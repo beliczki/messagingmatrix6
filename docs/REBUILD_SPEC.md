@@ -627,6 +627,9 @@ Single-page editor (no separate list page). Non-admin users see "Admin only" pan
 - Body: CodeMirror 6 with language auto-detect (HTML/SVG → `lang-html`, CSS → `lang-css`, JSON → `lang-json`, JS → `lang-javascript`)
 - Binary files (png/jpg/mp4/etc.) → read-only message; not editable in this UI
 
+**Skip-animation semantics:**
+The `skipAnim` toggle is two things at once: (a) it tells the render API to inject `animation:none !important; transition:none !important;` (via `injectSkipAnimations`), AND (b) the editor strips the literal `animated` class from the message's `template_variant_classes` field before sending it to render. Both are required: many v5 templates use the `.animated` class to wrap `opacity:0 → 1` fade-in animations; disabling animation alone leaves the elements at `opacity:0` (invisible). Stripping the class makes the non-animated CSS rules apply (visible static state). Same logic v5 used.
+
 **Files slide-in (from left, 320px):**
 - Triggered from editor header chevron
 - File list with bytes shown (sorted as in §4.5)
@@ -641,8 +644,18 @@ Single-page editor (no separate list page). Non-admin users see "Admin only" pan
 **Bindings slide-in (from right, 384px):**
 - Triggered from preview header chevron
 - Type filter chips (`Type` text, `Image`, `Video`, `Link` url, `Tag`, `Palette` style) with v5-color-coded active state; All / None toggle; `Filter` icon
-- Per-placeholder card: 3px left border in type color, type icon, `{{name}}` mono, `←` arrow, binding name (or `AlertTriangle` + "Unbound" rose if no binding). Default value shown small below. For `tag` type, first 4 options shown as pink chips
-- Footer hint: "Edit bindings via `template.json` in the files panel" (no inline editor in v6.0 — stretch goal)
+- Per-placeholder card: 3px left border in type color, type icon, `{{name}}` mono, `←` arrow, binding name (or `AlertTriangle` + "Unbound" rose if no binding). Below the binding row, the **resolved value** for the currently-selected MC is shown:
+  - From the message → slate text, truncated, full value in `title` tooltip (v5 behavior)
+  - From `template.json` `default` → italic amber `default: …`
+  - Neither → italic muted (`no default` if sample data, or `not in MC{label}` if a real MC is selected)
+- For `tag` type, first 4 options shown as pink chips, `+N` for the rest
+- Footer hint: "Edit bindings via `template.json` in the files panel" (no inline binding editor in v6.0 — stretch goal)
+
+**localStorage persistence** (key `mm6_templates_editor_state_v1`):
+- **Globally**: `activeTemplate`, `previewBg`, `skipAnim`, `typeFilters`, `splitPercent`
+- **Per template** (`perTemplate[name]`): `file`, `size`
+- Validation on load: persisted values are dropped if they no longer exist (template removed from disk, file deleted, size CSS removed). Falls back to first-available defaults
+- Writes happen synchronously inside a `useEffect` watching all relevant state — no debounce since changes are infrequent
 
 **Save/cancel semantics:**
 - Save = `PUT /api/templates/[name]/[file]` with the buffer; on 200 invalidates `templates/detail` query and re-fires preview render
@@ -655,8 +668,7 @@ Single-page editor (no separate list page). Non-admin users see "Admin only" pan
 - Errors shown inline (409 = "exists", 400 = "invalid_name")
 
 **Stretch goals (post-v6.0, not built):**
-- Persist `splitPercent`, `previewBg`, `skipAnim` to localStorage
-- Inline binding editor (rewrite `template.json` per-placeholder)
+- Inline binding editor (rewrite `template.json` per-placeholder via the bindings panel UI instead of editing JSON directly)
 - Valid JSON / Valid HTML badges with warning panel
 - Last-modified file auto-open
 

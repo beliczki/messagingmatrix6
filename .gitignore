@@ -9,6 +9,7 @@ db/matrix.db
 db/matrix.db-shm
 db/matrix.db-wal
 storage/
+docs/
 
 .env
 .env.local

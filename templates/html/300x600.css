@@ -1,0 +1,166 @@
+/* ------------------------------------------- */
+/* ------------------------------------------- */
+/* 300x250 */
+/* ------------------------------------------- */
+/* ------------------------------------------- */
+
+html {
+  font-size: 21px;
+}
+
+body #adContainer {
+  width: 300px !important;
+  height: 600px !important;
+}
+
+body #backgroundContainer { width:100%; height:40%; left:0px; }
+body main { width: 100%; height: 60%; top:40%; display: flex; }
+body #logoContainer { top:40%; }
+body .topRoundedFrame #logoWrapper { margin-top:0rem;}
+body #logoContainer img { height:1.8rem; }
+body #textContainer  { padding-top: 3rem; width:100%;}
+body #headlineWrapper  { padding-top: 0;}
+body #stickerContainer  {
+  transform-origin: 100% 0%;
+  transform: scale(0.45);
+  right: 2rem;
+  top: -2.5rem;
+}
+body #cardContainer  {
+  transform-origin: 0% 0%;
+  transform: scale(0.45);
+  left: 1rem;
+  right: auto;
+  top: -5.5rem;
+}
+body #copyWrapper1,
+body #copyWrapper2,
+body #disclaimerWrapper1,
+body #headlineWrapper  { width:90%; }
+
+
+body .imageAndColor2 #backgroundContainer { height:50%; }
+body .imageAndColor2 main { height: 50%; top:50%; }
+body .imageAndColor2.topRoundedFrame #logoWrapper { margin-top:1.5rem;}
+body .imageAndColor2 #logoContainer { top:0px; }
+body .imageAndColor2 #logoContainer img { height:2rem; }
+body .imageAndColor2 #textContainer  { padding-top: 1rem;}
+
+
+
+body .fullSurfaceColor main { width: 100%; height: 100%; top:0;}
+body .fullSurfaceColor.topRoundedFrame #logoWrapper { margin-top:1.5rem;}
+body .fullSurfaceColor #logoContainer { top:0px; }
+body .fullSurfaceColor #logoContainer img { height:2.4rem; }
+
+body .fullSurfaceColor #textContainer { width: 100%; height: 100%;  top: 0rem; bottom:auto; position: absolute; padding-top:5rem;}
+body .fullSurfaceColor #buttonWrapper { margin-top: auto; margin-bottom:0; }
+body .fullSurfaceColor #headlineWrapper {  margin-top:0;}
+body .fullSurfaceColor #headlineWrapper,
+body .fullSurfaceColor #copyWrapper1,
+body .fullSurfaceColor #copyWrapper2 { width:100%;}
+body .fullSurfaceColor #disclaimerWrapper1 {  margin-bottom:0; }
+body .fullSurfaceColor #stickerContainer  { transform: scale(0.5); top: 47%; transform-origin: 100% 0%; }
+body .fullSurfaceColor.bottomRoundedFrame #stickerContainer  { top: -2.5rem; }
+body .fullSurfaceColor #objectWrapper { width:100%; height:45%; left:0; right:0; top:auto; bottom: 5%;}
+body .fullSurfaceColor.largeGfx #objectWrapper { width: 130%; height: 52%; left: -15%; right: -15%; top: 2.5rem; }
+
+body .fullSurfaceColor.bottomSticker #textContainer {   height:100%; padding-top:4.5rem;}
+body .fullSurfaceColor.bottomSticker #headlineWrapper {  margin-top:1rem;}
+body .fullSurfaceColor.bottomSticker #buttonWrapper {  margin-top: 1rem; margin-bottom:0; }
+body .fullSurfaceColor.bottomSticker #disclaimerWrapper1 {  margin-bottom:auto; width:50%;}
+body .fullSurfaceColor.bottomSticker #stickerContainer  {  bottom: 13%; top: auto; right: 8%; }
+body .fullSurfaceColor.bottomSticker #objectWrapper{  bottom:5%; top:auto; }
+body .fullSurfaceColor.bottomSticker.largeGfx #objectWrapper{  bottom:-10%;  }
+
+body .fullSurfaceImage #backgroundContainer { height:100%; }
+body .fullSurfaceImage main { width: 100%; height: 100%; top:0; background:none !important;}
+body .fullSurfaceImage #logoContainer { top:0px; }
+body .fullSurfaceImage.topRoundedFrame #logoWrapper { margin-top:1.5rem;}
+body .fullSurfaceImage #logoContainer { top:0px; }
+
+body .fullSurfaceImage #textContainer {   width: 100%; height: 50%; bottom: 0; top: auto; position: absolute; padding-top:1rem;}
+body .fullSurfaceImage #buttonWrapper {  margin-top: 1rem; margin-bottom:0; }
+body .fullSurfaceImage #headlineWrapper {  margin-top:auto;}
+body .fullSurfaceImage #disclaimerWrapper1 {  margin-bottom:0; }
+body .fullSurfaceImage #stickerContainer  { transform: scale(0.5); top: -2rem; }
+
+body.fullSurfaceImage.bottomSticker #textContainer {   height:100%; padding-top:4.5rem;}
+body .fullSurfaceImage.bottomSticker #headlineWrapper {  margin-top:1rem;}
+body .fullSurfaceImage.bottomSticker #buttonWrapper {  margin-top: 1rem; margin-bottom:0; }
+body .fullSurfaceImage.bottomSticker #disclaimerWrapper1 {  margin-bottom:auto; width:50%;}
+body .fullSurfaceImage.bottomSticker #stickerContainer  {  bottom: 13%; top: auto; right: 8%; }
+
+body .preCompBg main { top:0px; bottom auto;}
+body .preCompBg #backgroundContainer { height:100%;}
+body .preCompBg #logoContainer { top:0px; }
+
+body .animated #backgroundContainer {
+  width: 100%;
+  height: 100%;
+  left: 0px;
+  animation-name: background-animate-in-300x600;
+}
+@keyframes background-animate-in-300x600 {
+  0% { height: 100%; }
+  100% { height: 40%; }
+}
+
+body .animated.imageAndColor2 #backgroundContainer {
+  width: 100%;
+  height: 100%;
+  animation-name: background-animate-in-2-300x600;
+}
+@keyframes background-animate-in-2-300x600 {
+  0% { height: 100%; }
+  100% { height: 50%; }
+}
+
+body .animated main {
+  left: 0%;
+  width:100%;
+  top:100%;
+  animation-name: color-box-animate-in-300x600
+}
+@keyframes color-box-animate-in-300x600 {
+  0% { top: 100%; }
+  100% { top: 40%; }
+}
+
+body .animated.imageAndColor2 main {
+  left: 0%;
+  width:100%;
+  top:100%;
+  animation-name: color-box-animate-in-2-300x600
+}
+@keyframes color-box-animate-in-2-300x600 {
+  0% { top: 100%; }
+  100% { top: 50%; }
+}
+
+body .animated.fullSurfaceColor main { width: 100%; height: 100%; top:0; animation-name:none;}
+body .animated.fullSurfaceImage #backgroundContainer { height: 100%; animation-name:none;}
+body .animated.fullSurfaceImage main { height: 100%; top:0; animation-name:none;}
+
+/* -----------------------------------------*/
+/* positioning based on Image cropping  PSD */
+/* -----------------------------------------*/
+.campaignImage #imageWrapper div {
+  background-size: 400%;
+  background-position: -450px -2px;
+}
+
+.preCompBg #imageWrapper div { 
+  background-size: inherit;
+  background-position: -1050px -370px;
+}
+
+/* -----------------------------------------*/
+/* text format helpers  */
+/* -----------------------------------------*/
+.sizebr.br300x600 {display: inline-block;}
+.size-300x600 .text-300x600{display: inline;}
+
+
+
+

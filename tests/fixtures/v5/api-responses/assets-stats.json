@@ -1,0 +1,20 @@
+{
+  "capturedAt": "2026-04-24T17:45:17.481Z",
+  "endpoint": "/api/assets/stats",
+  "auth": "public",
+  "status": 200,
+  "ok": true,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "filename": "ERSTE_VAL_background_x_1_656x459_backgroundImage1_psd_v1.jpg",
+      "mtime": "2026-04-03T19:51:18.507Z",
+      "size": 99553
+    },
+    {
+      "filename": "ERSTE_VAL_background_x_2_656x459_backgroundImage1_psd_v1.jpg",
+      "mtime": "2026-04-03T19:51:18.507Z",
+      "size": 119789
+    }
+  ]
+}

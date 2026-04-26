@@ -1,0 +1,29 @@
+node_modules
+.next
+next-env.d.ts
+tsconfig.tsbuildinfo
+dist
+out
+
+db/matrix.db
+db/matrix.db-shm
+db/matrix.db-wal
+storage/
+
+.env
+.env.local
+.env.*.local
+
+.DS_Store
+*.log
+.vercel
+.turbo
+
+coverage
+playwright-report
+test-results
+
+# Claude Code transient state — settings.json IS tracked (team hooks), but
+# session locks and personal local overrides are not.
+.claude/*.lock
+.claude/settings.local.json

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html id="html" class="telekom">
+  <head>
+    <title>{{advert_name}}</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="advert_id" content="{{advert_id}}">
+    <meta name="advert_mc" content="{{advert_mc}}">
+    <meta name="advert_variant" content="{{advert_variant}}">
+    <meta name="advert_name" content="{{advert_name}}" />
+    <meta name="click_url" content="{{click_url}}">
+    <link rel="stylesheet" href="main.css" />
+    <link rel="stylesheet" href="[[css]]" />
+  </head>
+  <body data-advert-name="{{advert_name}}">
+    <div id="adContainer" class="template_variant_class {{template_variant_class}}">
+      <div id="backgroundContainer">
+        <div id="imageWrapper">
+          <div style="background-image:url('empty.png')" class="background_image_1" data-placeholder="{{background_image_1}}"></div>
+        </div>
+      </div>
+      <main>
+        <div id="textContainer">
+          <div id="headlineWrapper">
+            <h2 class="headline_text_1 headline_style_1" style="{{headline_style_1}}">{{headline_text_1}}</h2>
+          </div>
+          <div id="copyWrapper1">
+            <p class="copy_text_1 copy_style_1" style="{{copy_style_1}}">{{copy_text_1}}</p>
+          </div>
+          <div id="disclaimerWrapper1">
+            <p class="disclaimer_text_1 disclaimer_style_1" style="{{disclaimer_style_1}}">{{disclaimer_text_1}}</p>
+          </div>
+        </div>
+      </main>
+      <div id="logoContainer">
+        <div id="logoWrapper">
+          <img src="empty.png" data-placeholder="{{brand_image_1}}" class="logo logo_image_1 brand_image_1"/>
+        </div>
+      </div>
+      <div id="image4Container">
+        <div id="image4Wrapper">
+          <div style="background-image:url('empty.png')" class="background_image_4" data-placeholder="{{background_image_4}}"></div>
+        </div>
+      </div>
+    </div>
+    <!-- extra css to finetune -->
+    <style type="text/css">{{css_styles}}</style>
+
+    <script>
+    (function() {
+    try {
+    console.log('DooH Template script starting...');
+
+    // Apply data-placeholder attributes directly to elements
+    function applyDataAttributes() {
+      var srcElements = document.querySelectorAll('[data-placeholder]');
+
+      for (var i = 0; i < srcElements.length; i++) {
+        var el = srcElements[i];
+        var dataSrc = el.getAttribute('data-placeholder');
+
+        // Skip if still a placeholder or empty
+        if (!dataSrc || dataSrc.indexOf('{{') !== -1) {
+          continue;
+        }
+
+        if (el.tagName === 'IMG') {
+          el.src = dataSrc;
+        } else {
+          // Background image div
+          el.style.backgroundImage = 'url(' + dataSrc + ')';
+        }
+      }
+    }
+
+    // Wait for DOM to be ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', applyDataAttributes);
+    } else {
+      applyDataAttributes();
+    }
+
+    } catch(globalError) {
+      console.error('DooH Template script error:', globalError);
+    }
+    })();
+    </script>
+  </body>
+</html>

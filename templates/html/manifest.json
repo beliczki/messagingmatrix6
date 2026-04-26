@@ -1,0 +1,15 @@
+{
+    "version": "1.0", 
+    "title": "Erste template", 
+    "description": "optional string",  
+    "width" : "{{ad.width}}", 
+    "height": "{{ad.height}}", 
+    "events": {
+        "enabled": 0, 
+        "list": {}
+    },
+    "clicktags": {
+        "clickTAG": "https://erstebank.hu/"
+    },
+    "source": "index.html"
+}

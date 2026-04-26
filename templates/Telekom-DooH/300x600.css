@@ -1,0 +1,74 @@
+/* ------------------------------------------- */
+/* 300x600 - Size specific overrides           */
+/* Base styles are in main.css                 */
+/* ------------------------------------------- */
+
+html {
+  font-size: 18px;
+}
+
+#adContainer {
+  width: 300px !important;
+  height: 600px !important;
+}
+
+/* Adjust text container for taller format */
+#textContainer {
+  width:75%;
+  padding: 1.5rem;
+}
+
+#logoWrapper > img {
+  height: 3rem;
+}
+
+#image4Container {
+  height: 65% !important;
+}
+
+#image4Wrapper {
+  position: absolute;
+  top: -100px;
+  left: -130px;
+  width: 130%;
+  height: 130%;
+  overflow: hidden;
+}
+
+
+
+/* -----------------------------------------*/
+/* positioning based on Image cropping  PSD */
+/* -----------------------------------------*/
+.campaignImage #imageWrapper div {
+  /*background-size: 210%;*/
+  background-position: -600px 0px;
+}
+
+/* -----------------------------------------*/
+/* Disclaimer rotation                      */
+/* -----------------------------------------*/
+#disclaimerWrapper1 p {
+  transform: rotate(-90deg);
+  transform-origin: top left;
+  white-space: nowrap;
+}
+
+/* -----------------------------------------*/
+/* Image 4 - top half                       */
+/* -----------------------------------------*/
+#image4Container {
+  width: 100%;
+  height: 50%;
+  top: 0;
+  left: 0;
+}
+
+/* Text format helpers */
+.sizebr.br300x600 {
+  display: inline-block;
+}
+
+.size-300x600 .text-300x600 {
+  display: inline;
+}

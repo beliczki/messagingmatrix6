@@ -1,0 +1,126 @@
+/* ------------------------------------------- */
+/* ------------------------------------------- */
+/* 640x360 */
+/* ------------------------------------------- */
+/* ------------------------------------------- */
+html {
+  font-size: 21px;
+}
+
+body #adContainer {
+  width: 640px !important;
+  height: 360px !important;
+}
+
+body #copyWrapper1,
+body #copyWrapper2,
+body #disclaimerWrapper1,
+body #headlineWrapper  { width:85%; }
+body #disclaimerWrapper1  { display:block; }
+body #buttonWrapper  { font-size:0.8rem; }
+body #textContainer { padding-bottom:1rem;}
+body #cardContainer {
+  top: auto;
+  transform-origin: 50% 100%;
+  bottom: 1rem;
+}
+
+body .bottomRoundedFrame #textContainer { padding-bottom:2rem;}
+body .bottomRoundedFrame #cardContainer { bottom:2rem; }
+
+
+body .imageAndColor2 #backgroundContainer { left:0%; height:100%; width:50%; }
+body .imageAndColor2 main {left:50%; height:100%; width:50%; bottom:auto; top:0%;}
+body .imageAndColor2.topRoundedFrame #logoWrapper { margin-top:1.5rem;}
+body .imageAndColor2.topRoundedFrame #textContainer { padding-top:2rem;}
+body .imageAndColor2 #logoContainer { top:0px; }
+body .imageAndColor2 #logoContainer img { height:2rem; }
+body .imageAndColor2 #textContainer  { padding-top: 1rem;}
+body .imageAndColor2 #headlineWrapper  { width: 65%;;}
+body .imageAndColor2 #buttonWrapper  { margin-top: 1rem; }
+
+body .imageAndColor2 #stickerContainer  {
+  transform-origin: 100% 0%;
+  transform: scale(0.45);
+  right: 1rem;
+  top: 1rem;
+}
+body .imageAndColor2.topRoundedFrame #stickerContainer,
+body .imageAndColor2.bottomRoundedFrame #stickerContainer { right:2rem; }
+body .imageAndColor2.topRoundedFrame #stickerContainer { top:2rem; }
+
+body .imageAndColor2 #cardContainer  {
+  transform-origin: 100% 100%;
+  transform: scale(0.45);
+  left: -11rem;
+  right: auto;
+  top: auto;
+  bottom: 1rem;
+}
+body .imageAndColor2.bottomRoundedFrame #cardContainer { bottom:2rem; }
+
+
+body .fullSurfaceColor #copyWrapper1,
+body .fullSurfaceColor #copyWrapper2,
+body .fullSurfaceColor #disclaimerWrapper1,
+body .fullSurfaceColor #headlineWrapper  { width:50%; }
+body .fullSurfaceColor #headlineWrapper  { margin-top:auto; }
+
+body .fullSurfaceColor #objectWrapper { width:50%; /*bottom:5%;*/ height:90%; left:auto; right:10%; }
+body .fullSurfaceColor.largeGfx #objectWrapper { width: 55%; height: 100%; right: 3%; }
+body .fullSurfaceColor.bottomSticker #objectWrapper { /*bottom: 0%;*/ top: auto; }
+body .fullSurfaceColor #stickerContainer  { transform-origin: 100% 0%; transform: scale(0.55); top: 2rem; }
+body .fullSurfaceColor.bottomSticker #stickerContainer { top: unset; bottom: 1rem; transform-origin: 100% 100%; }
+body .fullSurfaceColor #cardContainer  {  transform-origin: 100% 100%;  transform: scale(0.65);  right: 2rem;  top: auto; bottom: 1rem;}
+body .fullSurfaceColor #cardWrapper > div { background-position: right bottom; }
+body .fullSurfaceColor.bottomRoundedFrame #cardContainer { bottom:2rem; }
+
+
+body .fullSurfaceImage #copyWrapper1,
+body .fullSurfaceImage #copyWrapper2,
+body .fullSurfaceImage #disclaimerWrapper1,
+body .fullSurfaceImage #headlineWrapper  { width:50%; }
+body .fullSurfaceImage #headlineWrapper  { margin-top:auto; }
+
+body .fullSurfaceImage #objectWrapper { width:50%; bottom:5%; height:90%; left:auto; right:10%; }
+body .fullSurfaceImage #stickerContainer  { transform-origin: 100% 0%; transform: scale(0.55); top: 2rem; }
+body .fullSurfaceImage #cardContainer  {  transform-origin: 100% 100%;  transform: scale(0.65);  right: 2rem;  top: auto; bottom: 1rem;}
+body .fullSurfaceImage #cardWrapper > div { background-position: right bottom; }
+body .fullSurfaceImage.bottomRoundedFrame #cardContainer { bottom:2rem; }
+
+
+
+body .animated.imageAndColor2 main {
+  left:100%;
+  top: 0%;
+  animation-name: color-box-animate-in-3;
+}
+
+body #adContainer.animated.imageAndColor2 #backgroundContainer {
+  width: 100%;
+  height: 100%;
+  animation-name: background-animate-in-3;
+}
+
+
+
+/* -----------------------------------------*/
+/* positioning based on Image cropping  PSD */
+/* -----------------------------------------*/
+.campaignImage #imageWrapper div {
+background-size: 193%;
+  background-position: -241px -128px;
+}
+
+.preCompBg #imageWrapper div { 
+  background-size: inherit;
+  background-position: -330px -370px;
+}
+
+/* -----------------------------------------*/
+/* text format helpers  */
+/* -----------------------------------------*/
+
+.sizebr.br640x360 { display:inline-block;}
+.size-640x360 .text-640x360 {display: inline;}
+

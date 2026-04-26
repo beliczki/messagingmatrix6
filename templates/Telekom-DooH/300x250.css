@@ -1,0 +1,25 @@
+/* ------------------------------------------- */
+/* 300x250 - Size specific overrides           */
+/* Base styles are in main.css                 */
+/* ------------------------------------------- */
+
+/* Size is already set in main.css as default */
+/* Only add overrides here if needed */
+
+/* -----------------------------------------*/
+/* positioning based on Image cropping  PSD */
+/* -----------------------------------------*/
+.campaignImage #imageWrapper div {
+  /*background-size: 210%;*/
+  background-position: -100px 0px;
+}
+
+
+/* Text format helpers */
+.sizebr.br300x250 {
+  display: inline-block;
+}
+
+.size-300x250 .text-300x250 {
+  display: inline;
+}

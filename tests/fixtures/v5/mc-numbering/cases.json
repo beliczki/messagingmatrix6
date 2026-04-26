@@ -1,0 +1,331 @@
+{
+  "capturedAt": "2026-04-24T17:45:17.310Z",
+  "sourceRef": "src/hooks/useMatrix.js:377-409",
+  "cases": [
+    {
+      "id": "empty-matrix",
+      "messages": [],
+      "insert": {
+        "topic": "top1",
+        "audience": "aud1"
+      },
+      "expected": {
+        "number": 1,
+        "variant": "a",
+        "version": 1
+      },
+      "actual": {
+        "number": 1,
+        "variant": "a",
+        "version": 1
+      }
+    },
+    {
+      "id": "empty-cell-other-messages-exist",
+      "messages": [
+        {
+          "number": 1,
+          "variant": "a",
+          "topic": "top1",
+          "audience": "aud1",
+          "status": "ACTIVE"
+        },
+        {
+          "number": 2,
+          "variant": "a",
+          "topic": "top2",
+          "audience": "aud1",
+          "status": "ACTIVE"
+        }
+      ],
+      "insert": {
+        "topic": "top3",
+        "audience": "aud2"
+      },
+      "expected": {
+        "number": 3,
+        "variant": "a",
+        "version": 1
+      },
+      "actual": {
+        "number": 3,
+        "variant": "a",
+        "version": 1
+      }
+    },
+    {
+      "id": "occupied-single-a",
+      "messages": [
+        {
+          "number": 5,
+          "variant": "a",
+          "topic": "top1",
+          "audience": "aud1",
+          "status": "ACTIVE"
+        }
+      ],
+      "insert": {
+        "topic": "top1",
+        "audience": "aud1"
+      },
+      "expected": {
+        "number": 5,
+        "variant": "b",
+        "version": 1
+      },
+      "actual": {
+        "number": 5,
+        "variant": "b",
+        "version": 1
+      }
+    },
+    {
+      "id": "occupied-multi-a-b",
+      "messages": [
+        {
+          "number": 5,
+          "variant": "a",
+          "topic": "top1",
+          "audience": "aud1",
+          "status": "ACTIVE"
+        },
+        {
+          "number": 5,
+          "variant": "b",
+          "topic": "top1",
+          "audience": "aud1",
+          "status": "ACTIVE"
+        }
+      ],
+      "insert": {
+        "topic": "top1",
+        "audience": "aud1"
+      },
+      "expected": {
+        "number": 5,
+        "variant": "c",
+        "version": 1
+      },
+      "actual": {
+        "number": 5,
+        "variant": "c",
+        "version": 1
+      }
+    },
+    {
+      "id": "occupied-multi-a-c-gap",
+      "messages": [
+        {
+          "number": 5,
+          "variant": "a",
+          "topic": "top1",
+          "audience": "aud1",
+          "status": "ACTIVE"
+        },
+        {
+          "number": 5,
+          "variant": "c",
+          "topic": "top1",
+          "audience": "aud1",
+          "status": "ACTIVE"
+        }
+      ],
+      "insert": {
+        "topic": "top1",
+        "audience": "aud1"
+      },
+      "expected": {
+        "number": 5,
+        "variant": "d",
+        "version": 1
+      },
+      "actual": {
+        "number": 5,
+        "variant": "d",
+        "version": 1
+      }
+    },
+    {
+      "id": "cell-only-has-deleted",
+      "messages": [
+        {
+          "number": 5,
+          "variant": "a",
+          "topic": "top1",
+          "audience": "aud1",
+          "status": "deleted"
+        },
+        {
+          "number": 5,
+          "variant": "b",
+          "topic": "top1",
+          "audience": "aud1",
+          "status": "deleted"
+        }
+      ],
+      "insert": {
+        "topic": "top1",
+        "audience": "aud1"
+      },
+      "expected": {
+        "number": 1,
+        "variant": "a",
+        "version": 1
+      },
+      "actual": {
+        "number": 1,
+        "variant": "a",
+        "version": 1
+      }
+    },
+    {
+      "id": "cell-has-deleted-and-active",
+      "messages": [
+        {
+          "number": 5,
+          "variant": "a",
+          "topic": "top1",
+          "audience": "aud1",
+          "status": "deleted"
+        },
+        {
+          "number": 5,
+          "variant": "b",
+          "topic": "top1",
+          "audience": "aud1",
+          "status": "ACTIVE"
+        }
+      ],
+      "insert": {
+        "topic": "top1",
+        "audience": "aud1"
+      },
+      "expected": {
+        "number": 5,
+        "variant": "c",
+        "version": 1
+      },
+      "actual": {
+        "number": 5,
+        "variant": "c",
+        "version": 1
+      }
+    },
+    {
+      "id": "global-max-ignores-deleted",
+      "messages": [
+        {
+          "number": 10,
+          "variant": "a",
+          "topic": "top1",
+          "audience": "aud1",
+          "status": "deleted"
+        },
+        {
+          "number": 3,
+          "variant": "a",
+          "topic": "top1",
+          "audience": "aud1",
+          "status": "ACTIVE"
+        }
+      ],
+      "insert": {
+        "topic": "topX",
+        "audience": "audX"
+      },
+      "expected": {
+        "number": 4,
+        "variant": "a",
+        "version": 1
+      },
+      "actual": {
+        "number": 4,
+        "variant": "a",
+        "version": 1
+      }
+    },
+    {
+      "id": "variant-missing-defaults-to-a",
+      "messages": [
+        {
+          "number": 7,
+          "topic": "top1",
+          "audience": "aud1",
+          "status": "ACTIVE"
+        }
+      ],
+      "insert": {
+        "topic": "top1",
+        "audience": "aud1"
+      },
+      "expected": {
+        "number": 7,
+        "variant": "b",
+        "version": 1
+      },
+      "actual": {
+        "number": 7,
+        "variant": "b",
+        "version": 1
+      }
+    },
+    {
+      "id": "missing-numbers-ignored",
+      "messages": [
+        {
+          "variant": "a",
+          "topic": "top1",
+          "audience": "aud1",
+          "status": "ACTIVE"
+        },
+        {
+          "number": 5,
+          "variant": "a",
+          "topic": "top2",
+          "audience": "aud1",
+          "status": "ACTIVE"
+        }
+      ],
+      "insert": {
+        "topic": "topX",
+        "audience": "audX"
+      },
+      "expected": {
+        "number": 6,
+        "variant": "a",
+        "version": 1
+      },
+      "actual": {
+        "number": 6,
+        "variant": "a",
+        "version": 1
+      }
+    },
+    {
+      "id": "variant-overflow-z-to-brace",
+      "messages": [
+        {
+          "number": 1,
+          "variant": "z",
+          "topic": "top1",
+          "audience": "aud1",
+          "status": "ACTIVE"
+        }
+      ],
+      "insert": {
+        "topic": "top1",
+        "audience": "aud1"
+      },
+      "expected": {
+        "number": 1,
+        "variant": "{",
+        "version": 1
+      },
+      "actual": {
+        "number": 1,
+        "variant": "{",
+        "version": 1
+      }
+    }
+  ]
+}

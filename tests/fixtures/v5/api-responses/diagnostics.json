@@ -1,0 +1,23 @@
+{
+  "capturedAt": "2026-04-24T17:45:17.453Z",
+  "endpoint": "/api/diagnostics",
+  "auth": "public",
+  "status": 200,
+  "ok": true,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "version": "1.0.2",
+    "serviceAccountPath": "./service-account.json",
+    "fullPath": "/Users/robertbeliczki/messagingmatrix/service-account.json",
+    "fileExists": true,
+    "hasServiceAccount": true,
+    "serviceAccountEmail": "messagingmatrix@messagingmatrix.iam.gserviceaccount.com",
+    "hasAccessToken": true,
+    "tokenExpiry": "2026-04-23T11:13:22.790Z",
+    "__dirname": "/Users/robertbeliczki/messagingmatrix",
+    "env": {
+      "NODE_ENV": "production",
+      "PORT": "3003"
+    }
+  }
+}

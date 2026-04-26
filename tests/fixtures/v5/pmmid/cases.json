@@ -1,0 +1,355 @@
+{
+  "capturedAt": "2026-04-24T17:45:17.284Z",
+  "notes": {
+    "hardcoded": "src/hooks/useMatrix.js:412 — used on addMessage",
+    "pattern": "src/utils/patternEvaluator.js generatePMMID()"
+  },
+  "cases": {
+    "hardcoded": [
+      {
+        "id": "hardcoded-1",
+        "message": {
+          "audience": "aud1",
+          "topic": "top1",
+          "number": 1,
+          "variant": "a",
+          "version": 1
+        },
+        "expected": "a_aud1-t_top1-m_1-v_a-n_1",
+        "actual": "a_aud1-t_top1-m_1-v_a-n_1"
+      },
+      {
+        "id": "hardcoded-2",
+        "message": {
+          "audience": "aud1",
+          "topic": "top1",
+          "number": 282,
+          "variant": "b",
+          "version": 1
+        },
+        "expected": "a_aud1-t_top1-m_282-v_b-n_1",
+        "actual": "a_aud1-t_top1-m_282-v_b-n_1"
+      },
+      {
+        "id": "hardcoded-3",
+        "message": {
+          "audience": "aud2",
+          "topic": "savings",
+          "number": 5,
+          "variant": "c",
+          "version": 2
+        },
+        "expected": "a_aud2-t_savings-m_5-v_c-n_2",
+        "actual": "a_aud2-t_savings-m_5-v_c-n_2"
+      },
+      {
+        "id": "hardcoded-4",
+        "message": {
+          "audience": "aud1",
+          "topic": "loan_x",
+          "number": 500,
+          "variant": "z",
+          "version": 10
+        },
+        "expected": "a_aud1-t_loan_x-m_500-v_z-n_10",
+        "actual": "a_aud1-t_loan_x-m_500-v_z-n_10"
+      },
+      {
+        "id": "hardcoded-5",
+        "message": {
+          "audience": "aud1",
+          "topic": "top1",
+          "number": 1,
+          "variant": "a",
+          "version": 1
+        },
+        "expected": "a_aud1-t_top1-m_1-v_a-n_1",
+        "actual": "a_aud1-t_top1-m_1-v_a-n_1"
+      },
+      {
+        "id": "hardcoded-6",
+        "message": {
+          "audience": "aud2",
+          "topic": "savings",
+          "number": 0,
+          "variant": "a",
+          "version": 1
+        },
+        "expected": "a_aud2-t_savings-m_0-v_a-n_1",
+        "actual": "a_aud2-t_savings-m_0-v_a-n_1"
+      }
+    ],
+    "pattern": [
+      {
+        "id": "pattern-std-1",
+        "message": {
+          "audience": "aud1",
+          "topic": "top1",
+          "number": 1,
+          "variant": "a",
+          "version": 1
+        },
+        "audiences": [
+          {
+            "key": "aud1",
+            "product": "SZK",
+            "strategy": "Prospecting",
+            "device": "Mobile"
+          },
+          {
+            "key": "aud2",
+            "product": "BANK",
+            "strategy": "Retargeting",
+            "device": "Desktop"
+          }
+        ],
+        "pattern": "a_{{audience}}-t_{{topic}}-m_{{number}}-v_{{variant}}-n_{{version}}",
+        "expected": "a_aud1-t_top1-m_1-v_a-n_1",
+        "actual": "a_aud1-t_top1-m_1-v_a-n_1"
+      },
+      {
+        "id": "pattern-std-2",
+        "message": {
+          "audience": "aud1",
+          "topic": "top1",
+          "number": 282,
+          "variant": "b",
+          "version": 1
+        },
+        "audiences": [
+          {
+            "key": "aud1",
+            "product": "SZK",
+            "strategy": "Prospecting",
+            "device": "Mobile"
+          },
+          {
+            "key": "aud2",
+            "product": "BANK",
+            "strategy": "Retargeting",
+            "device": "Desktop"
+          }
+        ],
+        "pattern": "a_{{audience}}-t_{{topic}}-m_{{number}}-v_{{variant}}-n_{{version}}",
+        "expected": "a_aud1-t_top1-m_282-v_b-n_1",
+        "actual": "a_aud1-t_top1-m_282-v_b-n_1"
+      },
+      {
+        "id": "pattern-std-3",
+        "message": {
+          "audience": "aud2",
+          "topic": "savings",
+          "number": 5,
+          "variant": "c",
+          "version": 2
+        },
+        "audiences": [
+          {
+            "key": "aud1",
+            "product": "SZK",
+            "strategy": "Prospecting",
+            "device": "Mobile"
+          },
+          {
+            "key": "aud2",
+            "product": "BANK",
+            "strategy": "Retargeting",
+            "device": "Desktop"
+          }
+        ],
+        "pattern": "a_{{audience}}-t_{{topic}}-m_{{number}}-v_{{variant}}-n_{{version}}",
+        "expected": "a_aud2-t_savings-m_5-v_c-n_2",
+        "actual": "a_aud2-t_savings-m_5-v_c-n_2"
+      },
+      {
+        "id": "pattern-std-4",
+        "message": {
+          "audience": "aud1",
+          "topic": "loan_x",
+          "number": 500,
+          "variant": "z",
+          "version": 10
+        },
+        "audiences": [
+          {
+            "key": "aud1",
+            "product": "SZK",
+            "strategy": "Prospecting",
+            "device": "Mobile"
+          },
+          {
+            "key": "aud2",
+            "product": "BANK",
+            "strategy": "Retargeting",
+            "device": "Desktop"
+          }
+        ],
+        "pattern": "a_{{audience}}-t_{{topic}}-m_{{number}}-v_{{variant}}-n_{{version}}",
+        "expected": "a_aud1-t_loan_x-m_500-v_z-n_10",
+        "actual": "a_aud1-t_loan_x-m_500-v_z-n_10"
+      },
+      {
+        "id": "pattern-std-5",
+        "message": {
+          "audience": "aud1",
+          "topic": "top1",
+          "number": 1,
+          "variant": "a",
+          "version": 1
+        },
+        "audiences": [
+          {
+            "key": "aud1",
+            "product": "SZK",
+            "strategy": "Prospecting",
+            "device": "Mobile"
+          },
+          {
+            "key": "aud2",
+            "product": "BANK",
+            "strategy": "Retargeting",
+            "device": "Desktop"
+          }
+        ],
+        "pattern": "a_{{audience}}-t_{{topic}}-m_{{number}}-v_{{variant}}-n_{{version}}",
+        "expected": "a_aud1-t_top1-m_1-v_a-n_1",
+        "actual": "a_aud1-t_top1-m_1-v_a-n_1"
+      },
+      {
+        "id": "pattern-std-6",
+        "message": {
+          "audience": "aud2",
+          "topic": "savings",
+          "number": 0,
+          "variant": "a",
+          "version": 1
+        },
+        "audiences": [
+          {
+            "key": "aud1",
+            "product": "SZK",
+            "strategy": "Prospecting",
+            "device": "Mobile"
+          },
+          {
+            "key": "aud2",
+            "product": "BANK",
+            "strategy": "Retargeting",
+            "device": "Desktop"
+          }
+        ],
+        "pattern": "a_{{audience}}-t_{{topic}}-m_{{number}}-v_{{variant}}-n_{{version}}",
+        "expected": "a_aud2-t_savings-m_0-v_a-n_1",
+        "actual": "a_aud2-t_savings-m_-v_a-n_1"
+      },
+      {
+        "id": "pattern-custom-szk",
+        "message": {
+          "audience": "aud1",
+          "topic": "top1",
+          "number": 282,
+          "variant": "a",
+          "version": 1
+        },
+        "audiences": [
+          {
+            "key": "aud1",
+            "product": "SZK",
+            "strategy": "Prospecting",
+            "device": "Mobile"
+          },
+          {
+            "key": "aud2",
+            "product": "BANK",
+            "strategy": "Retargeting",
+            "device": "Desktop"
+          }
+        ],
+        "pattern": "mc_{{number}}{{variant}}_{{audiences[Audience_Key].Product|lower}}",
+        "expected": "mc_282a_szk",
+        "actual": "mc_282a_szk"
+      },
+      {
+        "id": "pattern-custom-bank",
+        "message": {
+          "audience": "aud2",
+          "topic": "savings",
+          "number": 5,
+          "variant": "b",
+          "version": 1
+        },
+        "audiences": [
+          {
+            "key": "aud1",
+            "product": "SZK",
+            "strategy": "Prospecting",
+            "device": "Mobile"
+          },
+          {
+            "key": "aud2",
+            "product": "BANK",
+            "strategy": "Retargeting",
+            "device": "Desktop"
+          }
+        ],
+        "pattern": "mc_{{number}}{{variant}}_{{audiences[Audience_Key].Product|lower}}",
+        "expected": "mc_5b_bank",
+        "actual": "mc_5b_bank"
+      },
+      {
+        "id": "pattern-missing-audience",
+        "message": {
+          "audience": "audMISSING",
+          "topic": "top1",
+          "number": 1,
+          "variant": "a",
+          "version": 1
+        },
+        "audiences": [
+          {
+            "key": "aud1",
+            "product": "SZK",
+            "strategy": "Prospecting",
+            "device": "Mobile"
+          },
+          {
+            "key": "aud2",
+            "product": "BANK",
+            "strategy": "Retargeting",
+            "device": "Desktop"
+          }
+        ],
+        "pattern": "mc_{{number}}{{variant}}_{{audiences[Audience_Key].Product|lower}}",
+        "expected": "mc_1a_",
+        "actual": "mc_1a_"
+      },
+      {
+        "id": "pattern-empty",
+        "message": {
+          "audience": "aud1",
+          "topic": "top1",
+          "number": 1,
+          "variant": "a",
+          "version": 1
+        },
+        "audiences": [
+          {
+            "key": "aud1",
+            "product": "SZK",
+            "strategy": "Prospecting",
+            "device": "Mobile"
+          },
+          {
+            "key": "aud2",
+            "product": "BANK",
+            "strategy": "Retargeting",
+            "device": "Desktop"
+          }
+        ],
+        "pattern": "",
+        "expected": "",
+        "actual": ""
+      }
+    ]
+  }
+}

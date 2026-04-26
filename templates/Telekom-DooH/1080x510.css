@@ -1,0 +1,51 @@
+/* ------------------------------------------- */
+/* 1080x510 - Size specific overrides          */
+/* Base styles are in main.css                 */
+/* ------------------------------------------- */
+
+html {
+  font-size: 32px;
+}
+
+#adContainer {
+  width: 1080px !important;
+  height: 510px !important;
+}
+
+/* Adjust padding for larger format - half of default */
+#textContainer {
+  width:50%;
+  padding: 1.5rem;
+}
+
+#logoContainer {
+  padding: 1rem;
+}
+
+#logoWrapper > img {
+  height: 3rem;
+}
+
+
+/* -----------------------------------------*/
+/* Image 4 - left side                      */
+/* -----------------------------------------*/
+#image4Container {
+  width: 50%;
+  height: 100%;
+  top: 0;
+  left: 0;
+}
+#image4Wrapper {
+  top: -50px;
+  left: -100px;
+}
+
+/* Text format helpers */
+.sizebr.br1080x510 {
+  display: inline-block;
+}
+
+.size-1080x510 .text-1080x510 {
+  display: inline;
+}

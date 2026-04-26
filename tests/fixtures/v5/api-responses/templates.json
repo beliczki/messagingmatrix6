@@ -1,0 +1,831 @@
+{
+  "capturedAt": "2026-04-24T17:45:17.467Z",
+  "endpoint": "/api/templates",
+  "auth": "public",
+  "status": 200,
+  "ok": true,
+  "contentType": "application/json; charset=utf-8",
+  "body": [
+    {
+      "name": "NobilisTilia-html",
+      "dimensions": [
+        "300x250",
+        "300x600",
+        "480x480",
+        "500x200",
+        "720x1280",
+        "970x250",
+        "970x310"
+      ],
+      "files": [
+        "300x250.css",
+        "300x600.css",
+        "480x480.css",
+        "500x200.css",
+        "720x1280.css",
+        "970x250.css",
+        "970x310.css",
+        "dynamic.content.js",
+        "empty.png",
+        "index.html",
+        "main.css",
+        "manifest.json",
+        "template.json"
+      ],
+      "filesWithMeta": [
+        {
+          "name": "300x250.css",
+          "lastModified": "2026-04-03T19:51:18.525Z",
+          "size": 684
+        },
+        {
+          "name": "300x600.css",
+          "lastModified": "2026-04-03T19:51:18.526Z",
+          "size": 1504
+        },
+        {
+          "name": "480x480.css",
+          "lastModified": "2026-04-03T19:51:18.526Z",
+          "size": 1286
+        },
+        {
+          "name": "500x200.css",
+          "lastModified": "2026-04-03T19:51:18.526Z",
+          "size": 1969
+        },
+        {
+          "name": "720x1280.css",
+          "lastModified": "2026-04-03T19:51:18.526Z",
+          "size": 1538
+        },
+        {
+          "name": "970x250.css",
+          "lastModified": "2026-04-03T19:51:18.526Z",
+          "size": 1942
+        },
+        {
+          "name": "970x310.css",
+          "lastModified": "2026-04-03T19:51:18.526Z",
+          "size": 2002
+        },
+        {
+          "name": "dynamic.content.js",
+          "lastModified": "2026-04-03T19:51:18.526Z",
+          "size": 10014
+        },
+        {
+          "name": "empty.png",
+          "lastModified": "2026-04-03T19:51:18.526Z",
+          "size": 955
+        },
+        {
+          "name": "index.html",
+          "lastModified": "2026-04-03T19:51:18.526Z",
+          "size": 12679
+        },
+        {
+          "name": "main.css",
+          "lastModified": "2026-04-03T19:51:18.526Z",
+          "size": 4639
+        },
+        {
+          "name": "manifest.json",
+          "lastModified": "2026-04-03T19:51:18.526Z",
+          "size": 324
+        },
+        {
+          "name": "template.json",
+          "lastModified": "2026-04-03T19:51:18.526Z",
+          "size": 5109
+        }
+      ],
+      "lastModifiedFile": "300x600.css",
+      "lastModified": "2026-04-03T19:51:18.526Z",
+      "description": "Template",
+      "default_size": "300x250",
+      "placeholders": {
+        "advert_id": {
+          "type": "var",
+          "default": "",
+          "binding-messagingmatrix": "POMS_ID"
+        },
+        "advert_mc": {
+          "type": "var",
+          "default": "",
+          "binding-messagingmatrix": "Number"
+        },
+        "advert_variant": {
+          "type": "var",
+          "default": "",
+          "binding-messagingmatrix": "Variant"
+        },
+        "advert_name": {
+          "type": "var",
+          "default": "",
+          "binding-messagingmatrix": ""
+        },
+        "click_url": {
+          "type": "url",
+          "default": "",
+          "binding-messagingmatrix": "landingUrl"
+        },
+        "template_variant_class": {
+          "type": "tag",
+          "options": "campaignImage, productHighlight, animated",
+          "default": "",
+          "binding-messagingmatrix": "Template_variant_classes"
+        },
+        "headline_text_1": {
+          "type": "text",
+          "default": " ",
+          "binding-messagingmatrix": "Headline"
+        },
+        "copy_text_1": {
+          "type": "text",
+          "default": "",
+          "binding-messagingmatrix": "Copy1"
+        },
+        "copy_text_2": {
+          "type": "text",
+          "default": "",
+          "binding-messagingmatrix": "Copy2"
+        },
+        "disclaimer_text_1": {
+          "type": "text",
+          "default": "",
+          "binding-messagingmatrix": "Disclaimer"
+        },
+        "cta_text_1": {
+          "type": "text",
+          "default": "Érdekel",
+          "binding-messagingmatrix": "CTA"
+        },
+        "sticker_text_1": {
+          "type": "text",
+          "default": "",
+          "binding-messagingmatrix": "Flash"
+        },
+        "background_video_1": {
+          "type": "video",
+          "default": "",
+          "binding-messagingmatrix": "Video1",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/videos/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_1": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image1",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/background/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_2": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image2",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/background/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_3": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image3",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/background/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_4": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image4",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/background/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "brand_image_1": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image5",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/brand",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "sticker_image_1": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image6",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/sticker/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "headline_style_1": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "Headline_style"
+        },
+        "copy_style_1": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "Copy1_style"
+        },
+        "copy_style_2": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "Copy2_style"
+        },
+        "disclaimer_style_1": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "Disclaimer_style"
+        },
+        "sticker_style_1": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "Flash_style"
+        },
+        "cta_style_1": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "CTA_style"
+        },
+        "css_styles": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "CSS"
+        }
+      },
+      "sizes": [
+        {
+          "width": 300,
+          "height": 250,
+          "name": "300x250"
+        },
+        {
+          "width": 300,
+          "height": 600,
+          "name": "300x600"
+        },
+        {
+          "width": 480,
+          "height": 480,
+          "name": "480x480"
+        },
+        {
+          "width": 500,
+          "height": 200,
+          "name": "500x200"
+        },
+        {
+          "width": 720,
+          "height": 1280,
+          "name": "720x1280"
+        },
+        {
+          "width": 970,
+          "height": 250,
+          "name": "970x250"
+        },
+        {
+          "width": 970,
+          "height": 310,
+          "name": "970x310"
+        }
+      ]
+    },
+    {
+      "name": "Telekom-DooH",
+      "dimensions": [
+        "1080x510",
+        "300x250",
+        "300x600"
+      ],
+      "files": [
+        "1080x510.css",
+        "300x250.css",
+        "300x600.css",
+        "empty.png",
+        "index.html",
+        "main.css",
+        "manifest.json",
+        "template.json"
+      ],
+      "filesWithMeta": [
+        {
+          "name": "1080x510.css",
+          "lastModified": "2026-04-03T19:51:18.526Z",
+          "size": 882
+        },
+        {
+          "name": "300x250.css",
+          "lastModified": "2026-04-03T19:51:18.527Z",
+          "size": 660
+        },
+        {
+          "name": "300x600.css",
+          "lastModified": "2026-04-03T19:51:18.527Z",
+          "size": 1447
+        },
+        {
+          "name": "empty.png",
+          "lastModified": "2026-04-03T19:51:18.527Z",
+          "size": 955
+        },
+        {
+          "name": "index.html",
+          "lastModified": "2026-04-03T19:51:18.527Z",
+          "size": 3105
+        },
+        {
+          "name": "main.css",
+          "lastModified": "2026-04-03T19:51:18.527Z",
+          "size": 3322
+        },
+        {
+          "name": "manifest.json",
+          "lastModified": "2026-04-03T19:51:18.527Z",
+          "size": 324
+        },
+        {
+          "name": "template.json",
+          "lastModified": "2026-04-03T19:51:18.527Z",
+          "size": 5337
+        }
+      ],
+      "lastModifiedFile": "300x250.css",
+      "lastModified": "2026-04-03T19:51:18.527Z",
+      "description": "Template",
+      "default_size": "300x250",
+      "placeholders": {
+        "advert_id": {
+          "type": "var",
+          "default": "",
+          "binding-messagingmatrix": "POMS_ID"
+        },
+        "advert_mc": {
+          "type": "var",
+          "default": "",
+          "binding-messagingmatrix": "Number"
+        },
+        "advert_variant": {
+          "type": "var",
+          "default": "",
+          "binding-messagingmatrix": "Variant"
+        },
+        "advert_name": {
+          "type": "var",
+          "default": "",
+          "binding-messagingmatrix": ""
+        },
+        "click_url": {
+          "type": "url",
+          "default": "",
+          "binding-messagingmatrix": "Final_Trafficked_URL"
+        },
+        "template_variant_class": {
+          "type": "tag",
+          "options": "fullSurfaceColor, fullSurfaceImage, imageAndColor, imageAndColor2, imageGfx, objectGfx, videoGfx, noFrame, topRoundedFrame, bottomRoundedFrame, animated, teal, purple, peach, stone, apple, orange, colorCta, outlineCta, topSticker, bottomSticker, campaignImage",
+          "default": "",
+          "binding-messagingmatrix": "Template_variant_classes"
+        },
+        "headline_text_1": {
+          "type": "text",
+          "default": " ",
+          "binding-messagingmatrix": "Headline"
+        },
+        "copy_text_1": {
+          "type": "text",
+          "default": "",
+          "binding-messagingmatrix": "Copy1"
+        },
+        "copy_text_2": {
+          "type": "text",
+          "default": "",
+          "binding-messagingmatrix": "Copy2"
+        },
+        "disclaimer_text_1": {
+          "type": "text",
+          "default": "",
+          "binding-messagingmatrix": "Disclaimer"
+        },
+        "cta_text_1": {
+          "type": "text",
+          "default": "Érdekel",
+          "binding-messagingmatrix": "CTA"
+        },
+        "sticker_text_1": {
+          "type": "text",
+          "default": "",
+          "binding-messagingmatrix": "Flash"
+        },
+        "background_video_1": {
+          "type": "video",
+          "default": "",
+          "binding-messagingmatrix": "Video1",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/videos/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_1": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image1",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/background/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_2": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image2",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/background/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_3": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image3",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/background/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_4": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image4",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/background/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "brand_image_1": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image5",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/brand",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "sticker_image_1": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image6",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/sticker/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "headline_style_1": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "Headline_style"
+        },
+        "copy_style_1": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "Copy1_style"
+        },
+        "copy_style_2": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "Copy2_style"
+        },
+        "disclaimer_style_1": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "Disclaimer_style"
+        },
+        "sticker_style_1": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "Flash_style"
+        },
+        "cta_style_1": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "CTA_style"
+        },
+        "css_styles": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "CSS"
+        }
+      },
+      "sizes": [
+        {
+          "width": 1080,
+          "height": 510,
+          "name": "1080x510"
+        },
+        {
+          "width": 300,
+          "height": 250,
+          "name": "300x250"
+        },
+        {
+          "width": 300,
+          "height": 600,
+          "name": "300x600"
+        }
+      ]
+    },
+    {
+      "name": "html",
+      "dimensions": [
+        "300x250",
+        "300x600",
+        "640x360",
+        "970x250"
+      ],
+      "files": [
+        "300x250.css",
+        "300x600.css",
+        "640x360.css",
+        "970x250.css",
+        "EBH_Logo_screen_white.svg",
+        "dynamic.content.js",
+        "empty.png",
+        "emptyvideo.mp4",
+        "index.html",
+        "main.css",
+        "manifest.json",
+        "template.json",
+        "thm.json"
+      ],
+      "filesWithMeta": [
+        {
+          "name": "300x250.css",
+          "lastModified": "2026-04-03T19:51:18.527Z",
+          "size": 1151
+        },
+        {
+          "name": "300x600.css",
+          "lastModified": "2026-04-03T19:51:18.527Z",
+          "size": 6119
+        },
+        {
+          "name": "640x360.css",
+          "lastModified": "2026-04-03T19:51:18.527Z",
+          "size": 4482
+        },
+        {
+          "name": "970x250.css",
+          "lastModified": "2026-04-03T19:51:18.527Z",
+          "size": 6191
+        },
+        {
+          "name": "EBH_Logo_screen_white.svg",
+          "lastModified": "2026-04-03T19:51:18.527Z",
+          "size": 1762
+        },
+        {
+          "name": "dynamic.content.js",
+          "lastModified": "2026-04-03T19:51:18.527Z",
+          "size": 8656
+        },
+        {
+          "name": "empty.png",
+          "lastModified": "2026-04-03T19:51:18.527Z",
+          "size": 955
+        },
+        {
+          "name": "emptyvideo.mp4",
+          "lastModified": "2026-04-03T19:51:18.527Z",
+          "size": 60
+        },
+        {
+          "name": "index.html",
+          "lastModified": "2026-04-22T23:33:56.173Z",
+          "size": 28550
+        },
+        {
+          "name": "main.css",
+          "lastModified": "2026-04-18T22:49:15.808Z",
+          "size": 18315
+        },
+        {
+          "name": "manifest.json",
+          "lastModified": "2026-04-03T19:51:18.528Z",
+          "size": 324
+        },
+        {
+          "name": "template.json",
+          "lastModified": "2026-04-03T19:51:18.528Z",
+          "size": 4652
+        },
+        {
+          "name": "thm.json",
+          "lastModified": "2026-04-03T19:51:18.528Z",
+          "size": 249
+        }
+      ],
+      "lastModifiedFile": "index.html",
+      "lastModified": "2026-04-22T23:33:56.173Z",
+      "description": "Template",
+      "default_size": "300x250",
+      "placeholders": {
+        "advert_id": {
+          "type": "var",
+          "default": "",
+          "binding-messagingmatrix": "POMS_ID"
+        },
+        "advert_mc": {
+          "type": "var",
+          "default": "",
+          "binding-messagingmatrix": "Number"
+        },
+        "advert_variant": {
+          "type": "var",
+          "default": "",
+          "binding-messagingmatrix": "Variant"
+        },
+        "advert_name": {
+          "type": "var",
+          "default": "",
+          "binding-messagingmatrix": ""
+        },
+        "pmmid": {
+          "type": "var",
+          "default": "",
+          "binding-messagingmatrix": "PMMID"
+        },
+        "click_url": {
+          "type": "url",
+          "default": "",
+          "binding-messagingmatrix": "Final_Trafficked_URL"
+        },
+        "template_variant_class": {
+          "type": "tag",
+          "options": "fullSurfaceColor, fullSurfaceImage, imageAndColor, imageAndColor2, preCompBg, imageGfx, objectGfx, videoGfx, noFrame, topRoundedFrame, bottomRoundedFrame, animated, teal, purple, peach, stone, apple, orange, colorCta, outlineCta, topSticker, bottomSticker, campaignImage, stickerImage",
+          "default": "",
+          "binding-messagingmatrix": "Template_variant_classes"
+        },
+        "headline_text_1": {
+          "type": "text",
+          "default": " ",
+          "binding-messagingmatrix": "Headline"
+        },
+        "copy_text_1": {
+          "type": "text",
+          "default": "",
+          "binding-messagingmatrix": "Copy1"
+        },
+        "copy_text_2": {
+          "type": "text",
+          "default": "",
+          "binding-messagingmatrix": "Copy2"
+        },
+        "disclaimer_text_1": {
+          "type": "text",
+          "default": "",
+          "binding-messagingmatrix": "Disclaimer"
+        },
+        "cta_text_1": {
+          "type": "text",
+          "default": "Érdekel",
+          "binding-messagingmatrix": "CTA"
+        },
+        "sticker_text_1": {
+          "type": "text",
+          "default": "",
+          "binding-messagingmatrix": "Flash"
+        },
+        "background_video_1": {
+          "type": "video",
+          "default": "",
+          "binding-messagingmatrix": "Video1",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/videos/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_1": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image1",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/background/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_2": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image2",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/background/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_3": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image3",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/background/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_4": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image4",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/background/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "brand_image_1": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image5",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/brand",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "sticker_image_1": {
+          "type": "image",
+          "default": "",
+          "binding-messagingmatrix": "Image6",
+          "path-messagingmatrix": "/api/drive/proxy/",
+          "path-adform": "",
+          "path-poms": "/HU-hu/sticker/",
+          "path-google": "DRM_Asset:Erste/"
+        },
+        "headline_style_1": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "Headline_style"
+        },
+        "copy_style_1": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "Copy1_style"
+        },
+        "copy_style_2": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "Copy2_style"
+        },
+        "disclaimer_style_1": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "Disclaimer_style"
+        },
+        "sticker_style_1": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "Flash_style"
+        },
+        "cta_style_1": {
+          "type": "style",
+          "default": "",
+          "binding-messagingmatrix": "CTA_style"
+        },
+        "extra_rules": {
+          "type": "text",
+          "default": "",
+          "binding-messagingmatrix": "CSS"
+        }
+      },
+      "sizes": [
+        {
+          "width": 300,
+          "height": 250,
+          "name": "300x250"
+        },
+        {
+          "width": 300,
+          "height": 600,
+          "name": "300x600"
+        },
+        {
+          "width": 640,
+          "height": 360,
+          "name": "640x360"
+        },
+        {
+          "width": 970,
+          "height": 250,
+          "name": "970x250"
+        }
+      ]
+    }
+  ]
+}

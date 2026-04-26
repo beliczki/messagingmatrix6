@@ -1,0 +1,287 @@
+{
+  "generatedAt": "2026-04-24T17:45:17.643Z",
+  "fixtureCount": 56,
+  "totalBytes": 2628566,
+  "files": [
+    {
+      "path": "adform-extract/cases.json",
+      "size": 5546,
+      "sha256": "fb4175824d5b4aff931051a0809b04d2f6585710a3e781fbf6cd60653d65eabe"
+    },
+    {
+      "path": "api-responses/assets-registry.json",
+      "size": 1874,
+      "sha256": "d1fe3d74282ab8116ed1f78bc0456f094fa22b1fdc551dbe30095b4c503d83db"
+    },
+    {
+      "path": "api-responses/assets-stats.json",
+      "size": 518,
+      "sha256": "c22468989cf096a520aa235e7f9be111fa32935ed90ca93a5e05d48b92b08f1f"
+    },
+    {
+      "path": "api-responses/cache-assets.json",
+      "size": 296,
+      "sha256": "a5e6d62497ee63225532e0c61472bd6b30f872f06eb6203e1909afd4b09403a1"
+    },
+    {
+      "path": "api-responses/cache-audiences.json",
+      "size": 299,
+      "sha256": "0c895e083cd149dae21447c97f86b5b676898b7079ae695b3a9a9abc8bbf5de7"
+    },
+    {
+      "path": "api-responses/cache-creatives.json",
+      "size": 299,
+      "sha256": "049c1cb9ee0b8195724ff4617382099f3f10b7967a32a9907a8e79a9e9e53c68"
+    },
+    {
+      "path": "api-responses/cache-messages.json",
+      "size": 298,
+      "sha256": "4e336b3c524d6901a41326a0fcaf75c2546ed67d6284c350604cf0dd5510394d"
+    },
+    {
+      "path": "api-responses/cache-status.json",
+      "size": 237,
+      "sha256": "a532b7212eae15e16d45992afb2df529d5bc511b03241bb0ab09ee5a3d168e37"
+    },
+    {
+      "path": "api-responses/cache-text_formatting.json",
+      "size": 305,
+      "sha256": "f28003c4b84dd78d452fd841a5b57568fe100124f336ed2619caa10b3f85da03"
+    },
+    {
+      "path": "api-responses/cache-topics.json",
+      "size": 296,
+      "sha256": "773053fb17d5ad49fffc2b85d3cc3b02f25ce3c4a5278134e2e2027b00c58d17"
+    },
+    {
+      "path": "api-responses/config-basic.json",
+      "size": 1138,
+      "sha256": "44a6ae3ac66abf2ff990df627de10c4aa63d854ece5efa66c5a917067ab41ef3"
+    },
+    {
+      "path": "api-responses/diagnostics.json",
+      "size": 701,
+      "sha256": "aee91c6a22f2563192e657facb17ef77a8b23b2191dc2859f04237c76b0328e6"
+    },
+    {
+      "path": "api-responses/messages-search-empty.json",
+      "size": 236,
+      "sha256": "f82c970ad62d9c659842036ea13d7f8d8ae80dd40143de7b1196414c3a01cfd9"
+    },
+    {
+      "path": "api-responses/templates-folders.json",
+      "size": 292,
+      "sha256": "daf3d640152482426b2fc4321d30c4e6b4d47dab77181325272169b64d8196ef"
+    },
+    {
+      "path": "api-responses/templates.json",
+      "size": 23377,
+      "sha256": "217d6cb2d6295fcf54e8fea6677b483bdb5efc4d6cb68751feed498f844f3cd1"
+    },
+    {
+      "path": "dataset/assets.json",
+      "size": 99,
+      "sha256": "0cc6fbb61b901c1ab3bb02d12d867d84e9db6451f098f60ab33e42c0c6e5c50b"
+    },
+    {
+      "path": "dataset/audiences.json",
+      "size": 102,
+      "sha256": "4a54831e83e2ac3c95d7cf5d5aea3a6f46542f94ce702fa966e6f717354a6494"
+    },
+    {
+      "path": "dataset/cache_metadata.json",
+      "size": 107,
+      "sha256": "fe13a42ec8c2011690a5221cd89357ead8375bd3c36fcd3c12999487aabcefe9"
+    },
+    {
+      "path": "dataset/config.json",
+      "size": 9152,
+      "sha256": "2a2d6df0a57b0d2df79980a08107945b173ef234ba4b337f43eab834bf2a3bf9"
+    },
+    {
+      "path": "dataset/creatives.json",
+      "size": 102,
+      "sha256": "4e97202d9c541b76f5dbbb13a00f0657e69d9c20ca0d51c464385484886f7a05"
+    },
+    {
+      "path": "dataset/messages.json",
+      "size": 101,
+      "sha256": "da469749335e641eaa36bfa4acb6b2a253dd814adc6309eb8bc619a84949fd6e"
+    },
+    {
+      "path": "dataset/share_galleries.json",
+      "size": 2155288,
+      "sha256": "2cfbe354cc896b25b8ebb5bb757eb8952b9d25685de4b4362c78f681384cdf67"
+    },
+    {
+      "path": "dataset/text_formatting.json",
+      "size": 108,
+      "sha256": "a4225025b59c11ce5767348ddabff69973bc907288160ac50bdbfcb81e13363d"
+    },
+    {
+      "path": "dataset/topics.json",
+      "size": 99,
+      "sha256": "fb394efbae837a22b45b20c5c1653b7abd09120d3964d871bba35bf63062ed26"
+    },
+    {
+      "path": "dataset/uploaded_assets.json",
+      "size": 1671,
+      "sha256": "ce33c5e0277f69586ae66100ef66a566f61cec9f862a1f545efcdd03f2fd64b9"
+    },
+    {
+      "path": "dataset/users.json",
+      "size": 653,
+      "sha256": "1bcc37939c093e006c4cb7e09bbe451c7fa126550d4c849610406b36c7be6239"
+    },
+    {
+      "path": "mc-numbering/cases.json",
+      "size": 6521,
+      "sha256": "a1d69a44bc449acca58b2b66c150143b8c16d0d481043072bf1af544408962c8"
+    },
+    {
+      "path": "pattern-evaluator/cases.json",
+      "size": 17884,
+      "sha256": "c225572957a8a241758e23148505d04a8cb1a35edb21553b76d4702b3446322a"
+    },
+    {
+      "path": "pmmid/cases.json",
+      "size": 9299,
+      "sha256": "0997aa5f68d4160dcefa337f0e79a90cb044c76b524a9a1c1236f13a679a7b93"
+    },
+    {
+      "path": "template-render/NobilisTilia-html/300x250/msg-test-1.html",
+      "size": 12536,
+      "sha256": "9fcd911763b785df39c773f064b9dd89db5fdaaf94fe3d9a54dfe46362ccf3a2"
+    },
+    {
+      "path": "template-render/NobilisTilia-html/300x250/msg-test-2.html",
+      "size": 12519,
+      "sha256": "3f4d5b1ed0096322595ba100c57cd12c9deb9ab474869df1a0b64475af82de5c"
+    },
+    {
+      "path": "template-render/NobilisTilia-html/300x250/msg-test-3.html",
+      "size": 12440,
+      "sha256": "f9a6c26a2d9b82a41b1649457e07fd627d42c86570c9e12eac6ae0095ec27d76"
+    },
+    {
+      "path": "template-render/NobilisTilia-html/300x600/msg-test-1.html",
+      "size": 12536,
+      "sha256": "1d2b4df87f7c60bf7c20f65b64144fd7b17ebae700d5c39da493e8e09360c0be"
+    },
+    {
+      "path": "template-render/NobilisTilia-html/300x600/msg-test-2.html",
+      "size": 12519,
+      "sha256": "825e547b0c1c8d74cc7267f7a911647e7d94900a46f34ccf26d6f8b9d7630515"
+    },
+    {
+      "path": "template-render/NobilisTilia-html/300x600/msg-test-3.html",
+      "size": 12440,
+      "sha256": "b42b022d3f01e0f64fb0d60cea10c1077111751d88353c90f47a2f0bd17c84ac"
+    },
+    {
+      "path": "template-render/NobilisTilia-html/480x480/msg-test-1.html",
+      "size": 12536,
+      "sha256": "ab7882dc759e2dae580fa16437365026b1e5804cb645960a870ec4785b47ffb2"
+    },
+    {
+      "path": "template-render/NobilisTilia-html/480x480/msg-test-2.html",
+      "size": 12519,
+      "sha256": "b1f57afc398bf2163b2861ffbb9d196349bcbc3fd85cdf918603f5fcfd97e81d"
+    },
+    {
+      "path": "template-render/NobilisTilia-html/480x480/msg-test-3.html",
+      "size": 12440,
+      "sha256": "5a38709f36cc912113813163e85c63443c3ffa2a5125c815b38370b702323e27"
+    },
+    {
+      "path": "template-render/Telekom-DooH/1080x510/msg-test-1.html",
+      "size": 2921,
+      "sha256": "a37bc2d090bda8e085b9b10837ba13ed1f49178bcb4ef395e8c1dbbd4e7c402f"
+    },
+    {
+      "path": "template-render/Telekom-DooH/1080x510/msg-test-2.html",
+      "size": 2892,
+      "sha256": "88ab3eae9057807f79fad2f3040b22ba0af03daaa4e467065cb5c48d39c14add"
+    },
+    {
+      "path": "template-render/Telekom-DooH/1080x510/msg-test-3.html",
+      "size": 2814,
+      "sha256": "d883ee2804d9473796e18be51a294484258cc870407b01816112c7df415bf837"
+    },
+    {
+      "path": "template-render/Telekom-DooH/300x250/msg-test-1.html",
+      "size": 2920,
+      "sha256": "e7e621c4895e881edd90e2f92444f048196b17248a04c66621c4740abc87fc19"
+    },
+    {
+      "path": "template-render/Telekom-DooH/300x250/msg-test-2.html",
+      "size": 2891,
+      "sha256": "52893b1a0244285df9ea740b36282b02068db8127da1ea9b0bd29dd7f03084f8"
+    },
+    {
+      "path": "template-render/Telekom-DooH/300x250/msg-test-3.html",
+      "size": 2813,
+      "sha256": "7385e507b4c6413e3dac0739553e36a7ff9f38d3ed8a75220bc4128778276e4d"
+    },
+    {
+      "path": "template-render/Telekom-DooH/300x600/msg-test-1.html",
+      "size": 2920,
+      "sha256": "ddd0b61fc3b8cdedeb853849db17d20d7c34d72dd6d94814b9455a9941a8febf"
+    },
+    {
+      "path": "template-render/Telekom-DooH/300x600/msg-test-2.html",
+      "size": 2891,
+      "sha256": "0ca076e87717e4d4ff6467f06ca7a3b5a7e2dc7b8d0ce5a3f7eaae8c16cd5ca6"
+    },
+    {
+      "path": "template-render/Telekom-DooH/300x600/msg-test-3.html",
+      "size": 2813,
+      "sha256": "e49fc4efc9fba09cb540d497471a79a743c5dee24d5d33d367933b6932214604"
+    },
+    {
+      "path": "template-render/html/300x250/msg-test-1.html",
+      "size": 28205,
+      "sha256": "91febbb6151bc5cef2cc1e3e40e59d5c09be64b9b32cfdde0309e9c0579cb8ef"
+    },
+    {
+      "path": "template-render/html/300x250/msg-test-2.html",
+      "size": 28155,
+      "sha256": "a8e30852b9e5d3b0bf03e3a5134c02e0ec8f1b4f2b5472391c8f734dfce7197a"
+    },
+    {
+      "path": "template-render/html/300x250/msg-test-3.html",
+      "size": 28076,
+      "sha256": "cdc8cf2469244369b2b71acdae3b5c88eaee33eb2e973a3dac87d0163fd006c3"
+    },
+    {
+      "path": "template-render/html/300x600/msg-test-1.html",
+      "size": 28205,
+      "sha256": "36652978067d9e98203f8a04559a476c2107f638d8eba64f6e70d7c7b196ee9b"
+    },
+    {
+      "path": "template-render/html/300x600/msg-test-2.html",
+      "size": 28155,
+      "sha256": "80c150675ca41fdad179cc7a4063b23ee4a17e7d4c939acf3c3148cbf3959bd4"
+    },
+    {
+      "path": "template-render/html/300x600/msg-test-3.html",
+      "size": 28076,
+      "sha256": "7b9bc391f3692ffc9d4806dab5e3ed575e3a9a93872fceba38228af7cda76241"
+    },
+    {
+      "path": "template-render/html/640x360/msg-test-1.html",
+      "size": 28205,
+      "sha256": "519b88485baf026be7a5cbf13acdec9dd8d8dff073019d3652adb4242cd50214"
+    },
+    {
+      "path": "template-render/html/640x360/msg-test-2.html",
+      "size": 28155,
+      "sha256": "fade56d11a8580d522beb3e0ba9023eeef4d409733df644b72363a598204c9d8"
+    },
+    {
+      "path": "template-render/html/640x360/msg-test-3.html",
+      "size": 28076,
+      "sha256": "510b091e3326e15801c5e17fd1588b253d212d753a724be11867ede1922124a2"
+    }
+  ]
+}

@@ -1,0 +1,119 @@
+{
+  "capturedAt": "2026-04-24T17:45:17.344Z",
+  "table": "config",
+  "rowCount": 16,
+  "rows": [
+    {
+      "key": "spreadsheetId",
+      "value": "1XEyM4DF5TE-EMlWZ3JHcLyb6AFkuBcIWaFFQJkxGgXE",
+      "category": "googleSheets",
+      "description": null,
+      "updated_at": "2026-04-19T20:45:16.999Z"
+    },
+    {
+      "key": "googleDrive",
+      "value": "{\"enabled\":true,\"assetsFolderId\":\"1U_QBRsxU6JSnLNRzOKh9P9O-u8YqLB9e\",\"creativesFolderId\":\"13Gh8UKq3_wuW38Y-UecKLF49cj4KnDyk\"}",
+      "category": "googleDrive",
+      "description": null,
+      "updated_at": "2026-04-19T20:45:16.999Z"
+    },
+    {
+      "key": "patterns",
+      "value": "{\"pmmid\":\"p_{{audiences[Audience_Key].Buying_platform}}-s_{{audiences[Audience_Key].Strategy}}-a_{{Audience_Key}}-m_{{Number}}-t_{{Topic_Key}}-v_{{Variant}}-n_{{Version}}\",\"topicKey\":\"{{Product}}_{{Tag1}}_{{Tag2}}_{{Tag3}}_{{Tag4}}\",\"trafficking\":{\"utm_campaign\":\"{{audiences[Audience_Key].Campaign_name}}\",\"utm_source\":\"{{audiences[Audience_Key].Buying_platform}}\",\"utm_medium\":\"display\",\"utm_content\":\"banner\",\"utm_term\":\"con!{{audiences[Audience_Key].Buying_platform}}!{{Audience_Key}}!...!hu!{{Number}}{{Variant}}\",\"utm_cd26\":\"{{PMMID}}\",\"final_trafficked_url\":\"{{Landing_URL}}?utm_campaign={{utm_campaign}}&utm_source={{utm_source}}&utm_medium={{utm_medium}}&utm_content={{utm_content}}&utm_term={{utm_term}}&utm_cd26={{utm_cd26}}&\"},\"feed\":{\"Text:advert_id\":\"{{id}}\",\"Text:pmmid\":\"{{pmmid}}\",\"AdformSignal:ADFPLAID\":\"{{audiences[Audience_Key].lineitem_id}}\",\"ReportingLabel\":\"{{pmmid}}-l_{{audiences[Audience_Key].lineitem_id}}\",\"IsDefault\":\"FALSE\",\"IsActive\":\"{{status}}=ACTIVE?TRUE:FALSE\",\"DateFrom\":\"{{start_date}}\",\"DateTo\":\"{{end_date}}\",\"Text:messaging_card_id\":\"{{number}}\",\"Text:messaging_card_variant\":\"{{variant}}\",\"Text:advert_name\":\"MC{{number}}_{{variant}}_{{topic}}_{{version}}\",\"Text:template_variant_class\":\"{{Template_variant_classes}}\",\"LP:clickTAG\":\"{{Final_trafficked_URL}}\",\"Asset:background_image_1\":\"{{image1|noext}}\",\"Asset:background_image_2\":\"{{image2|noext}}\",\"Asset:background_image_3\":\"{{image3|noext}}\",\"Asset:background_image_4\":\"{{image4|noext}}\",\"Asset:sticker_image_1\":\"{{image6|noext}}\",\"Text:headline_text_1\":\"{{Headline}}\",\"Text:copy_text_1\":\"{{Copy1}}\",\"Text:copy_text_2\":\"{{Copy2}}\",\"Text:headline_style_1\":\"{{Headline_style}}\",\"Text:copy_style_1\":\"{{Copy1_style}}\",\"Text:copy_style_2\":\"{{Copy2_style}}\",\"Text:sticker_text_1\":\"{{Flash}}\",\"Text:cta_text_1\":\"{{CTA}}\",\"Text:sticker_style_1\":\"{{Flash_style}}\",\"Text:cta_style_1\":\"{{CTA_style}}\",\"Asset:background_video_1\":\"{{video1|noext}}\",\"Text:disclaimer_text_1\":\"{{Disclaimer}}\",\"Text:disclaimer_style_1\":\"{{Disclaimer_style}}\",\"Asset:brand_image_1\":\"{{image5|noext}}\",\"Text:extra_rules\":\"{{CSS}}\"}}",
+      "category": "patterns",
+      "description": null,
+      "updated_at": "2026-04-19T20:45:16.999Z"
+    },
+    {
+      "key": "treeStructure",
+      "value": "Audience.Product → Audiences.Strategy → Audiences.Name → Topic.Tag1 → Topic.Tag2 → Topic.Tag3 → Messages.Number → Messages.Variant ",
+      "category": "ui",
+      "description": null,
+      "updated_at": "2026-04-19T20:45:16.999Z"
+    },
+    {
+      "key": "sankeyStructure",
+      "value": "Audiences.Product → Audiences.Strategy → Audience.Name → Topic.Name → Messages.Number",
+      "category": "structure",
+      "description": null,
+      "updated_at": "2026-04-19T20:45:16.999Z"
+    },
+    {
+      "key": "feedStructure",
+      "value": "Text:advert_id, Text:pmmid, AdformSignal:ADFPLAID, ReportingLabel, IsDefault, IsActive, DateFrom, DateTo, Text:messaging_card_id, Text:messaging_card_variant, Text:advert_name, Text:template_variant_class, LP:clickTAG, Asset:background_image_1, Asset:background_video_1, Asset:background_image_2, Asset:background_image_3, Asset:background_image_4, Asset:sticker_image_1, Asset:brand_image_1, Text:headline_text_1, Text:copy_text_1, Text:copy_text_2, Text:sticker_text_1, Text:disclaimer_text_1,Text:cta_text_1, Text:headline_style_1, Text:copy_style_1, Text:copy_style_2, Text:cta_style_1, Text:disclaimer_style_1, Text:sticker_style_1, Text:extra_rules",
+      "category": "feed",
+      "description": null,
+      "updated_at": "2026-04-19T20:45:16.999Z"
+    },
+    {
+      "key": "lookAndFeel",
+      "value": "{\"logo\":\"https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/EBH_Logo_screen_white.svg\",\"headerColor\":\"#2870ed\",\"logoStyle\":\"height: 25px; margin-top: -6px;\",\"buttonColor\":\"#ff6130\",\"buttonStyle\":\"border-radius: 7px; filter: drop-shadow(0px 0px 5px rgba(0,0,0,0.6));\",\"secondaryColor1\":\"#02a3a4\",\"secondaryColor2\":\"#eb4c79\",\"secondaryColor3\":\"#711c7a\",\"statusColors\":{\"ACTIVE\":\"#34a853\",\"INACTIVE\":\"#cccccc\",\"ERROR\":\"#ff0000\",\"INPROGRESS\":\"#ff6d01\",\"PLANNED\":\"#ffff00\",\"INCOMING\":\"#e6bf00\",\"NAMING\":\"#8B5CF6\",\"PREVIEW\":\"#3bf7d1\"},\"pageTitle\":\"ERSTE Messaging Matrix 1.0\",\"cobranding\":{\"enabled\":true,\"logoUrl\":\"/S.svg\"},\"fontFamily\":\"Inter\",\"capsuleDesign\":true}",
+      "category": "ui",
+      "description": null,
+      "updated_at": "2026-04-19T20:45:16.999Z"
+    },
+    {
+      "key": "emailAccount",
+      "value": "{\"type\":\"email_account\",\"project_id\":\"messagingmatrix\",\"client_email\":\"agent.erste@messagingmatrix.ai\",\"pass\":\"756Eu5yo&\",\"host\":\"messagingmatrix.ai\",\"port\":\"993\"}",
+      "category": "general",
+      "description": null,
+      "updated_at": "2026-04-19T20:45:17.020Z"
+    },
+    {
+      "key": "audienceStructure",
+      "value": "ID,Name,Order,Status,Product,Strategy,Buying_platform,Data_source,Targeting_type,Device,Tag,Key,Comment,Campaign_name,Campaign_ID,Lineitem_name,Lineitem_ID",
+      "category": "structure",
+      "description": null,
+      "updated_at": "2026-04-19T20:45:17.020Z"
+    },
+    {
+      "key": "topicStructure",
+      "value": "ID,Name,Key,Order,Status,Product,Tag1,Tag2,Tag3,Tag4,Created,Comment",
+      "category": "structure",
+      "description": null,
+      "updated_at": "2026-04-19T20:45:17.020Z"
+    },
+    {
+      "key": "messagesStructure",
+      "value": "ID,POMS_ID,Name,Number,Variant,Audience_Key,Topic_Key,Version,PMMID,Status,Start_date,End_date,Template,Template_variant_classes,Headline,Copy1,Copy2,Disclaimer,Headline_style,Copy1_style,Copy2_style,Disclaimer_style,CSS,Image1,Image2,Image3,Image4,Image5,Image6,Video1,Flash,Flash_style,CTA,CTA_style,Landing_URL,Comment,UTM_Campaign,UTM_Source,UTM_Medium,UTM_Content,UTM_Term,UTM_CD26,Final_Trafficked_URL",
+      "category": "structure",
+      "description": null,
+      "updated_at": "2026-04-19T20:45:17.020Z"
+    },
+    {
+      "key": "creativeStructure",
+      "value": "ID, Brand, Product, Type, Visual_keyword, Visual_description, MC_Number, MC_Variant, Version, File_format, File_driveID, File_name, File_size, File_date, File_dimensions, File_DirectLink, File_thumbnail, Is_Dynamic",
+      "category": "structure",
+      "description": null,
+      "updated_at": "2026-04-19T20:45:17.020Z"
+    },
+    {
+      "key": "creativeParsingRules",
+      "value": "{\"Brand\":{\"rule\":\"fixed\",\"value\":\"ERSTE\"},\"Product\":{\"rule\":\"after_segment\",\"afterValue\":\"ERSTE\",\"matchKeywords\":false},\"MC_Number\":{\"rule\":\"pattern\",\"pattern\":\"MC(\\\\d+)\",\"extractGroup\":1},\"MC_Variant\":{\"rule\":\"after_pattern\",\"pattern\":\"^MC\\\\d+$\"},\"Version\":{\"rule\":\"pattern\",\"pattern\":\"[nv](\\\\d+)\",\"extractGroup\":1},\"File_dimensions\":{\"rule\":\"last_segment\",\"pattern\":\"(\\\\d+)x(\\\\d+)\"},\"Visual_description\":{\"rule\":\"remaining\"}}",
+      "category": "structure",
+      "description": null,
+      "updated_at": "2026-04-19T20:45:17.020Z"
+    },
+    {
+      "key": "visibleTemplates",
+      "value": "[\"html\",\"Telekom-DooH\",\"NobilisTilia-html\"]",
+      "category": "general",
+      "description": null,
+      "updated_at": "2026-04-19T20:45:17.020Z"
+    },
+    {
+      "key": "aiModels",
+      "value": "{\"claude\":[{\"id\":\"claude-sonnet-4-5-20250929\",\"name\":\"Claude 4.5 Sonnet\",\"isDefault\":true},{\"id\":\"claude-opus-4-5-20251101\",\"name\":\"Claude 4.5 Opus\"}],\"gemini\":[{\"id\":\"gemini-3-pro-preview\",\"name\":\"Gemini 3 Pro\",\"isDefault\":true},{\"id\":\"gemini-2.5-flash\",\"name\":\"Gemini 2.5 Flash\"}],\"grok\":[{\"id\":\"grok-4-1-fast-reasoning\",\"name\":\"Grok 4.1 Fast Reasoning\",\"isDefault\":true}],\"imageGeneration\":\"gemini-3-pro-image-preview\"}",
+      "category": "general",
+      "description": null,
+      "updated_at": "2026-04-19T20:45:17.020Z"
+    },
+    {
+      "key": "adformLastSync",
+      "value": "{\"campaignCount\":19,\"bannerCount\":5227,\"matchedCount\":4229,\"rowsWritten\":4380,\"syncedAt\":\"2026-04-22T20:50:09.513Z\",\"dateFrom\":\"2026-03-23\",\"dateTo\":\"2026-04-22\",\"campaignPrefix\":\"26!\"}",
+      "category": "adform",
+      "description": null,
+      "updated_at": "2026-04-22T20:50:18.029Z"
+    }
+  ]
+}

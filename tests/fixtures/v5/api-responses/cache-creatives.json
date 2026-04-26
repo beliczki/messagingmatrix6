@@ -1,0 +1,15 @@
+{
+  "capturedAt": "2026-04-24T17:45:17.495Z",
+  "endpoint": "/api/cache/creatives",
+  "auth": "public",
+  "status": 200,
+  "ok": true,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "data": [],
+    "cached": true,
+    "cacheAge": null,
+    "isStale": true,
+    "count": 0
+  }
+}

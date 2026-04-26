@@ -1,0 +1,361 @@
+/* ------------------------------------------- */
+/* ------------------------------------------- */
+/* 970x250 */
+/* ------------------------------------------- */
+/* ------------------------------------------- */
+html {
+  font-size: 20px;
+}
+
+body {
+    #adContainer {
+        width: 970px !important;
+        height: 250px !important;
+    }
+
+    #backgroundContainer {
+        width: 45%;
+        left: 55%;
+    }
+
+    main {
+        width: 55%;
+    }
+
+    #textContainer,
+    #logoContainer {
+        padding: 1.5rem;
+    }
+
+    #textContainer {
+        padding-bottom: 1rem;
+        padding-top: 3.5rem;
+    }
+
+    #copyWrapper1,
+    #copyWrapper2,
+    #disclaimerWrapper1,
+    #headlineWrapper  { 
+        width:85%; 
+    }
+    
+    #stickerContainer {
+        transform: scale(0.65);
+    }
+
+    #buttonWrapper  { 
+        font-size:0.8rem; 
+    }
+
+    #cardContainer {
+        top: auto;
+        transform-origin: 50% 100%;
+        bottom: 1rem;
+        right: -9rem;
+      }
+
+    #disclaimerWrapper1  { 
+        display:block; 
+    }
+}
+
+
+
+body .topRoundedFrame {
+    #frameContainer::before {
+        /*top: 1.5rem;
+        right: 1.5rem;*/
+        display: none;
+    }
+   
+    #logoWrapper { 
+        /*margin-top:1.5rem;*/
+        margin-top:0rem;
+        
+    }
+    #textContainer {
+        /*padding-top:2rem;*/
+        padding-top:3.5rem;
+        
+    }
+
+}
+
+
+body .bottomRoundedFrame {
+    #textContainer { 
+        padding-bottom:2rem;
+    }
+
+    #cardContainer { 
+        bottom:2rem; 
+    }
+}
+
+
+body .imageAndColor2 {
+    #backgroundContainer {
+        left: 0%;
+        height: 100%;
+        width: 45%;
+    }
+
+    main {
+        left: 45%;
+        height: 100%;
+        width: 55%;
+        bottom: auto;
+        top: 0%;
+    }
+
+    #logoContainer { 
+        top:0px; 
+
+        img { 
+            height:2rem; 
+        }
+    }
+
+    #textContainer  { 
+        padding-top: 1rem;
+    }
+    
+    #headlineWrapper {
+        margin-top: 0;
+    }
+    
+    #copyWrapper1 {
+        margin-top: 0.5rem;
+    }
+
+    #headlineWrapper,
+    #copyWrapper1,
+    #copyWrapper2{ 
+        width: 70%;
+    }
+
+    #buttonWrapper  { 
+        margin-top: auto; 
+    }
+
+    #stickerContainer  {
+        transform-origin: 100% 0%;
+        right: 1rem;
+        top: 1rem;
+    }
+
+    #cardContainer  {
+        transform-origin: 100% 100%;
+        transform: scale(0.45);
+        left: -11rem;
+        right: auto;
+        top: auto;
+        bottom: 1rem;
+    }
+
+    .topRoundedFrame{
+        #logoWrapper { 
+            /*margin-top:1.5rem;*/
+            margin-top:0rem;
+        }
+
+        #textContainer {
+            /*padding-top:2rem;*/
+            padding-top:1rem;
+        }
+    }
+    
+    &.topRoundedFrame,
+    &.bottomRoundedFrame {
+        #stickerContainer { 
+            right:2rem; 
+        }
+    }
+
+    &.bottomRoundedFrame {
+        #cardContainer { 
+            bottom:2rem; 
+        }
+    }
+    
+    &.animated main {
+        left:100%;
+        top: 0%;
+        animation-name: color-box-animate-in-4;
+    }
+    
+    &.animated #backgroundContainer {
+        width: 100%;
+        height: 100%;
+        animation-name: background-animate-in-4!important;
+    }
+}
+
+
+body .fullSurfaceColor {
+
+    #copyWrapper1,
+    #copyWrapper2,
+    #disclaimerWrapper1,
+    #headlineWrapper {
+        width: 55%;
+    }
+    
+    #logoContainer { 
+        top:0px; 
+
+        img { 
+            height:2rem; 
+        }
+    }
+
+    #headlineWrapper {
+        margin-top: auto;
+    }
+    
+    #stickerContainer {
+        transform: scale(0.65) translateY(-50%);
+        transform-origin: 100% 0%;
+        right: 4rem;
+        top: 50%;
+    }
+
+    #objectWrapper {
+        width: 35%;
+        bottom: 5%;
+        height: 90%;
+        left: auto;
+        right: 15%;
+    }
+    
+    &.largeGfx {
+        #objectWrapper { 
+            width: 35%;
+            height: 110%;
+            right: 12%;
+            bottom: -5%;
+        }
+    }
+    
+    &.smallGfx {
+        #objectWrapper {
+            >div {
+                background-size: 55%;
+            }
+        }
+    }
+    
+    &.bottomSticker{ 
+        /*#stickerContainer{
+            top: auto;
+            bottom: 1rem;
+        }*/
+        
+        /*#stickerContainer{
+            top: -1.5rem;
+            bottom: unset;
+        }*/
+        #objectWrapper {
+            top: unset;
+            bottom: 5%;
+        }
+        
+        #stickerContainer {
+            top: 50%;
+            bottom: unset;
+        }
+    }
+    
+    &.largeGfx.bottomSticker {
+        #objectWrapper {
+            bottom: -5%;
+        }
+    }
+
+    #cardContainer {
+        transform-origin: 100% 100%;
+        transform: scale(0.65);
+        right: 2rem;
+        top: auto;
+        bottom: 1rem;
+    }
+
+    #cardWrapper > div { 
+        background-position: right bottom; 
+    }
+
+    /*&.bottomRoundedFrame {
+        #cardContainer { 
+            bottom:2rem; 
+        }
+    }*/
+}
+
+
+body .fullSurfaceImage {
+
+    #copyWrapper1,
+    #copyWrapper2,
+    #disclaimerWrapper1,
+    #headlineWrapper {
+        width: 50%;
+    }
+
+    #headlineWrapper {
+        margin-top: auto;
+    }
+
+    #objectWrapper {
+        width: 35%;
+        bottom: 5%;
+        height: 90%;
+        left: auto;
+        right: 10%;
+    }
+
+    #stickerContainer {
+        transform-origin: 100% 0%;
+        top: 2rem;
+    }
+
+    #cardContainer {
+        transform-origin: 100% 100%;
+        transform: scale(0.65);
+        right: 2rem;
+        top: auto;
+        bottom: 1rem;
+    }
+
+    #cardWrapper>div {
+        background-position: right bottom;
+    }
+
+    /*&.bottomRoundedFrame {
+        #cardContainer { 
+            bottom:2rem; 
+        }
+    }*/
+}
+
+
+
+/* -----------------------------------------*/
+/* positioning based on Image cropping  PSD */
+/* -----------------------------------------*/
+.campaignImage #imageWrapper div {
+background-size: 193%;
+  background-position: -241px -128px;
+}
+
+.preCompBg #imageWrapper div { 
+  background-size: inherit;
+  background-position: 0px 0px;
+}
+
+/* -----------------------------------------*/
+/* text format helpers  */
+/* -----------------------------------------*/
+
+.sizebr.br970x250 { display:inline-block;} 
+.size-970x250 .text-970x250 {display: inline;}
+

@@ -1,0 +1,249 @@
+{
+  "capturedAt": "2026-04-24T17:45:17.259Z",
+  "sourceRef": "services/adformSyncService.js lines 32-63",
+  "cases": {
+    "extractMcLabel": [
+      {
+        "id": "direct-basic",
+        "input": "MC282a_300x250",
+        "expected": "MC282a",
+        "actual": "MC282a"
+      },
+      {
+        "id": "direct-suffix",
+        "input": "Campaign_MC1b_970x250_final",
+        "expected": "MC1b",
+        "actual": "MC1b"
+      },
+      {
+        "id": "direct-uppercase-letter",
+        "input": "MC5A",
+        "expected": "MC5a",
+        "actual": "MC5a"
+      },
+      {
+        "id": "direct-mixed-case-mc",
+        "input": "mc10c_test",
+        "expected": "MC10c",
+        "actual": "MC10c"
+      },
+      {
+        "id": "direct-large-number",
+        "input": "MC9999z_banner",
+        "expected": "MC9999z",
+        "actual": "MC9999z"
+      },
+      {
+        "id": "direct-leading-zero",
+        "input": "MC007a",
+        "expected": "MC7a",
+        "actual": "MC7a"
+      },
+      {
+        "id": "pmmid-standard",
+        "input": "pmmid=p_adform-m_282-t_top1-v_a",
+        "expected": "MC282a",
+        "actual": "MC282a"
+      },
+      {
+        "id": "pmmid-v-trailing-underscore",
+        "input": "a_aud1-m_5-v_b_extra",
+        "expected": "MC5b",
+        "actual": "MC5b"
+      },
+      {
+        "id": "pmmid-v-trailing-dash",
+        "input": "a_aud1-m_5-v_c-n_1",
+        "expected": "MC5c",
+        "actual": "MC5c"
+      },
+      {
+        "id": "pmmid-v-at-end",
+        "input": "a_aud1-m_5-v_d",
+        "expected": "MC5d",
+        "actual": "MC5d"
+      },
+      {
+        "id": "pmmid-m-00-dropped",
+        "input": "pmmid=a_aud1-m_00-v_a",
+        "expected": null,
+        "actual": null
+      },
+      {
+        "id": "pmmid-m-zero-dropped",
+        "input": "a_aud1-m_0-v_a",
+        "expected": null,
+        "actual": null
+      },
+      {
+        "id": "pmmid-uppercase-v",
+        "input": "a_aud1-m_5-V_A",
+        "expected": "MC5a",
+        "actual": "MC5a"
+      },
+      {
+        "id": "no-match-plain",
+        "input": "banner_300x250",
+        "expected": null,
+        "actual": null
+      },
+      {
+        "id": "no-match-only-m",
+        "input": "a_aud1-m_5",
+        "expected": null,
+        "actual": null
+      },
+      {
+        "id": "no-match-only-v",
+        "input": "a_aud1-v_a",
+        "expected": null,
+        "actual": null
+      },
+      {
+        "id": "empty-string",
+        "input": "",
+        "expected": null,
+        "actual": null
+      },
+      {
+        "id": "null-input",
+        "input": null,
+        "expected": null,
+        "actual": null
+      },
+      {
+        "id": "mixed-direct-wins",
+        "input": "m_99-MC282a-v_z",
+        "expected": "MC282a",
+        "actual": "MC282a"
+      }
+    ],
+    "extractSize": [
+      {
+        "id": "size-300x250",
+        "input": "MC282a_300x250",
+        "expected": "300x250",
+        "actual": "300x250"
+      },
+      {
+        "id": "size-970x250",
+        "input": "Campaign_970x250_variant",
+        "expected": "970x250",
+        "actual": "970x250"
+      },
+      {
+        "id": "size-with-spaces",
+        "input": "banner 728 x 90 html",
+        "expected": "728x90",
+        "actual": "728x90"
+      },
+      {
+        "id": "size-1x1-dropped",
+        "input": "richmedia_1x1",
+        "expected": "",
+        "actual": ""
+      },
+      {
+        "id": "size-first-match-wins",
+        "input": "banner_300x250_mobile_728x90",
+        "expected": "300x250",
+        "actual": "300x250"
+      },
+      {
+        "id": "size-no-dimensions",
+        "input": "plain_banner",
+        "expected": "",
+        "actual": ""
+      },
+      {
+        "id": "size-empty",
+        "input": "",
+        "expected": "",
+        "actual": ""
+      },
+      {
+        "id": "size-null",
+        "input": null,
+        "expected": "",
+        "actual": ""
+      },
+      {
+        "id": "size-big",
+        "input": "banner 1920x1080 video",
+        "expected": "1920x1080",
+        "actual": "1920x1080"
+      }
+    ],
+    "computeCtr": [
+      {
+        "id": "ctr-normal",
+        "impressions": 10000,
+        "clicks": 41,
+        "expected": 0.0041,
+        "actual": 0.0041
+      },
+      {
+        "id": "ctr-round-4-decimals",
+        "impressions": 7777,
+        "clicks": 3,
+        "expected": 0.0004,
+        "actual": 0.0004
+      },
+      {
+        "id": "ctr-zero-impressions",
+        "impressions": 0,
+        "clicks": 5,
+        "expected": 0,
+        "actual": 0
+      },
+      {
+        "id": "ctr-negative-impressions",
+        "impressions": -10,
+        "clicks": 5,
+        "expected": 0,
+        "actual": 0
+      },
+      {
+        "id": "ctr-null-impressions",
+        "impressions": null,
+        "clicks": 5,
+        "expected": 0,
+        "actual": 0
+      },
+      {
+        "id": "ctr-undefined-impressions",
+        "clicks": 5,
+        "expected": 0,
+        "actual": 0
+      },
+      {
+        "id": "ctr-perfect",
+        "impressions": 100,
+        "clicks": 100,
+        "expected": 1,
+        "actual": 1
+      },
+      {
+        "id": "ctr-tiny",
+        "impressions": 1000000,
+        "clicks": 1,
+        "expected": 0,
+        "actual": 0
+      },
+      {
+        "id": "ctr-small-but-nonzero",
+        "impressions": 100000,
+        "clicks": 1,
+        "expected": 0,
+        "actual": 0
+      },
+      {
+        "id": "ctr-half-percent",
+        "impressions": 10000,
+        "clicks": 50,
+        "expected": 0.005,
+        "actual": 0.005
+      }
+    ]
+  }
+}

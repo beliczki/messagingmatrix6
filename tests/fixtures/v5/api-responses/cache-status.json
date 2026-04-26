@@ -1,0 +1,11 @@
+{
+  "capturedAt": "2026-04-24T17:45:17.451Z",
+  "endpoint": "/api/cache/status",
+  "auth": "public",
+  "status": 400,
+  "ok": false,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "error": "Invalid table name"
+  }
+}

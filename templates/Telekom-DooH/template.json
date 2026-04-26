@@ -1,0 +1,176 @@
+{
+    "default_size": "300x250",
+    "placeholders": {
+        "advert_id": {
+            "type": "var",
+	        "default": "",
+            "binding-messagingmatrix": "POMS_ID"
+        },
+        "advert_mc": {
+            "type": "var",
+	        "default": "",
+            "binding-messagingmatrix": "Number"
+        },
+        "advert_variant": {
+            "type": "var",
+	        "default": "",
+            "binding-messagingmatrix": "Variant"
+        },
+        "advert_name": {
+            "type": "var",
+	        "default": "",
+            "binding-messagingmatrix": ""
+        },
+        "click_url": {
+            "type": "url",
+	        "default": "",
+            "binding-messagingmatrix": "Final_Trafficked_URL"
+        },
+        "template_variant_class": {
+            "type": "tag",
+            "options": "fullSurfaceColor, fullSurfaceImage, imageAndColor, imageAndColor2, imageGfx, objectGfx, videoGfx, noFrame, topRoundedFrame, bottomRoundedFrame, animated, teal, purple, peach, stone, apple, orange, colorCta, outlineCta, topSticker, bottomSticker, campaignImage",
+            "default": "",
+            "binding-messagingmatrix": "Template_variant_classes"
+        },
+
+
+      
+      
+        "headline_text_1": {
+            "type": "text",
+            "default": " ",
+            "binding-messagingmatrix": "Headline"
+        },
+        "copy_text_1": {
+            "type": "text",
+	        "default": "",
+            "binding-messagingmatrix": "Copy1"
+        },
+        "copy_text_2": {
+            "type": "text",
+	        "default": "",
+            "binding-messagingmatrix": "Copy2"
+        },
+        "disclaimer_text_1": {
+            "type": "text",
+	        "default": "",
+            "binding-messagingmatrix": "Disclaimer"
+        },
+        "cta_text_1": {
+            "type": "text",
+	        "default": "Érdekel",
+            "binding-messagingmatrix": "CTA"
+        },
+        "sticker_text_1": {
+            "type": "text",
+	        "default": "",
+            "binding-messagingmatrix": "Flash"
+        },
+
+
+      
+        "background_video_1": {
+            "type": "video",
+	        "default": "",
+            "binding-messagingmatrix": "Video1",
+            "path-messagingmatrix": "/api/drive/proxy/",
+            "path-adform": "",
+            "path-poms": "/HU-hu/videos/",
+            "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_1": {
+            "type": "image",
+	        "default": "",
+            "binding-messagingmatrix": "Image1",
+            "path-messagingmatrix": "/api/drive/proxy/",
+            "path-adform": "",
+            "path-poms": "/HU-hu/background/",
+            "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_2": {
+            "type": "image",
+	        "default": "",
+            "binding-messagingmatrix": "Image2",
+            "path-messagingmatrix": "/api/drive/proxy/",
+            "path-adform": "",
+            "path-poms": "/HU-hu/background/",
+            "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_3": {
+            "type": "image",
+	        "default": "",
+            "binding-messagingmatrix": "Image3",
+            "path-messagingmatrix": "/api/drive/proxy/",
+            "path-adform": "",
+            "path-poms": "/HU-hu/background/",
+            "path-google": "DRM_Asset:Erste/"
+        },
+        "background_image_4": {
+            "type": "image",
+	        "default": "",
+            "binding-messagingmatrix": "Image4",
+            "path-messagingmatrix": "/api/drive/proxy/",
+            "path-adform": "",
+            "path-poms": "/HU-hu/background/",
+            "path-google": "DRM_Asset:Erste/"
+        },
+        "brand_image_1": {
+            "type": "image",
+	        "default": "",
+            "binding-messagingmatrix": "Image5",
+            "path-messagingmatrix": "/api/drive/proxy/",
+            "path-adform": "",
+            "path-poms": "/HU-hu/brand",
+            "path-google": "DRM_Asset:Erste/"
+        },
+        "sticker_image_1": {
+            "type": "image",
+	        "default": "",
+            "binding-messagingmatrix": "Image6",
+            "path-messagingmatrix": "/api/drive/proxy/",
+            "path-adform": "",
+            "path-poms": "/HU-hu/sticker/",
+            "path-google": "DRM_Asset:Erste/"
+        },
+
+
+
+
+      
+        "headline_style_1": {
+            "type": "style",
+	        "default": "",
+            "binding-messagingmatrix": "Headline_style"
+        },
+        "copy_style_1": {
+            "type": "style",
+	        "default": "",
+            "binding-messagingmatrix": "Copy1_style"
+        },
+        "copy_style_2": {
+            "type": "style",
+	        "default": "",
+            "binding-messagingmatrix": "Copy2_style"
+        },
+        "disclaimer_style_1": {
+            "type": "style",
+	        "default": "",
+            "binding-messagingmatrix": "Disclaimer_style"
+        },
+        "sticker_style_1": {
+            "type": "style",
+	        "default": "",
+            "binding-messagingmatrix": "Flash_style"
+        },
+        "cta_style_1": {
+            "type": "style",
+	        "default": "",
+            "binding-messagingmatrix": "CTA_style"
+        },
+        "css_styles": {
+            "type": "style",
+	        "default": "",
+            "binding-messagingmatrix": "CSS"
+        }
+    }
+}

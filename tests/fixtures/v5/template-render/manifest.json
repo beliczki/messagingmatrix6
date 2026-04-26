@@ -1,0 +1,324 @@
+{
+  "capturedAt": "2026-04-24T17:45:17.390Z",
+  "sourceRef": "server.js populateTemplate() 1682-1737 + buildTemplateImageBaseUrls() 1857-1872",
+  "sampleMessages": [
+    {
+      "id": "test-1",
+      "number": 282,
+      "variant": "a",
+      "name": "Q1 Savings Promo",
+      "audience": "aud1",
+      "topic": "savings",
+      "status": "ACTIVE",
+      "headline": "Save up to 25%",
+      "copy1": "Special offer for new customers",
+      "copy2": "Limited time only",
+      "cta": "Learn More",
+      "flash": "NEW",
+      "disclaimer": "Terms apply",
+      "image1": "hero.jpg",
+      "image2": "",
+      "image5": "logo.png",
+      "video1": "",
+      "landing_url": "https://bank.com/promo"
+    },
+    {
+      "id": "test-2",
+      "number": 1,
+      "variant": "b",
+      "name": "Loan Offer",
+      "audience": "aud2",
+      "topic": "loan",
+      "status": "APPROVED",
+      "headline": "Get a loan",
+      "copy1": "Fast approval",
+      "copy2": "",
+      "cta": "Apply Now",
+      "flash": "",
+      "disclaimer": "",
+      "image1": "loan-hero.png",
+      "image5": "brand.png",
+      "landing_url": "https://bank.com/loan"
+    },
+    {
+      "id": "test-3",
+      "number": 5,
+      "variant": "a",
+      "name": "Empty fields test",
+      "audience": "aud1",
+      "topic": "top1",
+      "status": "INCOMING",
+      "headline": "",
+      "copy1": "",
+      "image1": ""
+    }
+  ],
+  "sampleTextFormatting": [
+    {
+      "id": 1,
+      "text_original": "Save",
+      "text_formatted": "<em>Save</em>",
+      "formatting_scope": "",
+      "formatting_mc_scope": ""
+    },
+    {
+      "id": 2,
+      "text_original": "25%",
+      "text_formatted": "<strong>25%</strong>",
+      "formatting_scope": "300x250",
+      "formatting_mc_scope": ""
+    },
+    {
+      "id": 3,
+      "text_original": "loan",
+      "text_formatted": "<b>loan</b>",
+      "formatting_scope": "",
+      "formatting_mc_scope": "MC1b"
+    }
+  ],
+  "items": [
+    {
+      "template": "NobilisTilia-html",
+      "size": "300x250",
+      "messageId": "test-1",
+      "messageNumber": 282,
+      "messageVariant": "a",
+      "bytes": 12536,
+      "path": "NobilisTilia-html/300x250/msg-test-1.html"
+    },
+    {
+      "template": "NobilisTilia-html",
+      "size": "300x250",
+      "messageId": "test-2",
+      "messageNumber": 1,
+      "messageVariant": "b",
+      "bytes": 12519,
+      "path": "NobilisTilia-html/300x250/msg-test-2.html"
+    },
+    {
+      "template": "NobilisTilia-html",
+      "size": "300x250",
+      "messageId": "test-3",
+      "messageNumber": 5,
+      "messageVariant": "a",
+      "bytes": 12439,
+      "path": "NobilisTilia-html/300x250/msg-test-3.html"
+    },
+    {
+      "template": "NobilisTilia-html",
+      "size": "300x600",
+      "messageId": "test-1",
+      "messageNumber": 282,
+      "messageVariant": "a",
+      "bytes": 12536,
+      "path": "NobilisTilia-html/300x600/msg-test-1.html"
+    },
+    {
+      "template": "NobilisTilia-html",
+      "size": "300x600",
+      "messageId": "test-2",
+      "messageNumber": 1,
+      "messageVariant": "b",
+      "bytes": 12519,
+      "path": "NobilisTilia-html/300x600/msg-test-2.html"
+    },
+    {
+      "template": "NobilisTilia-html",
+      "size": "300x600",
+      "messageId": "test-3",
+      "messageNumber": 5,
+      "messageVariant": "a",
+      "bytes": 12439,
+      "path": "NobilisTilia-html/300x600/msg-test-3.html"
+    },
+    {
+      "template": "NobilisTilia-html",
+      "size": "480x480",
+      "messageId": "test-1",
+      "messageNumber": 282,
+      "messageVariant": "a",
+      "bytes": 12536,
+      "path": "NobilisTilia-html/480x480/msg-test-1.html"
+    },
+    {
+      "template": "NobilisTilia-html",
+      "size": "480x480",
+      "messageId": "test-2",
+      "messageNumber": 1,
+      "messageVariant": "b",
+      "bytes": 12519,
+      "path": "NobilisTilia-html/480x480/msg-test-2.html"
+    },
+    {
+      "template": "NobilisTilia-html",
+      "size": "480x480",
+      "messageId": "test-3",
+      "messageNumber": 5,
+      "messageVariant": "a",
+      "bytes": 12439,
+      "path": "NobilisTilia-html/480x480/msg-test-3.html"
+    },
+    {
+      "template": "Telekom-DooH",
+      "size": "1080x510",
+      "messageId": "test-1",
+      "messageNumber": 282,
+      "messageVariant": "a",
+      "bytes": 2921,
+      "path": "Telekom-DooH/1080x510/msg-test-1.html"
+    },
+    {
+      "template": "Telekom-DooH",
+      "size": "1080x510",
+      "messageId": "test-2",
+      "messageNumber": 1,
+      "messageVariant": "b",
+      "bytes": 2892,
+      "path": "Telekom-DooH/1080x510/msg-test-2.html"
+    },
+    {
+      "template": "Telekom-DooH",
+      "size": "1080x510",
+      "messageId": "test-3",
+      "messageNumber": 5,
+      "messageVariant": "a",
+      "bytes": 2814,
+      "path": "Telekom-DooH/1080x510/msg-test-3.html"
+    },
+    {
+      "template": "Telekom-DooH",
+      "size": "300x250",
+      "messageId": "test-1",
+      "messageNumber": 282,
+      "messageVariant": "a",
+      "bytes": 2920,
+      "path": "Telekom-DooH/300x250/msg-test-1.html"
+    },
+    {
+      "template": "Telekom-DooH",
+      "size": "300x250",
+      "messageId": "test-2",
+      "messageNumber": 1,
+      "messageVariant": "b",
+      "bytes": 2891,
+      "path": "Telekom-DooH/300x250/msg-test-2.html"
+    },
+    {
+      "template": "Telekom-DooH",
+      "size": "300x250",
+      "messageId": "test-3",
+      "messageNumber": 5,
+      "messageVariant": "a",
+      "bytes": 2813,
+      "path": "Telekom-DooH/300x250/msg-test-3.html"
+    },
+    {
+      "template": "Telekom-DooH",
+      "size": "300x600",
+      "messageId": "test-1",
+      "messageNumber": 282,
+      "messageVariant": "a",
+      "bytes": 2920,
+      "path": "Telekom-DooH/300x600/msg-test-1.html"
+    },
+    {
+      "template": "Telekom-DooH",
+      "size": "300x600",
+      "messageId": "test-2",
+      "messageNumber": 1,
+      "messageVariant": "b",
+      "bytes": 2891,
+      "path": "Telekom-DooH/300x600/msg-test-2.html"
+    },
+    {
+      "template": "Telekom-DooH",
+      "size": "300x600",
+      "messageId": "test-3",
+      "messageNumber": 5,
+      "messageVariant": "a",
+      "bytes": 2813,
+      "path": "Telekom-DooH/300x600/msg-test-3.html"
+    },
+    {
+      "template": "html",
+      "size": "300x250",
+      "messageId": "test-1",
+      "messageNumber": 282,
+      "messageVariant": "a",
+      "bytes": 28195,
+      "path": "html/300x250/msg-test-1.html"
+    },
+    {
+      "template": "html",
+      "size": "300x250",
+      "messageId": "test-2",
+      "messageNumber": 1,
+      "messageVariant": "b",
+      "bytes": 28145,
+      "path": "html/300x250/msg-test-2.html"
+    },
+    {
+      "template": "html",
+      "size": "300x250",
+      "messageId": "test-3",
+      "messageNumber": 5,
+      "messageVariant": "a",
+      "bytes": 28065,
+      "path": "html/300x250/msg-test-3.html"
+    },
+    {
+      "template": "html",
+      "size": "300x600",
+      "messageId": "test-1",
+      "messageNumber": 282,
+      "messageVariant": "a",
+      "bytes": 28195,
+      "path": "html/300x600/msg-test-1.html"
+    },
+    {
+      "template": "html",
+      "size": "300x600",
+      "messageId": "test-2",
+      "messageNumber": 1,
+      "messageVariant": "b",
+      "bytes": 28145,
+      "path": "html/300x600/msg-test-2.html"
+    },
+    {
+      "template": "html",
+      "size": "300x600",
+      "messageId": "test-3",
+      "messageNumber": 5,
+      "messageVariant": "a",
+      "bytes": 28065,
+      "path": "html/300x600/msg-test-3.html"
+    },
+    {
+      "template": "html",
+      "size": "640x360",
+      "messageId": "test-1",
+      "messageNumber": 282,
+      "messageVariant": "a",
+      "bytes": 28195,
+      "path": "html/640x360/msg-test-1.html"
+    },
+    {
+      "template": "html",
+      "size": "640x360",
+      "messageId": "test-2",
+      "messageNumber": 1,
+      "messageVariant": "b",
+      "bytes": 28145,
+      "path": "html/640x360/msg-test-2.html"
+    },
+    {
+      "template": "html",
+      "size": "640x360",
+      "messageId": "test-3",
+      "messageNumber": 5,
+      "messageVariant": "a",
+      "bytes": 28065,
+      "path": "html/640x360/msg-test-3.html"
+    }
+  ]
+}

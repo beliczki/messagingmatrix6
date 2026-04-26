@@ -1,0 +1,689 @@
+{
+  "capturedAt": "2026-04-24T17:45:17.234Z",
+  "cases": {
+    "evaluatePattern": [
+      {
+        "id": "simple-var",
+        "pattern": "hello {{name}}",
+        "context": {
+          "name": "world"
+        },
+        "expected": "hello world",
+        "actual": "hello world"
+      },
+      {
+        "id": "simple-missing",
+        "pattern": "hello {{nope}}",
+        "context": {
+          "name": "world"
+        },
+        "expected": "hello ",
+        "actual": "hello "
+      },
+      {
+        "id": "case-insensitive-var",
+        "pattern": "{{Name}} and {{NAME}}",
+        "context": {
+          "name": "bob"
+        },
+        "expected": "bob and bob",
+        "actual": "bob and bob"
+      },
+      {
+        "id": "mod-upper",
+        "pattern": "{{x|upper}}",
+        "context": {
+          "x": "hi"
+        },
+        "expected": "HI",
+        "actual": "HI"
+      },
+      {
+        "id": "mod-lower",
+        "pattern": "{{x|lower}}",
+        "context": {
+          "x": "HI"
+        },
+        "expected": "hi",
+        "actual": "hi"
+      },
+      {
+        "id": "mod-trim",
+        "pattern": "{{x|trim}}",
+        "context": {
+          "x": "  hi  "
+        },
+        "expected": "hi",
+        "actual": "hi"
+      },
+      {
+        "id": "mod-noext",
+        "pattern": "{{x|noext}}",
+        "context": {
+          "x": "video.mp4"
+        },
+        "expected": "video",
+        "actual": "video"
+      },
+      {
+        "id": "mod-noext-no-dot",
+        "pattern": "{{x|noext}}",
+        "context": {
+          "x": "video"
+        },
+        "expected": "video",
+        "actual": "video"
+      },
+      {
+        "id": "mod-noext-leading-dot",
+        "pattern": "{{x|noext}}",
+        "context": {
+          "x": ".hidden"
+        },
+        "expected": ".hidden",
+        "actual": ".hidden"
+      },
+      {
+        "id": "mod-chain",
+        "pattern": "{{x|noext|upper}}",
+        "context": {
+          "x": "video.mp4"
+        },
+        "expected": "VIDEO",
+        "actual": "VIDEO"
+      },
+      {
+        "id": "mod-unknown",
+        "pattern": "{{x|weird}}",
+        "context": {
+          "x": "abc"
+        },
+        "expected": "abc",
+        "actual": "abc"
+      },
+      {
+        "id": "mod-empty-value",
+        "pattern": "{{x|upper}}",
+        "context": {
+          "x": ""
+        },
+        "expected": "",
+        "actual": ""
+      },
+      {
+        "id": "array-access-direct-key",
+        "pattern": "{{audiences[aud1].strategy}}",
+        "context": {
+          "audiences": [
+            {
+              "key": "aud1",
+              "product": "szk",
+              "strategy": "Prospecting",
+              "device": "Mobile",
+              "name": "Mobile Prospects"
+            },
+            {
+              "key": "aud2",
+              "product": "bank",
+              "strategy": "Retargeting",
+              "device": "Desktop",
+              "name": "Desktop Retargets"
+            }
+          ]
+        },
+        "expected": "Prospecting",
+        "actual": ""
+      },
+      {
+        "id": "array-access-via-var",
+        "pattern": "{{audiences[Audience_Key].Strategy}}",
+        "context": {
+          "audiences": [
+            {
+              "key": "aud1",
+              "product": "szk",
+              "strategy": "Prospecting",
+              "device": "Mobile",
+              "name": "Mobile Prospects"
+            },
+            {
+              "key": "aud2",
+              "product": "bank",
+              "strategy": "Retargeting",
+              "device": "Desktop",
+              "name": "Desktop Retargets"
+            }
+          ],
+          "Audience_Key": "aud2"
+        },
+        "expected": "Retargeting",
+        "actual": "Retargeting"
+      },
+      {
+        "id": "array-access-pascalcase-field",
+        "pattern": "{{audiences[aud1].Device}}",
+        "context": {
+          "audiences": [
+            {
+              "key": "aud1",
+              "product": "szk",
+              "strategy": "Prospecting",
+              "device": "Mobile",
+              "name": "Mobile Prospects"
+            },
+            {
+              "key": "aud2",
+              "product": "bank",
+              "strategy": "Retargeting",
+              "device": "Desktop",
+              "name": "Desktop Retargets"
+            }
+          ]
+        },
+        "expected": "Mobile",
+        "actual": ""
+      },
+      {
+        "id": "array-access-missing-key",
+        "pattern": "{{audiences[audX].strategy}}",
+        "context": {
+          "audiences": [
+            {
+              "key": "aud1",
+              "product": "szk",
+              "strategy": "Prospecting",
+              "device": "Mobile",
+              "name": "Mobile Prospects"
+            },
+            {
+              "key": "aud2",
+              "product": "bank",
+              "strategy": "Retargeting",
+              "device": "Desktop",
+              "name": "Desktop Retargets"
+            }
+          ]
+        },
+        "expected": "",
+        "actual": ""
+      },
+      {
+        "id": "array-access-missing-field",
+        "pattern": "{{audiences[aud1].nope}}",
+        "context": {
+          "audiences": [
+            {
+              "key": "aud1",
+              "product": "szk",
+              "strategy": "Prospecting",
+              "device": "Mobile",
+              "name": "Mobile Prospects"
+            },
+            {
+              "key": "aud2",
+              "product": "bank",
+              "strategy": "Retargeting",
+              "device": "Desktop",
+              "name": "Desktop Retargets"
+            }
+          ]
+        },
+        "expected": "",
+        "actual": ""
+      },
+      {
+        "id": "array-access-no-array",
+        "pattern": "{{topics[top1].name}}",
+        "context": {
+          "audiences": [
+            {
+              "key": "aud1",
+              "product": "szk",
+              "strategy": "Prospecting",
+              "device": "Mobile",
+              "name": "Mobile Prospects"
+            },
+            {
+              "key": "aud2",
+              "product": "bank",
+              "strategy": "Retargeting",
+              "device": "Desktop",
+              "name": "Desktop Retargets"
+            }
+          ]
+        },
+        "expected": "",
+        "actual": ""
+      },
+      {
+        "id": "obj-access-direct",
+        "pattern": "{{message.headline}}",
+        "context": {
+          "message": {
+            "headline": "hi"
+          }
+        },
+        "expected": "hi",
+        "actual": "hi"
+      },
+      {
+        "id": "obj-access-pascal",
+        "pattern": "{{message.Headline}}",
+        "context": {
+          "message": {
+            "headline": "hi"
+          }
+        },
+        "expected": "hi",
+        "actual": "hi"
+      },
+      {
+        "id": "obj-access-snake",
+        "pattern": "{{message.LandingUrl}}",
+        "context": {
+          "message": {
+            "landing_url": "https://x.com"
+          }
+        },
+        "expected": "https://x.com",
+        "actual": "https://x.com"
+      },
+      {
+        "id": "cond-true",
+        "pattern": "{{device}}=Mobile?mob:desk",
+        "context": {
+          "device": "Mobile"
+        },
+        "expected": "mob",
+        "actual": "mob"
+      },
+      {
+        "id": "cond-false",
+        "pattern": "{{device}}=Mobile?mob:desk",
+        "context": {
+          "device": "Desktop"
+        },
+        "expected": "desk",
+        "actual": "desk"
+      },
+      {
+        "id": "cond-empty-true",
+        "pattern": "{{x}}=a?yes:",
+        "context": {
+          "x": "a"
+        },
+        "expected": "yes",
+        "actual": "yes"
+      },
+      {
+        "id": "cond-empty-false",
+        "pattern": "{{x}}=a?:no",
+        "context": {
+          "x": "b"
+        },
+        "expected": "no",
+        "actual": "no"
+      },
+      {
+        "id": "empty-pattern",
+        "pattern": "",
+        "context": {},
+        "expected": "",
+        "actual": ""
+      },
+      {
+        "id": "null-pattern",
+        "pattern": null,
+        "context": {},
+        "expected": "",
+        "actual": ""
+      },
+      {
+        "id": "no-placeholders",
+        "pattern": "plain text",
+        "context": {},
+        "expected": "plain text",
+        "actual": "plain text"
+      },
+      {
+        "id": "number-value-coerce",
+        "pattern": "{{n}}",
+        "context": {
+          "n": 42
+        },
+        "expected": "42",
+        "actual": "42"
+      },
+      {
+        "id": "null-value",
+        "pattern": "{{n}}",
+        "context": {
+          "n": null
+        },
+        "expected": "",
+        "actual": ""
+      },
+      {
+        "id": "undefined-value",
+        "pattern": "{{n}}",
+        "context": {},
+        "expected": "",
+        "actual": ""
+      }
+    ],
+    "buildTraffickingUrl": [
+      {
+        "id": "url-no-params",
+        "landing": "https://x.com",
+        "params": {},
+        "expected": "https://x.com",
+        "actual": "https://x.com"
+      },
+      {
+        "id": "url-with-params",
+        "landing": "https://x.com",
+        "params": {
+          "utm_campaign": "q1",
+          "utm_source": "display"
+        },
+        "expected": "https://x.com?utm_campaign=q1&utm_source=display",
+        "actual": "https://x.com?utm_campaign=q1&utm_source=display"
+      },
+      {
+        "id": "url-existing-query",
+        "landing": "https://x.com?foo=bar",
+        "params": {
+          "utm_campaign": "q1"
+        },
+        "expected": "https://x.com?foo=bar&utm_campaign=q1",
+        "actual": "https://x.com?foo=bar&utm_campaign=q1"
+      },
+      {
+        "id": "url-trailing-amp",
+        "landing": "https://x.com?foo=bar&",
+        "params": {
+          "utm_campaign": "q1"
+        },
+        "expected": "https://x.com?foo=bar&utm_campaign=q1",
+        "actual": "https://x.com?foo=bar&utm_campaign=q1"
+      },
+      {
+        "id": "url-skip-empty-params",
+        "landing": "https://x.com",
+        "params": {
+          "utm_campaign": "q1",
+          "utm_term": "",
+          "utm_source": null
+        },
+        "expected": "https://x.com?utm_campaign=q1",
+        "actual": "https://x.com?utm_campaign=q1"
+      },
+      {
+        "id": "url-encode-special",
+        "landing": "https://x.com",
+        "params": {
+          "key with space": "val&special="
+        },
+        "expected": "https://x.com?key%20with%20space=val%26special%3D",
+        "actual": "https://x.com?key%20with%20space=val%26special%3D"
+      },
+      {
+        "id": "url-empty-landing",
+        "landing": "",
+        "params": {
+          "a": "1"
+        },
+        "expected": "",
+        "actual": ""
+      }
+    ],
+    "generatePMMID": [
+      {
+        "id": "pmmid-standard",
+        "message": {
+          "audience": "aud1",
+          "topic": "top1",
+          "number": 282,
+          "variant": "a",
+          "version": 1
+        },
+        "audiences": [
+          {
+            "key": "aud1",
+            "product": "szk",
+            "strategy": "Prospecting",
+            "device": "Mobile",
+            "name": "Mobile Prospects"
+          },
+          {
+            "key": "aud2",
+            "product": "bank",
+            "strategy": "Retargeting",
+            "device": "Desktop",
+            "name": "Desktop Retargets"
+          }
+        ],
+        "pattern": "a_{{audience}}-t_{{topic}}-m_{{number}}-v_{{variant}}-n_{{version}}",
+        "expected": "a_aud1-t_top1-m_282-v_a-n_1",
+        "actual": "a_aud1-t_top1-m_282-v_a-n_1"
+      },
+      {
+        "id": "pmmid-variant-b",
+        "message": {
+          "audience": "aud2",
+          "topic": "savings",
+          "number": 5,
+          "variant": "b",
+          "version": 2
+        },
+        "audiences": [
+          {
+            "key": "aud1",
+            "product": "szk",
+            "strategy": "Prospecting",
+            "device": "Mobile",
+            "name": "Mobile Prospects"
+          },
+          {
+            "key": "aud2",
+            "product": "bank",
+            "strategy": "Retargeting",
+            "device": "Desktop",
+            "name": "Desktop Retargets"
+          }
+        ],
+        "pattern": "a_{{audience}}-t_{{topic}}-m_{{number}}-v_{{variant}}-n_{{version}}",
+        "expected": "a_aud2-t_savings-m_5-v_b-n_2",
+        "actual": "a_aud2-t_savings-m_5-v_b-n_2"
+      },
+      {
+        "id": "pmmid-with-audience-strategy",
+        "message": {
+          "audience": "aud1",
+          "topic": "top1",
+          "number": 1,
+          "variant": "a",
+          "version": 1
+        },
+        "audiences": [
+          {
+            "key": "aud1",
+            "product": "szk",
+            "strategy": "Prospecting",
+            "device": "Mobile",
+            "name": "Mobile Prospects"
+          },
+          {
+            "key": "aud2",
+            "product": "bank",
+            "strategy": "Retargeting",
+            "device": "Desktop",
+            "name": "Desktop Retargets"
+          }
+        ],
+        "pattern": "a_{{audience}}-s_{{audiences[Audience_Key].Strategy|lower}}",
+        "expected": "a_aud1-s_prospecting",
+        "actual": "a_aud1-s_prospecting"
+      }
+    ],
+    "generateTopicKey": [
+      {
+        "id": "tk-product-tag1",
+        "topic": {
+          "name": "Savings",
+          "product": "Bank",
+          "tag1": "promo",
+          "tag2": "",
+          "tag3": "",
+          "tag4": ""
+        },
+        "pattern": "{{product|lower}}_{{tag1|lower}}",
+        "expected": "bank_promo",
+        "actual": "bank_promo"
+      },
+      {
+        "id": "tk-all-tags",
+        "topic": {
+          "name": "Loan X",
+          "product": "SZK",
+          "tag1": "A",
+          "tag2": "B",
+          "tag3": "C",
+          "tag4": "D"
+        },
+        "pattern": "{{tag1|lower}}_{{tag2|lower}}_{{tag3|lower}}_{{tag4|lower}}",
+        "expected": "a_b_c_d",
+        "actual": "a_b_c_d"
+      },
+      {
+        "id": "tk-missing-tags",
+        "topic": {
+          "name": "X",
+          "product": "SZK",
+          "tag1": "only"
+        },
+        "pattern": "{{tag1|lower}}_{{tag2|lower}}",
+        "expected": "only_",
+        "actual": "only_"
+      }
+    ],
+    "generateTraffickingFields": [
+      {
+        "id": "traff-standard",
+        "message": {
+          "id": 5,
+          "number": 282,
+          "variant": "a",
+          "audience": "aud1",
+          "topic": "top1",
+          "version": 1,
+          "headline": "Save up to 25%",
+          "copy1": "Limited time",
+          "image1": "hero.mp4",
+          "landingUrl": "https://bank.com/promo",
+          "pmmid": "a_aud1-t_top1-m_282-v_a-n_1"
+        },
+        "audiences": [
+          {
+            "key": "aud1",
+            "product": "szk",
+            "strategy": "Prospecting",
+            "device": "Mobile",
+            "name": "Mobile Prospects"
+          },
+          {
+            "key": "aud2",
+            "product": "bank",
+            "strategy": "Retargeting",
+            "device": "Desktop",
+            "name": "Desktop Retargets"
+          }
+        ],
+        "patterns": {
+          "utm_campaign": "{{audiences[Audience_Key].Product|lower}}_q1",
+          "utm_source": "{{audiences[Audience_Key].Strategy|lower}}",
+          "utm_medium": "display",
+          "utm_content": "MC{{number}}{{variant}}",
+          "utm_term": "",
+          "utm_cd26": "{{audience}}"
+        },
+        "expected": {
+          "utm_campaign": "szk_q1",
+          "utm_source": "prospecting",
+          "utm_medium": "display",
+          "utm_content": "MC282a",
+          "utm_term": "",
+          "utm_cd26": "aud1",
+          "final_trafficked_url": "https://bank.com/promo?utm_campaign=szk_q1&utm_source=prospecting&utm_medium=display&utm_content=MC282a&utm_cd26=aud1"
+        },
+        "actual": {
+          "utm_campaign": "szk_q1",
+          "utm_source": "prospecting",
+          "utm_medium": "display",
+          "utm_content": "MC282a",
+          "utm_term": "",
+          "utm_cd26": "aud1",
+          "final_trafficked_url": "https://bank.com/promo?utm_campaign=szk_q1&utm_source=prospecting&utm_medium=display&utm_content=MC282a&utm_cd26=aud1"
+        }
+      },
+      {
+        "id": "traff-empty-landing",
+        "message": {
+          "id": 5,
+          "number": 282,
+          "variant": "a",
+          "audience": "aud1",
+          "topic": "top1",
+          "version": 1,
+          "headline": "Save up to 25%",
+          "copy1": "Limited time",
+          "image1": "hero.mp4",
+          "landingUrl": "",
+          "pmmid": "a_aud1-t_top1-m_282-v_a-n_1"
+        },
+        "audiences": [
+          {
+            "key": "aud1",
+            "product": "szk",
+            "strategy": "Prospecting",
+            "device": "Mobile",
+            "name": "Mobile Prospects"
+          },
+          {
+            "key": "aud2",
+            "product": "bank",
+            "strategy": "Retargeting",
+            "device": "Desktop",
+            "name": "Desktop Retargets"
+          }
+        ],
+        "patterns": {
+          "utm_campaign": "{{audiences[Audience_Key].Product|lower}}_q1",
+          "utm_source": "{{audiences[Audience_Key].Strategy|lower}}",
+          "utm_medium": "display",
+          "utm_content": "MC{{number}}{{variant}}",
+          "utm_term": "",
+          "utm_cd26": "{{audience}}"
+        },
+        "expected": {
+          "utm_campaign": "szk_q1",
+          "utm_source": "prospecting",
+          "utm_medium": "display",
+          "utm_content": "MC282a",
+          "utm_term": "",
+          "utm_cd26": "aud1",
+          "final_trafficked_url": ""
+        },
+        "actual": {
+          "utm_campaign": "szk_q1",
+          "utm_source": "prospecting",
+          "utm_medium": "display",
+          "utm_content": "MC282a",
+          "utm_term": "",
+          "utm_cd26": "aud1",
+          "final_trafficked_url": ""
+        }
+      }
+    ]
+  }
+}

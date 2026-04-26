@@ -1,0 +1,37 @@
+{
+  "capturedAt": "2026-04-24T17:45:17.444Z",
+  "endpoint": "/api/config-basic",
+  "auth": "public",
+  "status": 200,
+  "ok": true,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "lookAndFeel": {
+      "logo": "https://s3.eu-central-1.amazonaws.com/pomscloud-storage/assets/43/hu-HU/background/EBH_Logo_screen_white.svg",
+      "headerColor": "#2870ed",
+      "logoStyle": "height: 25px; margin-top: -6px;",
+      "buttonColor": "#ff6130",
+      "buttonStyle": "border-radius: 7px; filter: drop-shadow(0px 0px 5px rgba(0,0,0,0.6));",
+      "secondaryColor1": "#02a3a4",
+      "secondaryColor2": "#eb4c79",
+      "secondaryColor3": "#711c7a",
+      "statusColors": {
+        "ACTIVE": "#34a853",
+        "INACTIVE": "#cccccc",
+        "ERROR": "#ff0000",
+        "INPROGRESS": "#ff6d01",
+        "PLANNED": "#ffff00",
+        "INCOMING": "#e6bf00",
+        "NAMING": "#8B5CF6",
+        "PREVIEW": "#3bf7d1"
+      },
+      "pageTitle": "ERSTE Messaging Matrix 1.0",
+      "cobranding": {
+        "enabled": true,
+        "logoUrl": "/S.svg"
+      },
+      "fontFamily": "Inter",
+      "capsuleDesign": true
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "capturedAt": "2026-04-24T17:45:17.344Z",
+  "table": "users",
+  "rowCount": 2,
+  "rows": [
+    {
+      "id": "1",
+      "email": "beliczki.robert@gmail.com",
+      "password": "4dbe86a61834073aeeac4dacdd40f3a94e5595929ed3ec145c854d754c22de27",
+      "role": "admin",
+      "created_at": "2025-10-13T06:45:06.034Z",
+      "updated_at": "2025-11-15T10:37:05.820Z"
+    },
+    {
+      "id": "2",
+      "email": "demo@messagingmatrix.ai",
+      "password": "3c0e845b890e7e9ced91a9b6f0e7da10dd8d0e2d1c17a196407b9a6e9d1eb368",
+      "role": "demo",
+      "created_at": "2025-10-13T06:45:06.034Z",
+      "updated_at": "2025-11-15T10:37:05.820Z"
+    }
+  ]
+}

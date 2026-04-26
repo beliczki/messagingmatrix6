@@ -1,0 +1,48 @@
+/* ------------------------------------------- */
+/* ------------------------------------------- */
+/* 300x250 */
+/* ------------------------------------------- */
+/* ------------------------------------------- */
+
+html {
+  font-size: 14px;
+}
+#adContainer {
+  width: 300px !important;
+  height: 250px !important;
+}
+
+
+/* -----------------------------------------*/
+/* positioning based on Image cropping  PSD */
+/* -----------------------------------------*/
+.campaignImage #imageWrapper div {
+  background-size: 210%;
+  background-position: -776px -352px;
+}
+
+.preCompBg #imageWrapper div { 
+  background-size: inherit;
+  background-position: -1050px 0px;
+}
+
+
+/* -----------------------------------------*/
+/* card positioning ----------------------- */
+/* -----------------------------------------*/
+body #cardContainer {
+  transform-origin: 0% 100%;
+  transform: scale(0.6);
+  right: auto;
+  left: 166px;
+  top:auto;
+  bottom: 1rem;
+}
+
+
+/* -----------------------------------------*/
+/* text format helpers  */
+/* -----------------------------------------*/
+
+.sizebr.br300x250 { display: inline-block; }
+.size-300x250 .text-300x250 {display: inline;}

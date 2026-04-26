@@ -1,0 +1,60 @@
+{
+  "capturedAt": "2026-04-24T17:45:17.476Z",
+  "endpoint": "/api/assets/registry",
+  "auth": "public",
+  "status": 200,
+  "ok": true,
+  "contentType": "application/json; charset=utf-8",
+  "body": {
+    "assets": [
+      {
+        "id": "1761251883424_b26fr",
+        "filename": "ERSTE_VAL_background_x_2_656x459_backgroundImage1_psd_v1.jpg",
+        "originalFilename": "ERSTE_VAL_background_x_2_backgroundImage1_psd_1.jpg",
+        "uploadDate": "2025-10-23T20:38:03.424Z",
+        "lastModified": "2025-10-23T20:38:03.424Z",
+        "metadata": {
+          "brand": "ERSTE",
+          "product": "VAL",
+          "type": "background",
+          "visualKeyword": "x",
+          "visualDescription": "2",
+          "dimensions": "656x459",
+          "placeholderName": "backgroundImage1",
+          "croppingTemplate": "psd",
+          "version": "1",
+          "format": "jpg"
+        },
+        "tags": [],
+        "platforms": [],
+        "status": "active",
+        "directory": "assets"
+      },
+      {
+        "id": "1761251883400_m4b3sq",
+        "filename": "ERSTE_VAL_background_x_1_656x459_backgroundImage1_psd_v1.jpg",
+        "originalFilename": "ERSTE_VAL_background_x_1_backgroundImage1_psd_1.jpg",
+        "uploadDate": "2025-10-23T20:38:03.400Z",
+        "lastModified": "2025-10-23T20:38:03.400Z",
+        "metadata": {
+          "brand": "ERSTE",
+          "product": "VAL",
+          "type": "background",
+          "visualKeyword": "x",
+          "visualDescription": "1",
+          "dimensions": "656x459",
+          "placeholderName": "backgroundImage1",
+          "croppingTemplate": "psd",
+          "version": "1",
+          "format": "jpg"
+        },
+        "tags": [],
+        "platforms": [],
+        "status": "active",
+        "directory": "assets"
+      }
+    ],
+    "version": "1.0.0",
+    "lastUpdated": "2026-04-24T17:45:17.475Z"
+  }
+}

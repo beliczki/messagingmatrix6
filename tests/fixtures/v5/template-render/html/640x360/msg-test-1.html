@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html id="html">
+  <head>
+    <title></title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="advert_id" content="">
+    <meta name="advert_mc" content="282">
+    <meta name="advert_variant" content="a">
+    <meta name="advert_name" content="" />
+    <meta name="pmmid" content="" />
+    <meta name="click_url" content="">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="main.css" />
+
+    <!-- THM data (date-dependent content) - loaded as JSON -->
+    <script>
+      // Initialize THM data container
+      document.interests = {};
+
+      // Load THM JSON file - store promise for async access
+      document.interestsReady = fetch('thm.json')
+        .then(function(response) {
+          if (!response.ok) throw new Error('thm.json not found');
+          return response.json();
+        })
+        .then(function(data) {
+          document.interests = data;
+          console.log('THM data loaded:', Object.keys(data));
+          return data;
+        })
+        .catch(function(err) {
+          console.log('thm.json failed to load:', err.message);
+          return {};
+        });
+    </script>
+
+    <script type="text/javascript" src="dynamic.content.js?v=1"></script>
+
+
+
+
+    <!-- UNCOMMENT THESE FOR ADFORM UPLOAD -->
+    <!-- 
+    <link rel="stylesheet" href="300x250.css" />
+    <script src="https://s1.adform.net/banners/scripts/rmb/Adform.DHTML.js" onerror="console.log('AdForm lib failed to load (expected in preview)')"></script>
+    <script src="https://s1.adform.net/banners/scripts/components/Adform.DynAdsHelper-2.js"></script>
+    -->
+    <!-- UNCOMMENT THESE FOR ADFORM UPLOAD -->
+
+
+
+
+    <style>
+      /* Preloader styles */
+      #preloader {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgb(40, 112, 237); /* Fallback blue */
+        background: rgb(var(--blue, 40, 112, 237));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 99999;
+        transition: opacity 0.4s ease-out;
+      }
+      #preloader.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #preloader svg {
+        width: 40px;
+        height: auto;
+      }
+      #preloader .s-outline {
+        fill: none;
+        stroke: #fff;
+        stroke-width: 2;
+      }
+      #preloader .s-fill {
+        fill: #fff;
+        clip-path: inset(100% 0 0 0);
+        transition: clip-path 0.3s ease-out;
+      }
+    </style>
+  </head>
+  <body data-pmmid="" class="size-640x360">
+    <!-- Preloader with S and dot -->
+    <div id="preloader">
+      <svg viewBox="397 0 116 151" xmlns="http://www.w3.org/2000/svg">
+        <!-- Outline S and dot -->
+        <path class="s-outline" d="M397.08 123.39h88.43v-11.87h-88.26c-.07-1.37-.03-28.14-.21-40.51-.15-10.55 7.05-20.82 20.66-20.59 24.8.41 49.63.41 74.43-.02 10.69-.19 20.42 7.66 20.41 20.43 0 1.78-.01 3.96-.01 6.27h-88.51v11.59l88.51-.02c0 1.59.03 28.4 0 40.87-.04 12.55-8.08 20.44-20.78 20.45h-73.8c-12.8 0-20.81-7.98-20.86-20.77v-5.83"/>
+        <path class="s-outline" d="M454.91 38.03c-10.46 0-18.92-8.62-18.86-19.2C436.1 8.43 444.6-.02 454.98 0c10.37.02 18.85 8.51 18.87 18.9.02 10.56-8.47 19.14-18.94 19.13"/>
+        <!-- Fill S and dot (animated) -->
+        <path class="s-fill" id="sFill" d="M397.08 123.39h88.43v-11.87h-88.26c-.07-1.37-.03-28.14-.21-40.51-.15-10.55 7.05-20.82 20.66-20.59 24.8.41 49.63.41 74.43-.02 10.69-.19 20.42 7.66 20.41 20.43 0 1.78-.01 3.96-.01 6.27h-88.51v11.59l88.51-.02c0 1.59.03 28.4 0 40.87-.04 12.55-8.08 20.44-20.78 20.45h-73.8c-12.8 0-20.81-7.98-20.86-20.77v-5.83"/>
+        <path class="s-fill" id="dotFill" d="M454.91 38.03c-10.46 0-18.92-8.62-18.86-19.2C436.1 8.43 444.6-.02 454.98 0c10.37.02 18.85 8.51 18.87 18.9.02 10.56-8.47 19.14-18.94 19.13"/>
+      </svg>
+    </div>
+
+    <div class="click-url" id="clickLayer" onclick="onAdClickTriggered()">
+        <div id="adContainer" class="template_variant_class ">
+          <div id="backgroundContainer">
+            <div id="imageWrapper">
+              <div style="background-image:url('empty.png')" class="background_image_1" data-placeholder="/api/drive/proxy/hero.jpg"></div>
+            </div>
+            <div id="videoWrapper">
+              <video autoplay muted playsinline loop crossorigin="anonymous">
+                <source src="" data-placeholder="" type="video/mp4" class="background_video_1"></video>
+            </div>
+          </div>
+          <main>
+            <div id="objectWrapper">
+              <div style="background-image:url('empty.png')" class="background_image_2" data-placeholder=""></div>
+            </div>
+            <div id="textContainer">
+              <div id="stickerContainer">
+                <div class="stickerTextWrapper">
+                  <p class="sticker_text_1 sticker_style_1" style="">NEW</p>
+                </div>
+                <div class="stickerImageWrapper">
+                  <div style="background-image:url('empty.png')" class="sticker_image_1" data-placeholder=""></div>
+                </div>
+              </div>
+              <div id="cardContainer">
+                <div class="cardImageWrapper">
+                  <div style="background-image:url('empty.png')" class="background_image_3" data-placeholder=""></div>
+                </div>
+              </div>
+              <div id="headlineWrapper">
+                <h2 class="headline_text_1 headline_style_1" style="">Save up to 25%</h2>
+              </div>
+              <div id="copyWrapper1">
+                <p class="copy_text_1 copy_style_1" style="">Special offer for new customers</p>
+              </div>
+              <div id="copyWrapper2">
+                <p class="thm copy_text_2 copy_style_2" style="">Limited time only</p>
+              </div>
+              <div id="buttonWrapper">
+                <span class="cta_text_1 cta_style_1" style="">Learn More</span>
+              </div>
+              <div id="disclaimerWrapper1">
+                <p class="disclaimer_text_1 disclaimer_style_1" style="">Terms apply</p>
+              </div>
+            </div>
+          </main>
+          <div id="frameContainer"></div>
+          <div id="logoContainer">
+            <div id="logoWrapper">
+              <img src="empty.png" data-placeholder="/api/drive/proxy/logo.png" class="logo logo_image_1 brand_image_1"/>
+            </div>
+          </div>
+        </div>
+    </div>
+    <!-- extra css to finetune -->
+    <style type="text/css" id="extra_rules"></style>
+
+    <script>
+    (function() {
+    try {
+    console.log('📢 Template script starting...');
+
+    // ============================================================
+    // PHASE 1: INITIAL SETUP
+    // ============================================================
+
+    // Check if Adform is available (may not load in sandboxed iframes)
+    var isAdformContext = false;
+    try {
+      isAdformContext = typeof Adform !== 'undefined' &&
+                        Adform !== null &&
+                        typeof Adform.DynAdsHelper !== 'undefined';
+    } catch(e) {
+      console.log('AdForm not available (likely sandboxed iframe):', e.message);
+      isAdformContext = false;
+    }
+
+    console.log('Template init - isAdformContext:', isAdformContext);
+
+    // Preloader state - will be started after content replacement
+    var preloaderStarted = false;
+    var savedClasses = [];
+    var hasAnimatedClass = false;
+    var classesSaved = false;
+    var adContainer = document.getElementById('adContainer');
+
+    // Function to save classes - called AFTER dynamic content is loaded
+    // This ensures we capture actual values, not placeholders like 
+    function saveClassesForPreloader() {
+      if (classesSaved || !adContainer) return;
+      classesSaved = true;
+
+      var classList = Array.prototype.slice.call(adContainer.classList);
+      classList.forEach(function(cls) {
+        // Skip the static class and any remaining placeholders
+        if (cls !== 'template_variant_class' && cls.indexOf('{{') === -1) {
+          // Check for "animated" class - will be added back after preloader
+          if (cls === 'animated') {
+            hasAnimatedClass = true;
+            console.log('Found "animated" class - will apply after preloader completes');
+          } else {
+            savedClasses.push(cls);
+          }
+        }
+      });
+      // Remove classes until preload complete (prevents animations from starting)
+      adContainer.className = 'template_variant_class';
+      console.log('Saved classes:', savedClasses.join(', '), hasAnimatedClass ? '(+ animated deferred)' : '');
+    }
+
+    // For local preview (non-Adform), save classes immediately since React has already populated values
+    if (!isAdformContext && adContainer) {
+      saveClassesForPreloader();
+    }
+
+    // Set body size class
+    if (adContainer) {
+      document.body.classList.add('size-' + adContainer.offsetWidth + 'x' + adContainer.offsetHeight);
+    }
+
+    // ============================================================
+    // PHASE 2: ADFORM INTEGRATION / INITIALIZATION
+    // ============================================================
+    function initAd() {
+      console.log('initAd: isAdformContext =', isAdformContext);
+
+      if (isAdformContext) {
+        // AdForm context - wait for dynamic variables
+        Adform.DynAdsHelper.getVars(function(variables) {
+          console.log('AdForm variables received:', variables);
+          onAdInitialized(variables);
+        });
+      } else {
+        // Local preview context - directly apply data attributes to elements
+        console.log('Local preview mode - applying data attributes directly');
+        // Small delay to ensure DOM is ready
+        setTimeout(function() {
+          applyDataAttributes();
+          var localValues = getLocalValues();
+          onAdInitialized(localValues);
+        }, 50);
+      }
+    }
+
+    // Apply data-placeholder attributes directly to elements (for local preview)
+    function applyDataAttributes() {
+      console.log('🔄 applyDataAttributes() called');
+
+      // Apply data-placeholder to images (background-image and img src)
+      var srcElements = document.querySelectorAll('[data-placeholder]');
+      console.log('Found', srcElements.length, 'elements with data-placeholder');
+
+      for (var i = 0; i < srcElements.length; i++) {
+        var el = srcElements[i];
+        var dataSrc = el.getAttribute('data-placeholder');
+        var className = el.className || el.tagName;
+
+        console.log('Element', i, ':', className, '-> data-placeholder =', dataSrc ? dataSrc.substring(0, 60) : 'null');
+
+        // Skip if still a placeholder or empty
+        if (!dataSrc || dataSrc.indexOf('{{') !== -1) {
+          console.log('  SKIPPED (placeholder or empty)');
+          continue;
+        }
+
+        if (el.tagName === 'IMG') {
+          console.log('  Before: img.src =', el.src);
+          el.src = dataSrc;
+          console.log('  After: img.src =', el.src);
+        } else if (el.tagName === 'SOURCE') {
+          el.src = dataSrc;
+          if (el.parentElement && el.parentElement.tagName === 'VIDEO') {
+            el.parentElement.load();
+          }
+          console.log('  Applied video src');
+        } else {
+          // Background image div
+          console.log('  Before: style.backgroundImage =', el.style.backgroundImage);
+          el.style.backgroundImage = 'url(' + dataSrc + ')';
+          console.log('  After: style.backgroundImage =', el.style.backgroundImage);
+        }
+      }
+      console.log('✅ applyDataAttributes() complete');
+    }
+
+    // Get values from meta tags and data attributes (local preview mode)
+    function getLocalValues() {
+      var values = {};
+
+      // Known field class names
+      var knownImageFields = ['background_image_1', 'background_image_2', 'background_image_3', 'background_image_4', 'sticker_image_1', 'brand_image_1', 'background_video_1'];
+
+      // Helper to find known field name in class list
+      function findKnownField(classList, knownFields) {
+        for (var i = 0; i < knownFields.length; i++) {
+          if (classList.indexOf(knownFields[i]) !== -1) {
+            return knownFields[i];
+          }
+        }
+        return null;
+      }
+
+      // Get from meta tags
+      var metas = document.querySelectorAll('meta[name]');
+      for (var i = 0; i < metas.length; i++) {
+        var meta = metas[i];
+        values[meta.name] = meta.content;
+      }
+
+      // Get from data-placeholder attributes (images)
+      var srcElements = document.querySelectorAll('[data-placeholder]');
+      for (var i = 0; i < srcElements.length; i++) {
+        var el = srcElements[i];
+        var classList = el.className || '';
+        var fieldName = findKnownField(classList, knownImageFields);
+        var dataSrc = el.getAttribute('data-placeholder');
+        if (fieldName && dataSrc && dataSrc.indexOf('{{') === -1) {
+          values[fieldName] = dataSrc;
+        }
+      }
+
+      console.log('Local values:', values);
+      return values;
+    }
+
+    // ============================================================
+    // PHASE 3: AD INITIALIZED (after variables arrive)
+    // ============================================================
+    function onAdInitialized(variables) {
+      console.log('onAdInitialized called, isAdformContext:', isAdformContext);
+
+      // 1. Replace content placeholders with actual values (only needed in AdForm context)
+      // In local preview, React has already populated the content, and applyDataAttributes() handles images
+      if (isAdformContext) {
+        replaceContent(variables);
+      }
+
+      // 1.5 Save classes NOW (after Adform has replaced placeholders with actual values)
+      // This must happen after replaceContent and before startPreloaderTracking
+      if (isAdformContext) {
+        saveClassesForPreloader();
+      }
+
+      // 2. Set up click tracking
+      setupClickHandler(variables);
+
+      // 3. Update body data attribute with PMMID
+      var pmmid = variables.pmmid || document.body.getAttribute('data-pmmid') || '';
+      // Clean up any remaining placeholder markers
+      if (pmmid.indexOf('{{') !== -1) {
+        pmmid = '';
+      }
+      document.body.setAttribute('data-pmmid', pmmid);
+      console.log('PMMID:', pmmid);
+
+      // 4. Check PMMID for SZK or HK and update THM if needed
+      if (shouldUpdateThm(pmmid)) {
+        console.log('THM trigger detected in PMMID - updating THM');
+        updateThmFromInterests(pmmid);
+      } else {
+        console.log('No SZK/HK in PMMID - skipping THM update');
+      }
+
+      // 5. Handle directpixel if provided (AdForm tracking)
+      if (isAdformContext && variables && typeof variables.directpixel !== 'undefined') {
+        var dp = document.createElement('img');
+        dp.setAttribute('src', variables.directpixel);
+        dp.style.display = 'none';
+        document.body.appendChild(dp);
+        console.log('Directpixel inserted:', variables.directpixel);
+      }
+
+      // 6. Handle sticker mode for local preview (CSS visibility control)
+
+      // 7. Start preloader image tracking (now that real URLs are in place)
+      startPreloaderTracking();
+    }
+
+    
+
+    // ============================================================
+    // PHASE 4: CONTENT REPLACEMENT
+    // ============================================================
+    /*function replaceContent(variables) {
+
+
+      console.log('replaceContent called');
+
+      // Image mappings: variable name -> CSS selector
+      var imageMappings = {
+        'background_image_1': '.background_image_1',
+        'background_image_2': '.background_image_2',
+        'background_image_3': '.background_image_3',
+        'background_image_4': '.background_image_4',
+        'sticker_image_1': '.sticker_image_1',
+        'brand_image_1': '.brand_image_1'
+      };
+
+      // Video mappings
+      var videoMappings = {
+        'background_video_1': '.background_video_1'
+      };
+
+      // Text mappings
+      var textMappings = {
+        'headline_text_1': '.headline_text_1',
+        'copy_text_1': '.copy_text_1',
+        'copy_text_2': '.copy_text_2',
+        'cta_text_1': '.cta_text_1',
+        'sticker_text_1': '.sticker_text_1',
+        'disclaimer_text_1': '.disclaimer_text_1'
+      };
+
+      // Replace images (background-image style)
+      for (var key in imageMappings) {
+        var value = variables[key];
+        if (value && value.indexOf('{{') === -1 && value !== 'empty.png') {
+          var el = document.querySelector(imageMappings[key]);
+          if (el) {
+            if (el.tagName === 'IMG') {
+              el.src = value;
+            } else {
+              el.style.backgroundImage = 'url(' + value + ')';
+            }
+            console.log('Replaced image:', key, '->', value.substring(0, 50) + '...');
+          }
+        }
+      }
+
+      // Replace videos
+      for (var key in videoMappings) {
+        var value = variables[key];
+        if (value && value.indexOf('{{') === -1 && value !== 'emptyvideo.mp4') {
+          var el = document.querySelector(videoMappings[key]);
+          if (el) {
+            el.src = value;
+            if (el.parentElement && el.parentElement.tagName === 'VIDEO') {
+              el.parentElement.load();
+            }
+            console.log('Replaced video:', key, '->', value.substring(0, 50) + '...');
+          }
+        }
+      }
+
+      // Replace text
+      for (var key in textMappings) {
+        var value = variables[key];
+        if (value && value.indexOf('{{') === -1) {
+          var el = document.querySelector(textMappings[key]);
+          if (el) {
+            el.innerHTML = value;
+            console.log('Replaced text:', key, '->', value.substring(0, 30) + '...');
+          }
+        }
+      }
+
+    }*/
+
+    // ============================================================
+    // PHASE 5: THM LOGIC (date-dependent content)
+    // ============================================================
+
+    // Check if PMMID contains _SZK_ or _HK_ and return the THM key to use
+    function getThmKey(pmmid) {
+      if (!pmmid) return null;
+      if (pmmid.indexOf('_SZK_') !== -1) return 'SZK_THM';
+      if (pmmid.indexOf('_HK_') !== -1) return 'HK_THM';
+      return null;
+    }
+
+    function shouldUpdateThm(a) {
+      return getThmKey(a) !== null;
+    }
+
+    function updateThmFromInterests(pmmid) {
+      // Wait for THM JSON to be loaded before processing
+      var processThm = function() {
+        try {
+          var thmKey = getThmKey(pmmid);
+          if (!thmKey) {
+            console.error('THM: No THM key found for PMMID:', pmmid);
+            return;
+          }
+
+          var thmData = document.interests[thmKey];
+          if (!thmData) {
+            console.error('THM: No data found for key:', thmKey);
+            return;
+          }
+
+          console.log('THM using key:', thmKey, 'data:', thmData);
+          var thmElement = document.querySelector('.thm');
+
+          if (!thmElement) {
+            console.error('THM: .thm element not found');
+            return;
+          }
+
+          // Parse "YYYY-MM-DD HH:mm" as local time (24h)
+          function parseLocalDate(s) {
+            var p = s.trim().split(/[\s\-:T]+/);
+            return new Date(+p[0], +p[1] - 1, +p[2], +p[3] || 0, +p[4] || 0);
+          }
+
+          var now = new Date();
+          // For testing: now.setDate(now.getDate() + 1);
+
+          // Pick the latest date that is not in the future
+          var best = null;
+          var bestDate = null;
+          var dates = Object.keys(thmData);
+          for (var i = 0; i < dates.length; i++) {
+            var d = parseLocalDate(dates[i]);
+            if (d <= now && (bestDate === null || d > bestDate)) {
+              bestDate = d;
+              best = thmData[dates[i]];
+            }
+          }
+
+          if (best) {
+            thmElement.innerHTML = best;
+            console.log('THM updated to:', best, '(from', thmKey + ')');
+          } else {
+            console.error('THM: No matching date found for', thmKey);
+          }
+        } catch(error) {
+          console.error('THM error:', error);
+        }
+      };
+
+      // Wait for JSON to load if promise exists
+      if (document.interestsReady) {
+        document.interestsReady.then(processThm);
+      } else {
+        processThm();
+      }
+    }
+
+    // ============================================================
+    // PHASE 6: CLICK HANDLER
+    // ============================================================
+    // Always try Adform's dhtml.getVar('clickTAG') first — independently of the
+    // isAdformContext flag. Adform's livepreview sometimes loads `dhtml` without
+    // exposing `Adform.DynAdsHelper`, which makes isAdformContext false even
+    // though the clickTAG macro is available. Falling back only when dhtml isn't
+    // usable keeps the click working in:
+    //   - Adform delivery (gets Adform's tracked URL)
+    //   - Adform livepreview (gets the preview URL)
+    //   - our local /share/ iframe preview (uses the meta tag)
+    function setupClickHandler(variables) {
+      var clickUrl = '';
+      var landingTarget = '_blank';
+
+      try {
+        if (typeof dhtml !== 'undefined' && dhtml && typeof dhtml.getVar === 'function') {
+          clickUrl = dhtml.getVar('clickTAG', '') || '';
+          landingTarget = dhtml.getVar('landingPageTarget', '_blank') || '_blank';
+        }
+      } catch (e) {
+        console.log('dhtml.getVar not usable:', e && e.message);
+      }
+
+      if (!clickUrl) {
+        var metaClickUrl = document.querySelector('meta[name="click_url"]');
+        clickUrl = (variables && variables.click_url) ||
+                   (metaClickUrl && metaClickUrl.content) ||
+                   '#';
+      }
+
+      window.clickTAGvalue = clickUrl;
+      window.landingpagetarget = landingTarget;
+      console.log('Click URL set:', window.clickTAGvalue);
+    }
+
+    window.onAdClickTriggered = function() {
+      console.log('Click triggered:', window.clickTAGvalue);
+      if (window.clickTAGvalue && window.clickTAGvalue !== '#') {
+        window.open(window.clickTAGvalue, window.landingpagetarget);
+      }
+    };
+
+    // ============================================================
+    // PHASE 7: PRELOADER (starts AFTER content replacement)
+    // ============================================================
+    function startPreloaderTracking() {
+      if (preloaderStarted) return;
+      preloaderStarted = true;
+
+      console.log('Starting preloader tracking...');
+
+      var preloader = document.getElementById('preloader');
+      var sFill = document.getElementById('sFill');
+      var dotFill = document.getElementById('dotFill');
+      var startTime = Date.now();
+
+      function setStatus(text) {
+        var elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        console.log('Preloader [' + elapsed + 's]:', text);
+      }
+
+      // Function to restore classes and trigger animations
+      function triggerAnimations() {
+        if (adContainer) {
+          // Restore saved classes
+          if (savedClasses.length > 0) {
+            adContainer.className = savedClasses.join(' ');
+          }
+          // Add "animated" class after preloader to start CSS animations
+          if (hasAnimatedClass) {
+            // Small delay to ensure layout is stable before animations start
+            setTimeout(function() {
+              adContainer.classList.add('animated');
+              console.log('Added "animated" class - CSS animations starting');
+            }, 50);
+          }
+          console.log('Restored classes:', adContainer.className);
+        }
+      }
+
+      // Get all images to track (now with real URLs)
+      var images = Array.prototype.slice.call(document.querySelectorAll('img'));
+      var bgElements = Array.prototype.slice.call(document.querySelectorAll('[style*="background-image"]'));
+
+      setStatus('Found: ' + images.length + ' img, ' + bgElements.length + ' bg');
+
+      // Extract background image URLs (skip empty.png and placeholders)
+      // Use el.style.backgroundImage which contains the updated URL after applyDataAttributes()
+      var bgUrls = bgElements
+        .map(function(el) {
+          var bgImage = el.style.backgroundImage || '';
+          var match = bgImage.match(/url\(['"]?([^'")\s]+)['"]?\)/);
+          return match ? match[1] : null;
+        })
+        .filter(function(url) {
+          return url && url.indexOf('{{') === -1 && url !== 'empty.png';
+        });
+
+      setStatus('BG URLs to load: ' + bgUrls.length);
+
+      // Filter img elements (skip empty, data URIs, and empty.png)
+      images = images.filter(function(img) {
+        return img.src &&
+               img.src.indexOf('empty.png') === -1 &&
+               img.src.indexOf('data:') !== 0 &&
+               img.src.length > 0;
+      });
+
+      // Create image objects for background images
+      var bgImages = bgUrls.map(function(url) {
+        var img = new Image();
+        img.src = url;
+        return img;
+      });
+
+      var allImages = images.concat(bgImages);
+      var totalItems = allImages.length;
+      var loadedItems = 0;
+
+      setStatus('Total items to track: ' + totalItems + ' images');
+
+      function updateProgress(source) {
+        loadedItems++;
+        var progress = totalItems > 0 ? (loadedItems / totalItems) : 1;
+        var fillPercent = 100 - (progress * 100);
+
+        setStatus('Loaded ' + loadedItems + '/' + totalItems + ' (' + source + ')');
+
+        // Animate fill from bottom to top
+        var clipPath = 'inset(' + fillPercent + '% 0 0 0)';
+        if (sFill) sFill.style.clipPath = clipPath;
+        if (dotFill) dotFill.style.clipPath = clipPath;
+
+        // Hide preloader when all loaded
+        if (loadedItems >= totalItems) {
+          hidePreloader();
+        }
+      }
+
+      function hidePreloader() {
+        setStatus('All loaded! Hiding...');
+        setTimeout(function() {
+          if (preloader) preloader.classList.add('hidden');
+          triggerAnimations();
+          setTimeout(function() {
+            if (preloader) preloader.remove();
+          }, 400);
+        }, 200);
+      }
+
+      // Track image loading
+      allImages.forEach(function(img, i) {
+        var src = img.src ? img.src.split('/').pop() : 'img' + i;
+        if (img.complete) {
+          updateProgress('img done: ' + src);
+        } else {
+          img.addEventListener('load', function() {
+            updateProgress('img load: ' + src);
+          });
+          img.addEventListener('error', function() {
+            console.error('Image load failed:', img.src);
+            updateProgress('img err: ' + src);
+          });
+        }
+      });
+
+      // Fallback: hide preloader after max 3 seconds (reduced for better UX)
+      setTimeout(function() {
+        if (preloader && !preloader.classList.contains('hidden')) {
+          setStatus('TIMEOUT! Only ' + loadedItems + '/' + totalItems + ' loaded');
+          if (sFill) sFill.style.clipPath = 'inset(0 0 0 0)';
+          if (dotFill) dotFill.style.clipPath = 'inset(0 0 0 0)';
+          hidePreloader();
+        }
+      }, 3000);
+
+      // If no items to load, hide immediately
+      if (totalItems === 0) {
+        setStatus('No items to load');
+        if (sFill) sFill.style.clipPath = 'inset(0 0 0 0)';
+        if (dotFill) dotFill.style.clipPath = 'inset(0 0 0 0)';
+        setTimeout(hidePreloader, 300);
+      }
+    }
+
+    // ============================================================
+    // INIT - Start the ad initialization
+    // ============================================================
+    // Wait for DOM to be ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initAd);
+    } else {
+      // DOM already loaded
+      initAd();
+    }
+
+    } catch(globalError) {
+      console.error('❌ Template script error:', globalError);
+    }
+    })();
+    </script>
+  </body>
+</html>

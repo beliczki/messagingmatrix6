@@ -14,10 +14,6 @@ import {
   AlertCircle,
   AlertTriangle,
   Loader2,
-  RefreshCw,
-  Sun,
-  Moon,
-  Grid as GridIcon,
   ChevronLeft,
   ChevronRight,
   Type,
@@ -29,6 +25,7 @@ import {
   Filter,
 } from "lucide-react";
 import clsx from "clsx";
+import PreviewPane from "../_components/PreviewPane";
 
 type FileInfo = {
   name: string;
@@ -211,9 +208,7 @@ export default function TemplateEditor() {
   );
   const [skipAnim, setSkipAnim] = useState(persisted.skipAnim ?? false);
   const [splitPercent, setSplitPercent] = useState(persisted.splitPercent ?? 50);
-  const [boxSize, setBoxSize] = useState({ w: 0, h: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
-  const previewBoxRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
   const [selectedMcId, setSelectedMcId] = useState<number | null>(null);
   const [filesOpen, setFilesOpen] = useState(false);
@@ -484,17 +479,6 @@ export default function TemplateEditor() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTemplate, previewSize, skipAnim, selectedMcId]);
 
-  // Track preview box size for ad-scale-to-fit.
-  useEffect(() => {
-    if (!previewBoxRef.current) return;
-    const ro = new ResizeObserver((entries) => {
-      const cr = entries[0]?.contentRect;
-      if (cr) setBoxSize({ w: cr.width, h: cr.height });
-    });
-    ro.observe(previewBoxRef.current);
-    return () => ro.disconnect();
-  }, []);
-
   // Draggable divider between editor and preview.
   function startDrag(e: React.MouseEvent) {
     e.preventDefault();
@@ -542,7 +526,7 @@ export default function TemplateEditor() {
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
         <div className="flex items-center gap-2">
           <select
             value={activeTemplate ?? ""}
@@ -764,62 +748,17 @@ export default function TemplateEditor() {
                 : { order: 3, flexBasis: `${splitPercent}%`, flexGrow: 0, flexShrink: 0 }
             }
           >
-            <div className="flex h-10 shrink-0 items-center justify-between border-b border-slate-200 px-3">
-              <div className="flex items-center gap-2">
-                <select
-                  value={previewSize ?? ""}
-                  onChange={(e) => setPreviewSize(e.target.value)}
-                  className="rounded border border-slate-300 bg-white px-2 py-1 text-xs"
-                  disabled={!detailQ.data?.template.sizes.length}
-                >
-                  {(detailQ.data?.template.sizes ?? []).map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={() => setSkipAnim((v) => !v)}
-                  className={clsx(
-                    "flex items-center gap-1 rounded border px-2 py-1 text-xs",
-                    skipAnim
-                      ? "border-slate-900 bg-slate-900 text-white"
-                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
-                  )}
-                  title="Skip animations in preview"
-                >
-                  <span
-                    className={clsx(
-                      "flex size-3.5 items-center justify-center rounded-sm border",
-                      skipAnim
-                        ? "border-white bg-white text-slate-900"
-                        : "border-slate-400",
-                    )}
-                  >
-                    {skipAnim && <Check className="size-2.5" strokeWidth={3} />}
-                  </span>
-                  Skip animation
-                </button>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="flex overflow-hidden rounded border border-slate-300">
-                  <BgBtn active={previewBg === "light"} onClick={() => setPreviewBg("light")} title="Light background">
-                    <Sun className="size-3.5" />
-                  </BgBtn>
-                  <BgBtn active={previewBg === "checker"} onClick={() => setPreviewBg("checker")} title="Checker background">
-                    <GridIcon className="size-3.5" />
-                  </BgBtn>
-                  <BgBtn active={previewBg === "dark"} onClick={() => setPreviewBg("dark")} title="Dark background">
-                    <Moon className="size-3.5" />
-                  </BgBtn>
-                </div>
-                <button
-                  onClick={refreshPreview}
-                  className="rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50"
-                  title="Refresh preview"
-                >
-                  <RefreshCw className="size-3.5" />
-                </button>
+            <PreviewPane
+              html={previewHtml}
+              sizes={detailQ.data?.template.sizes ?? []}
+              size={previewSize}
+              onSizeChange={setPreviewSize}
+              bg={previewBg}
+              onBgChange={setPreviewBg}
+              skipAnim={skipAnim}
+              onSkipAnimChange={setSkipAnim}
+              onRefresh={refreshPreview}
+              rightExtras={
                 <button
                   onClick={() => setBindingsOpen((v) => !v)}
                   className="rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50"
@@ -828,19 +767,8 @@ export default function TemplateEditor() {
                 >
                   {bindingsOpen ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
                 </button>
-              </div>
-            </div>
-            <div
-              ref={previewBoxRef}
-              className="flex flex-1 items-center justify-center overflow-hidden"
-              style={bgStyleFor(previewBg)}
-            >
-              <PreviewIframe
-                html={previewHtml}
-                size={previewSize}
-                box={boxSize}
-              />
-            </div>
+              }
+            />
           </section>
         </div>
       </div>
@@ -1071,90 +999,6 @@ function BindingsPanel({
         />
       )}
     </>
-  );
-}
-
-function BgBtn({
-  active,
-  onClick,
-  title,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      className={clsx(
-        "flex items-center justify-center px-1.5 py-1 transition-colors",
-        active
-          ? "bg-slate-900 text-white"
-          : "bg-white text-slate-700 hover:bg-slate-50",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function bgStyleFor(bg: "light" | "dark" | "checker"): React.CSSProperties {
-  if (bg === "dark") return { backgroundColor: "#1f2937" };
-  if (bg === "checker") {
-    return {
-      backgroundColor: "#f9fafb",
-      backgroundImage:
-        "linear-gradient(45deg, #d1d5db 25%, transparent 25%), " +
-        "linear-gradient(-45deg, #d1d5db 25%, transparent 25%), " +
-        "linear-gradient(45deg, transparent 75%, #d1d5db 75%), " +
-        "linear-gradient(-45deg, transparent 75%, #d1d5db 75%)",
-      backgroundSize: "20px 20px",
-      backgroundPosition: "0 0, 0 10px, 10px -10px, -10px 0px",
-    };
-  }
-  return { backgroundColor: "#ffffff" };
-}
-
-function PreviewIframe({
-  html,
-  size,
-  box,
-}: {
-  html: string;
-  size: string | null;
-  box: { w: number; h: number };
-}) {
-  if (!size) return null;
-  const m = size.match(/^(\d+)x(\d+)$/);
-  if (!m) return null;
-  const adW = parseInt(m[1], 10);
-  const adH = parseInt(m[2], 10);
-  const margin = 16; // breathing room around the ad
-  const availW = Math.max(0, box.w - margin * 2);
-  const availH = Math.max(0, box.h - margin * 2);
-  const scale =
-    box.w === 0 || box.h === 0
-      ? 1
-      : Math.min(1, availW / adW, availH / adH);
-  return (
-    <iframe
-      title="preview"
-      srcDoc={html}
-      sandbox="allow-same-origin allow-scripts"
-      style={{
-        width: adW,
-        height: adH,
-        transform: scale < 1 ? `scale(${scale})` : undefined,
-        transformOrigin: "center center",
-        border: 0,
-        background: "white",
-        boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
-        flexShrink: 0,
-      }}
-    />
   );
 }
 

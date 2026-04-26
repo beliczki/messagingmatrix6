@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { type Audience, type Message, type Topic, STATUS_COLOR } from "./types";
+import PreviewPane, { type PreviewBg } from "../_components/PreviewPane";
 
 type Tab = "naming" | "template" | "content" | "styles" | "trafficking";
 
@@ -136,6 +137,12 @@ export default function MessageEditor({
   const [committedSnapshot, setCommittedSnapshot] = useState<Message | null>(
     null,
   );
+  const [autoSave, setAutoSave] = useState<boolean>(true);
+  const [splitPercent, setSplitPercent] = useState<number>(50);
+  const [previewSize, setPreviewSize] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const draggingRef = useRef<boolean>(false);
+  const wide = isLandscape(previewSize);
 
   // Reset the tab to "naming" only when the editor *opens* fresh — keep the
   // current tab while navigating prev/next between MCs.
@@ -254,9 +261,13 @@ export default function MessageEditor({
     },
   });
 
-  // Auto-save on draft changes — 400ms debounce.
+  // Auto-save on draft changes — 400ms debounce. Disabled when autoSave=false.
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    if (!autoSave) {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      return;
+    }
     if (!draft || !committedSnapshot) return;
     const payload = diffPayload(toEditable(committedSnapshot), draft);
     if (Object.keys(payload).length === 0) return;
@@ -266,7 +277,59 @@ export default function MessageEditor({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
+  }, [draft, committedSnapshot, autoSave]);
+
+  const isDirty = useMemo(() => {
+    if (!draft || !committedSnapshot) return false;
+    const payload = diffPayload(toEditable(committedSnapshot), draft);
+    return Object.keys(payload).length > 0;
   }, [draft, committedSnapshot]);
+
+  function manualSave() {
+    if (!draft || !committedSnapshot || !isDirty) return;
+    const payload = diffPayload(toEditable(committedSnapshot), draft);
+    setSaveState({ kind: "saving" });
+    save.mutate(payload);
+  }
+
+  function manualCancel() {
+    if (!committedSnapshot) return;
+    setDraft(toEditable(committedSnapshot));
+    setSaveState({ kind: "idle" });
+  }
+
+  function startDrag(e: React.MouseEvent) {
+    e.preventDefault();
+    draggingRef.current = true;
+    document.body.style.cursor = wide ? "row-resize" : "col-resize";
+    document.body.style.userSelect = "none";
+  }
+
+  useEffect(() => {
+    function onMove(ev: MouseEvent) {
+      if (!draggingRef.current || !containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      let pct: number;
+      if (wide) {
+        pct = ((ev.clientY - rect.top) / rect.height) * 100;
+      } else {
+        pct = ((rect.right - ev.clientX) / rect.width) * 100;
+      }
+      setSplitPercent(Math.max(20, Math.min(80, pct)));
+    }
+    function onUp() {
+      if (!draggingRef.current) return;
+      draggingRef.current = false;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [wide]);
 
   if (!open || !message || !draft) return null;
 
@@ -278,104 +341,198 @@ export default function MessageEditor({
       onClick={onClose}
     >
       <div
-        className="m-auto flex h-[90vh] w-[90vw] max-w-6xl overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+        className="m-auto flex h-[90vh] w-[90vw] max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Form column */}
-        <div className="flex w-[58%] flex-col border-r border-slate-100">
-          <header className="flex items-center gap-3 border-b border-slate-100 px-4 py-3">
-            <button
-              onClick={navigatePrev}
-              disabled={navIndex <= 0}
-              aria-label="Previous"
-              className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
-            >
-              <ChevronLeft className="size-4" />
-            </button>
-            <span className="font-mono text-base font-semibold text-slate-900">
-              {mcLabel}
+        <header className="flex shrink-0 items-center gap-3 border-b border-slate-100 px-4 py-3">
+          <button
+            onClick={navigatePrev}
+            disabled={navIndex <= 0}
+            aria-label="Previous"
+            className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+          >
+            <ChevronLeft className="size-4" />
+          </button>
+          <span className="font-mono text-base font-semibold text-slate-900">
+            {mcLabel}
+          </span>
+          <button
+            onClick={navigateNext}
+            disabled={navIndex < 0 || navIndex >= visibleMessages.length - 1}
+            aria-label="Next"
+            className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+          >
+            <ChevronRight className="size-4" />
+          </button>
+          {visibleMessages.length > 0 ? (
+            <span className="text-xs text-slate-500">
+              {navIndex + 1}/{visibleMessages.length}
             </span>
-            <button
-              onClick={navigateNext}
-              disabled={navIndex < 0 || navIndex >= visibleMessages.length - 1}
-              aria-label="Next"
-              className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
-            >
-              <ChevronRight className="size-4" />
-            </button>
-            {visibleMessages.length > 0 ? (
-              <span className="text-xs text-slate-500">
-                {navIndex + 1}/{visibleMessages.length}
-              </span>
-            ) : null}
+          ) : null}
+          <span
+            className={clsx(
+              "ml-2 inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-xs",
+              "border border-slate-200 bg-white",
+            )}
+          >
             <span
               className={clsx(
-                "ml-2 inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-xs",
-                "border border-slate-200 bg-white",
+                "size-2 rounded-full",
+                STATUS_COLOR[draft.status ?? ""] ?? "bg-slate-300",
               )}
+            />
+            {draft.status ?? "—"}
+          </span>
+          <SaveIndicator state={saveState} />
+
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => setAutoSave((v) => !v)}
+              className={clsx(
+                "flex items-center gap-1 rounded border px-2 py-1 text-xs",
+                autoSave
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+              )}
+              title="Save changes automatically"
             >
               <span
                 className={clsx(
-                  "size-2 rounded-full",
-                  STATUS_COLOR[draft.status ?? ""] ?? "bg-slate-300",
+                  "flex size-3.5 items-center justify-center rounded-sm border",
+                  autoSave
+                    ? "border-white bg-white text-slate-900"
+                    : "border-slate-400",
                 )}
-              />
-              {draft.status ?? "—"}
-            </span>
-            <SaveIndicator state={saveState} />
+              >
+                {autoSave && <Check className="size-2.5" strokeWidth={3} />}
+              </span>
+              Autosave
+            </button>
+            {!autoSave && isDirty ? (
+              <span className="text-xs text-amber-600">modified</span>
+            ) : null}
+            {!autoSave ? (
+              <>
+                <button
+                  onClick={manualSave}
+                  disabled={!isDirty || saveState.kind === "saving"}
+                  className="rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={manualCancel}
+                  disabled={!isDirty || saveState.kind === "saving"}
+                  className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : null}
             <button
               onClick={onClose}
               aria-label="Close"
-              className="ml-auto rounded p-1 text-slate-500 hover:bg-slate-100"
+              className="rounded p-1 text-slate-500 hover:bg-slate-100"
             >
               <X className="size-5" />
             </button>
-          </header>
-
-          <nav className="flex border-b border-slate-100 bg-slate-50/60 px-2">
-            <TabBtn active={tab === "naming"} onClick={() => setTab("naming")} icon={<Tag className="size-3.5" />}>
-              Naming
-            </TabBtn>
-            <TabBtn active={tab === "template"} onClick={() => setTab("template")} icon={<FileCode className="size-3.5" />}>
-              Template
-            </TabBtn>
-            <TabBtn active={tab === "content"} onClick={() => setTab("content")} icon={<FileText className="size-3.5" />}>
-              Content
-            </TabBtn>
-            <TabBtn active={tab === "styles"} onClick={() => setTab("styles")} icon={<PencilRuler className="size-3.5" />}>
-              Styles
-            </TabBtn>
-            <TabBtn active={tab === "trafficking"} onClick={() => setTab("trafficking")} icon={<Rocket className="size-3.5" />}>
-              Trafficking
-            </TabBtn>
-          </nav>
-
-          <div className="flex-1 overflow-y-auto px-5 py-4">
-            {tab === "naming" ? (
-              <NamingTab message={message} aud={aud} top={top} draft={draft} setDraft={setDraft} />
-            ) : null}
-            {tab === "content" ? <ContentTab draft={draft} setDraft={setDraft} /> : null}
-            {tab === "styles" ? <StylesTab draft={draft} setDraft={setDraft} /> : null}
-            {tab === "trafficking" ? <TraffickingTab message={committedSnapshot ?? message} /> : null}
-            {tab === "template" ? (
-              <TemplateTab
-                draft={draft}
-                setDraft={setDraft}
-                templates={templatesQ.data?.templates ?? []}
-              />
-            ) : null}
           </div>
-        </div>
+        </header>
 
-        {/* Preview column */}
-        <PreviewPane
-          message={committedSnapshot ?? message}
-          draft={draft}
-          templateInfo={templatesQ.data?.templates.find((t) => t.name === (draft.template ?? "html"))}
-        />
+        <div
+          ref={containerRef}
+          className={clsx(
+            "flex flex-1 overflow-hidden",
+            wide ? "flex-col" : "flex-row",
+          )}
+        >
+          {/* Editor section */}
+          <section
+            className="flex flex-col overflow-hidden bg-white"
+            style={{
+              order: wide ? 3 : 1,
+              flexBasis: `${100 - splitPercent}%`,
+              flexGrow: 0,
+              flexShrink: 0,
+            }}
+          >
+            <nav className="flex h-10 shrink-0 items-stretch border-b border-slate-100 bg-slate-50/60 px-2">
+              <TabBtn active={tab === "naming"} onClick={() => setTab("naming")} icon={<Tag className="size-3.5" />}>
+                Naming
+              </TabBtn>
+              <TabBtn active={tab === "template"} onClick={() => setTab("template")} icon={<FileCode className="size-3.5" />}>
+                Template
+              </TabBtn>
+              <TabBtn active={tab === "content"} onClick={() => setTab("content")} icon={<FileText className="size-3.5" />}>
+                Content
+              </TabBtn>
+              <TabBtn active={tab === "styles"} onClick={() => setTab("styles")} icon={<PencilRuler className="size-3.5" />}>
+                Styles
+              </TabBtn>
+              <TabBtn active={tab === "trafficking"} onClick={() => setTab("trafficking")} icon={<Rocket className="size-3.5" />}>
+                Trafficking
+              </TabBtn>
+            </nav>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4">
+              {tab === "naming" ? (
+                <NamingTab message={message} aud={aud} top={top} draft={draft} setDraft={setDraft} />
+              ) : null}
+              {tab === "content" ? <ContentTab draft={draft} setDraft={setDraft} /> : null}
+              {tab === "styles" ? <StylesTab draft={draft} setDraft={setDraft} /> : null}
+              {tab === "trafficking" ? <TraffickingTab message={committedSnapshot ?? message} /> : null}
+              {tab === "template" ? (
+                <TemplateTab
+                  draft={draft}
+                  setDraft={setDraft}
+                  templates={templatesQ.data?.templates ?? []}
+                />
+              ) : null}
+            </div>
+          </section>
+
+          {/* Draggable divider */}
+          <div
+            onMouseDown={startDrag}
+            className={clsx(
+              "shrink-0 bg-slate-200 transition-colors hover:bg-slate-400",
+              wide ? "h-1 w-full cursor-row-resize" : "h-full w-1 cursor-col-resize",
+            )}
+            style={{ order: 2 }}
+            title="Drag to resize"
+          />
+
+          {/* Preview section */}
+          <section
+            className="flex flex-col overflow-hidden bg-slate-50"
+            style={{
+              order: wide ? 1 : 3,
+              flexBasis: `${splitPercent}%`,
+              flexGrow: 0,
+              flexShrink: 0,
+            }}
+          >
+            <MessagePreview
+              message={committedSnapshot ?? message}
+              draft={draft}
+              templateInfo={templatesQ.data?.templates.find((t) => t.name === (draft.template ?? "html"))}
+              onSizeChange={setPreviewSize}
+            />
+          </section>
+        </div>
       </div>
     </div>
   );
+}
+
+function isLandscape(size: string | null): boolean {
+  if (!size) return false;
+  const m = size.match(/^(\d+)x(\d+)$/);
+  if (!m) return false;
+  const w = parseInt(m[1], 10);
+  const h = parseInt(m[2], 10);
+  if (h === 0) return false;
+  return w / h >= 1.5;
 }
 
 class VersionMismatchError extends Error {
@@ -802,14 +959,16 @@ function TemplateTab({
 }
 
 // ── Preview pane: live iframe, debounced ──
-function PreviewPane({
+function MessagePreview({
   message,
   draft,
   templateInfo,
+  onSizeChange,
 }: {
   message: Message;
   draft: EditableFields;
   templateInfo?: TemplateInfo;
+  onSizeChange?: (s: string) => void;
 }) {
   const sizes = templateInfo?.sizes ?? [
     "300x250",
@@ -823,106 +982,69 @@ function PreviewPane({
   useEffect(() => {
     if (!sizes.includes(size)) setSize(sizes[0] ?? "300x250");
   }, [sizes.join(",")]);
+  // Notify parent so layout can react to landscape/portrait.
+  useEffect(() => {
+    onSizeChange?.(size);
+  }, [size]);
 
   const [html, setHtml] = useState<string>("");
-  const [bg, setBg] = useState<"light" | "dark" | "checker">("light");
+  const [bg, setBg] = useState<PreviewBg>("light");
   const [skipAnim, setSkipAnim] = useState<boolean>(true);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  function refresh() {
+    const merged: Record<string, unknown> = { ...message, ...draft };
+    if (skipAnim) {
+      const tvc = (merged.templateVariantClasses ?? "") as string;
+      merged.templateVariantClasses = tvc
+        .split(/\s+/)
+        .filter((c) => c && c !== "animated")
+        .join(" ");
+    }
+    const templateName = draft.template ?? message.template ?? "html";
+    fetch("/api/render", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        templateName,
+        size,
+        message: merged,
+        inline: true,
+        skipAnimations: skipAnim,
+      }),
+    })
+      .then((r) => (r.ok ? r.text() : Promise.reject(r)))
+      .then(setHtml)
+      .catch(async (err) => {
+        if (err instanceof Response) {
+          const txt = await err.text();
+          setHtml(`<pre style="padding:8px;color:#b91c1c;font:12px monospace">${escapeHtml(txt)}</pre>`);
+        }
+      });
+  }
+
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      const merged = { ...message, ...draft };
-      const templateName = draft.template ?? message.template ?? "html";
-      fetch("/api/render", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          templateName,
-          size,
-          message: merged,
-          inline: true,
-          skipAnimations: skipAnim,
-        }),
-      })
-        .then((r) => (r.ok ? r.text() : Promise.reject(r)))
-        .then(setHtml)
-        .catch(async (err) => {
-          if (err instanceof Response) {
-            const txt = await err.text();
-            setHtml(`<pre style="padding:8px;color:#b91c1c;font:12px monospace">${escapeHtml(txt)}</pre>`);
-          }
-        });
-    }, 200);
+    debounceRef.current = setTimeout(refresh, 200);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [message.id, size, skipAnim, JSON.stringify(draft)]);
 
-  const bgClass =
-    bg === "dark"
-      ? "bg-slate-900"
-      : bg === "checker"
-        ? "bg-[length:20px_20px] bg-[conic-gradient(at_50%_50%,_#e2e8f0_25%,_#fff_0_50%,_#e2e8f0_0_75%,_#fff_0)]"
-        : "bg-slate-100";
-
   return (
-    <div className="flex w-[42%] flex-col bg-slate-50">
-      <div className="flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
-        <span className="text-xs font-medium text-slate-700">Preview</span>
-        <select
-          value={size}
-          onChange={(e) => setSize(e.target.value)}
-          className="rounded border border-slate-300 px-1.5 py-0.5 text-xs"
-        >
-          {sizes.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <label className="flex cursor-pointer select-none items-center gap-1 text-[11px] text-slate-600">
-          <input
-            type="checkbox"
-            checked={skipAnim}
-            onChange={(e) => setSkipAnim(e.target.checked)}
-            className="size-3.5"
-          />
-          Skip animation
-        </label>
-        <div className="ml-auto flex items-center gap-1 rounded border border-slate-200 bg-white p-0.5 text-[10px]">
-          {(["light", "dark", "checker"] as const).map((b) => (
-            <button
-              key={b}
-              onClick={() => setBg(b)}
-              className={clsx(
-                "rounded px-1.5 py-0.5",
-                bg === b ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100",
-              )}
-            >
-              {b}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className={clsx("flex flex-1 items-center justify-center overflow-auto", bgClass)}>
-        <iframe
-          srcDoc={html}
-          sandbox="allow-scripts allow-same-origin"
-          scrolling="no"
-          style={iframeSize(size)}
-          className="border border-slate-300 bg-white shadow-lg"
-        />
-      </div>
-    </div>
+    <PreviewPane
+      html={html}
+      sizes={sizes}
+      size={size}
+      onSizeChange={setSize}
+      bg={bg}
+      onBgChange={setBg}
+      skipAnim={skipAnim}
+      onSkipAnimChange={setSkipAnim}
+      onRefresh={refresh}
+    />
   );
-}
-
-function iframeSize(size: string): { width: number; height: number } {
-  const m = size.match(/^(\d+)x(\d+)$/);
-  if (!m) return { width: 300, height: 250 };
-  return { width: Number(m[1]), height: Number(m[2]) };
 }
 
 function escapeHtml(s: string): string {

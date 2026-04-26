@@ -18,6 +18,8 @@ import UploadQueue, {
   useDropTarget,
   type QueueItem,
 } from "../_components/UploadQueue";
+import MultiPill from "../_components/MultiPill";
+import RightToolbar from "../_components/RightToolbar";
 import type { ParseRules } from "@/lib/parse-filename";
 
 type Asset = {
@@ -148,8 +150,9 @@ export default function AssetsLibrary() {
   });
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
+    <div className="flex h-full">
+      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="sticky top-0 z-10 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
         <div className="flex items-baseline gap-2">
           <div className="text-sm font-semibold text-slate-900">Assets</div>
           <div className="text-xs text-slate-500">
@@ -261,6 +264,9 @@ export default function AssetsLibrary() {
       />
 
       {queue.panel}
+      </div>
+
+      <RightToolbar storageKey="mm6_assets_right_toolbar_open" />
     </div>
   );
 }
@@ -295,55 +301,6 @@ function QueueItemForm({
         </label>
       ))}
     </div>
-  );
-}
-
-function MultiPill({
-  label,
-  values,
-  options,
-  onChange,
-}: {
-  label: string;
-  values: Set<string>;
-  options: string[];
-  onChange: (s: Set<string>) => void;
-}) {
-  if (options.length === 0) return null;
-  return (
-    <details className="relative text-xs">
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-700 hover:bg-slate-50">
-        <span>{label}</span>
-        {values.size > 0 ? (
-          <span className="rounded-full bg-slate-900 px-1.5 text-[10px] font-medium text-white">
-            {values.size}
-          </span>
-        ) : null}
-      </summary>
-      <div className="absolute left-0 top-full z-50 mt-1 max-h-72 w-56 overflow-auto rounded-md border border-slate-200 bg-white p-1.5 shadow-lg">
-        {options.map((opt) => {
-          const checked = values.has(opt);
-          return (
-            <label
-              key={opt}
-              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-slate-100"
-            >
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={(e) => {
-                  const next = new Set(values);
-                  if (e.target.checked) next.add(opt);
-                  else next.delete(opt);
-                  onChange(next);
-                }}
-              />
-              <span className="truncate">{opt}</span>
-            </label>
-          );
-        })}
-      </div>
-    </details>
   );
 }
 

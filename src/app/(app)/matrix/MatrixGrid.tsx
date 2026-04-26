@@ -2,10 +2,14 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
+import { Layers, Rows3, Table2, ListFilter } from "lucide-react";
+import clsx from "clsx";
 import GridView from "./GridView";
 import FeedView from "./FeedView";
 import MatrixToolbar from "./MatrixToolbar";
 import MessageEditor from "./MessageEditor";
+import RightToolbar from "../_components/RightToolbar";
+import CycleIconButton from "../_components/CycleIconButton";
 import {
   type Audience,
   type Density,
@@ -110,42 +114,74 @@ export default function MatrixWorkspace() {
   if (audiences.length === 0 && topics.length === 0) return <EmptyState />;
 
   return (
-    <div className="flex h-full flex-col">
-      <MatrixToolbar
-        view={view}
-        setView={setView}
-        density={density}
-        setDensity={setDensity}
-        filters={filters}
-        setFilters={setFilters}
-        productOptions={productOptions}
-        statusOptions={statusOptions}
-        counts={{
-          audiences: audiences.length,
-          topics: topics.length,
-          messages: messages.length,
-          visible: filtered.msgs.length,
-        }}
-      />
+    <div className="flex h-full">
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <MatrixToolbar
+          filters={filters}
+          setFilters={setFilters}
+          productOptions={productOptions}
+          statusOptions={statusOptions}
+          counts={{
+            audiences: audiences.length,
+            topics: topics.length,
+            messages: messages.length,
+            visible: filtered.msgs.length,
+          }}
+        />
 
-      <div className="relative flex-1 overflow-hidden">
-        {view === "grid" ? (
-          <GridView
-            audiences={filtered.auds}
-            topics={filtered.tops}
-            messages={filtered.msgs}
-            density={density}
-            onOpenMessage={(id) => setOpenMessageId(id)}
-          />
-        ) : (
-          <FeedView
-            messages={filtered.msgs}
-            audiences={audiences}
-            topics={topics}
-            onOpenMessage={(id) => setOpenMessageId(id)}
-          />
-        )}
+        <div className="relative flex-1 overflow-hidden">
+          {view === "grid" ? (
+            <GridView
+              audiences={filtered.auds}
+              topics={filtered.tops}
+              messages={filtered.msgs}
+              density={density}
+              onOpenMessage={(id) => setOpenMessageId(id)}
+            />
+          ) : (
+            <FeedView
+              messages={filtered.msgs}
+              audiences={audiences}
+              topics={topics}
+              onOpenMessage={(id) => setOpenMessageId(id)}
+            />
+          )}
+        </div>
       </div>
+
+      <RightToolbar storageKey="mm6_matrix_right_toolbar_open">
+        {(collapsed) =>
+          collapsed ? (
+            <>
+              <CycleIconButton
+                options={[
+                  { value: "grid", icon: <Table2 className="size-4" />, label: "Grid view" },
+                  { value: "feed", icon: <ListFilter className="size-4" />, label: "Feed view" },
+                ]}
+                value={view}
+                onChange={setView}
+              />
+              {view === "grid" ? (
+                <CycleIconButton
+                  options={[
+                    { value: "informative", icon: <Layers className="size-4" />, label: "Informative" },
+                    { value: "minimal", icon: <Rows3 className="size-4" />, label: "Minimal" },
+                  ]}
+                  value={density}
+                  onChange={setDensity}
+                />
+              ) : null}
+            </>
+          ) : (
+            <ViewControls
+              view={view}
+              setView={setView}
+              density={density}
+              setDensity={setDensity}
+            />
+          )
+        }
+      </RightToolbar>
 
       <MessageEditor
         open={!!openMessage}
@@ -157,6 +193,86 @@ export default function MatrixWorkspace() {
         onJump={(id) => setOpenMessageId(id)}
       />
     </div>
+  );
+}
+
+function ViewControls({
+  view,
+  setView,
+  density,
+  setDensity,
+}: {
+  view: View;
+  setView: (v: View) => void;
+  density: Density;
+  setDensity: (d: Density) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <div>
+        <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+          View
+        </div>
+        <div className="flex rounded-md border border-slate-200 bg-white p-0.5 text-xs">
+          <ToggleBtn active={view === "grid"} onClick={() => setView("grid")}>
+            <Table2 className="size-3.5" />
+            Grid
+          </ToggleBtn>
+          <ToggleBtn active={view === "feed"} onClick={() => setView("feed")}>
+            <ListFilter className="size-3.5" />
+            Feed
+          </ToggleBtn>
+        </div>
+      </div>
+
+      {view === "grid" ? (
+        <div>
+          <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+            Density
+          </div>
+          <div className="flex rounded-md border border-slate-200 bg-white p-0.5 text-xs">
+            <ToggleBtn
+              active={density === "informative"}
+              onClick={() => setDensity("informative")}
+            >
+              <Layers className="size-3.5" />
+              Informative
+            </ToggleBtn>
+            <ToggleBtn
+              active={density === "minimal"}
+              onClick={() => setDensity("minimal")}
+            >
+              <Rows3 className="size-3.5" />
+              Minimal
+            </ToggleBtn>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ToggleBtn({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={clsx(
+        "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1",
+        active
+          ? "bg-slate-900 text-white"
+          : "text-slate-700 hover:bg-slate-100",
+      )}
+    >
+      {children}
+    </button>
   );
 }
 

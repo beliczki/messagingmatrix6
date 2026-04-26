@@ -18,6 +18,8 @@ import UploadQueue, {
   useDropTarget,
   type QueueItem,
 } from "../_components/UploadQueue";
+import MultiPill from "../_components/MultiPill";
+import RightToolbar from "../_components/RightToolbar";
 import type { ParseRules } from "@/lib/parse-filename";
 
 type Creative = {
@@ -167,69 +169,73 @@ export default function CreativeLibrary() {
   });
 
   return (
-    <div className="flex h-full flex-col">
-      <Toolbar
-        search={search}
-        setSearch={setSearch}
-        productOptions={productOptions}
-        products={products}
-        setProducts={setProducts}
-        typeOptions={typeOptions}
-        types={types}
-        setTypes={setTypes}
-        total={creatives.length}
-        visible={filtered.length}
-        onUpload={() => setUploadOpen(true)}
-      />
+    <div className="flex h-full">
+      <div className="flex flex-1 flex-col overflow-hidden">
+        <Toolbar
+          search={search}
+          setSearch={setSearch}
+          productOptions={productOptions}
+          products={products}
+          setProducts={setProducts}
+          typeOptions={typeOptions}
+          types={types}
+          setTypes={setTypes}
+          total={creatives.length}
+          visible={filtered.length}
+          onUpload={() => setUploadOpen(true)}
+        />
 
-      <div
-        className={clsx(
-          "relative flex-1 overflow-auto p-4 transition",
-          drop.over && "bg-slate-100 ring-2 ring-inset ring-slate-900",
-        )}
-        {...drop.handlers}
-      >
-        {drop.over ? (
-          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
-            <div className="rounded-xl bg-slate-900/90 px-5 py-3 text-sm font-medium text-white">
-              Drop files to queue them
+        <div
+          className={clsx(
+            "relative flex-1 overflow-auto p-4 transition",
+            drop.over && "bg-slate-100 ring-2 ring-inset ring-slate-900",
+          )}
+          {...drop.handlers}
+        >
+          {drop.over ? (
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+              <div className="rounded-xl bg-slate-900/90 px-5 py-3 text-sm font-medium text-white">
+                Drop files to queue them
+              </div>
             </div>
-          </div>
-        ) : null}
-        {creativesQ.isLoading ? (
-          <div className="flex h-full items-center justify-center text-sm text-slate-500">
-            <Loader2 className="mr-2 size-4 animate-spin" />
-            Loading…
-          </div>
-        ) : filtered.length === 0 ? (
-          <EmptyState empty={creatives.length === 0} onUpload={() => setUploadOpen(true)} />
-        ) : (
-          <Masonry
-            items={filtered}
-            render={(c) => (
-              <Card
-                creative={c}
-                file={c.fileId ? filesById.get(c.fileId) : undefined}
-                onDelete={() => del.mutate(c)}
-              />
-            )}
-          />
-        )}
+          ) : null}
+          {creativesQ.isLoading ? (
+            <div className="flex h-full items-center justify-center text-sm text-slate-500">
+              <Loader2 className="mr-2 size-4 animate-spin" />
+              Loading…
+            </div>
+          ) : filtered.length === 0 ? (
+            <EmptyState empty={creatives.length === 0} onUpload={() => setUploadOpen(true)} />
+          ) : (
+            <Masonry
+              items={filtered}
+              render={(c) => (
+                <Card
+                  creative={c}
+                  file={c.fileId ? filesById.get(c.fileId) : undefined}
+                  onDelete={() => del.mutate(c)}
+                />
+              )}
+            />
+          )}
+        </div>
+
+        {queue.panel}
+
+        <UploadDialog
+          open={uploadOpen}
+          category="creative"
+          onClose={() => setUploadOpen(false)}
+          onUploaded={() => {
+            qc.invalidateQueries({ queryKey: ["files", "creative"] });
+          }}
+          metadataForm={({ file, submit, submitting }) => (
+            <CreativeMetadataForm file={file} submit={submit} submitting={submitting} />
+          )}
+        />
       </div>
 
-      {queue.panel}
-
-      <UploadDialog
-        open={uploadOpen}
-        category="creative"
-        onClose={() => setUploadOpen(false)}
-        onUploaded={() => {
-          qc.invalidateQueries({ queryKey: ["files", "creative"] });
-        }}
-        metadataForm={({ file, submit, submitting }) => (
-          <CreativeMetadataForm file={file} submit={submit} submitting={submitting} />
-        )}
-      />
+      <RightToolbar storageKey="mm6_creative_library_right_toolbar_open" />
     </div>
   );
 }
@@ -261,7 +267,7 @@ function Toolbar({
 }) {
   const activeFilters = products.size + types.size + (search ? 1 : 0);
   return (
-    <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
+    <div className="sticky top-0 z-10 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
       <div className="flex items-baseline gap-2">
         <div className="text-sm font-semibold text-slate-900">Creative Library</div>
         <div className="text-xs text-slate-500">
@@ -305,55 +311,6 @@ function Toolbar({
         Upload
       </button>
     </div>
-  );
-}
-
-function MultiPill({
-  label,
-  values,
-  options,
-  onChange,
-}: {
-  label: string;
-  values: Set<string>;
-  options: string[];
-  onChange: (s: Set<string>) => void;
-}) {
-  if (options.length === 0) return null;
-  return (
-    <details className="relative text-xs">
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-700 hover:bg-slate-50">
-        <span>{label}</span>
-        {values.size > 0 ? (
-          <span className="rounded-full bg-slate-900 px-1.5 text-[10px] font-medium text-white">
-            {values.size}
-          </span>
-        ) : null}
-      </summary>
-      <div className="absolute left-0 top-full z-50 mt-1 max-h-72 w-56 overflow-auto rounded-md border border-slate-200 bg-white p-1.5 shadow-lg">
-        {options.map((opt) => {
-          const checked = values.has(opt);
-          return (
-            <label
-              key={opt}
-              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 hover:bg-slate-100"
-            >
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={(e) => {
-                  const next = new Set(values);
-                  if (e.target.checked) next.add(opt);
-                  else next.delete(opt);
-                  onChange(next);
-                }}
-              />
-              <span className="truncate">{opt}</span>
-            </label>
-          );
-        })}
-      </div>
-    </details>
   );
 }
 

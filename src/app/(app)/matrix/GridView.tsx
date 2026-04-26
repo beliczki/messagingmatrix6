@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import clsx from "clsx";
 import {
   type Audience,
@@ -23,6 +23,8 @@ export default function GridView({
   density: Density;
   onOpenMessage: (id: number) => void;
 }) {
+  const [transposed, setTransposed] = useState(false);
+
   const cells = useMemo(() => {
     const m = new Map<string, Message[]>();
     for (const msg of messages) {
@@ -42,47 +44,68 @@ export default function GridView({
     );
   }
 
+  const rows = transposed ? topics : audiences;
+  const cols = transposed ? audiences : topics;
+  const rowLabel = transposed ? "Topic" : "Audience";
+  const colLabel = transposed ? "Audience" : "Topic";
+
   return (
     <div className="overflow-auto">
       <table className="border-separate border-spacing-0">
         <thead>
           <tr>
-            <th className="sticky left-0 top-0 z-30 min-w-[180px] border-b border-r border-slate-200 bg-slate-50 p-2 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
-              Audience ╲ Topic
+            <th className="sticky left-0 top-0 z-30 h-20 min-w-[180px] border-b border-r border-slate-200 bg-slate-50 p-0 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <div className="flex h-full min-h-20 items-center justify-center p-2">
+                <button
+                  type="button"
+                  onClick={() => setTransposed((v) => !v)}
+                  title={`Transpose — show ${transposed ? "audiences" : "topics"} as rows`}
+                  aria-label="Transpose matrix"
+                  className="inline-flex items-center gap-1.5 rounded px-1.5 py-1 hover:bg-slate-200/60"
+                >
+                  <span>{rowLabel}</span>
+                  <span className="text-base font-normal text-slate-400">
+                    {transposed ? "╱" : "╲"}
+                  </span>
+                  <span>{colLabel}</span>
+                </button>
+              </div>
             </th>
-            {topics.map((t) => (
+            {cols.map((c) => (
               <th
-                key={t.id}
-                className="sticky top-0 z-20 min-w-[160px] border-b border-r border-slate-200 bg-slate-50 p-2 text-left text-xs font-medium text-slate-700"
-                title={t.key}
+                key={c.id}
+                className="sticky top-0 z-20 h-20 min-h-20 min-w-[160px] border-b border-r border-slate-200 bg-slate-50 p-2 align-top text-left text-xs font-medium text-slate-700"
+                title={c.key}
               >
-                <div className="font-semibold">{t.name}</div>
+                <div className="font-semibold">{c.name}</div>
                 <div className="truncate font-mono text-[10px] text-slate-400">
-                  {t.key}
+                  {c.key}
                 </div>
               </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {audiences.map((a) => (
-            <tr key={a.id}>
+          {rows.map((r) => (
+            <tr key={r.id}>
               <th
                 className="sticky left-0 z-10 min-w-[180px] border-b border-r border-slate-200 bg-slate-50 p-2 text-left text-xs font-medium text-slate-700"
-                title={a.key}
+                title={r.key}
               >
-                <div className="font-semibold">{a.name}</div>
+                <div className="font-semibold">{r.name}</div>
                 <div className="font-mono text-[10px] text-slate-400">
-                  {a.key}
+                  {r.key}
                 </div>
               </th>
-              {topics.map((t) => {
-                const list = cells.get(`${a.key}\0${t.key}`) ?? [];
+              {cols.map((c) => {
+                const audKey = transposed ? c.key : r.key;
+                const topKey = transposed ? r.key : c.key;
+                const list = cells.get(`${audKey}\0${topKey}`) ?? [];
                 return (
                   <Cell
-                    key={t.id}
-                    audience={a.key}
-                    topic={t.key}
+                    key={c.id}
+                    audience={audKey}
+                    topic={topKey}
                     messages={list}
                     density={density}
                     onOpenMessage={onOpenMessage}

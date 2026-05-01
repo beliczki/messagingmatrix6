@@ -99,7 +99,65 @@ Mind a 6 lockolt → **10a.1 (schema migration) készen áll indulásra**. Ez eg
 Eredmények rögzítendők ide. Ha bármi fail → root-cause + fix patch (virtualization window méret, lazy import, memoization). A budget verification end-user manual workflow, mert Lighthouse+DevTools-t a böngészőben kell pörgetni — Claude itt nem fut.
 
 ### 10e Status (2026-05-01)
-TBD — kezdés 10d után.
+
+**Bootstrap automatizálva**: új `scripts/seed-multi.ts` (`npm run seed:multi`) létrehozza a 4 deploy clients row-jait (erste / telekom / proficio / demo) + admin user-t mindegyikbe (default `admin@local` / `admin123`). Az `seed-multi` futás eredménye táblázatban kiírja az id/key/mcp_token-t és a port + dev script mappingot.
+
+**Manuális smoke checklist (a usernek)** — futtass mindegyiket egy frissen seedelt DB-n:
+
+#### Branding
+- [ ] `npm run dev:erste` → http://localhost:6001 — login page Erste branding (sidebar logo, brand colors a lookAndFeel-ből)
+- [ ] `npm run dev:telekom` → http://localhost:6002 — login page Telekom branding (eltér Erste-től)
+- [ ] `npm run dev:proficio` → http://localhost:6003 — Proficio branding
+- [ ] `npm run dev:demo` → http://localhost:6000 — generic slate (default lookAndFeel)
+- [ ] Settings → Design tab egyik deploy-on változtatás (pl. `--brand-primary`) → ugyanazon deploy login page új színt mutat → másik deploy login page **érintetlen**
+
+#### Adat-izoláció (cross-tenant leak)
+- [ ] Erste deploy-on hozz létre egy audience-t. Telekom deploy `/api/audiences` GET → 0 row (vagy kizárólag Telekom data)
+- [ ] Erste session JWT-vel hívd meg Telekom deploy-on `/api/audiences` (curl Bearer-rel) → 401 (forged-cid)
+- [ ] Forged JWT-t signeljen Telekom client_id-vel és Erste session-secret-tel → Erste deploy `/api/audiences` → 401 (cid mismatch)
+
+#### MCP per-client
+- [ ] Settings → Clients tab Erste deploy-on → "Generate MCP token". Másold a tokent.
+- [ ] Hívd meg Erste `/mcp` endpoint-ot a Bearer-rel + `tools/list` → 24 tool sikeres
+- [ ] Hívd meg ugyanazt a tokent Telekom `/mcp`-n → 401
+- [ ] Telekom-on generálj saját MCP tokent → ugyanaz a flow Telekom data-val
+
+#### Snapshot per-client izoláció
+- [ ] Erste deploy-on hozz létre snapshot-ot ("test-1"). Settings → Snapshots tab list mutatja
+- [ ] Telekom deploy Settings → Snapshots → list **NEM** tartalmazza Erste "test-1"-t
+- [ ] Telekom-on hozz létre saját snapshot-ot → Erste-n nem látszik
+
+#### Share gallery cross-deploy
+- [ ] Erste deploy-on hozz létre share gallery-t a Matrix-ról (selected MC-k → "Share")
+- [ ] Másold a share URL-t (`/share/<id>`)
+- [ ] Nyisd meg a URL-t Telekom deploy host-on (port 6002) → a megnyíló oldal **Erste branding**-gel renderelődik (mert a share metadata client_id-t tárol)
+
+#### Soft-archive cross-tenant
+- [ ] Erste-n archiváld egy audience-t → Telekom Matrix listáján nem látszik (mindenképp, már izolált)
+- [ ] Erste "Show archived" toggle-lel láthatóvá teszed → csak Erste archived row-ok jelennek meg
+- [ ] Restore működik per-client
+
+#### Eredmények rögzítése
+Pipáld ki a fenti lépéseket. Ha bármi fail → bug-fix patch a következő phase 11+ kibocsátásig. A Phase 10 ezzel zárva.
+
+---
+
+## Phase 10 zárás összegzés
+
+**Status (2026-05-01)**: Phase 10 funkcionálisan zárva (10a.1-10c kódolva + commit-olva + tesztelve, 170/170 zöld). A 10d (perf budget verify) és 10e (multi-deploy smoke) **manuális end-user workflow** — Claude bootstrap script-ekkel előkészítette (`seed-perf` + `seed-multi`) és checklistet adott; a tényleges Lighthouse + multi-deploy futtatás a usernél van.
+
+**Új capability-k:**
+- Soft-delete mindenre (10 tenant-scoped tábla `archived_at`-tal, cascade audience↔message + topic↔message)
+- Restore per-action a UI-on (Assets/CL/Users/Shares) és MCP-n (audience_restore/topic_restore/mc_restore)
+- Parent-first restore guard messages-en (parent audience/topic archived → 409 / MCP error)
+- Snapshot create/restore (10 tábla teljes pillanatkép, transaction-ban wipe-then-insert) — Settings → Snapshots tab
+- Read-only changelog UI (audit_log timeline filterekkel) — Settings → Changelog tab
+- Synthetic perf seed + multi-deploy bootstrap script
+
+**Hátra (post-launch / 11+):**
+- Matrix Grid/Feed cell-szintű archive UX (most a list view-on van toggle, mátrix nem)
+- Templates/Monitoring tab archive toggle-jei (most kihagyva, mert template fájlrendszer-alapú; monitoring 6c deferred)
+- Phase 11 file ingest pipeline + AI-agent error triage (post-launch pinned work)
 
 ---
 

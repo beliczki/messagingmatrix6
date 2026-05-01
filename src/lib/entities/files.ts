@@ -105,13 +105,37 @@ export function listFiles(
   if (!opts.includeArchived) {
     where.push(isNull(uploadedFiles.archivedAt));
   }
-  return db
+  const q = db
     .select()
     .from(uploadedFiles)
     .where(and(...where))
-    .orderBy(desc(uploadedFiles.createdAt))
-    .limit(opts.limit ?? 200)
-    .all();
+    .orderBy(desc(uploadedFiles.createdAt));
+  return (opts.limit !== undefined ? q.limit(opts.limit) : q).all();
+}
+
+// Lookup by exact filename within a client. Used by /api/drive/proxy/* to
+// resolve template-rendered references (messages.image1..6 / video1 store
+// just a filename) back to the storage row. Returns the most recent match
+// when multiple files share the name.
+export function getFileByFilename(
+  clientId: number,
+  filename: string,
+): UploadedFile | null {
+  return (
+    db
+      .select()
+      .from(uploadedFiles)
+      .where(
+        and(
+          eq(uploadedFiles.clientId, clientId),
+          eq(uploadedFiles.filename, filename),
+          isNull(uploadedFiles.archivedAt),
+        ),
+      )
+      .orderBy(desc(uploadedFiles.createdAt))
+      .limit(1)
+      .get() ?? null
+  );
 }
 
 export function getFile(clientId: number, id: string): UploadedFile | null {

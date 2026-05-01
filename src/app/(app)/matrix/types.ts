@@ -58,6 +58,7 @@ export type Message = {
   image4: string | null;
   image5: string | null;
   image6: string | null;
+  video1: string | null;
   utmCampaign: string | null;
   utmSource: string | null;
   utmMedium: string | null;

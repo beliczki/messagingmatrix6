@@ -1,13 +1,11 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Upload as UploadIcon,
   Search,
   X,
-  Archive as ArchiveIcon,
-  ArchiveRestore,
   Image as ImageIcon,
   Loader2,
   Package,
@@ -22,6 +20,13 @@ import UploadQueue, {
 import MultiPill from "../_components/MultiPill";
 import ArchiveToggle from "../_components/ArchiveToggle";
 import RightToolbar from "../_components/RightToolbar";
+import AssetDetailDialog from "./AssetDetailDialog";
+import {
+  LibraryViewSwitcher,
+  LIBRARY_VIEW_CODEC,
+  type LibraryViewMode,
+} from "../_components/LibraryViewSwitcher";
+import { usePersistent } from "../_components/usePersistent";
 import type { ParseRules } from "@/lib/parse-filename";
 
 type Asset = {
@@ -61,6 +66,12 @@ export default function AssetsLibrary() {
   const [types, setTypes] = useState<Set<string>>(new Set());
   const [uploadOpen, setUploadOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const [view, setView] = usePersistent<LibraryViewMode>(
+    "mm6_assets_library_view",
+    "masonry",
+    LIBRARY_VIEW_CODEC,
+  );
 
   const assetsQ = useQuery({
     queryKey: ["assets", { showArchived }],
@@ -144,32 +155,6 @@ export default function AssetsLibrary() {
   }, [assets, products, types, search]);
 
   const qc = useQueryClient();
-  const del = useMutation({
-    mutationFn: async (a: Asset) => {
-      const r = await fetch(`/api/assets/${a.id}`, {
-        method: "DELETE",
-        credentials: "include",
-        headers: { "If-Match": String(a.version) },
-      });
-      if (!r.ok) throw new Error(await r.text());
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["assets"] }),
-  });
-  const restore = useMutation({
-    mutationFn: async (a: Asset) => {
-      const r = await fetch(`/api/assets/${a.id}/restore`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "If-Match": String(a.version),
-          "Content-Type": "application/json",
-        },
-        body: "{}",
-      });
-      if (!r.ok) throw new Error(await r.text());
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["assets"] }),
-  });
 
   return (
     <div className="assets-library flex h-full">
@@ -266,18 +251,41 @@ export default function AssetsLibrary() {
               ) : null}
             </div>
           </div>
-        ) : (
-          <Masonry
-            items={filtered}
-            render={(a) => (
+        ) : view === "masonry" ? (
+          <div className="assets-library__view assets-library__view--masonry">
+            <Masonry
+              items={filtered}
+              render={(a) => (
+                <ImageTile
+                  asset={a}
+                  file={a.fileId ? filesById.get(a.fileId) : undefined}
+                  onOpen={() => setDetailId(a.id)}
+                />
+              )}
+            />
+          </div>
+        ) : view === "grid" ? (
+          <div className="assets-library__view assets-library__view--grid grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {filtered.map((a) => (
               <Card
+                key={a.id}
                 asset={a}
                 file={a.fileId ? filesById.get(a.fileId) : undefined}
-                onDelete={() => del.mutate(a)}
-                onRestore={() => restore.mutate(a)}
+                onOpen={() => setDetailId(a.id)}
               />
-            )}
-          />
+            ))}
+          </div>
+        ) : (
+          <div className="assets-library__view assets-library__view--list flex flex-col gap-1.5">
+            {filtered.map((a) => (
+              <ListRow
+                key={a.id}
+                asset={a}
+                file={a.fileId ? filesById.get(a.fileId) : undefined}
+                onOpen={() => setDetailId(a.id)}
+              />
+            ))}
+          </div>
         )}
       </div>
 
@@ -291,10 +299,31 @@ export default function AssetsLibrary() {
         )}
       />
 
+      {detailId !== null
+        ? (() => {
+            const a = filtered.find((x) => x.id === detailId)
+              ?? assets.find((x) => x.id === detailId);
+            if (!a) return null;
+            return (
+              <AssetDetailDialog
+                asset={a}
+                assets={filtered}
+                file={a.fileId ? filesById.get(a.fileId) : undefined}
+                onJump={(id) => setDetailId(id)}
+                onClose={() => setDetailId(null)}
+              />
+            );
+          })()
+        : null}
+
       {queue.panel}
       </div>
 
-      <RightToolbar storageKey="mm6_assets_right_toolbar_open" />
+      <RightToolbar storageKey="mm6_assets_right_toolbar_open">
+        {(collapsed) => (
+          <LibraryViewSwitcher view={view} setView={setView} collapsed={collapsed} />
+        )}
+      </RightToolbar>
     </div>
   );
 }
@@ -335,71 +364,170 @@ function QueueItemForm({
 function Card({
   asset,
   file,
-  onDelete,
-  onRestore,
+  onOpen,
 }: {
   asset: Asset;
   file: UploadedFile | undefined;
-  onDelete: () => void;
-  onRestore: () => void;
+  onOpen: () => void;
 }) {
   const isImage = file?.mimeType?.startsWith("image/");
+  const isVideo = file?.mimeType?.startsWith("video/");
   const archived = asset.archivedAt !== null;
   return (
-    <div
+    <button
+      type="button"
+      onClick={onOpen}
       className={clsx(
-        "media-tile group overflow-hidden rounded-lg border border-slate-200 bg-white transition hover:border-slate-400 hover:shadow-md",
+        "asset-card group block w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-left transition hover:border-slate-400 hover:shadow-md [content-visibility:auto] [contain-intrinsic-size:auto_220px]",
         archived && "row--archived",
       )}
     >
-      <div className="media-tile__thumb relative aspect-[4/3] bg-slate-50">
+      <div className="asset-card__thumb thumb-checker relative aspect-[4/3]">
         {isImage && asset.fileId ? (
           <img
             src={`/api/files/${asset.fileId}/thumbnail?w=400`}
             alt={asset.fileName ?? "asset"}
-            className="media-tile__image size-full object-contain"
+            className="size-full object-contain"
             loading="lazy"
+            decoding="async"
+          />
+        ) : isVideo && asset.fileId ? (
+          <video
+            src={`/api/files/${asset.fileId}#t=0.1`}
+            className="size-full object-contain"
+            preload="metadata"
+            muted
+            playsInline
           />
         ) : (
-          <div className="media-tile__placeholder flex size-full items-center justify-center text-slate-300">
+          <div className="flex size-full items-center justify-center bg-slate-50 text-slate-300">
             <ImageIcon className="size-8" />
           </div>
         )}
-        {archived ? (
-          <button
-            onClick={onRestore}
-            aria-label="Restore"
-            title="Restore from archive"
-            className="media-tile__restore-btn absolute right-1.5 top-1.5 rounded-md bg-white/90 p-1 text-emerald-600 shadow transition hover:bg-emerald-50"
-          >
-            <ArchiveRestore className="size-3.5" />
-          </button>
-        ) : (
-          <button
-            onClick={onDelete}
-            aria-label="Archive"
-            title="Archive"
-            className="media-tile__archive-btn absolute right-1.5 top-1.5 rounded-md bg-white/90 p-1 text-rose-600 opacity-0 shadow transition group-hover:opacity-100 hover:bg-rose-50"
-          >
-            <ArchiveIcon className="size-3.5" />
-          </button>
-        )}
       </div>
-      <div className="media-tile__meta p-2 text-xs">
+      <div className="asset-card__meta p-2 text-xs">
         <div
-          className="media-tile__filename row--archived__filename truncate text-slate-700"
+          className="asset-card__filename row--archived__filename truncate text-slate-700"
           title={asset.fileName ?? ""}
         >
           {asset.fileName ?? "(no file)"}
         </div>
-        <div className="media-tile__tags mt-0.5 flex flex-wrap gap-1 text-[10px] text-slate-500">
+        <div className="asset-card__tags mt-0.5 flex flex-wrap gap-1 text-[10px] text-slate-500">
           {asset.brand ? <span className="tag-chip">{asset.brand}</span> : null}
           {asset.product ? <span className="tag-chip">· {asset.product}</span> : null}
           {asset.type ? <span className="tag-chip">· {asset.type}</span> : null}
           {asset.fileDimensions ? <span className="tag-chip">· {asset.fileDimensions}</span> : null}
         </div>
       </div>
-    </div>
+    </button>
+  );
+}
+
+function ImageTile({
+  asset,
+  file,
+  onOpen,
+}: {
+  asset: Asset;
+  file: UploadedFile | undefined;
+  onOpen: () => void;
+}) {
+  const isImage = file?.mimeType?.startsWith("image/");
+  const isVideo = file?.mimeType?.startsWith("video/");
+  const archived = asset.archivedAt !== null;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={clsx(
+        "media-tile thumb-checker group block w-full overflow-hidden rounded-md [content-visibility:auto] [contain-intrinsic-size:auto_300px]",
+        archived && "row--archived",
+      )}
+    >
+      {isImage && asset.fileId ? (
+        <img
+          src={`/api/files/${asset.fileId}/thumbnail?w=320`}
+          alt={asset.fileName ?? "asset"}
+          className="media-tile__image block w-full"
+          loading="lazy"
+          decoding="async"
+        />
+      ) : isVideo && asset.fileId ? (
+        <video
+          src={`/api/files/${asset.fileId}#t=0.1`}
+          className="media-tile__image block w-full"
+          preload="metadata"
+          muted
+          playsInline
+        />
+      ) : (
+        <div className="media-tile__placeholder flex aspect-[4/3] items-center justify-center bg-slate-50 text-slate-300">
+          <ImageIcon className="size-8" />
+        </div>
+      )}
+    </button>
+  );
+}
+
+function ListRow({
+  asset,
+  file,
+  onOpen,
+}: {
+  asset: Asset;
+  file: UploadedFile | undefined;
+  onOpen: () => void;
+}) {
+  const isImage = file?.mimeType?.startsWith("image/");
+  const isVideo = file?.mimeType?.startsWith("video/");
+  const archived = asset.archivedAt !== null;
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={clsx(
+        "asset-row group flex w-full items-center gap-3 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left transition hover:border-slate-400 hover:shadow-sm [content-visibility:auto] [contain-intrinsic-size:auto_56px]",
+        archived && "row--archived",
+      )}
+    >
+      <div className="asset-row__thumb thumb-checker size-12 shrink-0 overflow-hidden rounded">
+        {isImage && asset.fileId ? (
+          <img
+            src={`/api/files/${asset.fileId}/thumbnail?w=96`}
+            alt={asset.fileName ?? "asset"}
+            className="size-full object-contain"
+            loading="lazy"
+            decoding="async"
+          />
+        ) : isVideo && asset.fileId ? (
+          <video
+            src={`/api/files/${asset.fileId}#t=0.1`}
+            className="size-full object-contain"
+            preload="metadata"
+            muted
+            playsInline
+          />
+        ) : (
+          <div className="flex size-full items-center justify-center bg-slate-50 text-slate-300">
+            <ImageIcon className="size-5" />
+          </div>
+        )}
+      </div>
+      <div className="asset-row__meta min-w-0 flex-1 text-xs">
+        <span
+          className="asset-row__filename row--archived__filename block truncate text-slate-700"
+          title={asset.fileName ?? ""}
+        >
+          {asset.fileName ?? "(no file)"}
+        </span>
+        <div className="asset-row__tags mt-0.5 flex flex-wrap gap-1 text-[10px] text-slate-500">
+          {asset.brand ? <span className="tag-chip">{asset.brand}</span> : null}
+          {asset.product ? <span className="tag-chip">· {asset.product}</span> : null}
+          {asset.type ? <span className="tag-chip">· {asset.type}</span> : null}
+          {asset.fileDimensions ? <span className="tag-chip">· {asset.fileDimensions}</span> : null}
+        </div>
+      </div>
+    </button>
   );
 }
 

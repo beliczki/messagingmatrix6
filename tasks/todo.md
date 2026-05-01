@@ -913,3 +913,64 @@ Recommendation: Phase 7 next so the app actually looks like the active client (c
 **Verifikáció (user):** scroll-perf a 3 view-ban, filter change után új találatok azonnal renderelődnek, scroll lefelé +200-asával töltődik tovább a galéria.
 
 Várom a megerősítést indítás előtt.
+
+---
+
+## 2026-05-02 — Library + Matrix media UX overhaul
+
+Több inkrementális kérés egy session alatt; mind merge-elt és typecheck-clean. Nincs új feature flag, nincs új DB séma, nincs új teszt fájl.
+
+### Library (Creative Library + Assets) view réteg
+
+- **Row-first masonry.** `_components/Masonry.tsx` átírva CSS-column alapról flex-column-okra: a parent container ResizeObserver-rel detektálja a szélességet (Tailwind sm/md/lg/xl breakpoints → 1/2/3/4/5 oszlop), az item-eket round-robin osztja szét N oszlopba (`columns[i % N].push(items[i])`), így egymás melletti elemek **szomszédos oszlopokban** vannak, nem alulmaszkolva. Variable-height tile-ok így is masonry-szerűen pakolódnak per-oszlop.
+- **Új shared komponensek:** `_components/LibraryViewSwitcher.tsx` (Grid/List/Masonry toggle, collapsed-aware → expanded-ben labeled toggle group, collapsed-ben CycleIconButton), `_components/usePersistent.ts` (lifted CreativeLibrary-ből: `usePersistent` hook + `STRING_CODEC`/`SET_CODEC`).
+- **Assets: grid + list + masonry view.** Eddig csak masonry volt — most ugyanaz a 3 mód mint Creative Library-n, ugyanaz a switcher, ugyanaz a localStorage perzisztencia (`mm6_assets_library_view`).
+- **`thumb-checker` global CSS class** (`app/globals.css`): conic-gradient 16px kétszínű kockás minta, áttetsző PNG/SVG mögé. Mind a 6 tile thumb-wrapperben (Card/ImageTile/ListRow × 2 lib) lecserélte a `bg-slate-50`-t. A "no file" placeholder div kapott `bg-slate-50`-t hogy ne látszódjon a kockás minta üres tile-on.
+- **Video creative-ek megjelennek.** Mind a 6 tile renderben új `<video src="/api/files/<id>#t=0.1" preload="metadata" muted playsInline>` ág a kép-ág mellett `mimeType.startsWith("video/")` esetén. A `#t=0.1` fragment hint elkerüli a fekete első frame-et bizonyos kodek-eknél. Backend-változtatás nem kellett: `/api/files/[id]` már streamel.
+- **Click-to-open detail dialog mind a 3 view-on.** Card / ImageTile / ListRow most `<button>`, kattintás → `setDetailId(id)`. Hover archive overlay megszűnt mind a háromban; archive/restore a dialog-ba költözött. A `del`/`restore` parent-szintű mutation + `useMutation` import + `_components/ArchiveOrRestoreBtn.tsx` mind törölve mindkét lib-ből.
+
+### Detail dialog (`_components/MediaEntityDialog.tsx`) — MC editor-style
+
+Generic `<MediaEntityDialog<E,D>>` egyetlen shared komponensben. `CreativeDetailDialog` és `AssetDetailDialog` ennek vékony wrapper-jei (csak Draft shape + diff payload + renderForm + endpoint/queryKey).
+
+- **Header:** stepper (◀ filename ▶ X/Y, a filtered listán lépdel), Active/Archived státusz badge, save indicator (idle/saving/saved/conflict/error), Archive/Restore gomb, Autosave checkbox, manual Save+Cancel ha autosave kikapcsolva, close X.
+- **Body:** form pane | draggable divider | preview pane. Layout flippel landscape vs portrait fájl alapján (`parseDimensions(fileDimensions)` → `landscape = w > h`): portrait → row (form bal, preview jobb), landscape → col (form fent, preview lent). Divider drag clamp 20–80%.
+- **Preview pane:** light/checker/dark bg toggle (saját toolbar), ennek értéke `usePersistent("mm6_media_dialog_preview_bg")` localStorage-ben. Új `_components/ScaledMediaPreview.tsx`: ResizeObserver-rel méri a saját containerét, ha a fájl natural size befér → 1:1 (no scale), ha nem → `transform: scale(<min>)` centered. Image-re `?w=800` thumbnail, video-ra raw `/api/files/<id>` controls-osan.
+- **Autosave:** 400ms debounce → PATCH `If-Match: <version>` header-rel; 409-es választ `VersionMismatchError`-ral kapja, snapshot-ot frissít, "Refreshed (someone else edited this)" indikátort mutat.
+- **Keyboard:** Esc close; ←/→ stepper (csak ha focus nem input/textarea/select-en).
+- **Stepper hatóköre:** a filtered listán (CL: `filtered`, nem a paginated `visible` — fix #18 lent). Filter-respektáló prev/next.
+
+### Matrix Content tab — visual placeholder editors
+
+- **Új mező csoport** "Images & video" a Landing URL alatt: 7 input (Image 1–6 + Video 1) 2-oszlopos grid-ben. Mindegyik mellett egy 36×36 `thumb-checker` preview tile, ami `/api/drive/proxy/<filename>`-ról tölti be a képet/videót — így vizuálisan visszacsatolt, hogy a beírt filename tényleg felbontható-e az aktív client storage-ában.
+- **`EditableFields` + `EDITABLE_KEYS`** kibővítve: `image1..image6, video1`. Save / autosave automatikusan átviszi (a `messages` entitás `WRITABLE_FIELDS`-jében már bent volt).
+- **Matrix `Message` típus** (`matrix/types.ts`): `video1` mező hozzáadva (eddig csak image1..6 volt a UI típuson, video1 csak DB-ben).
+
+### Backend / shared lib változások
+
+- **`/api/files` lekérés cap megszüntetve.** `lib/entities/files.ts → listFiles`: a default `limit: 200` cap eltávolítva; `LIMIT` csak akkor kerül a query-be ha a hívó explicit átadja. Root cause: 555 asset esetén a `/api/files?category=asset` csak az első 200 file-row-t adta vissza, így a többi 355 asset placeholder ikont mutatott (file lookup miss). Egyetlen hívó (`/api/files` route) nem ad át limit-et → most teljes lista jön per-category.
+- **SVG thumbnail.** `app/api/files/[id]/thumbnail/route.ts`: `image/svg+xml` mime-ra nem fut sharp resize, a raw bytes streamel ugyanazzal a Cache-Control-lal. Eddig 415-öt adott (Sharp-ot nem hívtuk) → broken image.
+- **`/api/drive/proxy/[filename]` új route.** A v6-ban hiányzó endpoint-ot pótolja, amit a template-ek `path-messagingmatrix: "/api/drive/proxy/"` referenciaként várnak (`templates/html/template.json`). Filename → `uploaded_files` lookup az aktív client-ben → bytes streamel. Új helper: `lib/entities/files.ts → getFileByFilename(clientId, filename)` (legutóbbi nem-archived találatot adja vissza ha van duplikátum). Templates `template.json` érintetlen.
+- **`renderTemplate` (`lib/render.ts`) két fix:**
+  1. `BINDING_ALIASES` map a `lookupField`-ben. A v5 spreadsheet kolumna neve "CSS" → normalize "css" → de a v6 séma `customCss` (normalize "customcss"), nem matchel. Az alias map (`{ css: "customcss" }`) a custom CSS-t a renderben végre alkalmazza. Bővíthető más v5→v6 rename-ekre.
+  2. `<base href="/api/templates/<name>/">` injekció `<head>`-be amikor `inline: true`. A preview iframe `srcDoc=` használ, így nincs base URL-je → `dynamic.content.js`, `thm.json`, és minden relatív ref 404. A base href az iframe-en belül a templates API-ra mutat (ami már létezett), így a THM JSON fetch + dynamic content script tényleg lefut. Csak `inline:true` esetén injektál — AdForm/POMS export érintetlen.
+
+### Bug fix
+
+- **Stepper full filtered listán lépked.** `CreativeLibrary.tsx` a dialog-nak `creatives={visible}`-t adott át (a 200-os infinite-scroll slice-ot), így 499 filtered creative-en is `4/200` látszott. Javítva: `creatives={filtered}`. AssetsLibrary nem paginate-el → érintetlen.
+
+### Refactor / takarítás
+
+- **Törölve:** `_components/EntityDetailDialog.tsx` (a `MediaEntityDialog` váltotta le), `_components/ArchiveOrRestoreBtn.tsx` (egyik lib sem használja már — archive/restore a dialog header-ben).
+- **`del` + `restore` mutation + `useMutation` import** mind a két library szülő-komponenséből kivéve.
+- **MC editor → asset/creative dialog parity:** a `MediaEntityDialog` lényegében a `MessageEditor`-ban már bevált chrome-pattern egy generikus `<E,D>` wrapperben. Saját `SaveIndicator`, `BgBtn`, `bgStyleFor` belül lakik (PreviewPane-ből nem hivatkozza, hogy a két dialog egymástól független maradjon).
+
+### Új shared elemek (component inventory frissítendő)
+
+- `_components/LibraryViewSwitcher.tsx` — Grid/List/Masonry kapcsoló (collapsed-aware).
+- `_components/MediaEntityDialog.tsx` — generic MC-editor-style detail dialog asset/creative-hez.
+- `_components/ScaledMediaPreview.tsx` — natural-size-vagy-scale-down media preview ResizeObserver-rel.
+- `_components/usePersistent.ts` — lifted localStorage hook + codec-ek.
+- Globalis class: `.thumb-checker` (`app/globals.css`).
+- BEM blokkok: `media-entity-dialog`, `scaled-preview`, `library-view-switcher`, `creative-row` / `asset-row` (átalakítva `<button>`-ra).
+

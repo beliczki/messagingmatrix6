@@ -16,7 +16,23 @@ const ALLOWED_OUTPUT = new Set(["image/jpeg", "image/png", "image/webp", "image/
 export const GET = withSession<Params>(async ({ req, claims, params }) => {
   const row = getFile(claims.cid, params.id);
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  if (!row.mimeType?.startsWith("image/") || !ALLOWED_OUTPUT.has(row.mimeType)) {
+  if (!row.mimeType?.startsWith("image/")) {
+    return NextResponse.json({ error: "not_an_image" }, { status: 415 });
+  }
+
+  // SVG is already vector — serve the bytes verbatim, no resize.
+  if (row.mimeType === "image/svg+xml") {
+    const src = await readFileBytes(row.storagePath);
+    return new NextResponse(new Uint8Array(src), {
+      headers: {
+        "Content-Type": "image/svg+xml",
+        "Content-Length": String(src.length),
+        "Cache-Control": "private, max-age=86400",
+      },
+    });
+  }
+
+  if (!ALLOWED_OUTPUT.has(row.mimeType)) {
     return NextResponse.json({ error: "not_an_image" }, { status: 415 });
   }
 

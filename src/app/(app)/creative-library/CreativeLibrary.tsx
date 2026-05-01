@@ -1,19 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Upload as UploadIcon,
   Search,
   X,
-  Archive as ArchiveIcon,
-  ArchiveRestore,
   Image as ImageIcon,
   Loader2,
-  Inbox,
-  LayoutGrid,
-  List as ListIcon,
-  Columns3,
 } from "lucide-react";
 import clsx from "clsx";
 import { Masonry } from "../_components/Masonry";
@@ -25,21 +19,18 @@ import UploadQueue, {
 import MultiPill from "../_components/MultiPill";
 import ArchiveToggle from "../_components/ArchiveToggle";
 import RightToolbar from "../_components/RightToolbar";
-import CycleIconButton from "../_components/CycleIconButton";
+import CreativeDetailDialog from "./CreativeDetailDialog";
+import {
+  LibraryViewSwitcher,
+  LIBRARY_VIEW_CODEC,
+  type LibraryViewMode,
+} from "../_components/LibraryViewSwitcher";
+import {
+  usePersistent,
+  STRING_CODEC,
+  SET_CODEC,
+} from "../_components/usePersistent";
 import type { ParseRules } from "@/lib/parse-filename";
-
-type CreativeView = "grid" | "list" | "masonry";
-
-type Codec<T> = { parse: (s: string) => T; stringify: (v: T) => string };
-const STRING_CODEC: Codec<string> = { parse: (s) => s, stringify: (s) => s };
-const SET_CODEC: Codec<Set<string>> = {
-  parse: (s) => new Set(JSON.parse(s) as string[]),
-  stringify: (v) => JSON.stringify([...v]),
-};
-const VIEW_CODEC: Codec<CreativeView> = {
-  parse: (s) => (s === "grid" || s === "list" || s === "masonry" ? s : "masonry"),
-  stringify: (v) => v,
-};
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -48,25 +39,6 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
     return () => clearTimeout(t);
   }, [value, delayMs]);
   return debounced;
-}
-
-function usePersistent<T>(key: string, initial: T, codec: Codec<T>) {
-  const [value, setValue] = useState<T>(initial);
-  const [hydrated, setHydrated] = useState(false);
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(key);
-      if (raw !== null) setValue(codec.parse(raw));
-    } catch {}
-    setHydrated(true);
-  }, [key, codec]);
-  useEffect(() => {
-    if (!hydrated) return;
-    try {
-      localStorage.setItem(key, codec.stringify(value));
-    } catch {}
-  }, [key, value, hydrated, codec]);
-  return [value, setValue] as const;
 }
 
 type Creative = {
@@ -128,10 +100,11 @@ export default function CreativeLibrary() {
   );
   const [uploadOpen, setUploadOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
-  const [view, setView] = usePersistent<CreativeView>(
+  const [detailId, setDetailId] = useState<number | null>(null);
+  const [view, setView] = usePersistent<LibraryViewMode>(
     "mm6_creative_library_view",
     "masonry",
-    VIEW_CODEC,
+    LIBRARY_VIEW_CODEC,
   );
 
   const debouncedSearch = useDebouncedValue(search, 200);
@@ -271,32 +244,6 @@ export default function CreativeLibrary() {
   );
 
   const qc = useQueryClient();
-  const del = useMutation({
-    mutationFn: async (c: Creative) => {
-      const r = await fetch(`/api/creatives/${c.id}`, {
-        method: "DELETE",
-        credentials: "include",
-        headers: { "If-Match": String(c.version) },
-      });
-      if (!r.ok) throw new Error(await r.text());
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["creatives"] }),
-  });
-  const restore = useMutation({
-    mutationFn: async (c: Creative) => {
-      const r = await fetch(`/api/creatives/${c.id}/restore`, {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "If-Match": String(c.version),
-          "Content-Type": "application/json",
-        },
-        body: "{}",
-      });
-      if (!r.ok) throw new Error(await r.text());
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["creatives"] }),
-  });
 
   return (
     <div className="creative-library flex h-full">
@@ -352,8 +299,7 @@ export default function CreativeLibrary() {
                       <ImageTile
                         creative={c}
                         file={c.fileId ? filesById.get(c.fileId) : undefined}
-                        onDelete={() => del.mutate(c)}
-                        onRestore={() => restore.mutate(c)}
+                        onOpen={() => setDetailId(c.id)}
                       />
                     )}
                   />
@@ -365,8 +311,7 @@ export default function CreativeLibrary() {
                       key={c.id}
                       creative={c}
                       file={c.fileId ? filesById.get(c.fileId) : undefined}
-                      onDelete={() => del.mutate(c)}
-                      onRestore={() => restore.mutate(c)}
+                      onOpen={() => setDetailId(c.id)}
                     />
                   ))}
                 </div>
@@ -377,8 +322,7 @@ export default function CreativeLibrary() {
                       key={c.id}
                       creative={c}
                       file={c.fileId ? filesById.get(c.fileId) : undefined}
-                      onDelete={() => del.mutate(c)}
-                      onRestore={() => restore.mutate(c)}
+                      onOpen={() => setDetailId(c.id)}
                     />
                   ))}
                 </div>
@@ -403,79 +347,31 @@ export default function CreativeLibrary() {
             <CreativeMetadataForm file={file} submit={submit} submitting={submitting} />
           )}
         />
+
+        {detailId !== null
+          ? (() => {
+              const c = filtered.find((x) => x.id === detailId)
+                ?? creatives.find((x) => x.id === detailId);
+              if (!c) return null;
+              return (
+                <CreativeDetailDialog
+                  creative={c}
+                  creatives={filtered}
+                  file={c.fileId ? filesById.get(c.fileId) : undefined}
+                  onJump={(id) => setDetailId(id)}
+                  onClose={() => setDetailId(null)}
+                />
+              );
+            })()
+          : null}
       </div>
 
       <RightToolbar storageKey="mm6_creative_library_right_toolbar_open">
-        {(collapsed) =>
-          collapsed ? (
-            <CycleIconButton
-              options={[
-                { value: "grid", icon: <LayoutGrid className="size-4" />, label: "Grid view" },
-                { value: "list", icon: <ListIcon className="size-4" />, label: "List view" },
-                { value: "masonry", icon: <Columns3 className="size-4" />, label: "Masonry view" },
-              ]}
-              value={view}
-              onChange={setView}
-            />
-          ) : (
-            <ViewControls view={view} setView={setView} />
-          )
-        }
+        {(collapsed) => (
+          <LibraryViewSwitcher view={view} setView={setView} collapsed={collapsed} />
+        )}
       </RightToolbar>
     </div>
-  );
-}
-
-function ViewControls({
-  view,
-  setView,
-}: {
-  view: CreativeView;
-  setView: (v: CreativeView) => void;
-}) {
-  return (
-    <div className="creative-library-view-controls">
-      <div className="creative-library-view-controls__label mb-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">
-        View
-      </div>
-      <div className="toggle-group flex rounded-md border border-slate-200 bg-white p-0.5 text-xs">
-        <ToggleBtn active={view === "grid"} onClick={() => setView("grid")}>
-          <LayoutGrid className="size-3.5" />
-          Grid
-        </ToggleBtn>
-        <ToggleBtn active={view === "list"} onClick={() => setView("list")}>
-          <ListIcon className="size-3.5" />
-          List
-        </ToggleBtn>
-        <ToggleBtn active={view === "masonry"} onClick={() => setView("masonry")}>
-          <Columns3 className="size-3.5" />
-          Masonry
-        </ToggleBtn>
-      </div>
-    </div>
-  );
-}
-
-function ToggleBtn({
-  active,
-  onClick,
-  children,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={clsx(
-        "toggle-btn flex flex-1 items-center justify-center gap-1 rounded px-2 py-1 transition",
-        active ? "toggle-btn--active bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100",
-      )}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -567,72 +463,32 @@ function Toolbar({
   );
 }
 
-function ArchiveOrRestoreBtn({
-  archived,
-  onDelete,
-  onRestore,
-  className,
-}: {
-  archived: boolean;
-  onDelete: () => void;
-  onRestore: () => void;
-  className?: string;
-}) {
-  if (archived) {
-    return (
-      <button
-        onClick={onRestore}
-        aria-label="Restore"
-        title="Restore from archive"
-        className={clsx(
-          "rounded-md bg-white/90 p-1 text-emerald-600 shadow transition hover:bg-emerald-50",
-          className,
-        )}
-      >
-        <ArchiveRestore className="size-3.5" />
-      </button>
-    );
-  }
-  return (
-    <button
-      onClick={onDelete}
-      aria-label="Archive"
-      title="Archive"
-      className={clsx(
-        "rounded-md bg-white/90 p-1 text-rose-600 opacity-0 shadow transition group-hover:opacity-100 hover:bg-rose-50",
-        className,
-      )}
-    >
-      <ArchiveIcon className="size-3.5" />
-    </button>
-  );
-}
-
 function Card({
   creative,
   file,
-  onDelete,
-  onRestore,
+  onOpen,
 }: {
   creative: Creative;
   file: UploadedFile | undefined;
-  onDelete: () => void;
-  onRestore: () => void;
+  onOpen: () => void;
 }) {
   const isImage = file?.mimeType?.startsWith("image/");
+  const isVideo = file?.mimeType?.startsWith("video/");
   const mcLabel =
     creative.mcNumber !== null
       ? `MC${creative.mcNumber}${creative.mcVariant ?? ""}`
       : null;
   const archived = creative.archivedAt !== null;
   return (
-    <div
+    <button
+      type="button"
+      onClick={onOpen}
       className={clsx(
-        "creative-card group overflow-hidden rounded-lg border border-slate-200 bg-white transition hover:border-slate-400 hover:shadow-md [content-visibility:auto] [contain-intrinsic-size:auto_220px]",
+        "creative-card group block w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-left transition hover:border-slate-400 hover:shadow-md [content-visibility:auto] [contain-intrinsic-size:auto_220px]",
         archived && "row--archived",
       )}
     >
-      <div className="creative-card__thumb relative aspect-[4/3] bg-slate-50">
+      <div className="creative-card__thumb thumb-checker relative aspect-[4/3]">
         {isImage && creative.fileId ? (
           <img
             src={`/api/files/${creative.fileId}/thumbnail?w=240`}
@@ -641,17 +497,19 @@ function Card({
             loading="lazy"
             decoding="async"
           />
+        ) : isVideo && creative.fileId ? (
+          <video
+            src={`/api/files/${creative.fileId}#t=0.1`}
+            className="size-full object-contain"
+            preload="metadata"
+            muted
+            playsInline
+          />
         ) : (
-          <div className="flex size-full items-center justify-center text-slate-300">
+          <div className="flex size-full items-center justify-center bg-slate-50 text-slate-300">
             <ImageIcon className="size-8" />
           </div>
         )}
-        <ArchiveOrRestoreBtn
-          archived={archived}
-          onDelete={onDelete}
-          onRestore={onRestore}
-          className="absolute right-1.5 top-1.5"
-        />
       </div>
       <div className="creative-card__meta p-2 text-xs">
         <div className="flex items-baseline gap-2">
@@ -669,27 +527,28 @@ function Card({
           {creative.fileDimensions ? <span className="tag-chip">· {creative.fileDimensions}</span> : null}
         </div>
       </div>
-    </div>
+    </button>
   );
 }
 
 function ImageTile({
   creative,
   file,
-  onDelete,
-  onRestore,
+  onOpen,
 }: {
   creative: Creative;
   file: UploadedFile | undefined;
-  onDelete: () => void;
-  onRestore: () => void;
+  onOpen: () => void;
 }) {
   const isImage = file?.mimeType?.startsWith("image/");
+  const isVideo = file?.mimeType?.startsWith("video/");
   const archived = creative.archivedAt !== null;
   return (
-    <div
+    <button
+      type="button"
+      onClick={onOpen}
       className={clsx(
-        "media-tile group relative overflow-hidden rounded-md bg-slate-50 [content-visibility:auto] [contain-intrinsic-size:auto_300px]",
+        "media-tile thumb-checker group block w-full overflow-hidden rounded-md [content-visibility:auto] [contain-intrinsic-size:auto_300px]",
         archived && "row--archived",
       )}
     >
@@ -701,46 +560,49 @@ function ImageTile({
           loading="lazy"
           decoding="async"
         />
+      ) : isVideo && creative.fileId ? (
+        <video
+          src={`/api/files/${creative.fileId}#t=0.1`}
+          className="media-tile__image block w-full"
+          preload="metadata"
+          muted
+          playsInline
+        />
       ) : (
-        <div className="media-tile__placeholder flex aspect-[4/3] items-center justify-center text-slate-300">
+        <div className="media-tile__placeholder flex aspect-[4/3] items-center justify-center bg-slate-50 text-slate-300">
           <ImageIcon className="size-8" />
         </div>
       )}
-      <ArchiveOrRestoreBtn
-        archived={archived}
-        onDelete={onDelete}
-        onRestore={onRestore}
-        className="absolute right-1.5 top-1.5"
-      />
-    </div>
+    </button>
   );
 }
 
 function ListRow({
   creative,
   file,
-  onDelete,
-  onRestore,
+  onOpen,
 }: {
   creative: Creative;
   file: UploadedFile | undefined;
-  onDelete: () => void;
-  onRestore: () => void;
+  onOpen: () => void;
 }) {
   const isImage = file?.mimeType?.startsWith("image/");
+  const isVideo = file?.mimeType?.startsWith("video/");
   const mcLabel =
     creative.mcNumber !== null
       ? `MC${creative.mcNumber}${creative.mcVariant ?? ""}`
       : null;
   const archived = creative.archivedAt !== null;
   return (
-    <div
+    <button
+      type="button"
+      onClick={onOpen}
       className={clsx(
-        "creative-row group flex items-center gap-3 rounded-md border border-slate-200 bg-white px-2 py-1.5 transition hover:border-slate-400 hover:shadow-sm [content-visibility:auto] [contain-intrinsic-size:auto_56px]",
+        "creative-row group flex w-full items-center gap-3 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left transition hover:border-slate-400 hover:shadow-sm [content-visibility:auto] [contain-intrinsic-size:auto_56px]",
         archived && "row--archived",
       )}
     >
-      <div className="creative-row__thumb size-12 shrink-0 overflow-hidden rounded bg-slate-50">
+      <div className="creative-row__thumb thumb-checker size-12 shrink-0 overflow-hidden rounded">
         {isImage && creative.fileId ? (
           <img
             src={`/api/files/${creative.fileId}/thumbnail?w=96`}
@@ -749,8 +611,16 @@ function ListRow({
             loading="lazy"
             decoding="async"
           />
+        ) : isVideo && creative.fileId ? (
+          <video
+            src={`/api/files/${creative.fileId}#t=0.1`}
+            className="size-full object-contain"
+            preload="metadata"
+            muted
+            playsInline
+          />
         ) : (
-          <div className="flex size-full items-center justify-center text-slate-300">
+          <div className="flex size-full items-center justify-center bg-slate-50 text-slate-300">
             <ImageIcon className="size-5" />
           </div>
         )}
@@ -771,13 +641,7 @@ function ListRow({
           {creative.fileDimensions ? <span className="tag-chip">· {creative.fileDimensions}</span> : null}
         </div>
       </div>
-      <ArchiveOrRestoreBtn
-        archived={archived}
-        onDelete={onDelete}
-        onRestore={onRestore}
-        className="ml-2"
-      />
-    </div>
+    </button>
   );
 }
 

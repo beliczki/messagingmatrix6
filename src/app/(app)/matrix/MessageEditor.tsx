@@ -64,6 +64,13 @@ type EditableFields = Pick<
   | "flash"
   | "cta"
   | "landingUrl"
+  | "image1"
+  | "image2"
+  | "image3"
+  | "image4"
+  | "image5"
+  | "image6"
+  | "video1"
   | "headlineStyle"
   | "copy1Style"
   | "copy2Style"
@@ -85,6 +92,13 @@ const EDITABLE_KEYS: Array<keyof EditableFields> = [
   "flash",
   "cta",
   "landingUrl",
+  "image1",
+  "image2",
+  "image3",
+  "image4",
+  "image5",
+  "image6",
+  "video1",
   "headlineStyle",
   "copy1Style",
   "copy2Style",
@@ -772,7 +786,73 @@ function ContentTab({
           className="w-full rounded-md border border-slate-300 px-2 py-1.5 font-mono text-xs focus:border-slate-500 focus:outline-none"
         />
       </Field>
+
+      <div className="content-tab__media mt-4 border-t border-slate-200 pt-4">
+        <div className="content-tab__media-label mb-2 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+          Images & video
+        </div>
+        <div className="form-grid grid grid-cols-2 gap-x-3 gap-y-2">
+          {(["image1", "image2", "image3", "image4", "image5", "image6"] as const).map((k, i) => (
+            <MediaField
+              key={k}
+              label={`Image ${i + 1}`}
+              value={draft[k] ?? ""}
+              onChange={(v) => set(k, v)}
+              kind="image"
+            />
+          ))}
+          <MediaField
+            label="Video 1"
+            value={draft.video1 ?? ""}
+            onChange={(v) => set("video1", v)}
+            kind="video"
+          />
+        </div>
+      </div>
     </>
+  );
+}
+
+function MediaField({
+  label,
+  value,
+  onChange,
+  kind,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  kind: "image" | "video";
+}) {
+  const src = value ? `/api/drive/proxy/${encodeURIComponent(value)}` : null;
+  return (
+    <label className="form-field block">
+      <div className="form-field__label mb-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+        {label}
+      </div>
+      <div className="media-field flex items-center gap-2">
+        <div className="media-field__thumb thumb-checker size-9 shrink-0 overflow-hidden rounded border border-slate-200">
+          {src && kind === "image" ? (
+            <img src={src} alt={value} className="size-full object-contain" loading="lazy" />
+          ) : src && kind === "video" ? (
+            <video
+              src={`${src}#t=0.1`}
+              className="size-full object-contain"
+              preload="metadata"
+              muted
+              playsInline
+            />
+          ) : null}
+        </div>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={kind === "image" ? "filename.jpg" : "filename.mp4"}
+          className="w-full min-w-0 rounded-md border border-slate-300 px-2 py-1 font-mono text-xs focus:border-slate-500 focus:outline-none"
+        />
+      </div>
+    </label>
   );
 }
 

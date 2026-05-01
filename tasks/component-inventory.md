@@ -67,6 +67,25 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `toggle-btn--active` | Aktív állapot | – | – |
 | `toggle-group` | Flex row toggle-btn-ekből | MatrixGrid ViewControls, CL ViewControls, MessageEditor TemplateTab variant classes | – |
 | `cycle-icon-btn` | Icon button ami opciókon körbeforog | `_components/CycleIconButton.tsx` | shared |
+| `library-view-switcher` | Grid/List/Masonry kapcsoló, collapsed-aware (collapsed → cycle-icon-btn, expanded → labeled toggle group) | `_components/LibraryViewSwitcher.tsx` | shared (CL + Assets right toolbar) |
+| `library-view-switcher__label` | "VIEW" felső caps címke expanded állapotban | LibraryViewSwitcher.tsx | – |
+| `media-entity-dialog` | MC-editor-style detail dialog asset/creative-hez (stepper, autosave, draggable divider, preview bg toggle, archive/restore) | `_components/MediaEntityDialog.tsx` | shared, generic `<E,D>` |
+| `media-entity-dialog--landscape` | Landscape layout flip (form fent, preview lent) | – | – |
+| `media-entity-dialog__header` | Full-width modal header (stepper + autosave + close) | – | – |
+| `media-entity-dialog__title-block` | Title + subtitle stack a header-ben | – | – |
+| `media-entity-dialog__nav-prev` / `__nav-next` / `__nav-counter` | Stepper bal/jobb chevron + N/M számláló | – | szemantikailag `nav-stepper` réteg fölött |
+| `media-entity-dialog__autosave-toggle` | Autosave checkbox + label (slate-900 active) | – | – |
+| `media-entity-dialog__modified-tag` | "modified" amber tag manual-mode + dirty | – | – |
+| `media-entity-dialog__body` | Pane container (row/col landscape-tól függően) | – | – |
+| `media-entity-dialog__pane--form` / `__pane--preview` | Bal/jobb (vagy fent/lent) pane | – | – |
+| `media-entity-dialog__form-content` | Scrollable belső a form pane-ben | – | – |
+| `media-entity-dialog__file-info` | Read-only fájl-metadata `<dl>` a form alján | – | – |
+| `media-entity-dialog__preview-toolbar` | Preview pane toolbar (light/checker/dark) | – | – |
+| `media-entity-dialog__preview-viewport` | Centered scaling container, bg-style toggle-tól függően | – | – |
+| `bg-toggle` | Segmented light/checker/dark group | MediaEntityDialog + PreviewPane | hasonló pattern, külön block-ok |
+| `bg-toggle__btn` / `bg-toggle__btn--active` | Egy bg gomb | – | – |
+| `scaled-preview` | Natural-size-vagy-scale-down media preview ResizeObserver-rel | `_components/ScaledMediaPreview.tsx` | shared (MediaEntityDialog body) |
+| `save-indicator` / `--saving` / `--saved` / `--conflict` / `--error` | Save status pill MessageEditor + MediaEntityDialog header-ben | MessageEditor SaveIndicator + MediaEntityDialog SaveIndicator | inline duplikátum, ugyanaz a Phase-7 design |
 | `preview-pane` | Live preview konténer (toolbar + iframe) | `_components/PreviewPane.tsx` | shared (MC editor + Templates) |
 | `preview-pane__toolbar` | Header toolbar (size + skip-anim + bg + extras) | PreviewPane.tsx 61–121 | – |
 | `preview-pane__size-select` | Size `<select>` | PreviewPane.tsx 63–74 | + `custom-dropdown` globalis |
@@ -95,14 +114,16 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `drop-overlay` | Drag-over feedback overlay | CL 307–313, Assets, UploadQueue useDropTarget consumers | – |
 | `masonry` | CSS-column masonry wrapper | `_components/Masonry.tsx` | shared |
 | `masonry__item` | Egy masonry tile | Masonry.tsx | – |
-| `media-tile` | Egységesített tile (creative + asset masonry) | CL `ImageTile` 593–627, Assets `Card` 307+ | – |
-| `media-tile__thumb` | Thumbnail wrapper (csak ahol van keret) | Assets Card 319 | – |
-| `media-tile__image` | A kép maga | – | – |
+| `media-tile` | Egységesített tile (creative + asset masonry) | CL/Assets `ImageTile` | tile most `<button>`, kattintásra detail dialog |
+| `media-tile__thumb` | Thumbnail wrapper (csak ahol van keret) | – | – |
+| `media-tile__image` | A kép vagy `<video>` maga | – | – |
 | `media-tile__placeholder` | Kép helyett placeholder | – | – |
-| `media-tile__delete-btn` | Hover delete gomb | – | – |
-| `media-tile__meta` | Tile alatti metadata (opcionális — CL ImageTile-ban nincs) | Assets Card 340 | – |
+| `media-tile__meta` | Tile alatti metadata (opcionális — CL ImageTile-ban nincs) | – | – |
 | `media-tile__filename` | Filename a meta-ban | – | – |
 | `media-tile__tags` | Tag-chip-ek konténere | – | – |
+| `creative-card` / `asset-card` | Grid-view card (`<button>` 2026-05-02-től, click-to-open dialog) | CL `Card`, Assets `Card` | hover archive overlay megszűnt |
+| `creative-row` / `asset-row` | List-view row (`<button>` 2026-05-02-től) | CL `ListRow`, Assets `ListRow` | – |
+| `thumb-checker` | 16px conic-gradient kockás minta áttetsző PNG/SVG mögé | mind a 6 thumb wrapperben + dialog viewport | global, `app/globals.css` |
 | `status-dot` | Színes pötty (státusz / state) | FeedView, MessageEditor, TemplateEditor MC stepper | szín később (Phase 7) |
 | `status-badge` | Pötty + szöveg pill | MessageEditor SaveIndicator 546–581, FeedView | szín később (Phase 7) |
 | `empty-state` | Centered card "no data" üzenettel | MatrixGrid 279–298, CL 828–859, Assets, `_placeholder.tsx` | inline duplikátum |
@@ -444,4 +465,26 @@ Ezeket NEM most refaktoráljuk, de jelölöm hogy ne felejtsük el:
 
 1. **Te jóváhagyod ezt a doc-ot** (vagy jelzed ha még valamit változtassak).
 2. **Csak ezután** kezdek hozzá a `tasks/todo.md` C1–C15 lépéseknek, fájlonként, a véglegesített nevekkel.
+
+---
+
+## Változások 2026-05-02
+
+**Új shared komponensek:**
+- `_components/LibraryViewSwitcher.tsx` — Grid/List/Masonry toggle (collapsed-aware), CL + Assets right toolbar.
+- `_components/MediaEntityDialog.tsx` — generic MC-editor-style detail dialog asset/creative-hez (stepper, autosave, draggable divider, preview bg toggle persisted, archive/restore).
+- `_components/ScaledMediaPreview.tsx` — natural-size-vagy-scale-down media preview ResizeObserver-rel.
+- `_components/usePersistent.ts` — lifted localStorage hook + `STRING_CODEC` / `SET_CODEC` (CreativeLibrary-ből).
+
+**Új globalis class:**
+- `.thumb-checker` (`app/globals.css`) — 16px conic-gradient kockás minta áttetsző PNG/SVG mögé.
+
+**Új BEM block-ok:** `media-entity-dialog`, `scaled-preview`, `library-view-switcher`, `bg-toggle`, `creative-card`, `asset-card`, `creative-row`, `asset-row`.
+
+**Megszűnt:**
+- `_components/ArchiveOrRestoreBtn.tsx` — archive/restore most a detail dialog header-ben él, nem hover overlay-ként.
+- `_components/EntityDetailDialog.tsx` (rövid életű előd) — `MediaEntityDialog` váltotta le.
+- `media-tile__delete-btn` class — már nincs hover delete gomb tile-okon.
+
+**Tile szemantika változott:** `Card` / `ImageTile` / `ListRow` mind `<button>`-ok mindkét library-ben (CL + Assets) — kattintásra nyitja a detail dialog-ot. Az archive/restore overlay-ek megszűntek (a dialog header-jében van Archive/Restore gomb).
 3. Sorrend: kicsi shared komponensek → page-szintű komponensek → nagyok (MessageEditor, TemplateEditor több commitra). Minden lépés után typecheck + te ránézel hogy nem tört semmi.

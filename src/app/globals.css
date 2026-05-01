@@ -60,6 +60,15 @@
   .status-badge--dead { background-color: color-mix(in srgb, var(--status-dead) 18%, white); color: var(--status-dead); }
   .status-badge--memory { background-color: color-mix(in srgb, var(--status-memory) 18%, white); color: var(--status-memory); }
 
+  /* Transparency checkerboard behind thumbnails so PNG/SVG transparency is
+     visible. Two-tone gray, 16px tile. */
+  .thumb-checker {
+    background-color: #fff;
+    background-image:
+      conic-gradient(#e5e7eb 25%, transparent 0 50%, #e5e7eb 0 75%, transparent 0);
+    background-size: 16px 16px;
+  }
+
   /* Soft-archive (Phase 10a) — applied to any list row whose archived_at is set. */
   .row--archived {
     opacity: 0.55;

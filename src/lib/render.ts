@@ -57,14 +57,27 @@ function normalize(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+// v5 binding → v6 column aliases. Only needed where the rename can't be
+// reached by `normalize` (which already covers PascalCase ↔ camelCase and
+// snake_case differences). Add entries when a template binding doesn't
+// resolve via direct normalize match.
+const BINDING_ALIASES: Record<string, string> = {
+  // Template binding "CSS" was the v5 spreadsheet column; v6 stores it as customCss.
+  css: "customcss",
+};
+
 function lookupField(
   message: Record<string, unknown>,
   binding: string,
 ): string {
   if (!binding) return "";
   const target = normalize(binding);
+  const candidates = [target];
+  const alias = BINDING_ALIASES[target];
+  if (alias) candidates.push(alias);
   for (const [k, v] of Object.entries(message)) {
-    if (normalize(k) === target) {
+    const nk = normalize(k);
+    if (candidates.includes(nk)) {
       if (v === null || v === undefined) return "";
       return String(v);
     }
@@ -139,6 +152,11 @@ export function renderTemplate(input: RenderInput): RenderResult {
 
   if (input.inline) {
     html = inlineCss(html, dir, input.size);
+    // The iframe preview uses `srcDoc=`, which gives the document no base URL,
+    // so the template's relative refs (dynamic.content.js, thm.json, …) all
+    // 404. Point them at /api/templates/<name>/ which already serves these.
+    // Only for inline mode — AdForm/POMS exports ship with the files alongside.
+    html = injectBaseHref(html, `/api/templates/${input.templateName}/`);
   }
 
   if (input.skipAnimations) {
@@ -146,6 +164,15 @@ export function renderTemplate(input: RenderInput): RenderResult {
   }
 
   return { html };
+}
+
+function injectBaseHref(html: string, href: string): string {
+  const tag = `<base href="${href}">`;
+  if (/<base\s/i.test(html)) return html;
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/(<head[^>]*>)/i, `$1\n${tag}`);
+  }
+  return tag + html;
 }
 
 // Strips animations + transitions for preview "skip animation" mode.

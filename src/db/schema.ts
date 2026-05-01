@@ -57,6 +57,7 @@ export const users = sqliteTable(
     updatedAt: text("updated_at")
       .notNull()
       .default(sql`(CURRENT_TIMESTAMP)`),
+    archivedAt: text("archived_at"),
   },
   (t) => [
     uniqueIndex("users_client_email_unique").on(t.clientId, t.email),
@@ -146,6 +147,7 @@ export const audiences = sqliteTable(
     updatedAt: text("updated_at")
       .notNull()
       .default(sql`(CURRENT_TIMESTAMP)`),
+    archivedAt: text("archived_at"),
   },
   (t) => [
     uniqueIndex("audiences_client_key_unique").on(t.clientId, t.key),
@@ -190,6 +192,7 @@ export const topics = sqliteTable(
     updatedAt: text("updated_at")
       .notNull()
       .default(sql`(CURRENT_TIMESTAMP)`),
+    archivedAt: text("archived_at"),
   },
   (t) => [
     uniqueIndex("topics_client_key_unique").on(t.clientId, t.key),
@@ -259,6 +262,7 @@ export const messages = sqliteTable(
     updatedAt: text("updated_at")
       .notNull()
       .default(sql`(CURRENT_TIMESTAMP)`),
+    archivedAt: text("archived_at"),
   },
   (t) => [
     index("messages_client_topic_audience_idx").on(
@@ -297,6 +301,7 @@ export const assets = sqliteTable(
     updatedAt: text("updated_at")
       .notNull()
       .default(sql`(CURRENT_TIMESTAMP)`),
+    archivedAt: text("archived_at"),
   },
   (t) => [
     index("assets_client_brand_idx").on(t.clientId, t.brand),
@@ -336,6 +341,7 @@ export const creatives = sqliteTable(
     updatedAt: text("updated_at")
       .notNull()
       .default(sql`(CURRENT_TIMESTAMP)`),
+    archivedAt: text("archived_at"),
   },
   (t) => [
     index("creatives_client_brand_idx").on(t.clientId, t.brand),
@@ -364,6 +370,7 @@ export const textFormatting = sqliteTable(
     updatedAt: text("updated_at")
       .notNull()
       .default(sql`(CURRENT_TIMESTAMP)`),
+    archivedAt: text("archived_at"),
   },
   (t) => [index("text_formatting_client_idx").on(t.clientId)],
 );
@@ -388,6 +395,7 @@ export const reporting = sqliteTable(
     campaignId: text("campaign_id"),
     campaignName: text("campaign_name"),
     syncedAt: text("synced_at"),
+    archivedAt: text("archived_at"),
   },
   (t) => [
     index("reporting_client_mc_idx").on(t.clientId, t.mcLabel),
@@ -414,6 +422,7 @@ export const shareGalleries = sqliteTable(
     updatedAt: text("updated_at")
       .notNull()
       .default(sql`(CURRENT_TIMESTAMP)`),
+    archivedAt: text("archived_at"),
   },
   (t) => [index("share_galleries_client_idx").on(t.clientId)],
 );
@@ -438,6 +447,7 @@ export const uploadedFiles = sqliteTable(
     createdAt: text("created_at")
       .notNull()
       .default(sql`(CURRENT_TIMESTAMP)`),
+    archivedAt: text("archived_at"),
   },
   (t) => [
     // Intra-client dedup *lookup* (Spec §17.10) — many logical rows may point

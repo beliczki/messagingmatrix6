@@ -262,9 +262,6 @@ export default function CreativeLibrary() {
           setSizes={setSizes}
           total={creatives.length}
           visible={filtered.length}
-          showArchived={showArchived}
-          setShowArchived={setShowArchived}
-          onUpload={() => setUploadOpen(true)}
         />
 
         <div
@@ -367,9 +364,33 @@ export default function CreativeLibrary() {
       </div>
 
       <RightToolbar storageKey="mm6_creative_library_right_toolbar_open">
-        {(collapsed) => (
-          <LibraryViewSwitcher view={view} setView={setView} collapsed={collapsed} />
-        )}
+        {(collapsed) => {
+          const content = (
+            <>
+              <LibraryViewSwitcher view={view} setView={setView} collapsed={collapsed}>
+                <ArchiveToggle
+                  showArchived={showArchived}
+                  onChange={setShowArchived}
+                  collapsed={collapsed}
+                />
+              </LibraryViewSwitcher>
+              <button
+                type="button"
+                onClick={() => setUploadOpen(true)}
+                title="Upload"
+                aria-label="Upload"
+                className={clsx(
+                  "toolbar-btn--primary mt-auto inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-900 font-medium text-white hover:bg-slate-800",
+                  collapsed ? "size-9" : "px-3 py-1.5 text-xs",
+                )}
+              >
+                <UploadIcon className="size-3.5" />
+                {!collapsed ? "Upload" : null}
+              </button>
+            </>
+          );
+          return collapsed ? content : <div className="flex h-full flex-col gap-3">{content}</div>;
+        }}
       </RightToolbar>
     </div>
   );
@@ -389,9 +410,6 @@ function Toolbar({
   setSizes,
   total,
   visible,
-  showArchived,
-  setShowArchived,
-  onUpload,
 }: {
   search: string;
   setSearch: (s: string) => void;
@@ -406,18 +424,12 @@ function Toolbar({
   setSizes: (s: Set<string>) => void;
   total: number;
   visible: number;
-  showArchived: boolean;
-  setShowArchived: (b: boolean) => void;
-  onUpload: () => void;
 }) {
   const activeFilters = products.size + types.size + sizes.size + (search ? 1 : 0);
   return (
     <div className="toolbar creative-library__toolbar sticky top-0 z-10 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
       <div className="flex items-baseline gap-2">
         <div className="toolbar__title text-sm font-semibold text-slate-900">Creative Library</div>
-        <div className="toolbar__count text-xs text-slate-500">
-          {visible}/{total} creatives
-        </div>
       </div>
 
       <div className="input-box input-box--with-icon relative ml-2">
@@ -450,15 +462,9 @@ function Toolbar({
         </button>
       ) : null}
 
-      <ArchiveToggle showArchived={showArchived} onChange={setShowArchived} />
-
-      <button
-        onClick={onUpload}
-        className="toolbar-btn--primary ml-auto inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
-      >
-        <UploadIcon className="size-3.5" />
-        Upload
-      </button>
+      <div className="toolbar__count ml-auto text-[11px] text-slate-500">
+        {visible}/{total} creatives
+      </div>
     </div>
   );
 }

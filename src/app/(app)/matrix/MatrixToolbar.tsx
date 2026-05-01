@@ -20,10 +20,6 @@ export default function MatrixToolbar(p: Props) {
     <div className="toolbar matrix-toolbar sticky top-0 z-40 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
       <div className="matrix-toolbar__brand flex items-baseline gap-2">
         <div className="matrix-toolbar__title text-sm font-semibold text-slate-900">Matrix</div>
-        <div className="matrix-toolbar__count text-xs text-slate-500">
-          {p.counts.visible}/{p.counts.messages} messages · {p.counts.audiences}{" "}
-          audiences · {p.counts.topics} topics
-        </div>
       </div>
 
       <input
@@ -64,6 +60,11 @@ export default function MatrixToolbar(p: Props) {
           Clear
         </button>
       ) : null}
+
+      <div className="matrix-toolbar__count ml-auto text-[11px] text-slate-500">
+        {p.counts.visible}/{p.counts.messages} messages · {p.counts.audiences}{" "}
+        audiences · {p.counts.topics} topics
+      </div>
     </div>
   );
 }

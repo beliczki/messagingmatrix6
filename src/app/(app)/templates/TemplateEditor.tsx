@@ -105,7 +105,7 @@ type Persisted = {
   skipAnim?: boolean;
   typeFilters?: Record<string, boolean>;
   splitPercent?: number;
-  perTemplate?: Record<string, { file?: string; size?: string }>;
+  perTemplate?: Record<string, { file?: string; size?: string; selectedMcId?: number | null }>;
 };
 
 function loadPersisted(): Persisted {
@@ -210,7 +210,12 @@ export default function TemplateEditor() {
   const [splitPercent, setSplitPercent] = useState(persisted.splitPercent ?? 50);
   const containerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
-  const [selectedMcId, setSelectedMcId] = useState<number | null>(null);
+  const [selectedMcId, setSelectedMcId] = useState<number | null>(() => {
+    const t = persisted.activeTemplate;
+    if (!t) return null;
+    return persisted.perTemplate?.[t]?.selectedMcId ?? null;
+  });
+  const lastMcRestoredTemplateRef = useRef<string | null>(persisted.activeTemplate ?? null);
   const [filesOpen, setFilesOpen] = useState(false);
   const [bindingsOpen, setBindingsOpen] = useState(false);
   const [typeFilters, setTypeFilters] = useState<Record<PHType, boolean>>(() => {
@@ -315,8 +320,21 @@ export default function TemplateEditor() {
     }
   }, [detailQ.data, activeTemplate, activeFile, previewSize]);
 
+  // Restore the remembered MC selection when the active template changes.
+  useEffect(() => {
+    if (!activeTemplate) return;
+    if (lastMcRestoredTemplateRef.current === activeTemplate) return;
+    const cur = loadPersisted();
+    const remembered = cur.perTemplate?.[activeTemplate]?.selectedMcId ?? null;
+    setSelectedMcId(remembered);
+    lastMcRestoredTemplateRef.current = activeTemplate;
+  }, [activeTemplate]);
+
   // Persist user preferences to localStorage whenever they change.
   useEffect(() => {
+    // Skip until the MC selection has been restored for the current template,
+    // otherwise we'd overwrite the persisted value with the previous template's state.
+    if (activeTemplate && lastMcRestoredTemplateRef.current !== activeTemplate) return;
     const cur = loadPersisted();
     const perTemplate = { ...(cur.perTemplate ?? {}) };
     if (activeTemplate) {
@@ -324,6 +342,7 @@ export default function TemplateEditor() {
       perTemplate[activeTemplate] = {
         file: activeFile ?? existing.file,
         size: previewSize ?? existing.size,
+        selectedMcId,
       };
     }
     savePersisted({
@@ -342,6 +361,7 @@ export default function TemplateEditor() {
     skipAnim,
     typeFilters,
     splitPercent,
+    selectedMcId,
   ]);
 
   const fileQ = useQuery({

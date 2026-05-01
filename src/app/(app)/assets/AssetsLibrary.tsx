@@ -162,9 +162,6 @@ export default function AssetsLibrary() {
       <div className="toolbar assets-library__toolbar sticky top-0 z-10 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
         <div className="flex items-baseline gap-2">
           <div className="toolbar__title text-sm font-semibold text-slate-900">Assets</div>
-          <div className="toolbar__count text-xs text-slate-500">
-            {filtered.length}/{assets.length} assets
-          </div>
         </div>
 
         <div className="input-box input-box--with-icon relative ml-2">
@@ -195,18 +192,9 @@ export default function AssetsLibrary() {
           </button>
         ) : null}
 
-        <ArchiveToggle
-          showArchived={showArchived}
-          onChange={setShowArchived}
-        />
-
-        <button
-          onClick={() => setUploadOpen(true)}
-          className="toolbar-btn--primary ml-auto inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
-        >
-          <UploadIcon className="size-3.5" />
-          Upload
-        </button>
+        <div className="toolbar__count ml-auto text-[11px] text-slate-500">
+          {filtered.length}/{assets.length} assets
+        </div>
       </div>
 
       <div
@@ -320,9 +308,33 @@ export default function AssetsLibrary() {
       </div>
 
       <RightToolbar storageKey="mm6_assets_right_toolbar_open">
-        {(collapsed) => (
-          <LibraryViewSwitcher view={view} setView={setView} collapsed={collapsed} />
-        )}
+        {(collapsed) => {
+          const content = (
+            <>
+              <LibraryViewSwitcher view={view} setView={setView} collapsed={collapsed}>
+                <ArchiveToggle
+                  showArchived={showArchived}
+                  onChange={setShowArchived}
+                  collapsed={collapsed}
+                />
+              </LibraryViewSwitcher>
+              <button
+                type="button"
+                onClick={() => setUploadOpen(true)}
+                title="Upload"
+                aria-label="Upload"
+                className={clsx(
+                  "toolbar-btn--primary mt-auto inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-900 font-medium text-white hover:bg-slate-800",
+                  collapsed ? "size-9" : "px-3 py-1.5 text-xs",
+                )}
+              >
+                <UploadIcon className="size-3.5" />
+                {!collapsed ? "Upload" : null}
+              </button>
+            </>
+          );
+          return collapsed ? content : <div className="flex h-full flex-col gap-3">{content}</div>;
+        }}
       </RightToolbar>
     </div>
   );

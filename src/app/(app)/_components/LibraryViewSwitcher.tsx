@@ -28,22 +28,28 @@ export function LibraryViewSwitcher({
   view,
   setView,
   collapsed,
+  children,
 }: {
   view: LibraryViewMode;
   setView: (v: LibraryViewMode) => void;
   collapsed: boolean;
+  /** Optional extra controls rendered inside the VIEW section, below the selector. */
+  children?: React.ReactNode;
 }) {
   if (collapsed) {
     return (
-      <CycleIconButton
-        options={VIEW_DEFS.map(({ value, label, Icon }) => ({
-          value,
-          label: `${label} view`,
-          icon: <Icon className="size-4" />,
-        }))}
-        value={view}
-        onChange={setView}
-      />
+      <>
+        <CycleIconButton
+          options={VIEW_DEFS.map(({ value, label, Icon }) => ({
+            value,
+            label: `${label} view`,
+            icon: <Icon className="size-4" />,
+          }))}
+          value={view}
+          onChange={setView}
+        />
+        {children}
+      </>
     );
   }
   return (
@@ -63,6 +69,9 @@ export function LibraryViewSwitcher({
           </ToggleBtn>
         ))}
       </div>
+      {children ? (
+        <div className="library-view-switcher__extra mt-2">{children}</div>
+      ) : null}
     </div>
   );
 }

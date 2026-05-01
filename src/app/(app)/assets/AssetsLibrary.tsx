@@ -150,24 +150,24 @@ export default function AssetsLibrary() {
   });
 
   return (
-    <div className="flex h-full">
-      <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="sticky top-0 z-10 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
+    <div className="assets-library flex h-full">
+      <div className="assets-library__content flex flex-1 flex-col overflow-hidden">
+      <div className="toolbar assets-library__toolbar sticky top-0 z-10 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
         <div className="flex items-baseline gap-2">
-          <div className="text-sm font-semibold text-slate-900">Assets</div>
-          <div className="text-xs text-slate-500">
+          <div className="toolbar__title text-sm font-semibold text-slate-900">Assets</div>
+          <div className="toolbar__count text-xs text-slate-500">
             {filtered.length}/{assets.length} assets
           </div>
         </div>
 
-        <div className="relative ml-2">
-          <Search className="pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+        <div className="input-box input-box--with-icon relative ml-2">
+          <Search className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
           <input
             type="search"
             placeholder="Filename, brand, keyword…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-56 rounded-md border border-slate-300 py-1 pl-7 pr-2 text-xs focus:border-slate-500 focus:outline-none"
+            className="input-box__field w-56 rounded-md border border-slate-300 py-1 pl-7 pr-2 text-xs focus:border-slate-500 focus:outline-none"
           />
         </div>
 
@@ -181,7 +181,7 @@ export default function AssetsLibrary() {
               setTypes(new Set());
               setSearch("");
             }}
-            className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
+            className="toolbar-btn flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
           >
             <X className="size-3" />
             Clear
@@ -190,7 +190,7 @@ export default function AssetsLibrary() {
 
         <button
           onClick={() => setUploadOpen(true)}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
+          className="toolbar-btn--primary ml-auto inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
         >
           <UploadIcon className="size-3.5" />
           Upload
@@ -199,14 +199,14 @@ export default function AssetsLibrary() {
 
       <div
         className={clsx(
-          "relative flex-1 overflow-auto p-4 transition",
+          "assets-library__scroll relative flex-1 overflow-auto p-4 transition",
           drop.over && "bg-slate-100 ring-2 ring-inset ring-slate-900",
         )}
         {...drop.handlers}
       >
         {drop.over ? (
-          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
-            <div className="rounded-xl bg-slate-900/90 px-5 py-3 text-sm font-medium text-white">
+          <div className="drop-overlay pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+            <div className="drop-overlay__message rounded-xl bg-slate-900/90 px-5 py-3 text-sm font-medium text-white">
               Drop files to queue them
             </div>
           </div>
@@ -218,12 +218,12 @@ export default function AssetsLibrary() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex h-full items-center justify-center">
-            <div className="max-w-md rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-              <Package className="mx-auto mb-2 size-8 text-slate-400" />
-              <h2 className="text-sm font-semibold text-slate-900">
+            <div className="empty-state assets-library__empty max-w-md rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
+              <Package className="empty-state__icon mx-auto mb-2 size-8 text-slate-400" />
+              <h2 className="empty-state__title text-sm font-semibold text-slate-900">
                 {assets.length === 0 ? "No assets yet" : "Nothing matches the filters"}
               </h2>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="empty-state__hint mt-1 text-xs text-slate-500">
                 {assets.length === 0
                   ? "Upload an image or video clip to use across messages."
                   : "Clear filters or adjust the search."}
@@ -231,7 +231,7 @@ export default function AssetsLibrary() {
               {assets.length === 0 ? (
                 <button
                   onClick={() => setUploadOpen(true)}
-                  className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
+                  className="toolbar-btn--primary mt-4 inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
                 >
                   <UploadIcon className="size-3.5" />
                   Upload first asset
@@ -279,7 +279,7 @@ function QueueItemForm({
   update: (patch: Partial<QueueItem["metadata"]>) => void;
 }) {
   const cellCls =
-    "rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs focus:border-slate-500 focus:outline-none";
+    "input-box rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs focus:border-slate-500 focus:outline-none";
   const fields: Array<{ k: string; label: string }> = [
     { k: "brand", label: "Brand" },
     { k: "product", label: "Product" },
@@ -287,10 +287,10 @@ function QueueItemForm({
     { k: "visualKeyword", label: "Keyword" },
   ];
   return (
-    <div className="grid grid-cols-4 gap-1.5">
+    <div className="upload-queue__item-form form-grid grid grid-cols-4 gap-1.5">
       {fields.map((f) => (
-        <label key={f.k} className="block">
-          <div className="mb-0.5 text-[9px] uppercase tracking-wide text-slate-500">
+        <label key={f.k} className="form-field block">
+          <div className="form-field__label mb-0.5 text-[9px] uppercase tracking-wide text-slate-500">
             {f.label}
           </div>
           <input
@@ -315,37 +315,37 @@ function Card({
 }) {
   const isImage = file?.mimeType?.startsWith("image/");
   return (
-    <div className="group overflow-hidden rounded-lg border border-slate-200 bg-white transition hover:border-slate-400 hover:shadow-md">
-      <div className="relative aspect-[4/3] bg-slate-50">
+    <div className="media-tile group overflow-hidden rounded-lg border border-slate-200 bg-white transition hover:border-slate-400 hover:shadow-md">
+      <div className="media-tile__thumb relative aspect-[4/3] bg-slate-50">
         {isImage && asset.fileId ? (
           <img
             src={`/api/files/${asset.fileId}/thumbnail?w=400`}
             alt={asset.fileName ?? "asset"}
-            className="size-full object-contain"
+            className="media-tile__image size-full object-contain"
             loading="lazy"
           />
         ) : (
-          <div className="flex size-full items-center justify-center text-slate-300">
+          <div className="media-tile__placeholder flex size-full items-center justify-center text-slate-300">
             <ImageIcon className="size-8" />
           </div>
         )}
         <button
           onClick={onDelete}
           aria-label="Delete"
-          className="absolute right-1.5 top-1.5 rounded-md bg-white/90 p-1 text-rose-600 opacity-0 shadow transition group-hover:opacity-100 hover:bg-rose-50"
+          className="media-tile__delete-btn absolute right-1.5 top-1.5 rounded-md bg-white/90 p-1 text-rose-600 opacity-0 shadow transition group-hover:opacity-100 hover:bg-rose-50"
         >
           <Trash2 className="size-3.5" />
         </button>
       </div>
-      <div className="p-2 text-xs">
-        <div className="truncate text-slate-700" title={asset.fileName ?? ""}>
+      <div className="media-tile__meta p-2 text-xs">
+        <div className="media-tile__filename truncate text-slate-700" title={asset.fileName ?? ""}>
           {asset.fileName ?? "(no file)"}
         </div>
-        <div className="mt-0.5 flex flex-wrap gap-1 text-[10px] text-slate-500">
-          {asset.brand ? <span>{asset.brand}</span> : null}
-          {asset.product ? <span>· {asset.product}</span> : null}
-          {asset.type ? <span>· {asset.type}</span> : null}
-          {asset.fileDimensions ? <span>· {asset.fileDimensions}</span> : null}
+        <div className="media-tile__tags mt-0.5 flex flex-wrap gap-1 text-[10px] text-slate-500">
+          {asset.brand ? <span className="tag-chip">{asset.brand}</span> : null}
+          {asset.product ? <span className="tag-chip">· {asset.product}</span> : null}
+          {asset.type ? <span className="tag-chip">· {asset.type}</span> : null}
+          {asset.fileDimensions ? <span className="tag-chip">· {asset.fileDimensions}</span> : null}
         </div>
       </div>
     </div>
@@ -396,10 +396,10 @@ function AssetMetadataForm({
   }
 
   const inputCls =
-    "w-full rounded border border-slate-300 px-2 py-1 text-xs focus:border-slate-500 focus:outline-none";
+    "input-box w-full rounded border border-slate-300 px-2 py-1 text-xs focus:border-slate-500 focus:outline-none";
   return (
-    <form onSubmit={onSubmit} className="space-y-2 text-xs">
-      <div className="grid grid-cols-2 gap-2">
+    <form onSubmit={onSubmit} className="asset-metadata-form space-y-2 text-xs">
+      <div className="form-grid grid grid-cols-2 gap-2">
         <Field label="Brand">
           <input value={brand} onChange={(e) => setBrand(e.target.value)} className={inputCls} />
         </Field>
@@ -424,7 +424,7 @@ function AssetMetadataForm({
         type="submit"
         disabled={submitting}
         className={clsx(
-          "mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white",
+          "toolbar-btn--primary mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white",
           submitting && "opacity-50",
         )}
       >
@@ -443,8 +443,8 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="block">
-      <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
+    <label className="form-field block">
+      <div className="form-field__label mb-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
         {label}
       </div>
       {children}

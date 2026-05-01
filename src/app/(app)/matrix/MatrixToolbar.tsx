@@ -17,10 +17,10 @@ export default function MatrixToolbar(p: Props) {
     p.filters.products.size + p.filters.statuses.size + (p.filters.search ? 1 : 0);
 
   return (
-    <div className="sticky top-0 z-40 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
-      <div className="flex items-baseline gap-2">
-        <div className="text-sm font-semibold text-slate-900">Matrix</div>
-        <div className="text-xs text-slate-500">
+    <div className="toolbar matrix-toolbar sticky top-0 z-40 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
+      <div className="matrix-toolbar__brand flex items-baseline gap-2">
+        <div className="matrix-toolbar__title text-sm font-semibold text-slate-900">Matrix</div>
+        <div className="matrix-toolbar__count text-xs text-slate-500">
           {p.counts.visible}/{p.counts.messages} messages · {p.counts.audiences}{" "}
           audiences · {p.counts.topics} topics
         </div>
@@ -33,7 +33,7 @@ export default function MatrixToolbar(p: Props) {
         onChange={(e) =>
           p.setFilters({ ...p.filters, search: e.target.value })
         }
-        className="ml-2 w-56 rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-slate-500 focus:outline-none"
+        className="input-box ml-2 w-56 rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-slate-500 focus:outline-none"
       />
 
       <MultiPill
@@ -58,7 +58,7 @@ export default function MatrixToolbar(p: Props) {
               search: "",
             })
           }
-          className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
+          className="toolbar-btn flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
         >
           <X className="size-3" />
           Clear

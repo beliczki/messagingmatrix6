@@ -1,14 +1,13 @@
 import { redirect } from "next/navigation";
 import { readSessionFromCookies } from "@/lib/auth-server";
-import { UsersView } from "./UsersView";
+import { SharesView } from "./SharesView";
 
 export default async function Page() {
   const claims = await readSessionFromCookies();
   if (!claims) redirect("/login");
-  if (claims.role !== "admin") redirect("/");
   return (
-    <div className="users flex h-full flex-col">
-      <UsersView currentUserId={claims.sub} />
+    <div className="shares flex h-full flex-col">
+      <SharesView />
     </div>
   );
 }

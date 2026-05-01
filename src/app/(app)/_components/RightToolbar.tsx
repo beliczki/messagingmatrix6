@@ -46,33 +46,33 @@ export default function RightToolbar({
   return (
     <aside
       className={clsx(
-        "flex h-full shrink-0 flex-col border-l border-slate-200 bg-white",
+        "right-toolbar flex h-full shrink-0 flex-col border-l border-slate-200 bg-white",
         hydrated ? "transition-[width] duration-150" : "",
-        collapsed ? "w-12" : "w-64",
+        collapsed ? "right-toolbar--collapsed w-12" : "right-toolbar--open w-64",
       )}
     >
-      <div className="flex h-12 shrink-0 items-center justify-end gap-2 border-b border-slate-100 px-2">
+      <div className="right-toolbar__header flex h-12 shrink-0 items-center justify-end gap-2 border-b border-slate-100 px-2">
         {!collapsed ? (
-          <span className="text-sm font-semibold text-slate-900">Toolbar</span>
+          <span className="right-toolbar__title text-sm font-semibold text-slate-900">Toolbar</span>
         ) : null}
         <button
           onClick={toggle}
           aria-label={collapsed ? "Open toolbar" : "Close toolbar"}
           title={collapsed ? "Open toolbar" : "Close toolbar"}
-          className="rounded p-1.5 text-slate-500 hover:bg-slate-100"
+          className="right-toolbar__toggle rounded p-1.5 text-slate-500 hover:bg-slate-100"
         >
           <PocketKnife className="size-5" />
         </button>
       </div>
-      <div className="flex flex-1 flex-col overflow-y-auto">
+      <div className="right-toolbar__body flex flex-1 flex-col overflow-y-auto">
         {!collapsed && title ? (
-          <div className="px-3 pb-1 pt-3 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+          <div className="right-toolbar__section-title px-3 pb-1 pt-3 text-[10px] font-medium uppercase tracking-wider text-slate-500">
             {title}
           </div>
         ) : null}
         <div
           className={clsx(
-            "flex-1",
+            "right-toolbar__content flex-1",
             collapsed ? "flex flex-col items-center gap-2 py-2" : "px-3 pb-3 pt-1",
           )}
         >

@@ -187,18 +187,18 @@ export default function UploadQueue({
     panel: total === 0 ? null : (
       <div
         className={clsx(
-          "fixed bottom-0 right-0 z-40 m-4 flex w-[440px] flex-col rounded-xl border border-slate-200 bg-white shadow-2xl transition",
-          open ? "max-h-[70vh]" : "max-h-12",
+          "upload-queue fixed bottom-0 right-0 z-40 m-4 flex w-[440px] flex-col rounded-xl border border-slate-200 bg-white shadow-2xl transition",
+          open ? "upload-queue--open max-h-[70vh]" : "upload-queue--collapsed max-h-12",
         )}
       >
         <header
           onClick={() => setOpen(!open)}
-          className="flex cursor-pointer items-center gap-2 border-b border-slate-100 px-3 py-2 text-sm"
+          className="upload-queue__header flex cursor-pointer items-center gap-2 border-b border-slate-100 px-3 py-2 text-sm"
         >
-          <span className="font-semibold text-slate-900">
+          <span className="upload-queue__title font-semibold text-slate-900">
             Upload queue
           </span>
-          <span className="text-xs text-slate-500">
+          <span className="upload-queue__count text-xs text-slate-500">
             {done}/{total} done
             {errored > 0 ? ` · ${errored} error` : ""}
           </span>
@@ -237,7 +237,7 @@ export default function UploadQueue({
           </button>
         </header>
         {open ? (
-          <div className="flex-1 overflow-y-auto p-2">
+          <div className="upload-queue__items flex-1 overflow-y-auto p-2">
             {items.map((item) => (
               <ItemRow
                 key={item.localId}
@@ -272,10 +272,10 @@ function ItemRow({
   renderForm: Props["renderForm"];
 }) {
   return (
-    <div className="mb-2 rounded-md border border-slate-200 bg-white p-2 text-xs">
+    <div className={`upload-queue__item upload-queue__item--${item.status} mb-2 rounded-md border border-slate-200 bg-white p-2 text-xs`}>
       <div className="flex items-baseline gap-2">
         <StatusIcon status={item.status} />
-        <span className="truncate font-medium text-slate-700" title={item.file.name}>
+        <span className="upload-queue__item-name truncate font-medium text-slate-700" title={item.file.name}>
           {item.file.name}
         </span>
         <span className="ml-auto text-[10px] text-slate-400">
@@ -284,7 +284,7 @@ function ItemRow({
         <button
           onClick={onDiscard}
           aria-label="Discard"
-          className="rounded p-0.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+          className="upload-queue__item-discard rounded p-0.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
         >
           <Trash2 className="size-3" />
         </button>
@@ -295,7 +295,7 @@ function ItemRow({
         </div>
       ) : null}
       {item.status === "error" && item.error ? (
-        <div className="mt-1 rounded bg-rose-50 p-1 text-[10px] text-rose-700">
+        <div className="error-alert mt-1 rounded bg-rose-50 p-1 text-[10px] text-rose-700">
           {item.error}
         </div>
       ) : null}

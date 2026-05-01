@@ -110,33 +110,33 @@ export default function UploadDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-6 backdrop-blur-sm"
+      className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-6 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+        className={`upload-dialog modal upload-dialog--${phase} w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl`}
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-          <h2 className="text-base font-semibold text-slate-900">
+        <header className="modal__header flex items-center justify-between border-b border-slate-100 px-4 py-3">
+          <h2 className="upload-dialog__title text-base font-semibold text-slate-900">
             Upload {category}
           </h2>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="rounded p-1 text-slate-500 hover:bg-slate-100"
+            className="modal__close rounded p-1 text-slate-500 hover:bg-slate-100"
           >
             <X className="size-4" />
           </button>
         </header>
 
-        <div className="px-4 py-4">
+        <div className="modal__body px-4 py-4">
           {phase === "pick" || phase === "uploading" ? (
             <>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={phase === "uploading"}
-                className="flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed border-slate-300 px-4 py-8 text-sm text-slate-600 transition hover:border-slate-500 hover:bg-slate-50 disabled:opacity-50"
+                className="upload-dialog__dropzone flex w-full flex-col items-center gap-2 rounded-lg border-2 border-dashed border-slate-300 px-4 py-8 text-sm text-slate-600 transition hover:border-slate-500 hover:bg-slate-50 disabled:opacity-50"
               >
                 {phase === "uploading" ? (
                   <>
@@ -162,7 +162,7 @@ export default function UploadDialog({
                 </p>
               ) : null}
               {error ? (
-                <p className="mt-3 rounded-md bg-rose-50 p-2 text-xs text-rose-700">
+                <p className="error-alert mt-3 rounded-md bg-rose-50 p-2 text-xs text-rose-700">
                   {error}
                 </p>
               ) : null}

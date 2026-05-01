@@ -42,7 +42,7 @@ export default function CycleIconButton<T extends string | number>({
       title={`${cur.label} → ${nextOpt.label}`}
       aria-label={cur.label}
       className={clsx(
-        "flex items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100",
+        "cycle-icon-btn flex items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100",
         size,
         className,
       )}

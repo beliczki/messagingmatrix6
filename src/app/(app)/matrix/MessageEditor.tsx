@@ -337,47 +337,50 @@ export default function MessageEditor({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-stretch bg-slate-900/40 backdrop-blur-sm"
+      className="modal-backdrop fixed inset-0 z-50 flex items-stretch bg-slate-900/40 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="m-auto flex h-[90vh] w-[90vw] max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+        className={clsx(
+          "message-editor modal m-auto flex h-[90vh] w-[90vw] max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl",
+          wide && "message-editor--landscape",
+        )}
         onClick={(e) => e.stopPropagation()}
       >
-        <header className="flex shrink-0 items-center gap-3 border-b border-slate-100 px-4 py-3">
+        <header className="message-editor__header modal__header flex shrink-0 items-center gap-3 border-b border-slate-100 px-4 py-3">
           <button
             onClick={navigatePrev}
             disabled={navIndex <= 0}
             aria-label="Previous"
-            className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+            className="message-editor__nav-prev rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
           >
             <ChevronLeft className="size-4" />
           </button>
-          <span className="font-mono text-base font-semibold text-slate-900">
+          <span className="message-editor__mc-label font-mono text-base font-semibold text-slate-900">
             {mcLabel}
           </span>
           <button
             onClick={navigateNext}
             disabled={navIndex < 0 || navIndex >= visibleMessages.length - 1}
             aria-label="Next"
-            className="rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+            className="message-editor__nav-next rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
           >
             <ChevronRight className="size-4" />
           </button>
           {visibleMessages.length > 0 ? (
-            <span className="text-xs text-slate-500">
+            <span className="message-editor__nav-counter text-xs text-slate-500">
               {navIndex + 1}/{visibleMessages.length}
             </span>
           ) : null}
           <span
             className={clsx(
-              "ml-2 inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-xs",
+              "status-badge ml-2 inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-xs",
               "border border-slate-200 bg-white",
             )}
           >
             <span
               className={clsx(
-                "size-2 rounded-full",
+                "status-dot size-2 rounded-full",
                 STATUS_COLOR[draft.status ?? ""] ?? "bg-slate-300",
               )}
             />
@@ -385,13 +388,13 @@ export default function MessageEditor({
           </span>
           <SaveIndicator state={saveState} />
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="message-editor__header-actions ml-auto flex items-center gap-2">
             <button
               onClick={() => setAutoSave((v) => !v)}
               className={clsx(
-                "flex items-center gap-1 rounded border px-2 py-1 text-xs",
+                "message-editor__autosave-toggle flex items-center gap-1 rounded border px-2 py-1 text-xs",
                 autoSave
-                  ? "border-slate-900 bg-slate-900 text-white"
+                  ? "message-editor__autosave-toggle--active border-slate-900 bg-slate-900 text-white"
                   : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
               )}
               title="Save changes automatically"
@@ -409,21 +412,21 @@ export default function MessageEditor({
               Autosave
             </button>
             {!autoSave && isDirty ? (
-              <span className="text-xs text-amber-600">modified</span>
+              <span className="message-editor__modified-tag text-xs text-amber-600">modified</span>
             ) : null}
             {!autoSave ? (
               <>
                 <button
                   onClick={manualSave}
                   disabled={!isDirty || saveState.kind === "saving"}
-                  className="rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="toolbar-btn--primary rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Save
                 </button>
                 <button
                   onClick={manualCancel}
                   disabled={!isDirty || saveState.kind === "saving"}
-                  className="rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="toolbar-btn rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Cancel
                 </button>
@@ -432,7 +435,7 @@ export default function MessageEditor({
             <button
               onClick={onClose}
               aria-label="Close"
-              className="rounded p-1 text-slate-500 hover:bg-slate-100"
+              className="modal__close rounded p-1 text-slate-500 hover:bg-slate-100"
             >
               <X className="size-5" />
             </button>
@@ -442,13 +445,13 @@ export default function MessageEditor({
         <div
           ref={containerRef}
           className={clsx(
-            "flex flex-1 overflow-hidden",
+            "message-editor__body flex flex-1 overflow-hidden",
             wide ? "flex-col" : "flex-row",
           )}
         >
           {/* Editor section */}
           <section
-            className="flex flex-col overflow-hidden bg-white"
+            className="message-editor__pane--form flex flex-col overflow-hidden bg-white"
             style={{
               order: wide ? 3 : 1,
               flexBasis: `${100 - splitPercent}%`,
@@ -456,7 +459,7 @@ export default function MessageEditor({
               flexShrink: 0,
             }}
           >
-            <nav className="flex h-10 shrink-0 items-stretch border-b border-slate-100 bg-slate-50/60 px-2">
+            <nav className="tab-bar flex h-10 shrink-0 items-stretch border-b border-slate-100 bg-slate-50/60 px-2">
               <TabBtn active={tab === "naming"} onClick={() => setTab("naming")} icon={<Tag className="size-3.5" />}>
                 Naming
               </TabBtn>
@@ -474,7 +477,7 @@ export default function MessageEditor({
               </TabBtn>
             </nav>
 
-            <div className="flex-1 overflow-y-auto px-5 py-4">
+            <div className="message-editor__tab-content flex-1 overflow-y-auto px-5 py-4">
               {tab === "naming" ? (
                 <NamingTab message={message} aud={aud} top={top} draft={draft} setDraft={setDraft} />
               ) : null}
@@ -495,8 +498,8 @@ export default function MessageEditor({
           <div
             onMouseDown={startDrag}
             className={clsx(
-              "shrink-0 bg-slate-200 transition-colors hover:bg-slate-400",
-              wide ? "h-1 w-full cursor-row-resize" : "h-full w-1 cursor-col-resize",
+              "divider-handle shrink-0 bg-slate-200 transition-colors hover:bg-slate-400",
+              wide ? "divider-handle--horizontal h-1 w-full cursor-row-resize" : "divider-handle--vertical h-full w-1 cursor-col-resize",
             )}
             style={{ order: 2 }}
             title="Drag to resize"
@@ -504,7 +507,7 @@ export default function MessageEditor({
 
           {/* Preview section */}
           <section
-            className="flex flex-col overflow-hidden bg-slate-50"
+            className="message-editor__pane--preview flex flex-col overflow-hidden bg-slate-50"
             style={{
               order: wide ? 1 : 3,
               flexBasis: `${splitPercent}%`,
@@ -547,7 +550,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
   if (state.kind === "idle") return null;
   if (state.kind === "saving") {
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-slate-500">
+      <span className="save-indicator save-indicator--saving inline-flex items-center gap-1 text-xs text-slate-500">
         <Loader2 className="size-3 animate-spin" />
         Saving…
       </span>
@@ -555,7 +558,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
   }
   if (state.kind === "saved") {
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-emerald-700">
+      <span className="save-indicator save-indicator--saved inline-flex items-center gap-1 text-xs text-emerald-700">
         <Check className="size-3" />
         Saved
       </span>
@@ -563,7 +566,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
   }
   if (state.kind === "conflict") {
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-amber-700">
+      <span className="save-indicator save-indicator--conflict inline-flex items-center gap-1 text-xs text-amber-700">
         <CircleAlert className="size-3" />
         Refreshed (someone else edited this)
       </span>
@@ -571,7 +574,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
   }
   return (
     <span
-      className="inline-flex items-center gap-1 text-xs text-rose-700"
+      className="save-indicator save-indicator--error inline-flex items-center gap-1 text-xs text-rose-700"
       title={state.message}
     >
       <CircleAlert className="size-3" />
@@ -595,9 +598,9 @@ function TabBtn({
     <button
       onClick={onClick}
       className={clsx(
-        "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition",
+        "tab-bar__tab inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition",
         active
-          ? "border-slate-900 text-slate-900"
+          ? "tab-bar__tab--active border-slate-900 text-slate-900"
           : "border-transparent text-slate-500 hover:text-slate-700",
       )}
     >
@@ -617,10 +620,10 @@ function Field({
   hint?: string;
 }) {
   return (
-    <label className="mb-3 block">
-      <div className="mb-1 text-xs font-medium text-slate-700">{label}</div>
+    <label className="form-field mb-3 block">
+      <div className="form-field__label mb-1 text-xs font-medium text-slate-700">{label}</div>
       {children}
-      {hint ? <div className="mt-1 text-[10px] text-slate-400">{hint}</div> : null}
+      {hint ? <div className="form-field__hint mt-1 text-[10px] text-slate-400">{hint}</div> : null}
     </label>
   );
 }
@@ -639,7 +642,7 @@ function NamingTab({
   setDraft: (d: EditableFields) => void;
 }) {
   return (
-    <div className="grid grid-cols-2 gap-x-4">
+    <div className="message-editor-tab message-editor-tab--naming form-grid grid grid-cols-2 gap-x-4">
       <Field label="MC Number">
         <input
           readOnly
@@ -660,7 +663,7 @@ function NamingTab({
           <select
             value={draft.status ?? ""}
             onChange={(e) => setDraft({ ...draft, status: e.target.value || null })}
-            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+            className="custom-dropdown w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
           >
             <option value="">— none —</option>
             {STATUS_OPTIONS.map((s) => (
@@ -905,7 +908,7 @@ function TemplateTab({
           onChange={(e) =>
             setDraft({ ...draft, template: e.target.value || null })
           }
-          className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+          className="custom-dropdown w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
         >
           <option value="">— none —</option>
           {templates.map((t) => (
@@ -921,7 +924,7 @@ function TemplateTab({
         hint="Space-separated CSS class names applied to the template root."
       >
         {tagOptions.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="toggle-group flex flex-wrap gap-1.5">
             {tagOptions.map((opt) => {
               const active = activeTags.has(opt);
               return (
@@ -929,9 +932,9 @@ function TemplateTab({
                   key={opt}
                   onClick={() => toggleTag(opt)}
                   className={clsx(
-                    "rounded-full border px-2.5 py-0.5 text-xs transition",
+                    "toggle-btn rounded-full border px-2.5 py-0.5 text-xs transition",
                     active
-                      ? "border-slate-900 bg-slate-900 text-white"
+                      ? "toggle-btn--active border-slate-900 bg-slate-900 text-white"
                       : "border-slate-200 bg-white text-slate-700 hover:border-slate-400",
                   )}
                 >

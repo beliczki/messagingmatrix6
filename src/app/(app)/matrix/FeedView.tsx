@@ -61,9 +61,9 @@ export default function FeedView({
   }
 
   return (
-    <div className="overflow-auto">
+    <div className="matrix-feed h-full overflow-auto">
       <table className="w-full text-sm">
-        <thead className="sticky top-0 z-10 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+        <thead className="matrix-feed__head sticky top-0 z-10 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
           <tr>
             <Th sk="mcLabel" cur={sortKey} dir={sortDir} onClick={toggleSort}>
               MC
@@ -100,21 +100,21 @@ export default function FeedView({
               <tr
                 key={m.id}
                 onClick={() => onOpenMessage(m.id)}
-                className="cursor-pointer border-b border-slate-100 hover:bg-slate-50"
+                className="matrix-feed__row matrix-feed__row--clickable cursor-pointer border-b border-slate-100 hover:bg-slate-50"
               >
-                <td className="px-3 py-1.5 font-mono text-slate-900">
+                <td className="matrix-feed__cell px-3 py-1.5 font-mono text-slate-900">
                   MC{m.number}
                   {m.variant}
                 </td>
-                <td className="px-3 py-1.5">
+                <td className="matrix-feed__cell matrix-feed__status px-3 py-1.5">
                   <span className="inline-flex items-center gap-1.5 text-xs">
-                    <span className={clsx("size-2 rounded-full", dot)} />
+                    <span className={clsx("status-dot size-2 rounded-full", dot)} />
                     <span className="text-slate-700">
                       {m.status ?? "—"}
                     </span>
                   </span>
                 </td>
-                <td className="px-3 py-1.5 text-xs">
+                <td className="matrix-feed__cell px-3 py-1.5 text-xs">
                   <div className="font-medium text-slate-700">
                     {aud?.name ?? m.audience}
                   </div>
@@ -122,7 +122,7 @@ export default function FeedView({
                     {m.audience}
                   </div>
                 </td>
-                <td className="px-3 py-1.5 text-xs">
+                <td className="matrix-feed__cell px-3 py-1.5 text-xs">
                   <div className="font-medium text-slate-700">
                     {top?.name ?? m.topic}
                   </div>
@@ -130,16 +130,16 @@ export default function FeedView({
                     {m.topic}
                   </div>
                 </td>
-                <td className="max-w-[220px] truncate px-3 py-1.5">
+                <td className="matrix-feed__cell max-w-[220px] truncate px-3 py-1.5">
                   {m.name ?? <span className="text-slate-400">—</span>}
                 </td>
-                <td className="max-w-[280px] truncate px-3 py-1.5 text-slate-600">
+                <td className="matrix-feed__cell max-w-[280px] truncate px-3 py-1.5 text-slate-600">
                   {m.headline ?? <span className="text-slate-400">—</span>}
                 </td>
-                <td className="px-3 py-1.5 text-xs text-slate-500">
+                <td className="matrix-feed__cell px-3 py-1.5 text-xs text-slate-500">
                   {m.template ?? "—"}
                 </td>
-                <td className="px-3 py-1.5 text-xs text-slate-400">
+                <td className="matrix-feed__cell px-3 py-1.5 text-xs text-slate-400">
                   {m.updatedAt}
                 </td>
               </tr>
@@ -148,7 +148,7 @@ export default function FeedView({
         </tbody>
       </table>
       {sorted.length === 0 ? (
-        <div className="p-8 text-center text-sm text-slate-500">
+        <div className="matrix-feed__empty p-8 text-center text-sm text-slate-500">
           No messages match the current filters.
         </div>
       ) : null}
@@ -196,17 +196,17 @@ function Th({
     <th
       onClick={() => onClick(sk)}
       className={clsx(
-        "cursor-pointer select-none border-b border-slate-200 px-3 py-2 text-left",
-        active ? "text-slate-900" : "hover:text-slate-700",
+        "matrix-feed__col-header cursor-pointer select-none border-b border-slate-200 px-3 py-2 text-left",
+        active ? "matrix-feed__col-header--sorted text-slate-900" : "hover:text-slate-700",
       )}
     >
       <div className="inline-flex items-center gap-1">
         {children}
         {active ? (
           dir === "asc" ? (
-            <ChevronUp className="size-3" />
+            <ChevronUp className="matrix-feed__sort-icon size-3" />
           ) : (
-            <ChevronDown className="size-3" />
+            <ChevronDown className="matrix-feed__sort-icon size-3" />
           )
         ) : null}
       </div>

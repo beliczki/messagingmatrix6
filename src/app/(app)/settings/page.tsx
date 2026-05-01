@@ -1,11 +1,43 @@
-import { Placeholder } from "../_placeholder";
+import path from "node:path";
+import { redirect } from "next/navigation";
+import { readSessionFromCookies } from "@/lib/auth-server";
+import { getActiveClient } from "@/lib/active-client";
+import { SettingsView } from "./SettingsView";
+import pkg from "../../../../package.json";
 
-export default function Page() {
+function resolveDbPath(): string {
+  const url = process.env.DATABASE_URL;
+  if (!url) return path.resolve(process.cwd(), "db", "matrix.db");
+  return url.replace(/^file:/, "");
+}
+
+export default async function Page() {
+  const claims = await readSessionFromCookies();
+  if (!claims) redirect("/login");
+  if (claims.role !== "admin") redirect("/");
+  const active = getActiveClient();
+
+  const aboutInfo = {
+    activeClient: {
+      key: active.key,
+      name: active.name,
+      status: active.status,
+    },
+    user: { email: claims.email, role: claims.role },
+    env: {
+      activeClientKey: process.env.ACTIVE_CLIENT_KEY ?? "(unset)",
+      nodeEnv: process.env.NODE_ENV ?? "(unset)",
+    },
+    dbPath: resolveDbPath(),
+    appVersion: pkg.version,
+  };
+
   return (
-    <Placeholder
-      phase="Phase 7"
-      title="Settings"
-      description="Clients (catalog) / Storage / Design / Structure / About. Per-client config; the active client is locked by ACTIVE_CLIENT_KEY env."
-    />
+    <div className="settings flex h-full">
+      <SettingsView
+        activeClient={{ key: active.key, name: active.name }}
+        aboutInfo={aboutInfo}
+      />
+    </div>
   );
 }

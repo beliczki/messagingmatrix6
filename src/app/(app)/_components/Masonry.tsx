@@ -27,9 +27,9 @@ export function Masonry<T>({
               ? "columns-4"
               : "columns-5";
   return (
-    <div className={`${colClass} gap-3`}>
+    <div className={`masonry ${colClass} gap-3`}>
       {items.map((item, i) => (
-        <div key={i} className="mb-3 break-inside-avoid">
+        <div key={i} className="masonry__item mb-3 break-inside-avoid">
           {render(item)}
         </div>
       ))}

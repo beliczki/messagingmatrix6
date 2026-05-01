@@ -50,18 +50,18 @@ export default function GridView({
   const colLabel = transposed ? "Audience" : "Topic";
 
   return (
-    <div className="overflow-auto">
+    <div className="matrix-grid h-full overflow-auto">
       <table className="border-separate border-spacing-0">
-        <thead>
+        <thead className="matrix-grid__head">
           <tr>
-            <th className="sticky left-0 top-0 z-30 h-20 min-w-[180px] border-b border-r border-slate-200 bg-slate-50 p-0 text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <th className="matrix-grid__corner sticky left-0 top-0 z-30 h-20 min-w-[180px] border-b border-r border-slate-200 bg-slate-50 p-0 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <div className="flex h-full min-h-20 items-center justify-center p-2">
                 <button
                   type="button"
                   onClick={() => setTransposed((v) => !v)}
                   title={`Transpose — show ${transposed ? "audiences" : "topics"} as rows`}
                   aria-label="Transpose matrix"
-                  className="inline-flex items-center gap-1.5 rounded px-1.5 py-1 hover:bg-slate-200/60"
+                  className="matrix-grid__transpose-btn inline-flex items-center gap-1.5 rounded px-1.5 py-1 hover:bg-slate-200/60"
                 >
                   <span>{rowLabel}</span>
                   <span className="text-base font-normal text-slate-400">
@@ -74,11 +74,11 @@ export default function GridView({
             {cols.map((c) => (
               <th
                 key={c.id}
-                className="sticky top-0 z-20 h-20 min-h-20 min-w-[160px] border-b border-r border-slate-200 bg-slate-50 p-2 align-top text-left text-xs font-medium text-slate-700"
+                className="matrix-grid__col-header sticky top-0 z-20 h-20 min-h-20 min-w-[160px] border-b border-r border-slate-200 bg-slate-50 p-2 align-top text-left text-xs font-medium text-slate-700"
                 title={c.key}
               >
-                <div className="font-semibold">{c.name}</div>
-                <div className="truncate font-mono text-[10px] text-slate-400">
+                <div className="matrix-grid__col-header-label font-semibold">{c.name}</div>
+                <div className="matrix-grid__col-header-key truncate font-mono text-[10px] text-slate-400">
                   {c.key}
                 </div>
               </th>
@@ -87,13 +87,13 @@ export default function GridView({
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.id}>
+            <tr key={r.id} className="matrix-grid__row">
               <th
-                className="sticky left-0 z-10 min-w-[180px] border-b border-r border-slate-200 bg-slate-50 p-2 text-left text-xs font-medium text-slate-700"
+                className="matrix-grid__row-header sticky left-0 z-10 min-w-[180px] border-b border-r border-slate-200 bg-slate-50 p-2 text-left text-xs font-medium text-slate-700"
                 title={r.key}
               >
-                <div className="font-semibold">{r.name}</div>
-                <div className="font-mono text-[10px] text-slate-400">
+                <div className="matrix-grid__row-header-label font-semibold">{r.name}</div>
+                <div className="matrix-grid__row-header-key font-mono text-[10px] text-slate-400">
                   {r.key}
                 </div>
               </th>
@@ -136,8 +136,8 @@ function Cell({
   return (
     <td
       className={clsx(
-        "min-w-[160px] border-b border-r border-slate-200 align-top p-1.5",
-        messages.length === 0 ? "bg-slate-50/50" : "bg-white",
+        "matrix-grid__cell min-w-[160px] border-b border-r border-slate-200 align-top p-1.5",
+        messages.length === 0 ? "bg-slate-50/50" : "matrix-grid__cell--has-messages bg-white",
       )}
       data-audience={audience}
       data-topic={topic}
@@ -178,7 +178,7 @@ function McChip({
         onClick={onClick}
         title={`${label} · ${message.name ?? "(unnamed)"}`}
         className={clsx(
-          "size-2.5 cursor-pointer rounded-full transition hover:ring-2 hover:ring-slate-300",
+          "mc-chip mc-chip--minimal size-2.5 cursor-pointer rounded-full transition hover:ring-2 hover:ring-slate-300",
           dot,
         )}
       />
@@ -188,10 +188,10 @@ function McChip({
     <button
       onClick={onClick}
       title={`${label} · ${message.name ?? "(unnamed)"}`}
-      className="inline-flex max-w-full cursor-pointer items-center gap-1.5 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs transition hover:border-slate-400 hover:bg-slate-50"
+      className="mc-chip mc-chip--informative inline-flex max-w-full cursor-pointer items-center gap-1.5 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs transition hover:border-slate-400 hover:bg-slate-50"
     >
-      <span className={clsx("size-1.5 rounded-full", dot)} />
-      <span className="font-mono text-slate-700">{label}</span>
+      <span className={clsx("mc-chip__dot status-dot size-1.5 rounded-full", dot)} />
+      <span className="mc-chip__label font-mono text-slate-700">{label}</span>
     </button>
   );
 }

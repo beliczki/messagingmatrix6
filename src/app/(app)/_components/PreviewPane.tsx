@@ -57,13 +57,13 @@ export default function PreviewPane({
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex h-10 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3">
+    <div className="preview-pane flex h-full flex-col">
+      <div className="preview-pane__toolbar flex h-10 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3">
         <div className="flex items-center gap-2">
           <select
             value={size ?? ""}
             onChange={(e) => onSizeChange(e.target.value)}
-            className="rounded border border-slate-300 bg-white px-2 py-1 text-xs"
+            className="custom-dropdown preview-pane__size-select rounded border border-slate-300 bg-white px-2 py-1 text-xs"
             disabled={sizes.length === 0}
           >
             {sizes.map((s) => (
@@ -75,9 +75,9 @@ export default function PreviewPane({
           <button
             onClick={() => onSkipAnimChange(!skipAnim)}
             className={clsx(
-              "flex items-center gap-1 rounded border px-2 py-1 text-xs",
+              "preview-pane__skip-anim flex items-center gap-1 rounded border px-2 py-1 text-xs",
               skipAnim
-                ? "border-slate-900 bg-slate-900 text-white"
+                ? "preview-pane__skip-anim--active border-slate-900 bg-slate-900 text-white"
                 : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
             )}
             title="Skip animations in preview"
@@ -96,7 +96,7 @@ export default function PreviewPane({
           </button>
         </div>
         <div className="flex items-center gap-1">
-          <div className="flex overflow-hidden rounded border border-slate-300">
+          <div className="preview-pane__bg-group flex overflow-hidden rounded border border-slate-300">
             <BgBtn active={bg === "light"} onClick={() => onBgChange("light")} title="Light background">
               <Sun className="size-3.5" />
             </BgBtn>
@@ -110,7 +110,7 @@ export default function PreviewPane({
           {onRefresh ? (
             <button
               onClick={handleRefresh}
-              className="rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50"
+              className="preview-pane__refresh rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50"
               title="Refresh preview"
             >
               <RefreshCw className="size-3.5" />
@@ -121,7 +121,7 @@ export default function PreviewPane({
       </div>
       <div
         ref={boxRef}
-        className="flex flex-1 items-center justify-center overflow-hidden"
+        className="preview-pane__viewport flex flex-1 items-center justify-center overflow-hidden"
         style={bgStyleFor(bg)}
       >
         <PreviewIframe key={reloadKey} html={html} size={size} box={box} />
@@ -146,9 +146,9 @@ function BgBtn({
       onClick={onClick}
       title={title}
       className={clsx(
-        "flex items-center justify-center px-1.5 py-1 transition-colors",
+        "preview-pane__bg-btn flex items-center justify-center px-1.5 py-1 transition-colors",
         active
-          ? "bg-slate-900 text-white"
+          ? "preview-pane__bg-btn--active bg-slate-900 text-white"
           : "bg-white text-slate-700 hover:bg-slate-50",
       )}
     >
@@ -200,6 +200,7 @@ function PreviewIframe({
       title="preview"
       srcDoc={html}
       sandbox="allow-same-origin allow-scripts"
+      className="preview-pane__iframe"
       style={{
         width: adW,
         height: adH,

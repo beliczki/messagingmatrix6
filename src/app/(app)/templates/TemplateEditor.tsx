@@ -525,8 +525,8 @@ export default function TemplateEditor() {
   });
 
   return (
-    <div className="flex h-screen flex-col">
-      <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
+    <div className={clsx("template-editor flex h-screen flex-col", wide && "template-editor--landscape")}>
+      <header className="template-editor__header flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
         <div className="flex items-center gap-2">
           <select
             value={activeTemplate ?? ""}
@@ -539,7 +539,7 @@ export default function TemplateEditor() {
               setDirty(false);
               setSaveState("idle");
             }}
-            className="rounded border border-slate-300 bg-white px-2 py-1.5 text-sm font-medium text-slate-900"
+            className="custom-dropdown template-editor__template-select rounded border border-slate-300 bg-white px-2 py-1.5 text-sm font-medium text-slate-900"
           >
             {templates.map((t) => (
               <option key={t.name} value={t.name}>
@@ -554,23 +554,23 @@ export default function TemplateEditor() {
               setActiveFile(null);
             }}
           />
-          <span className="ml-2 text-xs text-slate-500">
+          <span className="template-editor__template-count ml-2 text-xs text-slate-500">
             {templates.length} templates
           </span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-500">Preview with:</span>
+        <div className="nav-stepper flex items-center gap-2">
+          <span className="nav-stepper__label text-xs text-slate-500">Preview with:</span>
           <button
             onClick={() => stepMc(-1)}
             disabled={uniqueCards.length === 0}
-            className="rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="nav-stepper__btn nav-stepper__btn--prev rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             title="Previous MC"
           >
             <ChevronLeft className="size-3.5" />
           </button>
-          <div className="flex items-center gap-1.5 rounded border border-slate-300 bg-white px-2 py-1">
+          <div className="nav-stepper__select-wrap flex items-center gap-1.5 rounded border border-slate-300 bg-white px-2 py-1">
             <span
-              className="size-2 shrink-0 rounded-full"
+              className="status-dot size-2 shrink-0 rounded-full"
               style={{
                 backgroundColor: selectedCard
                   ? statusColorFor(selectedCard.status, customStatusColors)
@@ -583,7 +583,7 @@ export default function TemplateEditor() {
                 const v = e.target.value;
                 setSelectedMcId(v === "" ? null : Number(v));
               }}
-              className="bg-transparent font-mono text-xs outline-none"
+              className="custom-dropdown bg-transparent font-mono text-xs outline-none"
               disabled={uniqueCards.length === 0}
             >
               <option value="">— sample data —</option>
@@ -599,7 +599,7 @@ export default function TemplateEditor() {
           <button
             onClick={() => stepMc(1)}
             disabled={uniqueCards.length === 0}
-            className="rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+            className="nav-stepper__btn nav-stepper__btn--next rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             title="Next MC"
           >
             <ChevronRight className="size-3.5" />
@@ -647,30 +647,30 @@ export default function TemplateEditor() {
         <div
           ref={containerRef}
           className={clsx(
-            "flex flex-1 overflow-hidden",
+            "template-editor__body flex flex-1 overflow-hidden",
             wide ? "flex-col" : "flex-row",
           )}
         >
           {/* Editor pane */}
           <section
-            className="flex flex-col overflow-hidden"
+            className="template-editor__code flex flex-col overflow-hidden"
             style={
               wide
                 ? { order: 3, flexBasis: `${100 - splitPercent}%`, flexGrow: 0, flexShrink: 0 }
                 : { order: 1, flexBasis: `${100 - splitPercent}%`, flexGrow: 0, flexShrink: 0 }
             }
           >
-            <div className="flex h-10 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3">
+            <div className="template-editor__code-header flex h-10 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3">
               <div className="flex items-center gap-2 text-xs">
                 <button
                   onClick={() => setFilesOpen((v) => !v)}
-                  className="flex items-center justify-center rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50"
+                  className="template-files-panel__toggle flex items-center justify-center rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50"
                   title={filesOpen ? "Close files panel" : "Open files panel"}
                   aria-label="Toggle files panel"
                 >
                   {filesOpen ? <ChevronLeft className="size-3.5" /> : <ChevronRight className="size-3.5" />}
                 </button>
-                <span className="font-mono text-slate-700">
+                <span className="template-editor__code-filename font-mono text-slate-700">
                   {activeFile ?? "—"}
                 </span>
                 <SaveIndicator state={saveState} dirty={dirty} error={saveError} />
@@ -679,7 +679,7 @@ export default function TemplateEditor() {
                 <button
                   onClick={revertChanges}
                   disabled={!dirty || saveState === "saving"}
-                  className="rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="toolbar-btn rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                   title="Discard unsaved changes (revert to last saved)"
                 >
                   Cancel
@@ -687,7 +687,7 @@ export default function TemplateEditor() {
                 <button
                   onClick={performSave}
                   disabled={!dirty || saveState === "saving"}
-                  className="flex items-center gap-1 rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="toolbar-btn--primary flex items-center gap-1 rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                   title="Save (⌘/Ctrl+S)"
                 >
                   {saveState === "saving" ? (
@@ -700,15 +700,15 @@ export default function TemplateEditor() {
               </div>
             </div>
             {!activeFile ? (
-              <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
+              <div className="template-editor__code-empty flex flex-1 items-center justify-center text-sm text-slate-500">
                 Select a file to edit.
               </div>
             ) : !isCurrentFileText() ? (
-              <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
+              <div className="template-editor__code-empty flex flex-1 items-center justify-center text-sm text-slate-500">
                 Binary file — open via the file URL to view.
               </div>
             ) : fileQ.isLoading ? (
-              <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
+              <div className="template-editor__code-empty flex flex-1 items-center justify-center text-sm text-slate-500">
                 <Loader2 className="mr-2 size-4 animate-spin" />
                 Loading…
               </div>
@@ -720,7 +720,7 @@ export default function TemplateEditor() {
                 extensions={languageFor(
                   detailQ.data?.files.find((f) => f.name === activeFile)?.ext ?? "",
                 )}
-                className="flex-1 overflow-auto text-[13px]"
+                className="template-editor__code-mirror flex-1 overflow-auto text-[13px]"
                 basicSetup={{ lineNumbers: true, highlightActiveLine: true }}
               />
             )}
@@ -730,10 +730,10 @@ export default function TemplateEditor() {
           <div
             onMouseDown={startDrag}
             className={clsx(
-              "shrink-0 bg-slate-200 hover:bg-slate-400 transition-colors",
+              "divider-handle shrink-0 bg-slate-200 hover:bg-slate-400 transition-colors",
               wide
-                ? "h-1 w-full cursor-row-resize"
-                : "w-1 h-full cursor-col-resize",
+                ? "divider-handle--horizontal h-1 w-full cursor-row-resize"
+                : "divider-handle--vertical w-1 h-full cursor-col-resize",
             )}
             style={{ order: 2 }}
             title="Drag to resize"
@@ -741,7 +741,7 @@ export default function TemplateEditor() {
 
           {/* Preview pane */}
           <section
-            className="flex flex-col overflow-hidden bg-white"
+            className="template-editor__preview flex flex-col overflow-hidden bg-white"
             style={
               wide
                 ? { order: 1, flexBasis: `${splitPercent}%`, flexGrow: 0, flexShrink: 0 }
@@ -761,7 +761,7 @@ export default function TemplateEditor() {
               rightExtras={
                 <button
                   onClick={() => setBindingsOpen((v) => !v)}
-                  className="rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50"
+                  className="template-bindings-panel__toggle rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50"
                   title={bindingsOpen ? "Close bindings panel" : "Open bindings panel"}
                   aria-label="Toggle bindings panel"
                 >
@@ -793,40 +793,40 @@ function FilesPanel({
     <>
       <aside
         className={clsx(
-          "absolute inset-y-0 left-0 z-20 flex w-80 transform flex-col border-r border-slate-200 bg-white transition-transform duration-300 ease-in-out",
-          open ? "translate-x-0 shadow-xl" : "-translate-x-full",
+          "template-files-panel absolute inset-y-0 left-0 z-20 flex w-80 transform flex-col border-r border-slate-200 bg-white transition-transform duration-300 ease-in-out",
+          open ? "template-files-panel--open translate-x-0 shadow-xl" : "-translate-x-full",
         )}
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-200 px-3 py-2">
-          <h4 className="text-sm font-semibold text-slate-900">Files</h4>
+        <div className="template-files-panel__header flex shrink-0 items-center justify-between border-b border-slate-200 px-3 py-2">
+          <h4 className="template-files-panel__title text-sm font-semibold text-slate-900">Files</h4>
           <button
             onClick={onClose}
-            className="rounded p-1 text-slate-500 hover:bg-slate-100"
+            className="template-files-panel__close rounded p-1 text-slate-500 hover:bg-slate-100"
             title="Close"
           >
             <ChevronLeft className="size-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-auto p-2">
+        <div className="template-files-panel__list flex-1 overflow-auto p-2">
           {files.map((f) => (
             <button
               key={f.name}
               onClick={() => onPick(f.name)}
               className={clsx(
-                "flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs",
+                "template-files-panel__file flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs",
                 activeFile === f.name
-                  ? "bg-slate-900 text-white"
+                  ? "template-files-panel__file--active bg-slate-900 text-white"
                   : "text-slate-700 hover:bg-slate-100",
-                !f.isText && "opacity-60",
+                !f.isText && "template-files-panel__file--binary opacity-60",
               )}
               title={f.isText ? "" : "binary — read-only"}
             >
-              <span className="truncate font-mono">{f.name}</span>
-              <span className="ml-2 shrink-0 tabular-nums">{prettyBytes(f.bytes)}</span>
+              <span className="template-files-panel__file-name truncate font-mono">{f.name}</span>
+              <span className="template-files-panel__file-size ml-2 shrink-0 tabular-nums">{prettyBytes(f.bytes)}</span>
             </button>
           ))}
           {files.length === 0 && (
-            <div className="px-2 py-4 text-center text-xs text-slate-500">
+            <div className="template-files-panel__empty px-2 py-4 text-center text-xs text-slate-500">
               No files
             </div>
           )}
@@ -834,7 +834,7 @@ function FilesPanel({
       </aside>
       {open && (
         <div
-          className="absolute inset-0 z-10"
+          className="template-files-panel__backdrop absolute inset-0 z-10"
           onClick={onClose}
           aria-label="Close files panel"
         />
@@ -867,31 +867,31 @@ function BindingsPanel({
     <>
       <aside
         className={clsx(
-          "absolute inset-y-0 right-0 z-20 flex w-96 transform flex-col border-l border-slate-200 bg-white transition-transform duration-300 ease-in-out",
-          open ? "translate-x-0 shadow-xl" : "translate-x-full",
+          "template-bindings-panel absolute inset-y-0 right-0 z-20 flex w-96 transform flex-col border-l border-slate-200 bg-white transition-transform duration-300 ease-in-out",
+          open ? "template-bindings-panel--open translate-x-0 shadow-xl" : "translate-x-full",
         )}
       >
-        <div className="flex shrink-0 flex-col gap-2 border-b border-slate-200 px-3 py-2">
+        <div className="template-bindings-panel__header flex shrink-0 flex-col gap-2 border-b border-slate-200 px-3 py-2">
           <div className="flex items-center justify-between">
-            <h4 className="text-sm font-semibold text-slate-900">Placeholder bindings</h4>
+            <h4 className="template-bindings-panel__title text-sm font-semibold text-slate-900">Placeholder bindings</h4>
             <button
               onClick={onClose}
-              className="rounded p-1 text-slate-500 hover:bg-slate-100"
+              className="template-bindings-panel__close rounded p-1 text-slate-500 hover:bg-slate-100"
               title="Close"
             >
               <ChevronRight className="size-4" />
             </button>
           </div>
-          <div className="flex flex-wrap items-center gap-1">
+          <div className="template-bindings-panel__type-filter flex flex-wrap items-center gap-1">
             <Filter className="mr-0.5 size-3.5 text-slate-400" />
             {(["text", "image", "video", "url", "tag", "style"] as PHType[]).map((t) => (
               <button
                 key={t}
                 onClick={() => onToggleType(t)}
                 className={clsx(
-                  "flex size-7 items-center justify-center rounded border",
+                  "toggle-btn flex size-7 items-center justify-center rounded border",
                   allTypeFilters[t]
-                    ? "border-transparent"
+                    ? "toggle-btn--active border-transparent"
                     : "border-slate-300 bg-white",
                 )}
                 style={
@@ -911,13 +911,13 @@ function BindingsPanel({
             <span className="mx-1 text-slate-300">|</span>
             <button
               onClick={onToggleAll}
-              className="rounded px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-100"
+              className="toolbar-btn rounded px-2 py-0.5 text-xs text-slate-600 hover:bg-slate-100"
             >
               {someOff ? "All" : "None"}
             </button>
           </div>
         </div>
-        <div className="flex-1 space-y-1.5 overflow-auto p-3">
+        <div className="template-bindings-panel__list flex-1 space-y-1.5 overflow-auto p-3">
           {placeholders.map((p) => {
             const type = (PLACEHOLDER_TYPES.includes(p.type as PHType) ? p.type : "text") as PHType;
             const color = TYPE_COLORS[type];
@@ -926,34 +926,34 @@ function BindingsPanel({
             return (
               <div
                 key={p.name}
-                className="rounded border border-slate-200 bg-white p-2"
+                className={`binding-card binding-card--type-${type} rounded border border-slate-200 bg-white p-2`}
                 style={{ borderLeftWidth: 3, borderLeftColor: color }}
               >
-                <div className="flex items-center gap-2">
+                <div className="binding-card__row flex items-center gap-2">
                   <TypeIcon type={type} size={13} color={color} />
-                  <span className="font-mono text-xs text-slate-700">{`{{${p.name}}}`}</span>
-                  <span className="text-slate-300">←</span>
+                  <span className="binding-card__name font-mono text-xs text-slate-700">{`{{${p.name}}}`}</span>
+                  <span className="binding-card__arrow text-slate-300">←</span>
                   {unknown ? (
-                    <span className="flex items-center gap-1 text-xs font-medium text-rose-700">
+                    <span className="binding-card__warning flex items-center gap-1 text-xs font-medium text-rose-700">
                       <AlertTriangle className="size-3" />
                       Unbound
                     </span>
                   ) : (
-                    <span className="text-xs font-medium text-blue-700">{p.binding}</span>
+                    <span className="binding-card__binding text-xs font-medium text-blue-700">{p.binding}</span>
                   )}
                 </div>
                 {!unknown && (
-                  <div className="mt-1 pl-1 text-[11px]">
+                  <div className="binding-card__value-wrap mt-1 pl-1 text-[11px]">
                     {resolved.fromMessage ? (
-                      <span className="block truncate text-slate-700" title={resolved.value}>
+                      <span className="binding-card__value binding-card__value--resolved block truncate text-slate-700" title={resolved.value}>
                         {resolved.value}
                       </span>
                     ) : resolved.value ? (
-                      <span className="block truncate italic text-amber-700" title={resolved.value}>
+                      <span className="binding-card__value binding-card__value--default block truncate italic text-amber-700" title={resolved.value}>
                         default: {resolved.value}
                       </span>
                     ) : (
-                      <span className="block italic text-slate-400">
+                      <span className="binding-card__value binding-card__value--missing block italic text-slate-400">
                         {fromMessageLabel === "sample"
                           ? "no default"
                           : `not in MC${fromMessageLabel.replace(/^MC/, "")}`}
@@ -962,17 +962,17 @@ function BindingsPanel({
                   </div>
                 )}
                 {type === "tag" && p.options && p.options.length > 0 && (
-                  <div className="mt-1 flex flex-wrap gap-1 pl-1">
+                  <div className="binding-card__options mt-1 flex flex-wrap gap-1 pl-1">
                     {p.options.slice(0, 4).map((o) => (
                       <span
                         key={o}
-                        className="rounded bg-pink-50 px-1.5 py-0.5 font-mono text-[10px] text-pink-800"
+                        className="tag-chip rounded bg-pink-50 px-1.5 py-0.5 font-mono text-[10px] text-pink-800"
                       >
                         {o}
                       </span>
                     ))}
                     {p.options.length > 4 && (
-                      <span className="text-[10px] text-slate-400">
+                      <span className="binding-card__options-more text-[10px] text-slate-400">
                         +{p.options.length - 4}
                       </span>
                     )}
@@ -982,18 +982,18 @@ function BindingsPanel({
             );
           })}
           {placeholders.length === 0 && (
-            <div className="py-8 text-center text-xs text-slate-500">
+            <div className="template-bindings-panel__empty py-8 text-center text-xs text-slate-500">
               No placeholders match the filters.
             </div>
           )}
         </div>
-        <div className="shrink-0 border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">
+        <div className="template-bindings-panel__footer shrink-0 border-t border-slate-200 px-3 py-2 text-[11px] text-slate-500">
           Edit bindings via <span className="font-mono">template.json</span> in the files panel.
         </div>
       </aside>
       {open && (
         <div
-          className="absolute inset-0 z-10"
+          className="template-bindings-panel__backdrop absolute inset-0 z-10"
           onClick={onClose}
           aria-label="Close bindings panel"
         />
@@ -1079,27 +1079,27 @@ function SaveIndicator({
 }) {
   if (state === "saving") {
     return (
-      <span className="flex items-center gap-1 text-xs text-slate-500">
+      <span className="save-indicator save-indicator--saving flex items-center gap-1 text-xs text-slate-500">
         <Loader2 className="size-3 animate-spin" /> saving…
       </span>
     );
   }
   if (state === "saved") {
     return (
-      <span className="flex items-center gap-1 text-xs text-emerald-700">
+      <span className="save-indicator save-indicator--saved flex items-center gap-1 text-xs text-emerald-700">
         <Check className="size-3" /> saved
       </span>
     );
   }
   if (state === "error") {
     return (
-      <span className="flex items-center gap-1 text-xs text-rose-700" title={error ?? ""}>
+      <span className="save-indicator save-indicator--error flex items-center gap-1 text-xs text-rose-700" title={error ?? ""}>
         <AlertCircle className="size-3" /> {error ?? "error"}
       </span>
     );
   }
   if (dirty) {
-    return <span className="text-xs text-slate-500">modified</span>;
+    return <span className="save-indicator save-indicator--dirty text-xs text-slate-500">modified</span>;
   }
   return null;
 }
@@ -1138,7 +1138,7 @@ function NewTemplateButton({ onCreated }: { onCreated: (name: string) => void })
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1 rounded bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
+        className="toolbar-btn--primary flex items-center gap-1 rounded bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
       >
         <Plus className="size-3.5" /> New
       </button>
@@ -1146,20 +1146,20 @@ function NewTemplateButton({ onCreated }: { onCreated: (name: string) => void })
   }
 
   return (
-    <form onSubmit={submit} className="flex items-center gap-2">
+    <form onSubmit={submit} className="new-template-form flex items-center gap-2">
       <input
         autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="template-name"
-        className="rounded border border-slate-300 px-2 py-1 text-xs"
+        className="input-box rounded border border-slate-300 px-2 py-1 text-xs"
         pattern="[a-zA-Z0-9][a-zA-Z0-9._-]*"
         title="alphanumerics, dot, dash, underscore"
       />
       <button
         type="submit"
         disabled={busy}
-        className="flex items-center gap-1 rounded bg-slate-900 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
+        className="toolbar-btn--primary flex items-center gap-1 rounded bg-slate-900 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
       >
         {busy ? <Loader2 className="size-3 animate-spin" /> : <Save className="size-3" />}
         Create
@@ -1171,11 +1171,11 @@ function NewTemplateButton({ onCreated }: { onCreated: (name: string) => void })
           setErr(null);
           setName("");
         }}
-        className="text-xs text-slate-500 hover:text-slate-900"
+        className="toolbar-btn text-xs text-slate-500 hover:text-slate-900"
       >
         Cancel
       </button>
-      {err && <span className="text-xs text-rose-700">{err}</span>}
+      {err && <span className="error-alert text-xs text-rose-700">{err}</span>}
     </form>
   );
 }

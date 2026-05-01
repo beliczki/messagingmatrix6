@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Layers, Rows3, Table2, ListFilter } from "lucide-react";
 import clsx from "clsx";
 import GridView from "./GridView";
@@ -26,11 +26,61 @@ async function fetchJSON<T>(url: string): Promise<T> {
   return r.json();
 }
 
+const STORAGE_KEY = "mm6_matrix_state_v1";
+
+type PersistedState = {
+  view: View;
+  density: Density;
+  filters: { products: string[]; statuses: string[]; search: string };
+};
+
+function loadPersisted(): Partial<PersistedState> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return {};
+    return JSON.parse(raw) as Partial<PersistedState>;
+  } catch {
+    return {};
+  }
+}
+
 export default function MatrixWorkspace() {
   const [view, setView] = useState<View>("grid");
   const [density, setDensity] = useState<Density>("informative");
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [openMessageId, setOpenMessageId] = useState<number | null>(null);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    const p = loadPersisted();
+    if (p.view === "grid" || p.view === "feed") setView(p.view);
+    if (p.density === "informative" || p.density === "minimal") {
+      setDensity(p.density);
+    }
+    if (p.filters) {
+      setFilters({
+        products: new Set(p.filters.products ?? []),
+        statuses: new Set(p.filters.statuses ?? []),
+        search: p.filters.search ?? "",
+      });
+    }
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated || typeof window === "undefined") return;
+    const payload: PersistedState = {
+      view,
+      density,
+      filters: {
+        products: [...filters.products],
+        statuses: [...filters.statuses],
+        search: filters.search,
+      },
+    };
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+  }, [hydrated, view, density, filters]);
 
   const audiencesQ = useQuery({
     queryKey: ["audiences"],
@@ -114,8 +164,8 @@ export default function MatrixWorkspace() {
   if (audiences.length === 0 && topics.length === 0) return <EmptyState />;
 
   return (
-    <div className="flex h-full">
-      <div className="flex flex-1 flex-col overflow-hidden">
+    <div className="matrix flex h-full">
+      <div className="matrix__content flex flex-1 flex-col overflow-hidden">
         <MatrixToolbar
           filters={filters}
           setFilters={setFilters}
@@ -208,12 +258,12 @@ function ViewControls({
   setDensity: (d: Density) => void;
 }) {
   return (
-    <div className="flex flex-col gap-3">
-      <div>
-        <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+    <div className="matrix-view-controls flex flex-col gap-3">
+      <div className="matrix-view-controls__section">
+        <div className="matrix-view-controls__label mb-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">
           View
         </div>
-        <div className="flex rounded-md border border-slate-200 bg-white p-0.5 text-xs">
+        <div className="toggle-group flex rounded-md border border-slate-200 bg-white p-0.5 text-xs">
           <ToggleBtn active={view === "grid"} onClick={() => setView("grid")}>
             <Table2 className="size-3.5" />
             Grid
@@ -226,11 +276,11 @@ function ViewControls({
       </div>
 
       {view === "grid" ? (
-        <div>
-          <div className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+        <div className="matrix-view-controls__section">
+          <div className="matrix-view-controls__label mb-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">
             Density
           </div>
-          <div className="flex rounded-md border border-slate-200 bg-white p-0.5 text-xs">
+          <div className="toggle-group flex rounded-md border border-slate-200 bg-white p-0.5 text-xs">
             <ToggleBtn
               active={density === "informative"}
               onClick={() => setDensity("informative")}
@@ -265,9 +315,9 @@ function ToggleBtn({
     <button
       onClick={onClick}
       className={clsx(
-        "flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1",
+        "toggle-btn flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1",
         active
-          ? "bg-slate-900 text-white"
+          ? "toggle-btn--active bg-slate-900 text-white"
           : "text-slate-700 hover:bg-slate-100",
       )}
     >
@@ -279,16 +329,16 @@ function ToggleBtn({
 function EmptyState() {
   return (
     <div className="flex h-full items-center justify-center p-8">
-      <div className="max-w-md rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-        <h2 className="text-base font-semibold text-slate-900">Empty matrix</h2>
-        <p className="mt-1 text-sm text-slate-500">
+      <div className="empty-state matrix-empty-state max-w-md rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
+        <h2 className="empty-state__title text-base font-semibold text-slate-900">Empty matrix</h2>
+        <p className="empty-state__hint mt-1 text-sm text-slate-500">
           Add an audience and a topic to start. The matrix renders audiences as
           rows and topics as columns; each MC lives at the intersection.
         </p>
-        <p className="mt-3 text-xs text-slate-500">
+        <p className="empty-state__hint mt-3 text-xs text-slate-500">
           For a quick fill from the real Erste data, run:
         </p>
-        <pre className="mt-1 rounded-md bg-slate-50 p-2 text-left font-mono text-[11px] text-slate-700">
+        <pre className="matrix-empty-state__hint mt-1 rounded-md bg-slate-50 p-2 text-left font-mono text-[11px] text-slate-700">
 {`ACTIVE_CLIENT_KEY=erste npx tsx \\
   scripts/import-erste-sample.ts`}
         </pre>

@@ -3,8 +3,8 @@ import RightToolbar from "../_components/RightToolbar";
 
 export default function Page() {
   return (
-    <div className="flex h-full">
-      <div className="flex-1 overflow-auto">
+    <div className="monitoring flex h-full">
+      <div className="monitoring__content flex-1 overflow-auto">
         <Placeholder
           phase="Phase 6"
           title="Monitoring"

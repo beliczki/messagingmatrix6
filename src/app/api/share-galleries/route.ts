@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/db";
 import { messages, shareGalleries } from "@/db/schema";
@@ -11,11 +11,19 @@ type SnapshotMetadata = {
   messages: Array<typeof messages.$inferSelect>;
 };
 
-export const GET = withSession(({ claims }) => {
+export const GET = withSession(({ req, claims }) => {
+  const includeArchived =
+    new URL(req.url).searchParams.get("includeArchived") === "1";
+  const where = includeArchived
+    ? eq(shareGalleries.clientId, claims.cid)
+    : and(
+        eq(shareGalleries.clientId, claims.cid),
+        isNull(shareGalleries.archivedAt),
+      );
   const rows = db
     .select()
     .from(shareGalleries)
-    .where(eq(shareGalleries.clientId, claims.cid))
+    .where(where)
     .orderBy(desc(shareGalleries.createdAt))
     .all();
   return NextResponse.json({

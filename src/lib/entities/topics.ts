@@ -1,6 +1,6 @@
-import { and, eq, max, sql } from "drizzle-orm";
+import { and, eq, isNull, max, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { config, topics, type Topic } from "@/db/schema";
+import { config, messages, topics, type Topic } from "@/db/schema";
 import { evaluatePattern } from "@/lib/patterns";
 
 const WRITABLE_FIELDS = [
@@ -40,11 +40,17 @@ export function pickWritable(input: unknown): TopicInput {
   return out as TopicInput;
 }
 
-export function listTopics(clientId: number): Topic[] {
+export function listTopics(
+  clientId: number,
+  opts: { includeArchived?: boolean } = {},
+): Topic[] {
+  const where = opts.includeArchived
+    ? eq(topics.clientId, clientId)
+    : and(eq(topics.clientId, clientId), isNull(topics.archivedAt));
   return db
     .select()
     .from(topics)
-    .where(eq(topics.clientId, clientId))
+    .where(where)
     .orderBy(topics.orderIndex)
     .all();
 }
@@ -208,18 +214,85 @@ export function updateTopic(
   return { ok: true, row: updated };
 }
 
-export function deleteTopic(
+// Cascade archive: topic archive → also archives every message attached to
+// this topic by key. Reporting NOT cascaded (history). Atomic via transaction.
+export function archiveTopic(
+  clientId: number,
+  id: number,
+  expectedVersion: number,
+):
+  | { ok: true; row: Topic; cascadedMessageIds: number[] }
+  | { ok: false; current: Topic | null } {
+  const current = getTopic(clientId, id);
+  if (!current) return { ok: false, current: null };
+  if (current.version !== expectedVersion) return { ok: false, current };
+
+  return db.transaction((tx) => {
+    const updated = tx
+      .update(topics)
+      .set({
+        archivedAt: sql`CURRENT_TIMESTAMP`,
+        version: sql`${topics.version} + 1`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(topics.clientId, clientId), eq(topics.id, id)))
+      .returning()
+      .get();
+
+    const cascadedMessages = tx
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.clientId, clientId),
+          eq(messages.topic, current.key),
+          isNull(messages.archivedAt),
+        ),
+      )
+      .all();
+
+    if (cascadedMessages.length > 0) {
+      tx.update(messages)
+        .set({
+          archivedAt: sql`CURRENT_TIMESTAMP`,
+          version: sql`${messages.version} + 1`,
+          updatedAt: sql`CURRENT_TIMESTAMP`,
+        })
+        .where(
+          and(
+            eq(messages.clientId, clientId),
+            eq(messages.topic, current.key),
+            isNull(messages.archivedAt),
+          ),
+        )
+        .run();
+    }
+
+    return {
+      ok: true as const,
+      row: updated,
+      cascadedMessageIds: cascadedMessages.map((m) => m.id),
+    };
+  });
+}
+
+export function restoreTopic(
   clientId: number,
   id: number,
   expectedVersion: number,
 ): { ok: true; row: Topic } | { ok: false; current: Topic | null } {
   const current = getTopic(clientId, id);
   if (!current) return { ok: false, current: null };
-  if (current.version !== expectedVersion) {
-    return { ok: false, current };
-  }
-  db.delete(topics)
+  if (current.version !== expectedVersion) return { ok: false, current };
+  const updated = db
+    .update(topics)
+    .set({
+      archivedAt: null,
+      version: sql`${topics.version} + 1`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    })
     .where(and(eq(topics.clientId, clientId), eq(topics.id, id)))
-    .run();
-  return { ok: true, row: current };
+    .returning()
+    .get();
+  return { ok: true, row: updated };
 }

@@ -3,11 +3,11 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { audiences, clients, messages, topics } from "@/db/schema";
 import {
+  archiveMessage,
   createMessage,
   getMessage,
   listMessages,
   MessageError,
-  softDeleteMessage,
   updateMessage,
 } from "@/lib/entities/messages";
 import { createTestDb, type TestDb } from "../../helpers/test-db";
@@ -98,32 +98,125 @@ describe("messages — numbering on create", () => {
   });
 });
 
-describe("messages — soft delete", () => {
-  it("DELETE sets status='deleted' instead of removing the row", () => {
+describe("messages — cascade archive + parent-first restore", () => {
+  it("archiving an audience cascades to all its messages", async () => {
+    const { archiveAudience } = await import("@/lib/entities/audiences");
     seedAudienceAndTopic(erste.id);
-    const m = createMessage(erste.id, { topic: "top1", audience: "aud1" });
-    const r = softDeleteMessage(erste.id, m.id, m.version);
+    const m1 = createMessage(erste.id, { topic: "top1", audience: "aud1", name: "M1" });
+    const m2 = createMessage(erste.id, { topic: "top1", audience: "aud1", name: "M2" });
+
+    const aud = db
+      .select()
+      .from(audiences)
+      .where(eq(audiences.clientId, erste.id))
+      .get();
+    const r = archiveAudience(erste.id, aud!.id, aud!.version);
     expect(r.ok).toBe(true);
-    if (r.ok) expect(r.row.status).toBe("deleted");
-    expect(getMessage(erste.id, m.id)?.status).toBe("deleted");
+    if (r.ok) {
+      expect(r.cascadedMessageIds.sort()).toEqual([m1.id, m2.id].sort());
+    }
+
+    expect(getMessage(erste.id, m1.id)?.archivedAt).not.toBeNull();
+    expect(getMessage(erste.id, m2.id)?.archivedAt).not.toBeNull();
+    // listMessages default filter excludes archived rows.
+    expect(listMessages(erste.id)).toHaveLength(0);
   });
 
-  it("listMessages excludes soft-deleted by default; includeDeleted shows them", () => {
+  it("archiving a topic cascades to all its messages", async () => {
+    const { archiveTopic } = await import("@/lib/entities/topics");
+    seedAudienceAndTopic(erste.id);
+    const m1 = createMessage(erste.id, { topic: "top1", audience: "aud1", name: "M1" });
+
+    const topic = db
+      .select()
+      .from(topics)
+      .where(eq(topics.clientId, erste.id))
+      .get();
+    const r = archiveTopic(erste.id, topic!.id, topic!.version);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.cascadedMessageIds).toEqual([m1.id]);
+
+    expect(getMessage(erste.id, m1.id)?.archivedAt).not.toBeNull();
+  });
+
+  it("restoreMessage refuses while parent audience is archived (parent-first guard)", async () => {
+    const { archiveAudience } = await import("@/lib/entities/audiences");
+    const { restoreMessage } = await import("@/lib/entities/messages");
     seedAudienceAndTopic(erste.id);
     const m = createMessage(erste.id, { topic: "top1", audience: "aud1" });
-    softDeleteMessage(erste.id, m.id, m.version);
+    const aud = db
+      .select()
+      .from(audiences)
+      .where(eq(audiences.clientId, erste.id))
+      .get();
+    archiveAudience(erste.id, aud!.id, aud!.version);
+
+    // m was cascade-archived; its version is now 2 (archive bumped).
+    const archived = getMessage(erste.id, m.id);
+    expect(archived?.archivedAt).not.toBeNull();
+    const result = restoreMessage(erste.id, m.id, archived!.version);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe("parent_archived");
+      expect(result.parent?.type).toBe("audience");
+      expect(result.parent?.key).toBe("aud1");
+    }
+  });
+
+  it("restoreMessage works once the parent is restored (full round-trip)", async () => {
+    const { archiveAudience, restoreAudience } = await import(
+      "@/lib/entities/audiences"
+    );
+    const { restoreMessage } = await import("@/lib/entities/messages");
+    seedAudienceAndTopic(erste.id);
+    const m = createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    const aud = db
+      .select()
+      .from(audiences)
+      .where(eq(audiences.clientId, erste.id))
+      .get();
+
+    archiveAudience(erste.id, aud!.id, aud!.version);
+    const audAfterArchive = db
+      .select()
+      .from(audiences)
+      .where(eq(audiences.id, aud!.id))
+      .get();
+    restoreAudience(erste.id, aud!.id, audAfterArchive!.version);
+
+    const mArchived = getMessage(erste.id, m.id);
+    const r = restoreMessage(erste.id, m.id, mArchived!.version);
+    expect(r.ok).toBe(true);
+    expect(getMessage(erste.id, m.id)?.archivedAt).toBeNull();
+  });
+});
+
+describe("messages — soft archive", () => {
+  it("DELETE sets archived_at instead of removing the row", () => {
+    seedAudienceAndTopic(erste.id);
+    const m = createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    const r = archiveMessage(erste.id, m.id, m.version);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.row.archivedAt).not.toBeNull();
+    expect(getMessage(erste.id, m.id)?.archivedAt).not.toBeNull();
+  });
+
+  it("listMessages excludes archived by default; includeArchived shows them", () => {
+    seedAudienceAndTopic(erste.id);
+    const m = createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    archiveMessage(erste.id, m.id, m.version);
 
     expect(listMessages(erste.id)).toHaveLength(0);
-    expect(listMessages(erste.id, { includeDeleted: true })).toHaveLength(1);
+    expect(listMessages(erste.id, { includeArchived: true })).toHaveLength(1);
   });
 
-  it("after soft-deleting an MC, a new MC inserted in the same cell starts fresh from global max", () => {
-    // This mirrors the v5 fixture `cell-only-has-deleted` numbering rule.
+  it("after archiving an MC, a new MC inserted in the same cell starts fresh from global max", () => {
+    // Mirrors the v5 `cell-only-has-deleted` numbering rule, ported to archive.
     seedAudienceAndTopic(erste.id);
     const a = createMessage(erste.id, { topic: "top1", audience: "aud1" });
     const b = createMessage(erste.id, { topic: "top1", audience: "aud1" });
-    softDeleteMessage(erste.id, a.id, a.version);
-    softDeleteMessage(erste.id, b.id, b.version);
+    archiveMessage(erste.id, a.id, a.version);
+    archiveMessage(erste.id, b.id, b.version);
 
     const fresh = createMessage(erste.id, { topic: "top1", audience: "aud1" });
     expect(fresh.number).toBe(1);

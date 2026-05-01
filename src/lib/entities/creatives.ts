@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { creatives, type Creative } from "@/db/schema";
 
@@ -33,11 +33,17 @@ export function pickWritable(input: unknown): CreativeInput {
   return out as CreativeInput;
 }
 
-export function listCreatives(clientId: number): Creative[] {
+export function listCreatives(
+  clientId: number,
+  opts: { includeArchived?: boolean } = {},
+): Creative[] {
+  const where = opts.includeArchived
+    ? eq(creatives.clientId, clientId)
+    : and(eq(creatives.clientId, clientId), isNull(creatives.archivedAt));
   return db
     .select()
     .from(creatives)
-    .where(eq(creatives.clientId, clientId))
+    .where(where)
     .orderBy(creatives.id)
     .all();
 }
@@ -85,7 +91,7 @@ export function updateCreative(
   return { ok: true, row: updated };
 }
 
-export function deleteCreative(
+export function archiveCreative(
   clientId: number,
   id: number,
   expectedVersion: number,
@@ -93,8 +99,36 @@ export function deleteCreative(
   const current = getCreative(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
-  db.delete(creatives)
+  const updated = db
+    .update(creatives)
+    .set({
+      archivedAt: sql`CURRENT_TIMESTAMP`,
+      version: sql`${creatives.version} + 1`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    })
     .where(and(eq(creatives.clientId, clientId), eq(creatives.id, id)))
-    .run();
-  return { ok: true, row: current };
+    .returning()
+    .get();
+  return { ok: true, row: updated };
+}
+
+export function restoreCreative(
+  clientId: number,
+  id: number,
+  expectedVersion: number,
+): { ok: true; row: Creative } | { ok: false; current: Creative | null } {
+  const current = getCreative(clientId, id);
+  if (!current) return { ok: false, current: null };
+  if (current.version !== expectedVersion) return { ok: false, current };
+  const updated = db
+    .update(creatives)
+    .set({
+      archivedAt: null,
+      version: sql`${creatives.version} + 1`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    })
+    .where(and(eq(creatives.clientId, clientId), eq(creatives.id, id)))
+    .returning()
+    .get();
+  return { ok: true, row: updated };
 }

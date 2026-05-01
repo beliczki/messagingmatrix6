@@ -3,10 +3,11 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { audiences, auditLog, clients } from "@/db/schema";
 import {
+  archiveAudience,
   createAudience,
-  deleteAudience,
   getAudience,
   listAudiences,
+  restoreAudience,
   updateAudience,
 } from "@/lib/entities/audiences";
 import { createTestDb, withActiveClientKey, type TestDb } from "../../helpers/test-db";
@@ -59,14 +60,27 @@ describe("audiences entity", () => {
     if (!stale.ok) expect(stale.current?.version).toBe(2);
   });
 
-  it("delete enforces version", () => {
+  it("archive enforces version, soft-deletes the row, restore brings it back", () => {
     const a = createAudience(erste.id, { name: "A" });
-    const stale = deleteAudience(erste.id, a.id, 99);
+    const stale = archiveAudience(erste.id, a.id, 99);
     expect(stale.ok).toBe(false);
-    expect(getAudience(erste.id, a.id)).not.toBeNull();
-    const ok = deleteAudience(erste.id, a.id, 1);
+    expect(getAudience(erste.id, a.id)?.archivedAt).toBeNull();
+
+    const ok = archiveAudience(erste.id, a.id, 1);
     expect(ok.ok).toBe(true);
-    expect(getAudience(erste.id, a.id)).toBeNull();
+    if (ok.ok) expect(ok.cascadedMessageIds).toEqual([]);
+    const archived = getAudience(erste.id, a.id);
+    expect(archived).not.toBeNull();
+    expect(archived?.archivedAt).not.toBeNull();
+    // Default list filters it out; includeArchived shows it.
+    expect(listAudiences(erste.id).map((r) => r.id)).not.toContain(a.id);
+    expect(
+      listAudiences(erste.id, { includeArchived: true }).map((r) => r.id),
+    ).toContain(a.id);
+
+    const restored = restoreAudience(erste.id, a.id, archived!.version);
+    expect(restored.ok).toBe(true);
+    expect(getAudience(erste.id, a.id)?.archivedAt).toBeNull();
   });
 
   it("client scoping — Telekom audience is invisible to Erste", () => {
@@ -92,11 +106,11 @@ describe("audiences entity", () => {
     expect(fresh?.name).toBe("Telekom Aud");
   });
 
-  it("delete with mismatched client_id returns not-found", () => {
+  it("archive with mismatched client_id returns not-found", () => {
     const t1 = createAudience(telekom.id, { name: "Telekom Aud" });
-    const result = deleteAudience(erste.id, t1.id, 1);
+    const result = archiveAudience(erste.id, t1.id, 1);
     expect(result.ok).toBe(false);
-    expect(getAudience(telekom.id, t1.id)).not.toBeNull();
+    expect(getAudience(telekom.id, t1.id)?.archivedAt).toBeNull();
   });
 
   it("same key allowed across clients (composite uniqueness)", () => {

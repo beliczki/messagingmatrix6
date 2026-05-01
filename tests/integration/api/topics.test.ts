@@ -2,11 +2,12 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { db } from "@/db";
 import { clients, config, topics } from "@/db/schema";
 import {
+  archiveTopic,
   createTopic,
-  deleteTopic,
   generateTopicKey,
   getTopic,
   listTopics,
+  restoreTopic,
   updateTopic,
 } from "@/lib/entities/topics";
 import { createTestDb, type TestDb } from "../../helpers/test-db";
@@ -114,11 +115,28 @@ describe("topics CRUD client scoping", () => {
     expect(getTopic(telekom.id, t.id)?.name).toBe("Tek");
   });
 
-  it("delete with foreign client_id leaves the row intact", () => {
+  it("archive with foreign client_id leaves the row unaffected", () => {
     const t = createTopic(telekom.id, { name: "Tek" });
-    const r = deleteTopic(erste.id, t.id, 1);
+    const r = archiveTopic(erste.id, t.id, 1);
     expect(r.ok).toBe(false);
-    expect(getTopic(telekom.id, t.id)).not.toBeNull();
+    expect(getTopic(telekom.id, t.id)?.archivedAt).toBeNull();
+  });
+
+  it("archive soft-deletes (sets archived_at), restore brings it back, list filters by default", () => {
+    const t = createTopic(erste.id, { name: "T" });
+    const ok = archiveTopic(erste.id, t.id, 1);
+    expect(ok.ok).toBe(true);
+    if (ok.ok) expect(ok.cascadedMessageIds).toEqual([]);
+    const archived = getTopic(erste.id, t.id);
+    expect(archived?.archivedAt).not.toBeNull();
+    expect(listTopics(erste.id).map((r) => r.id)).not.toContain(t.id);
+    expect(
+      listTopics(erste.id, { includeArchived: true }).map((r) => r.id),
+    ).toContain(t.id);
+
+    const restored = restoreTopic(erste.id, t.id, archived!.version);
+    expect(restored.ok).toBe(true);
+    expect(getTopic(erste.id, t.id)?.archivedAt).toBeNull();
   });
 });
 

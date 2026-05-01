@@ -1,5 +1,8 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { and, eq, isNull } from "drizzle-orm";
+import { db } from "@/db";
+import { users } from "@/db/schema";
 import { activeClientId } from "@/lib/active-client";
 import { verifySession, type JwtClaims } from "@/lib/auth";
 
@@ -30,7 +33,8 @@ function readBearer(req: NextRequest): string | null {
 }
 
 // Returns claims if a valid session is present AND the JWT's client_id matches
-// this deploy's active client. Otherwise returns null. Spec §17.6.
+// this deploy's active client AND the user is not archived. Otherwise returns
+// null. Spec §17.6 + Phase 10a soft-delete.
 export async function readSession(
   req: NextRequest,
 ): Promise<JwtClaims | null> {
@@ -47,6 +51,20 @@ export async function readSession(
   if (claims.cid !== activeClientId()) {
     return null; // foreign client → defense-in-depth, treat as unauthenticated
   }
+  // Reject archived users — JWT may live up to 5 days after archive, so check
+  // the live row on every request. SQLite WAL + indexed PK lookup is sub-ms.
+  const liveUser = db
+    .select({ id: users.id })
+    .from(users)
+    .where(
+      and(
+        eq(users.id, claims.sub),
+        eq(users.clientId, claims.cid),
+        isNull(users.archivedAt),
+      ),
+    )
+    .get();
+  if (!liveUser) return null;
   return claims;
 }
 

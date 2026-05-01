@@ -8,9 +8,11 @@ import {
 import { denyDemo, withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 
-export const GET = withSession(({ claims }) => {
+export const GET = withSession(({ req, claims }) => {
+  const includeArchived =
+    new URL(req.url).searchParams.get("includeArchived") === "1";
   return NextResponse.json({
-    text_formatting: listTextFormatting(claims.cid),
+    text_formatting: listTextFormatting(claims.cid, { includeArchived }),
   });
 });
 

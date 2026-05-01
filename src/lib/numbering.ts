@@ -8,6 +8,7 @@ export type ExistingMessage = {
   topic?: string | null;
   audience?: string | null;
   status?: string | null;
+  archivedAt?: string | null;
 };
 
 export type McSlot = {
@@ -17,7 +18,7 @@ export type McSlot = {
 };
 
 function isLive(m: ExistingMessage): boolean {
-  return m.status !== "deleted";
+  return m.status !== "deleted" && (m.archivedAt ?? null) === null;
 }
 
 function maxVariantChar(messages: ExistingMessage[]): string {

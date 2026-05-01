@@ -9,8 +9,12 @@ import { withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 import { denyDemo } from "@/lib/scoped";
 
-export const GET = withSession(({ claims }) => {
-  return NextResponse.json({ audiences: listAudiences(claims.cid) });
+export const GET = withSession(({ req, claims }) => {
+  const includeArchived =
+    new URL(req.url).searchParams.get("includeArchived") === "1";
+  return NextResponse.json({
+    audiences: listAudiences(claims.cid, { includeArchived }),
+  });
 });
 
 export const POST = withSession(async ({ req, claims }) => {

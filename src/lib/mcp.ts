@@ -16,25 +16,25 @@ import {
 import { activeClientId } from "@/lib/active-client";
 import {
   BadRequest as AudienceBadRequest,
+  archiveAudience,
   createAudience,
-  deleteAudience,
   listAudiences,
   pickWritable as pickAudienceWritable,
   updateAudience,
 } from "@/lib/entities/audiences";
 import {
   TopicError,
+  archiveTopic,
   createTopic,
-  deleteTopic,
   listTopics,
   pickWritable as pickTopicWritable,
   updateTopic,
 } from "@/lib/entities/topics";
 import {
   MessageError,
+  archiveMessage,
   createMessage,
   pickWritable as pickMessageWritable,
-  softDeleteMessage,
   updateMessage,
 } from "@/lib/entities/messages";
 import { listVisibleTemplates } from "@/lib/templates";
@@ -522,7 +522,7 @@ function registerAudienceWriteTools(server: McpServer, ctx: McpContext): void {
     "audience_remove",
     {
       description:
-        "Delete an audience by key. Required: key, version. Hard delete (audience rows have no soft-delete).",
+        "Archive an audience by key (soft-delete via archived_at). Cascades to all messages attached to this audience by key. Required: key, version. Restore via audience_restore.",
       inputSchema: {
         key: z.string(),
         version: z.number().int(),
@@ -533,7 +533,7 @@ function registerAudienceWriteTools(server: McpServer, ctx: McpContext): void {
       if (limited) return limited;
       const existing = findAudienceByKey(ctx.clientId, key);
       if (!existing) return errorResult(`audience '${key}' not found`);
-      const result = deleteAudience(ctx.clientId, existing.id, version);
+      const result = archiveAudience(ctx.clientId, existing.id, version);
       if (!result.ok) {
         return errorResult("version_conflict", { current: result.current });
       }
@@ -542,10 +542,15 @@ function registerAudienceWriteTools(server: McpServer, ctx: McpContext): void {
         userId: mcpUserId(ctx),
         entityType: "audiences",
         entityId: result.row.id,
-        action: "delete",
-        before: result.row,
+        action: "archive",
+        before: existing,
+        after: result.row,
       });
-      return jsonResult({ ok: true, deleted: result.row });
+      return jsonResult({
+        ok: true,
+        archived: result.row,
+        cascadedMessageIds: result.cascadedMessageIds,
+      });
     },
   );
 }
@@ -623,7 +628,8 @@ function registerTopicWriteTools(server: McpServer, ctx: McpContext): void {
   server.registerTool(
     "topic_remove",
     {
-      description: "Delete a topic by key. Required: key, version.",
+      description:
+        "Archive a topic by key (soft-delete via archived_at). Cascades to all messages attached to this topic by key. Required: key, version. Restore via topic_restore.",
       inputSchema: {
         key: z.string(),
         version: z.number().int(),
@@ -634,7 +640,7 @@ function registerTopicWriteTools(server: McpServer, ctx: McpContext): void {
       if (limited) return limited;
       const existing = findTopicByKey(ctx.clientId, key);
       if (!existing) return errorResult(`topic '${key}' not found`);
-      const result = deleteTopic(ctx.clientId, existing.id, version);
+      const result = archiveTopic(ctx.clientId, existing.id, version);
       if (!result.ok) {
         return errorResult("version_conflict", { current: result.current });
       }
@@ -643,10 +649,15 @@ function registerTopicWriteTools(server: McpServer, ctx: McpContext): void {
         userId: mcpUserId(ctx),
         entityType: "topics",
         entityId: result.row.id,
-        action: "delete",
-        before: result.row,
+        action: "archive",
+        before: existing,
+        after: result.row,
       });
-      return jsonResult({ ok: true, deleted: result.row });
+      return jsonResult({
+        ok: true,
+        archived: result.row,
+        cascadedMessageIds: result.cascadedMessageIds,
+      });
     },
   );
 }
@@ -730,7 +741,7 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
     "mc_remove",
     {
       description:
-        "Soft-delete a message by mc_label (sets status='deleted', bumps version). Required: mc_label, version.",
+        "Archive a message by mc_label (soft-delete via archived_at, bumps version). Required: mc_label, version. Restore via mc_restore (parent-first guard: parent audience and topic must not be archived).",
       inputSchema: {
         mc_label: z.string(),
         version: z.number().int(),
@@ -741,7 +752,7 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
       if (limited) return limited;
       const existing = findMessageByPmmid(ctx.clientId, mc_label);
       if (!existing) return errorResult(`message '${mc_label}' not found`);
-      const result = softDeleteMessage(ctx.clientId, existing.id, version);
+      const result = archiveMessage(ctx.clientId, existing.id, version);
       if (!result.ok) {
         return errorResult("version_conflict", { current: result.current });
       }
@@ -750,11 +761,11 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
         userId: mcpUserId(ctx),
         entityType: "messages",
         entityId: result.row.id,
-        action: "delete",
+        action: "archive",
         before: existing,
         after: result.row,
       });
-      return jsonResult({ ok: true, deleted: result.row });
+      return jsonResult({ ok: true, archived: result.row });
     },
   );
 }

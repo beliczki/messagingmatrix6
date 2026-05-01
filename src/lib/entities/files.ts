@@ -1,4 +1,4 @@
-import { and, desc, eq, like, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, like, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/db";
 import { uploadedFiles, type UploadedFile } from "@/db/schema";
@@ -90,12 +90,20 @@ export async function uploadFile(
 
 export function listFiles(
   clientId: number,
-  opts: { category?: StorageCategory; q?: string; limit?: number } = {},
+  opts: {
+    category?: StorageCategory;
+    q?: string;
+    limit?: number;
+    includeArchived?: boolean;
+  } = {},
 ): UploadedFile[] {
   const where = [eq(uploadedFiles.clientId, clientId)];
   if (opts.category) where.push(eq(uploadedFiles.category, opts.category));
   if (opts.q && opts.q.trim()) {
     where.push(like(uploadedFiles.filename, `%${opts.q.trim()}%`));
+  }
+  if (!opts.includeArchived) {
+    where.push(isNull(uploadedFiles.archivedAt));
   }
   return db
     .select()
@@ -121,7 +129,42 @@ export function getFile(clientId: number, id: string): UploadedFile | null {
   );
 }
 
-export async function deleteFile(
+// Soft-archive: marks the row archived_at. Keeps the physical bytes — restore
+// re-uses them, and other logical rows may still point at the same storage_path.
+export function archiveFile(
+  clientId: number,
+  id: string,
+): { ok: true; row: UploadedFile } | { ok: false } {
+  const row = getFile(clientId, id);
+  if (!row) return { ok: false };
+  db.update(uploadedFiles)
+    .set({ archivedAt: sql`CURRENT_TIMESTAMP` })
+    .where(
+      and(eq(uploadedFiles.clientId, clientId), eq(uploadedFiles.id, id)),
+    )
+    .run();
+  return { ok: true, row };
+}
+
+export function restoreFile(
+  clientId: number,
+  id: string,
+): { ok: true; row: UploadedFile } | { ok: false } {
+  const row = getFile(clientId, id);
+  if (!row) return { ok: false };
+  db.update(uploadedFiles)
+    .set({ archivedAt: null })
+    .where(
+      and(eq(uploadedFiles.clientId, clientId), eq(uploadedFiles.id, id)),
+    )
+    .run();
+  return { ok: true, row };
+}
+
+// Hard delete with ref-counting physical cleanup. Used only by snapshot
+// restore wipe-then-insert and admin "purge archived" paths — never by the
+// HTTP DELETE endpoint, which uses archiveFile.
+export async function purgeFile(
   clientId: number,
   id: string,
 ): Promise<{ ok: true; row: UploadedFile } | { ok: false }> {

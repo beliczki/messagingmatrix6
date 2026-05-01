@@ -6,11 +6,16 @@ export type AuditAction =
   | "create"
   | "update"
   | "delete"
+  | "archive"
+  | "restore"
+  | "snapshot_restore"
   | "bulk_move"
   | "bulk_copy"
   | "bulk_create"
   | "bulk_update"
-  | "bulk_delete";
+  | "bulk_delete"
+  | "bulk_archive"
+  | "bulk_restore";
 
 export type AuditInput = {
   clientId: number;

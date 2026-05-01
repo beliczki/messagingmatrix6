@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { assets, type Asset } from "@/db/schema";
 
@@ -28,13 +28,14 @@ export function pickWritable(input: unknown): AssetInput {
   return out as AssetInput;
 }
 
-export function listAssets(clientId: number): Asset[] {
-  return db
-    .select()
-    .from(assets)
-    .where(eq(assets.clientId, clientId))
-    .orderBy(assets.id)
-    .all();
+export function listAssets(
+  clientId: number,
+  opts: { includeArchived?: boolean } = {},
+): Asset[] {
+  const where = opts.includeArchived
+    ? eq(assets.clientId, clientId)
+    : and(eq(assets.clientId, clientId), isNull(assets.archivedAt));
+  return db.select().from(assets).where(where).orderBy(assets.id).all();
 }
 
 export function getAsset(clientId: number, id: number): Asset | null {
@@ -73,7 +74,7 @@ export function updateAsset(
   return { ok: true, row: updated };
 }
 
-export function deleteAsset(
+export function archiveAsset(
   clientId: number,
   id: number,
   expectedVersion: number,
@@ -81,8 +82,36 @@ export function deleteAsset(
   const current = getAsset(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
-  db.delete(assets)
+  const updated = db
+    .update(assets)
+    .set({
+      archivedAt: sql`CURRENT_TIMESTAMP`,
+      version: sql`${assets.version} + 1`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    })
     .where(and(eq(assets.clientId, clientId), eq(assets.id, id)))
-    .run();
-  return { ok: true, row: current };
+    .returning()
+    .get();
+  return { ok: true, row: updated };
+}
+
+export function restoreAsset(
+  clientId: number,
+  id: number,
+  expectedVersion: number,
+): { ok: true; row: Asset } | { ok: false; current: Asset | null } {
+  const current = getAsset(clientId, id);
+  if (!current) return { ok: false, current: null };
+  if (current.version !== expectedVersion) return { ok: false, current };
+  const updated = db
+    .update(assets)
+    .set({
+      archivedAt: null,
+      version: sql`${assets.version} + 1`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    })
+    .where(and(eq(assets.clientId, clientId), eq(assets.id, id)))
+    .returning()
+    .get();
+  return { ok: true, row: updated };
 }

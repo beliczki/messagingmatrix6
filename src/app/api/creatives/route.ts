@@ -7,8 +7,12 @@ import {
 import { denyDemo, withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 
-export const GET = withSession(({ claims }) => {
-  return NextResponse.json({ creatives: listCreatives(claims.cid) });
+export const GET = withSession(({ req, claims }) => {
+  const includeArchived =
+    new URL(req.url).searchParams.get("includeArchived") === "1";
+  return NextResponse.json({
+    creatives: listCreatives(claims.cid, { includeArchived }),
+  });
 });
 
 export const POST = withSession(async ({ req, claims }) => {

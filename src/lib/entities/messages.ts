@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   audiences,
@@ -92,6 +92,7 @@ function listLiveMessages(clientId: number): ExistingMessage[] {
       topic: messages.topic,
       audience: messages.audience,
       status: messages.status,
+      archivedAt: messages.archivedAt,
     })
     .from(messages)
     .where(eq(messages.clientId, clientId))
@@ -121,12 +122,14 @@ function findTopicByKey(clientId: number, key: string): Topic | null {
   );
 }
 
-// Spec §3.3 — list reads filter out soft-deleted by default.
+// Default list filters out archived rows. The legacy status='deleted' soft-
+// delete (pre-Phase-10a) is also filtered out, since live data may still carry
+// it from before the archived_at migration.
 export function listMessages(
   clientId: number,
-  opts: { includeDeleted?: boolean } = {},
+  opts: { includeArchived?: boolean } = {},
 ): Message[] {
-  if (opts.includeDeleted) {
+  if (opts.includeArchived) {
     return db
       .select()
       .from(messages)
@@ -140,7 +143,8 @@ export function listMessages(
     .where(
       and(
         eq(messages.clientId, clientId),
-        sql`${messages.status} IS NULL OR ${messages.status} != 'deleted'`,
+        isNull(messages.archivedAt),
+        sql`(${messages.status} IS NULL OR ${messages.status} != 'deleted')`,
       ),
     )
     .orderBy(messages.number, messages.variant)
@@ -272,9 +276,7 @@ export function updateMessage(
   return { ok: true, row: updated };
 }
 
-// Spec §3.3 — soft delete: status='deleted', not row removal. Bumps version
-// and updates timestamp.
-export function softDeleteMessage(
+export function archiveMessage(
   clientId: number,
   id: number,
   expectedVersion: number,
@@ -287,7 +289,58 @@ export function softDeleteMessage(
   const updated = db
     .update(messages)
     .set({
-      status: "deleted",
+      archivedAt: sql`CURRENT_TIMESTAMP`,
+      version: sql`${messages.version} + 1`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    })
+    .where(and(eq(messages.clientId, clientId), eq(messages.id, id)))
+    .returning()
+    .get();
+  return { ok: true, row: updated };
+}
+
+// Restore a message. Parent-first guard: if either the audience or the topic
+// the message points at is currently archived, the restore is rejected.
+// Caller (HTTP/MCP) should map `parent_archived` to a 409.
+export function restoreMessage(
+  clientId: number,
+  id: number,
+  expectedVersion: number,
+):
+  | { ok: true; row: Message }
+  | {
+      ok: false;
+      current: Message | null;
+      reason?: "parent_archived";
+      parent?: { type: "audience" | "topic"; key: string };
+    } {
+  const current = getMessage(clientId, id);
+  if (!current) return { ok: false, current: null };
+  if (current.version !== expectedVersion) return { ok: false, current };
+
+  const audienceRow = findAudienceByKey(clientId, current.audience);
+  if (audienceRow && audienceRow.archivedAt !== null) {
+    return {
+      ok: false,
+      current,
+      reason: "parent_archived",
+      parent: { type: "audience", key: current.audience },
+    };
+  }
+  const topicRow = findTopicByKey(clientId, current.topic);
+  if (topicRow && topicRow.archivedAt !== null) {
+    return {
+      ok: false,
+      current,
+      reason: "parent_archived",
+      parent: { type: "topic", key: current.topic },
+    };
+  }
+
+  const updated = db
+    .update(messages)
+    .set({
+      archivedAt: null,
       version: sql`${messages.version} + 1`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     })

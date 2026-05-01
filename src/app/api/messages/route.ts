@@ -9,10 +9,10 @@ import { denyDemo, withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 
 export const GET = withSession(({ req, claims }) => {
-  const includeDeleted =
-    new URL(req.url).searchParams.get("includeDeleted") === "1";
+  const includeArchived =
+    new URL(req.url).searchParams.get("includeArchived") === "1";
   return NextResponse.json({
-    messages: listMessages(claims.cid, { includeDeleted }),
+    messages: listMessages(claims.cid, { includeArchived }),
   });
 });
 

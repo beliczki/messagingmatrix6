@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { deleteFile, getFile } from "@/lib/entities/files";
+import { archiveFile, getFile } from "@/lib/entities/files";
 import { readFileBytes } from "@/lib/storage";
 import { writeAudit } from "@/lib/audit";
 import { denyDemo, withSession } from "@/lib/scoped";
@@ -32,7 +32,8 @@ export const GET = withSession<Params>(async ({ claims, params }) => {
 export const DELETE = withSession<Params>(async ({ claims, params }) => {
   const denial = denyDemo(claims);
   if (denial) return denial;
-  const result = await deleteFile(claims.cid, params.id);
+  const before = getFile(claims.cid, params.id);
+  const result = archiveFile(claims.cid, params.id);
   if (!result.ok) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -41,12 +42,9 @@ export const DELETE = withSession<Params>(async ({ claims, params }) => {
     userId: claims.sub,
     entityType: "uploaded_files",
     entityId: params.id,
-    action: "delete",
-    before: {
-      id: result.row.id,
-      filename: result.row.filename,
-      storagePath: result.row.storagePath,
-    },
+    action: "archive",
+    before,
+    after: { ...result.row, archivedAt: new Date().toISOString() },
   });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ file: result.row });
 });

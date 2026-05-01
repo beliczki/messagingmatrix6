@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  deleteTextFormatting,
+  archiveTextFormatting,
   getTextFormatting,
   pickWritable,
   updateTextFormatting,
@@ -64,7 +64,8 @@ export const DELETE = withSession<Params>(async ({ req, claims, params }) => {
   if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
   const expected = readClientVersion(req, null);
   if (expected === null) return missingVersion();
-  const result = deleteTextFormatting(claims.cid, id, expected);
+  const before = getTextFormatting(claims.cid, id);
+  const result = archiveTextFormatting(claims.cid, id, expected);
   if (!result.ok) {
     if (!result.current) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -76,8 +77,9 @@ export const DELETE = withSession<Params>(async ({ req, claims, params }) => {
     userId: claims.sub,
     entityType: "text_formatting",
     entityId: id,
-    action: "delete",
-    before: result.row,
+    action: "archive",
+    before,
+    after: result.row,
   });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ rule: result.row });
 });

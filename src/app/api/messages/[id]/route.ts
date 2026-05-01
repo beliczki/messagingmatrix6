@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import {
+  archiveMessage,
   getMessage,
   pickWritable,
-  softDeleteMessage,
   updateMessage,
 } from "@/lib/entities/messages";
 import { denyDemo, withSession } from "@/lib/scoped";
@@ -57,7 +57,6 @@ export const PATCH = withSession<Params>(async ({ req, claims, params }) => {
   return NextResponse.json({ message: result.row });
 });
 
-// Soft delete (Spec §3.3) — sets status='deleted', does not remove the row.
 export const DELETE = withSession<Params>(async ({ req, claims, params }) => {
   const denial = denyDemo(claims);
   if (denial) return denial;
@@ -66,7 +65,7 @@ export const DELETE = withSession<Params>(async ({ req, claims, params }) => {
   const expected = readClientVersion(req, null);
   if (expected === null) return missingVersion();
   const before = getMessage(claims.cid, id);
-  const result = softDeleteMessage(claims.cid, id, expected);
+  const result = archiveMessage(claims.cid, id, expected);
   if (!result.ok) {
     if (!result.current) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -78,7 +77,7 @@ export const DELETE = withSession<Params>(async ({ req, claims, params }) => {
     userId: claims.sub,
     entityType: "messages",
     entityId: id,
-    action: "delete",
+    action: "archive",
     before,
     after: result.row,
   });

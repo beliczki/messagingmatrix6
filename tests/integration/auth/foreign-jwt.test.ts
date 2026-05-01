@@ -92,6 +92,30 @@ describe("readSession rejects foreign client_id", () => {
     );
     expect(claims).toBeNull();
   });
+
+  it("a valid JWT for an archived user is rejected (Phase 10a soft-delete)", async () => {
+    withActiveClientKey("erste");
+    const u = db.select().from(users).where(eqUserId("u-erste")).get()!;
+    const validToken = await signSession(u);
+
+    // First confirm it works.
+    const before = await import("@/lib/session").then((m) =>
+      m.readSession(makeReq(validToken)),
+    );
+    expect(before).not.toBeNull();
+
+    // Archive the user.
+    db.update(users)
+      .set({ archivedAt: new Date().toISOString() })
+      .where(eqUserId("u-erste"))
+      .run();
+
+    // Same token, now rejected.
+    const after = await import("@/lib/session").then((m) =>
+      m.readSession(makeReq(validToken)),
+    );
+    expect(after).toBeNull();
+  });
 });
 
 import { eq } from "drizzle-orm";

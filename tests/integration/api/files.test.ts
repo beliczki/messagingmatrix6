@@ -5,9 +5,11 @@ import os from "node:os";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
 import {
-  deleteFile,
+  archiveFile,
   getFile,
   listFiles,
+  purgeFile,
+  restoreFile,
   uploadFile,
 } from "@/lib/entities/files";
 import { _setStorageRootForTests, readFileBytes } from "@/lib/storage";
@@ -162,13 +164,37 @@ describe("file upload + sha256 dedup", () => {
     });
     expect(b.storagePath).toBe(a.storagePath); // dedup hit
 
-    // delete `a` — bytes should remain because `b` still references them.
-    await deleteFile(erste.id, a.id);
+    // purge `a` — bytes should remain because `b` still references them.
+    await purgeFile(erste.id, a.id);
     const stillThere = await readFileBytes(a.storagePath);
     expect(stillThere.length).toBe(TINY_PNG.length);
 
-    // delete `b` — last reference, bytes should now be gone.
-    await deleteFile(erste.id, b.id);
+    // purge `b` — last reference, bytes should now be gone.
+    await purgeFile(erste.id, b.id);
     await expect(readFileBytes(a.storagePath)).rejects.toThrow();
+  });
+
+  it("archive sets archived_at, keeps the bytes, hides from default list; restore brings it back", async () => {
+    const f = await uploadFile(erste.id, {
+      buffer: TINY_PNG,
+      originalFilename: "x.png",
+      mimeType: "image/png",
+      category: "asset",
+      uploadedBy: "u",
+    });
+    const r = archiveFile(erste.id, f.id);
+    expect(r.ok).toBe(true);
+    expect(getFile(erste.id, f.id)?.archivedAt).not.toBeNull();
+    // Bytes still on disk.
+    expect((await readFileBytes(f.storagePath)).length).toBe(TINY_PNG.length);
+    // Default list filter excludes it.
+    expect(listFiles(erste.id).map((x) => x.id)).not.toContain(f.id);
+    expect(
+      listFiles(erste.id, { includeArchived: true }).map((x) => x.id),
+    ).toContain(f.id);
+
+    const back = restoreFile(erste.id, f.id);
+    expect(back.ok).toBe(true);
+    expect(getFile(erste.id, f.id)?.archivedAt).toBeNull();
   });
 });

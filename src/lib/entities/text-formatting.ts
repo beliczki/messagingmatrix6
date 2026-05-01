@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { textFormatting, type TextFormatting } from "@/db/schema";
 
@@ -26,11 +26,20 @@ export function pickWritable(input: unknown): TextFormattingInput {
 
 export class TextFormattingError extends Error {}
 
-export function listTextFormatting(clientId: number): TextFormatting[] {
+export function listTextFormatting(
+  clientId: number,
+  opts: { includeArchived?: boolean } = {},
+): TextFormatting[] {
+  const where = opts.includeArchived
+    ? eq(textFormatting.clientId, clientId)
+    : and(
+        eq(textFormatting.clientId, clientId),
+        isNull(textFormatting.archivedAt),
+      );
   return db
     .select()
     .from(textFormatting)
-    .where(eq(textFormatting.clientId, clientId))
+    .where(where)
     .orderBy(textFormatting.id)
     .all();
 }
@@ -102,7 +111,7 @@ export function updateTextFormatting(
   return { ok: true, row: updated };
 }
 
-export function deleteTextFormatting(
+export function archiveTextFormatting(
   clientId: number,
   id: number,
   expectedVersion: number,
@@ -112,12 +121,44 @@ export function deleteTextFormatting(
   const current = getTextFormatting(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
-  db.delete(textFormatting)
+  const updated = db
+    .update(textFormatting)
+    .set({
+      archivedAt: sql`CURRENT_TIMESTAMP`,
+      version: sql`${textFormatting.version} + 1`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    })
     .where(
       and(eq(textFormatting.clientId, clientId), eq(textFormatting.id, id)),
     )
-    .run();
-  return { ok: true, row: current };
+    .returning()
+    .get();
+  return { ok: true, row: updated };
+}
+
+export function restoreTextFormatting(
+  clientId: number,
+  id: number,
+  expectedVersion: number,
+):
+  | { ok: true; row: TextFormatting }
+  | { ok: false; current: TextFormatting | null } {
+  const current = getTextFormatting(clientId, id);
+  if (!current) return { ok: false, current: null };
+  if (current.version !== expectedVersion) return { ok: false, current };
+  const updated = db
+    .update(textFormatting)
+    .set({
+      archivedAt: null,
+      version: sql`${textFormatting.version} + 1`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    })
+    .where(
+      and(eq(textFormatting.clientId, clientId), eq(textFormatting.id, id)),
+    )
+    .returning()
+    .get();
+  return { ok: true, row: updated };
 }
 
 // Spec §3.6 — scope parsing helpers, used at render time.

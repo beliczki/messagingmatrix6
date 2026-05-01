@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/db";
 import { users } from "@/db/schema";
@@ -17,15 +17,17 @@ function pickUser(u: typeof users.$inferSelect) {
     role: u.role,
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
+    archivedAt: u.archivedAt,
   };
 }
 
-export const GET = withAdmin(({ claims }) => {
-  const rows = db
-    .select()
-    .from(users)
-    .where(eq(users.clientId, claims.cid))
-    .all();
+export const GET = withAdmin(({ req, claims }) => {
+  const includeArchived =
+    new URL(req.url).searchParams.get("includeArchived") === "1";
+  const where = includeArchived
+    ? eq(users.clientId, claims.cid)
+    : and(eq(users.clientId, claims.cid), isNull(users.archivedAt));
+  const rows = db.select().from(users).where(where).all();
   return NextResponse.json({ users: rows.map(pickUser) });
 });
 

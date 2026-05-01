@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  deleteAsset,
+  archiveAsset,
   getAsset,
   pickWritable,
   updateAsset,
@@ -64,7 +64,8 @@ export const DELETE = withSession<Params>(async ({ req, claims, params }) => {
   if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
   const expected = readClientVersion(req, null);
   if (expected === null) return missingVersion();
-  const result = deleteAsset(claims.cid, id, expected);
+  const before = getAsset(claims.cid, id);
+  const result = archiveAsset(claims.cid, id, expected);
   if (!result.ok) {
     if (!result.current) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -76,8 +77,9 @@ export const DELETE = withSession<Params>(async ({ req, claims, params }) => {
     userId: claims.sub,
     entityType: "assets",
     entityId: id,
-    action: "delete",
-    before: result.row,
+    action: "archive",
+    before,
+    after: result.row,
   });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ asset: result.row });
 });

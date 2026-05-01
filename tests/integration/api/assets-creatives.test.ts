@@ -2,10 +2,11 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { db } from "@/db";
 import { clients } from "@/db/schema";
 import {
+  archiveAsset,
   createAsset,
-  deleteAsset,
   getAsset,
   listAssets,
+  restoreAsset,
   updateAsset,
 } from "@/lib/entities/assets";
 import {
@@ -55,11 +56,19 @@ describe("assets — client isolation + optimistic lock", () => {
     if (!stale.ok) expect(stale.current?.version).toBe(2);
   });
 
-  it("hard delete with version", () => {
+  it("archive sets archived_at; restore brings the row back; default list filters", () => {
     const a = createAsset(erste.id, { brand: "X" });
-    const r = deleteAsset(erste.id, a.id, 1);
+    const r = archiveAsset(erste.id, a.id, 1);
     expect(r.ok).toBe(true);
-    expect(getAsset(erste.id, a.id)).toBeNull();
+    const archived = getAsset(erste.id, a.id);
+    expect(archived?.archivedAt).not.toBeNull();
+    expect(listAssets(erste.id).map((x) => x.id)).not.toContain(a.id);
+    expect(
+      listAssets(erste.id, { includeArchived: true }).map((x) => x.id),
+    ).toContain(a.id);
+    const back = restoreAsset(erste.id, a.id, archived!.version);
+    expect(back.ok).toBe(true);
+    expect(getAsset(erste.id, a.id)?.archivedAt).toBeNull();
   });
 });
 

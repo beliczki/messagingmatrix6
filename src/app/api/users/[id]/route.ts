@@ -16,6 +16,7 @@ function pickUser(u: typeof users.$inferSelect) {
     role: u.role,
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
+    archivedAt: u.archivedAt,
   };
 }
 
@@ -101,7 +102,7 @@ export const DELETE = withAdmin<{ id: string }>(({ claims, params }) => {
   const id = params.id;
   if (id === claims.sub) {
     return NextResponse.json(
-      { error: "you cannot delete your own user" },
+      { error: "you cannot archive your own user" },
       { status: 400 },
     );
   }
@@ -114,18 +115,25 @@ export const DELETE = withAdmin<{ id: string }>(({ claims, params }) => {
     return NextResponse.json({ error: "user not found" }, { status: 404 });
   }
 
-  db.delete(users)
+  const updated = db
+    .update(users)
+    .set({
+      archivedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: sql`CURRENT_TIMESTAMP`,
+    })
     .where(and(eq(users.clientId, claims.cid), eq(users.id, id)))
-    .run();
+    .returning()
+    .get();
 
   writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "users",
     entityId: id,
-    action: "delete",
+    action: "archive",
     before: pickUser(existing),
+    after: pickUser(updated),
   });
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ user: pickUser(updated) });
 });

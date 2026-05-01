@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import {
-  deleteAudience,
+  archiveAudience,
   getAudience,
   pickWritable,
   updateAudience,
@@ -64,7 +64,8 @@ export const DELETE = withSession<Params>(async ({ req, claims, params }) => {
   if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
   const expected = readClientVersion(req, null);
   if (expected === null) return missingVersion();
-  const result = deleteAudience(claims.cid, id, expected);
+  const before = getAudience(claims.cid, id);
+  const result = archiveAudience(claims.cid, id, expected);
   if (!result.ok) {
     if (!result.current) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -76,8 +77,12 @@ export const DELETE = withSession<Params>(async ({ req, claims, params }) => {
     userId: claims.sub,
     entityType: "audiences",
     entityId: id,
-    action: "delete",
-    before: result.row,
+    action: "archive",
+    before,
+    after: result.row,
   });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({
+    audience: result.row,
+    cascadedMessageIds: result.cascadedMessageIds,
+  });
 });

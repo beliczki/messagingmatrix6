@@ -5,7 +5,7 @@ import { shareGalleries } from "@/db/schema";
 import { withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 
-export const DELETE = withSession<{ id: string }>(({ claims, params }) => {
+export const POST = withSession<{ id: string }>(({ claims, params }) => {
   const id = params.id;
   const existing = db
     .select()
@@ -21,10 +21,7 @@ export const DELETE = withSession<{ id: string }>(({ claims, params }) => {
     return NextResponse.json({ error: "share not found" }, { status: 404 });
   }
   db.update(shareGalleries)
-    .set({
-      archivedAt: sql`CURRENT_TIMESTAMP`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
-    })
+    .set({ archivedAt: null, updatedAt: sql`CURRENT_TIMESTAMP` })
     .where(
       and(
         eq(shareGalleries.clientId, claims.cid),
@@ -37,9 +34,9 @@ export const DELETE = withSession<{ id: string }>(({ claims, params }) => {
     userId: claims.sub,
     entityType: "share_galleries",
     entityId: id,
-    action: "archive",
-    before: { id: existing.id, title: existing.title },
-    after: { id: existing.id, title: existing.title, archived: true },
+    action: "restore",
+    before: { id: existing.id, title: existing.title, archived: true },
+    after: { id: existing.id, title: existing.title, archived: false },
   });
   return NextResponse.json({ ok: true });
 });

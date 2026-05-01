@@ -463,6 +463,30 @@ export const uploadedFiles = sqliteTable(
   ],
 );
 
+// §17.13 (Phase 10b) — point-in-time snapshots of the 10 tenant-scoped tables
+// for one-shot restore. payload is a JSON object whose keys are the table
+// names and values are arrays of full row objects. Restore wipes-then-inserts
+// in a transaction. Does NOT include config / clients / system_config /
+// audit_log (history must survive restore).
+export const snapshots = sqliteTable(
+  "snapshots",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    clientId: integer("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    createdBy: text("created_by"),
+    payloadJson: text("payload_json").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+  },
+  (t) => [index("snapshots_client_created_idx").on(t.clientId, t.createdAt)],
+);
+
+export type Snapshot = typeof snapshots.$inferSelect;
+
 export type ConfigRow = typeof config.$inferSelect;
 export type NewConfigRow = typeof config.$inferInsert;
 export type Client = typeof clients.$inferSelect;

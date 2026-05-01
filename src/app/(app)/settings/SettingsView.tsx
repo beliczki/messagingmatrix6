@@ -6,15 +6,23 @@ import { DesignTab } from "./_design/DesignTab";
 import { ClientsTab } from "./_clients/ClientsTab";
 import { StorageTab } from "./_storage/StorageTab";
 import { StructureTab } from "./_structure/StructureTab";
+import { SnapshotsTab } from "./_snapshots/SnapshotsTab";
 import { AboutTab } from "./_about/AboutTab";
 
-type TabKey = "clients" | "design" | "storage" | "structure" | "about";
+type TabKey =
+  | "clients"
+  | "design"
+  | "storage"
+  | "structure"
+  | "snapshots"
+  | "about";
 
 const TABS: Array<{ key: TabKey; label: string }> = [
   { key: "clients", label: "Clients" },
   { key: "design", label: "Design" },
   { key: "storage", label: "Storage" },
   { key: "structure", label: "Structure" },
+  { key: "snapshots", label: "Snapshots" },
   { key: "about", label: "About" },
 ];
 
@@ -65,6 +73,8 @@ export function SettingsView({
           <StorageTab />
         ) : active === "structure" ? (
           <StructureTab />
+        ) : active === "snapshots" ? (
+          <SnapshotsTab />
         ) : (
           <AboutTab info={aboutInfo} />
         )}

@@ -23,6 +23,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
     "seed:dev": "tsx scripts/seed-dev.ts",
+    "seed:perf": "ACTIVE_CLIENT_KEY=erste tsx scripts/seed-perf.ts",
     "import:erste": "ACTIVE_CLIENT_KEY=erste tsx scripts/import-erste.ts",
     "link:erste": "ACTIVE_CLIENT_KEY=erste tsx scripts/link-creative-files.ts"
   },

@@ -43,6 +43,64 @@
 ### Indítás
 Mind a 6 lockolt → **10a.1 (schema migration) készen áll indulásra**. Ez egy önálló kis commit: 10 tábla `archived_at TEXT NULLABLE` + per-tábla `archived_idx`, drizzle generate, migration file. Semmi viselkedés-változás, csak séma. Várom a "mehet 10a.1" zöld jelzést, aztán futok.
 
+### 10a.1 Review (2026-05-01)
+**1 schema fájl + 1 migration (`0006_shiny_husk.sql`, 10 ALTER TABLE). 167/167 tests green; typecheck clean.** Per-table `archived_at TEXT NULLABLE` mező, **nincs** dedikált `(client_id, archived_at)` index — YAGNI, 10d perf round eldönti kell-e (a meglévő `(client_id, *)` index-eken a list query-k filter-elik az archived-eket app-szinten gyorsan).
+
+### 10a.2 Review (2026-05-01)
+**44 fájl változás (~+1207 / −187 sor). 167/167 tests green (160 → 167); typecheck clean.**
+- 7 entity lib `delete*` → `archive*` átnevezés + új `restore*`. Audience és topic archive cascade-archive-eli a hozzá kötött message-eket egyetlen `db.transaction`-ben.
+- `messages.softDeleteMessage` → `archiveMessage`. Régi `status='deleted'` filter megmaradt backward-compat-ként (`listMessages` kizárja mind a status='deleted'-et, mind az archived_at != NULL row-okat).
+- 9 DELETE route soft-archive lett (audit "archive"). 9 új `[id]/restore` POST route audit "restore" + parent-first guard a message restore-on (409 + parent type/key).
+- `withSession` archived-user reject (sub-ms PK lookup minden authenticated request-en).
+- `mcp.ts` 3 *_remove tool átírva archiveX hívásra; *_restore tool-ok 10a.4-ben.
+- `numbering.ts` `nextMcSlot` az archived row-okat is `!isLive`-nek kezeli — fully-archived cell új MC-je recycle-eli a variant slotot (v5 fixture konzisztens, `cell-only-has-deleted` ported to archive).
+- `files.ts` `deleteFile` (ref-counting + fizikai cleanup) átnevezve `purgeFile`-re; új `archiveFile`/`restoreFile` (csak metadata, fizikai bytes maradnak).
+
+### 10a.3 Review (2026-05-01)
+**7 fájl változás (~+433 / −131 sor). 167/167 tests green; typecheck clean.**
+- Új shared `<ArchiveToggle>` komponens (`src/app/(app)/_components/ArchiveToggle.tsx`) — stateless pill, Archive/ArchiveRestore icon swap.
+- Új `.row--archived` global CSS class (opacity 0.55 + grayscale 0.4, `.row--archived__filename`/`__title` line-through).
+- 4 list view: AssetsLibrary, CreativeLibrary (mind 3 view mód: masonry/grid/list), Users tab, SharesView. Mindegyik kapott "Show archived" toggle-t a toolbar-ba + restore mutation-t + dim/restore-button-swap a row-szintű komponensben.
+- Users tab: `archived` badge az email mellett, edit gomb disabled archived row-on.
+- Shares: copy/open gombok disabled archived share-en.
+- Matrix Grid/Feed UX **NEM** ebben a commit-ben — cell-szintű archive viselkedés (whole row/column dim vs hide) más design, defer 10d/post-10 polish-ra.
+
+### 10a.4 Review (2026-05-01)
+**1 fájl változás (`src/lib/mcp.ts`, ~+127 sor). 167/167 tests green.**
+- `list_audiences`, `list_topics`, `list_mc` → új `include_archived` param (default false).
+- 3 új tool: `audience_restore`, `topic_restore`, `mc_restore`. Mc_restore parent-first guard (parent_archived hibaválasz a parent type/key-vel).
+- 24 tool összesen (8 read/meta + 9 single write + 4 batch + 3 restore).
+
+### 10b Review (2026-05-01)
+**11 fájl változás (~+700 sor). 170/170 tests green (167 → 170, 3 új snapshot teszt: round-trip restore, cross-client izoláció, list+delete).**
+- Új `snapshots` tábla (migration `0007_sour_morlocks.sql`): `id, client_id, label, created_by, payload_json, created_at` + `(client_id, created_at)` index.
+- `src/lib/snapshots.ts`: createSnapshot mind a 10 tenant-scoped táblából olvas és JSON-ba szerializál a `payload_json`-be. restoreSnapshot egyetlen `db.transaction`-ben wipe-then-insert. List/get/delete + per-table row counts.
+- 3 új API route (admin-only via `withAdmin`): `POST/GET /api/snapshots`, `DELETE /api/snapshots/[id]`, `POST /api/snapshots/[id]/restore`.
+- Audit row-ok: create/delete/snapshot_restore action `entityType='snapshots'`-on.
+- Settings → új "Snapshots" tab: Create form (label), saved-snapshots list per-table count chip-ekkel, Restore (amber confirm modal a wipe-figyelmeztetéssel), Delete browser-confirm-mel. Restore után minden TanStack Query key invalidate.
+- **Nem érinti** config / clients / system_config / audit_log — config (lookAndFeel, patterns) + audit history túléli a restore-t.
+
+### 10c Review (2026-05-01)
+**3 fájl (~+408 sor). 170/170 tests green; typecheck clean.**
+- `GET /api/audit-log` admin endpoint: filterek entity, actions (CSV), userId, since/until (ISO date), limit (max 1000), offset. Returns rows + hasMore + nextOffset.
+- Settings → új "Changelog" tab: filterek (entity dropdown, date range, user id, action multi-pill action-type alapján színkódolva). Reverse-chronological list, 100/page, Prev/Next.
+- Per-row expand: side-by-side Before/After JSON pretty-print.
+- **Nincs undo gomb** — design szerint (snapshot restore a mechanizmus).
+
+### 10d Status (2026-05-01)
+**Synthetic perf seed létrehozva** (`scripts/seed-perf.ts`, `npm run seed:perf`): 100 audience, 100 topic, 30000 message, 500 creative az aktív client-be (default Erste). A seed eldobja a meglévő tenant-data-t a 4 táblán — production Erste DB ellen ne futtasd.
+
+**Spec §8.1 budgetek (manuális verify a usernek)**:
+- [ ] Matrix Grid `/matrix` paint < 50ms (30k MC) — React DevTools Profiler "Profile" rec, mérd a teljes commit-ot a TanStack Virtual scroll-ozáskor
+- [ ] Creative Library `/creative-library` masonry FCP < 200ms (500 creative) — Lighthouse mobile preset
+- [ ] Message Editor preview iframe re-render < 200ms field edit után — DevTools Performance tab, mérd a `keydown → iframe paint` window-t
+- [ ] AdForm sync 10k banner < 5s — **defer** (Phase 6c monitoring page nincs még)
+
+Eredmények rögzítendők ide. Ha bármi fail → root-cause + fix patch (virtualization window méret, lazy import, memoization). A budget verification end-user manual workflow, mert Lighthouse+DevTools-t a böngészőben kell pörgetni — Claude itt nem fut.
+
+### 10e Status (2026-05-01)
+TBD — kezdés 10d után.
+
 ---
 
 ## Current task (2026-05-01) — Phase 8 kickoff (MCP server, per-client bearer)

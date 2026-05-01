@@ -6,7 +6,8 @@ import {
   Upload as UploadIcon,
   Search,
   X,
-  Trash2,
+  Archive as ArchiveIcon,
+  ArchiveRestore,
   Image as ImageIcon,
   Loader2,
   Package,
@@ -19,6 +20,7 @@ import UploadQueue, {
   type QueueItem,
 } from "../_components/UploadQueue";
 import MultiPill from "../_components/MultiPill";
+import ArchiveToggle from "../_components/ArchiveToggle";
 import RightToolbar from "../_components/RightToolbar";
 import type { ParseRules } from "@/lib/parse-filename";
 
@@ -36,6 +38,7 @@ type Asset = {
   comment: string | null;
   version: number;
   createdAt: string;
+  archivedAt: string | null;
 };
 
 type UploadedFile = {
@@ -57,10 +60,14 @@ export default function AssetsLibrary() {
   const [products, setProducts] = useState<Set<string>>(new Set());
   const [types, setTypes] = useState<Set<string>>(new Set());
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   const assetsQ = useQuery({
-    queryKey: ["assets"],
-    queryFn: () => fetchJSON<{ assets: Asset[] }>("/api/assets"),
+    queryKey: ["assets", { showArchived }],
+    queryFn: () =>
+      fetchJSON<{ assets: Asset[] }>(
+        showArchived ? "/api/assets?includeArchived=1" : "/api/assets",
+      ),
   });
   const filesQ = useQuery({
     queryKey: ["files", "asset"],
@@ -148,6 +155,21 @@ export default function AssetsLibrary() {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["assets"] }),
   });
+  const restore = useMutation({
+    mutationFn: async (a: Asset) => {
+      const r = await fetch(`/api/assets/${a.id}/restore`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "If-Match": String(a.version),
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      });
+      if (!r.ok) throw new Error(await r.text());
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["assets"] }),
+  });
 
   return (
     <div className="assets-library flex h-full">
@@ -187,6 +209,11 @@ export default function AssetsLibrary() {
             Clear
           </button>
         ) : null}
+
+        <ArchiveToggle
+          showArchived={showArchived}
+          onChange={setShowArchived}
+        />
 
         <button
           onClick={() => setUploadOpen(true)}
@@ -247,6 +274,7 @@ export default function AssetsLibrary() {
                 asset={a}
                 file={a.fileId ? filesById.get(a.fileId) : undefined}
                 onDelete={() => del.mutate(a)}
+                onRestore={() => restore.mutate(a)}
               />
             )}
           />
@@ -308,14 +336,22 @@ function Card({
   asset,
   file,
   onDelete,
+  onRestore,
 }: {
   asset: Asset;
   file: UploadedFile | undefined;
   onDelete: () => void;
+  onRestore: () => void;
 }) {
   const isImage = file?.mimeType?.startsWith("image/");
+  const archived = asset.archivedAt !== null;
   return (
-    <div className="media-tile group overflow-hidden rounded-lg border border-slate-200 bg-white transition hover:border-slate-400 hover:shadow-md">
+    <div
+      className={clsx(
+        "media-tile group overflow-hidden rounded-lg border border-slate-200 bg-white transition hover:border-slate-400 hover:shadow-md",
+        archived && "row--archived",
+      )}
+    >
       <div className="media-tile__thumb relative aspect-[4/3] bg-slate-50">
         {isImage && asset.fileId ? (
           <img
@@ -329,16 +365,31 @@ function Card({
             <ImageIcon className="size-8" />
           </div>
         )}
-        <button
-          onClick={onDelete}
-          aria-label="Delete"
-          className="media-tile__delete-btn absolute right-1.5 top-1.5 rounded-md bg-white/90 p-1 text-rose-600 opacity-0 shadow transition group-hover:opacity-100 hover:bg-rose-50"
-        >
-          <Trash2 className="size-3.5" />
-        </button>
+        {archived ? (
+          <button
+            onClick={onRestore}
+            aria-label="Restore"
+            title="Restore from archive"
+            className="media-tile__restore-btn absolute right-1.5 top-1.5 rounded-md bg-white/90 p-1 text-emerald-600 shadow transition hover:bg-emerald-50"
+          >
+            <ArchiveRestore className="size-3.5" />
+          </button>
+        ) : (
+          <button
+            onClick={onDelete}
+            aria-label="Archive"
+            title="Archive"
+            className="media-tile__archive-btn absolute right-1.5 top-1.5 rounded-md bg-white/90 p-1 text-rose-600 opacity-0 shadow transition group-hover:opacity-100 hover:bg-rose-50"
+          >
+            <ArchiveIcon className="size-3.5" />
+          </button>
+        )}
       </div>
       <div className="media-tile__meta p-2 text-xs">
-        <div className="media-tile__filename truncate text-slate-700" title={asset.fileName ?? ""}>
+        <div
+          className="media-tile__filename row--archived__filename truncate text-slate-700"
+          title={asset.fileName ?? ""}
+        >
           {asset.fileName ?? "(no file)"}
         </div>
         <div className="media-tile__tags mt-0.5 flex flex-wrap gap-1 text-[10px] text-slate-500">

@@ -59,4 +59,14 @@
   .status-badge--error { background-color: color-mix(in srgb, var(--status-error) 18%, white); color: var(--status-error); }
   .status-badge--dead { background-color: color-mix(in srgb, var(--status-dead) 18%, white); color: var(--status-dead); }
   .status-badge--memory { background-color: color-mix(in srgb, var(--status-memory) 18%, white); color: var(--status-memory); }
+
+  /* Soft-archive (Phase 10a) — applied to any list row whose archived_at is set. */
+  .row--archived {
+    opacity: 0.55;
+    filter: grayscale(0.4);
+  }
+  .row--archived .row--archived__filename,
+  .row--archived .row--archived__title {
+    text-decoration: line-through;
+  }
 }

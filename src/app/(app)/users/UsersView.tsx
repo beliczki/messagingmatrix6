@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import ArchiveToggle from "../_components/ArchiveToggle";
+import clsx from "clsx";
 
 type User = {
   id: string;
@@ -9,29 +11,48 @@ type User = {
   role: string;
   createdAt: string;
   updatedAt: string;
+  archivedAt: string | null;
 };
 
 export function UsersView({ currentUserId }: { currentUserId: string }) {
   const qc = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
 
   const q = useQuery({
-    queryKey: ["users"],
+    queryKey: ["users", { showArchived }],
     queryFn: async (): Promise<User[]> => {
-      const r = await fetch("/api/users");
+      const url = showArchived ? "/api/users?includeArchived=1" : "/api/users";
+      const r = await fetch(url);
       if (!r.ok) throw new Error("users fetch failed");
       const data = (await r.json()) as { users: User[] };
       return data.users;
     },
   });
 
-  const deleteM = useMutation({
+  const archiveM = useMutation({
     mutationFn: async (id: string) => {
       const r = await fetch(`/api/users/${id}`, { method: "DELETE" });
       if (!r.ok) {
         const body = await r.json().catch(() => ({}));
-        throw new Error(body.error ?? "delete failed");
+        throw new Error(body.error ?? "archive failed");
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["users"] });
+    },
+  });
+  const restoreM = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await fetch(`/api/users/${id}/restore`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error ?? "restore failed");
       }
     },
     onSuccess: () => {
@@ -39,22 +60,25 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
     },
   });
 
-  function confirmDelete(u: User) {
-    if (!window.confirm(`Delete ${u.email}? This cannot be undone.`)) return;
-    deleteM.mutate(u.id);
+  function confirmArchive(u: User) {
+    if (!window.confirm(`Archive ${u.email}? They won't be able to log in.`)) return;
+    archiveM.mutate(u.id);
   }
 
   return (
     <>
-      <header className="users__header toolbar flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
+      <header className="users__header toolbar flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4">
         <h1 className="text-lg font-semibold text-slate-900">Users</h1>
-        <button
-          type="button"
-          onClick={() => setShowAdd(true)}
-          className="toolbar-btn--primary rounded-md bg-brand-button px-3 py-1.5 text-sm font-medium text-white"
-        >
-          Add user
-        </button>
+        <div className="flex items-center gap-2">
+          <ArchiveToggle showArchived={showArchived} onChange={setShowArchived} />
+          <button
+            type="button"
+            onClick={() => setShowAdd(true)}
+            className="toolbar-btn--primary rounded-md bg-brand-button px-3 py-1.5 text-sm font-medium text-white"
+          >
+            Add user
+          </button>
+        </div>
       </header>
 
       <div className="users__content flex-1 overflow-auto p-6">
@@ -84,16 +108,25 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
               <tbody>
                 {(q.data ?? []).map((u) => {
                   const isMe = u.id === currentUserId;
+                  const archived = u.archivedAt !== null;
                   return (
                     <tr
                       key={u.id}
-                      className="users__row border-b border-slate-100"
+                      className={clsx(
+                        "users__row border-b border-slate-100",
+                        archived && "row--archived",
+                      )}
                     >
-                      <td className="px-2 py-2">
+                      <td className="px-2 py-2 row--archived__title">
                         {u.email}
                         {isMe ? (
                           <span className="ml-2 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-emerald-800">
                             you
+                          </span>
+                        ) : null}
+                        {archived ? (
+                          <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">
+                            archived
                           </span>
                         ) : null}
                       </td>
@@ -115,19 +148,31 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
                         <button
                           type="button"
                           onClick={() => setEditing(u)}
-                          className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                          disabled={archived}
+                          className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           Edit
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => confirmDelete(u)}
-                          disabled={isMe || deleteM.isPending}
-                          title={isMe ? "You can't delete your own user" : ""}
-                          className="ml-2 rounded border border-rose-200 bg-white px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          Delete
-                        </button>
+                        {archived ? (
+                          <button
+                            type="button"
+                            onClick={() => restoreM.mutate(u.id)}
+                            disabled={restoreM.isPending}
+                            className="ml-2 rounded border border-emerald-200 bg-white px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Restore
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => confirmArchive(u)}
+                            disabled={isMe || archiveM.isPending}
+                            title={isMe ? "You can't archive your own user" : ""}
+                            className="ml-2 rounded border border-rose-200 bg-white px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
+                          >
+                            Archive
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

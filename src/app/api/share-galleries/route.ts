@@ -33,6 +33,7 @@ export const GET = withSession(({ req, claims }) => {
       description: r.description,
       createdBy: r.createdBy,
       createdAt: r.createdAt,
+      archivedAt: r.archivedAt,
       messageCount: messageCountFromMetadata(r.metadata),
     })),
   });

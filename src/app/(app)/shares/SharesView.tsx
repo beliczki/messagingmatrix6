@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, ExternalLink, Trash2 } from "lucide-react";
+import { Archive as ArchiveIcon, ArchiveRestore, Copy, ExternalLink } from "lucide-react";
+import clsx from "clsx";
+import ArchiveToggle from "../_components/ArchiveToggle";
 
 type Share = {
   id: string;
@@ -10,6 +12,7 @@ type Share = {
   description: string | null;
   createdBy: string | null;
   createdAt: string;
+  archivedAt: string | null;
   messageCount: number;
 };
 
@@ -26,25 +29,45 @@ type Message = {
 export function SharesView() {
   const qc = useQueryClient();
   const [showNew, setShowNew] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   const sharesQ = useQuery({
-    queryKey: ["share-galleries"],
+    queryKey: ["share-galleries", { showArchived }],
     queryFn: async (): Promise<Share[]> => {
-      const r = await fetch("/api/share-galleries");
+      const url = showArchived
+        ? "/api/share-galleries?includeArchived=1"
+        : "/api/share-galleries";
+      const r = await fetch(url);
       if (!r.ok) throw new Error("shares fetch failed");
       const data = (await r.json()) as { shares: Share[] };
       return data.shares;
     },
   });
 
-  const deleteM = useMutation({
+  const archiveM = useMutation({
     mutationFn: async (id: string) => {
       const r = await fetch(`/api/share-galleries/${id}`, {
         method: "DELETE",
       });
       if (!r.ok) {
         const body = await r.json().catch(() => ({}));
-        throw new Error(body.error ?? "delete failed");
+        throw new Error(body.error ?? "archive failed");
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["share-galleries"] });
+    },
+  });
+  const restoreM = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await fetch(`/api/share-galleries/${id}/restore`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error ?? "restore failed");
       }
     },
     onSuccess: () => {
@@ -52,15 +75,15 @@ export function SharesView() {
     },
   });
 
-  function confirmDelete(s: Share) {
+  function confirmArchive(s: Share) {
     if (
       !window.confirm(
-        `Delete share "${s.title ?? "untitled"}"? The public link will stop working.`,
+        `Archive share "${s.title ?? "untitled"}"? The public link will stop working until restored.`,
       )
     ) {
       return;
     }
-    deleteM.mutate(s.id);
+    archiveM.mutate(s.id);
   }
 
   function copyLink(id: string) {
@@ -70,15 +93,18 @@ export function SharesView() {
 
   return (
     <>
-      <header className="shares__header toolbar flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
+      <header className="shares__header toolbar flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4">
         <h1 className="text-lg font-semibold text-slate-900">Shares</h1>
-        <button
-          type="button"
-          onClick={() => setShowNew(true)}
-          className="toolbar-btn--primary rounded-md bg-brand-button px-3 py-1.5 text-sm font-medium text-white"
-        >
-          New share
-        </button>
+        <div className="flex items-center gap-2">
+          <ArchiveToggle showArchived={showArchived} onChange={setShowArchived} />
+          <button
+            type="button"
+            onClick={() => setShowNew(true)}
+            className="toolbar-btn--primary rounded-md bg-brand-button px-3 py-1.5 text-sm font-medium text-white"
+          >
+            New share
+          </button>
+        </div>
       </header>
 
       <div className="shares__content flex-1 overflow-auto p-6">
@@ -98,54 +124,81 @@ export function SharesView() {
             </div>
           ) : (
             <ul className="shares__list space-y-3">
-              {(sharesQ.data ?? []).map((s) => (
-                <li
-                  key={s.id}
-                  className="shares__row flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-slate-900">
-                      {s.title ?? (
-                        <span className="italic text-slate-400">untitled</span>
+              {(sharesQ.data ?? []).map((s) => {
+                const archived = s.archivedAt !== null;
+                return (
+                  <li
+                    key={s.id}
+                    className={clsx(
+                      "shares__row flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4",
+                      archived && "row--archived",
+                    )}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="row--archived__title truncate text-sm font-semibold text-slate-900">
+                        {s.title ?? (
+                          <span className="italic text-slate-400">untitled</span>
+                        )}
+                        {archived ? (
+                          <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">
+                            archived
+                          </span>
+                        ) : null}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {s.messageCount} message
+                        {s.messageCount === 1 ? "" : "s"} · created{" "}
+                        {s.createdAt.slice(0, 10)}
+                      </p>
+                      <p className="mt-1 truncate font-mono text-xs text-slate-400">
+                        /share/{s.id}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => copyLink(s.id)}
+                      title="Copy public link"
+                      disabled={archived}
+                      className="rounded border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      <Copy className="size-4" />
+                    </button>
+                    <a
+                      href={`/share/${s.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={archived ? "Archived shares aren't viewable" : "Open public page"}
+                      className={clsx(
+                        "rounded border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50",
+                        archived && "pointer-events-none opacity-40",
                       )}
-                    </p>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      {s.messageCount} message
-                      {s.messageCount === 1 ? "" : "s"} · created{" "}
-                      {s.createdAt.slice(0, 10)}
-                    </p>
-                    <p className="mt-1 truncate font-mono text-xs text-slate-400">
-                      /share/{s.id}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => copyLink(s.id)}
-                    title="Copy public link"
-                    className="rounded border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50"
-                  >
-                    <Copy className="size-4" />
-                  </button>
-                  <a
-                    href={`/share/${s.id}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title="Open public page"
-                    className="rounded border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50"
-                  >
-                    <ExternalLink className="size-4" />
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => confirmDelete(s)}
-                    disabled={deleteM.isPending}
-                    title="Delete share"
-                    className="rounded border border-rose-200 bg-white p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-40"
-                  >
-                    <Trash2 className="size-4" />
-                  </button>
-                </li>
-              ))}
+                    >
+                      <ExternalLink className="size-4" />
+                    </a>
+                    {archived ? (
+                      <button
+                        type="button"
+                        onClick={() => restoreM.mutate(s.id)}
+                        disabled={restoreM.isPending}
+                        title="Restore from archive"
+                        className="rounded border border-emerald-200 bg-white p-2 text-emerald-600 hover:bg-emerald-50 disabled:opacity-40"
+                      >
+                        <ArchiveRestore className="size-4" />
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => confirmArchive(s)}
+                        disabled={archiveM.isPending}
+                        title="Archive share"
+                        className="rounded border border-rose-200 bg-white p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-40"
+                      >
+                        <ArchiveIcon className="size-4" />
+                      </button>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

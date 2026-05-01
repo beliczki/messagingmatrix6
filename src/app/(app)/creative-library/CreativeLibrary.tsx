@@ -6,7 +6,8 @@ import {
   Upload as UploadIcon,
   Search,
   X,
-  Trash2,
+  Archive as ArchiveIcon,
+  ArchiveRestore,
   Image as ImageIcon,
   Loader2,
   Inbox,
@@ -22,6 +23,7 @@ import UploadQueue, {
   type QueueItem,
 } from "../_components/UploadQueue";
 import MultiPill from "../_components/MultiPill";
+import ArchiveToggle from "../_components/ArchiveToggle";
 import RightToolbar from "../_components/RightToolbar";
 import CycleIconButton from "../_components/CycleIconButton";
 import type { ParseRules } from "@/lib/parse-filename";
@@ -86,6 +88,7 @@ type Creative = {
   comment: string | null;
   version: number;
   createdAt: string;
+  archivedAt: string | null;
 };
 
 type UploadedFile = {
@@ -124,6 +127,7 @@ export default function CreativeLibrary() {
     SET_CODEC,
   );
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
   const [view, setView] = usePersistent<CreativeView>(
     "mm6_creative_library_view",
     "masonry",
@@ -136,8 +140,11 @@ export default function CreativeLibrary() {
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const creativesQ = useQuery({
-    queryKey: ["creatives"],
-    queryFn: () => fetchJSON<{ creatives: Creative[] }>("/api/creatives"),
+    queryKey: ["creatives", { showArchived }],
+    queryFn: () =>
+      fetchJSON<{ creatives: Creative[] }>(
+        showArchived ? "/api/creatives?includeArchived=1" : "/api/creatives",
+      ),
   });
   const filesQ = useQuery({
     queryKey: ["files", "creative"],
@@ -275,6 +282,21 @@ export default function CreativeLibrary() {
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["creatives"] }),
   });
+  const restore = useMutation({
+    mutationFn: async (c: Creative) => {
+      const r = await fetch(`/api/creatives/${c.id}/restore`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "If-Match": String(c.version),
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      });
+      if (!r.ok) throw new Error(await r.text());
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["creatives"] }),
+  });
 
   return (
     <div className="creative-library flex h-full">
@@ -293,6 +315,8 @@ export default function CreativeLibrary() {
           setSizes={setSizes}
           total={creatives.length}
           visible={filtered.length}
+          showArchived={showArchived}
+          setShowArchived={setShowArchived}
           onUpload={() => setUploadOpen(true)}
         />
 
@@ -329,6 +353,7 @@ export default function CreativeLibrary() {
                         creative={c}
                         file={c.fileId ? filesById.get(c.fileId) : undefined}
                         onDelete={() => del.mutate(c)}
+                        onRestore={() => restore.mutate(c)}
                       />
                     )}
                   />
@@ -341,6 +366,7 @@ export default function CreativeLibrary() {
                       creative={c}
                       file={c.fileId ? filesById.get(c.fileId) : undefined}
                       onDelete={() => del.mutate(c)}
+                      onRestore={() => restore.mutate(c)}
                     />
                   ))}
                 </div>
@@ -352,6 +378,7 @@ export default function CreativeLibrary() {
                       creative={c}
                       file={c.fileId ? filesById.get(c.fileId) : undefined}
                       onDelete={() => del.mutate(c)}
+                      onRestore={() => restore.mutate(c)}
                     />
                   ))}
                 </div>
@@ -466,6 +493,8 @@ function Toolbar({
   setSizes,
   total,
   visible,
+  showArchived,
+  setShowArchived,
   onUpload,
 }: {
   search: string;
@@ -481,6 +510,8 @@ function Toolbar({
   setSizes: (s: Set<string>) => void;
   total: number;
   visible: number;
+  showArchived: boolean;
+  setShowArchived: (b: boolean) => void;
   onUpload: () => void;
 }) {
   const activeFilters = products.size + types.size + sizes.size + (search ? 1 : 0);
@@ -523,6 +554,8 @@ function Toolbar({
         </button>
       ) : null}
 
+      <ArchiveToggle showArchived={showArchived} onChange={setShowArchived} />
+
       <button
         onClick={onUpload}
         className="toolbar-btn--primary ml-auto inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
@@ -534,22 +567,71 @@ function Toolbar({
   );
 }
 
+function ArchiveOrRestoreBtn({
+  archived,
+  onDelete,
+  onRestore,
+  className,
+}: {
+  archived: boolean;
+  onDelete: () => void;
+  onRestore: () => void;
+  className?: string;
+}) {
+  if (archived) {
+    return (
+      <button
+        onClick={onRestore}
+        aria-label="Restore"
+        title="Restore from archive"
+        className={clsx(
+          "rounded-md bg-white/90 p-1 text-emerald-600 shadow transition hover:bg-emerald-50",
+          className,
+        )}
+      >
+        <ArchiveRestore className="size-3.5" />
+      </button>
+    );
+  }
+  return (
+    <button
+      onClick={onDelete}
+      aria-label="Archive"
+      title="Archive"
+      className={clsx(
+        "rounded-md bg-white/90 p-1 text-rose-600 opacity-0 shadow transition group-hover:opacity-100 hover:bg-rose-50",
+        className,
+      )}
+    >
+      <ArchiveIcon className="size-3.5" />
+    </button>
+  );
+}
+
 function Card({
   creative,
   file,
   onDelete,
+  onRestore,
 }: {
   creative: Creative;
   file: UploadedFile | undefined;
   onDelete: () => void;
+  onRestore: () => void;
 }) {
   const isImage = file?.mimeType?.startsWith("image/");
   const mcLabel =
     creative.mcNumber !== null
       ? `MC${creative.mcNumber}${creative.mcVariant ?? ""}`
       : null;
+  const archived = creative.archivedAt !== null;
   return (
-    <div className="creative-card group overflow-hidden rounded-lg border border-slate-200 bg-white transition hover:border-slate-400 hover:shadow-md [content-visibility:auto] [contain-intrinsic-size:auto_220px]">
+    <div
+      className={clsx(
+        "creative-card group overflow-hidden rounded-lg border border-slate-200 bg-white transition hover:border-slate-400 hover:shadow-md [content-visibility:auto] [contain-intrinsic-size:auto_220px]",
+        archived && "row--archived",
+      )}
+    >
       <div className="creative-card__thumb relative aspect-[4/3] bg-slate-50">
         {isImage && creative.fileId ? (
           <img
@@ -564,20 +646,19 @@ function Card({
             <ImageIcon className="size-8" />
           </div>
         )}
-        <button
-          onClick={onDelete}
-          aria-label="Delete"
-          className="creative-card__delete-btn absolute right-1.5 top-1.5 rounded-md bg-white/90 p-1 text-rose-600 opacity-0 shadow transition group-hover:opacity-100 hover:bg-rose-50"
-        >
-          <Trash2 className="size-3.5" />
-        </button>
+        <ArchiveOrRestoreBtn
+          archived={archived}
+          onDelete={onDelete}
+          onRestore={onRestore}
+          className="absolute right-1.5 top-1.5"
+        />
       </div>
       <div className="creative-card__meta p-2 text-xs">
         <div className="flex items-baseline gap-2">
           {mcLabel ? (
             <span className="creative-card__mc font-mono font-semibold text-slate-900">{mcLabel}</span>
           ) : null}
-          <span className="creative-card__filename truncate text-slate-700" title={creative.fileName ?? ""}>
+          <span className="creative-card__filename row--archived__filename truncate text-slate-700" title={creative.fileName ?? ""}>
             {creative.fileName ?? "(no file)"}
           </span>
         </div>
@@ -596,14 +677,22 @@ function ImageTile({
   creative,
   file,
   onDelete,
+  onRestore,
 }: {
   creative: Creative;
   file: UploadedFile | undefined;
   onDelete: () => void;
+  onRestore: () => void;
 }) {
   const isImage = file?.mimeType?.startsWith("image/");
+  const archived = creative.archivedAt !== null;
   return (
-    <div className="media-tile group relative overflow-hidden rounded-md bg-slate-50 [content-visibility:auto] [contain-intrinsic-size:auto_300px]">
+    <div
+      className={clsx(
+        "media-tile group relative overflow-hidden rounded-md bg-slate-50 [content-visibility:auto] [contain-intrinsic-size:auto_300px]",
+        archived && "row--archived",
+      )}
+    >
       {isImage && creative.fileId ? (
         <img
           src={`/api/files/${creative.fileId}/thumbnail?w=320`}
@@ -617,13 +706,12 @@ function ImageTile({
           <ImageIcon className="size-8" />
         </div>
       )}
-      <button
-        onClick={onDelete}
-        aria-label="Delete"
-        className="media-tile__delete-btn absolute right-1.5 top-1.5 rounded-md bg-white/90 p-1 text-rose-600 opacity-0 shadow transition group-hover:opacity-100 hover:bg-rose-50"
-      >
-        <Trash2 className="size-3.5" />
-      </button>
+      <ArchiveOrRestoreBtn
+        archived={archived}
+        onDelete={onDelete}
+        onRestore={onRestore}
+        className="absolute right-1.5 top-1.5"
+      />
     </div>
   );
 }
@@ -632,18 +720,26 @@ function ListRow({
   creative,
   file,
   onDelete,
+  onRestore,
 }: {
   creative: Creative;
   file: UploadedFile | undefined;
   onDelete: () => void;
+  onRestore: () => void;
 }) {
   const isImage = file?.mimeType?.startsWith("image/");
   const mcLabel =
     creative.mcNumber !== null
       ? `MC${creative.mcNumber}${creative.mcVariant ?? ""}`
       : null;
+  const archived = creative.archivedAt !== null;
   return (
-    <div className="creative-row group flex items-center gap-3 rounded-md border border-slate-200 bg-white px-2 py-1.5 transition hover:border-slate-400 hover:shadow-sm [content-visibility:auto] [contain-intrinsic-size:auto_56px]">
+    <div
+      className={clsx(
+        "creative-row group flex items-center gap-3 rounded-md border border-slate-200 bg-white px-2 py-1.5 transition hover:border-slate-400 hover:shadow-sm [content-visibility:auto] [contain-intrinsic-size:auto_56px]",
+        archived && "row--archived",
+      )}
+    >
       <div className="creative-row__thumb size-12 shrink-0 overflow-hidden rounded bg-slate-50">
         {isImage && creative.fileId ? (
           <img
@@ -664,7 +760,7 @@ function ListRow({
           {mcLabel ? (
             <span className="creative-row__mc font-mono font-semibold text-slate-900">{mcLabel}</span>
           ) : null}
-          <span className="creative-row__filename truncate text-slate-700" title={creative.fileName ?? ""}>
+          <span className="creative-row__filename row--archived__filename truncate text-slate-700" title={creative.fileName ?? ""}>
             {creative.fileName ?? "(no file)"}
           </span>
         </div>
@@ -675,13 +771,12 @@ function ListRow({
           {creative.fileDimensions ? <span className="tag-chip">· {creative.fileDimensions}</span> : null}
         </div>
       </div>
-      <button
-        onClick={onDelete}
-        aria-label="Delete"
-        className="creative-row__delete-btn rounded-md p-1 text-rose-600 opacity-0 transition group-hover:opacity-100 hover:bg-rose-50"
-      >
-        <Trash2 className="size-3.5" />
-      </button>
+      <ArchiveOrRestoreBtn
+        archived={archived}
+        onDelete={onDelete}
+        onRestore={onRestore}
+        className="ml-2"
+      />
     </div>
   );
 }

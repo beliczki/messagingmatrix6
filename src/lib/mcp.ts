@@ -20,6 +20,7 @@ import {
   createAudience,
   listAudiences,
   pickWritable as pickAudienceWritable,
+  restoreAudience,
   updateAudience,
 } from "@/lib/entities/audiences";
 import {
@@ -28,6 +29,7 @@ import {
   createTopic,
   listTopics,
   pickWritable as pickTopicWritable,
+  restoreTopic,
   updateTopic,
 } from "@/lib/entities/topics";
 import {
@@ -35,8 +37,10 @@ import {
   archiveMessage,
   createMessage,
   pickWritable as pickMessageWritable,
+  restoreMessage,
   updateMessage,
 } from "@/lib/entities/messages";
+import { isNull } from "drizzle-orm";
 import { listVisibleTemplates } from "@/lib/templates";
 import { writeAudit } from "@/lib/audit";
 
@@ -149,11 +153,16 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
     "list_audiences",
     {
       description:
-        "List audiences for the active client, optionally filtered by product.",
-      inputSchema: { product: z.string().optional() },
+        "List audiences for the active client. Filters: product. Default excludes soft-archived rows; pass include_archived=true to see them.",
+      inputSchema: {
+        product: z.string().optional(),
+        include_archived: z.boolean().optional(),
+      },
     },
-    async ({ product }) => {
-      let rows = listAudiences(ctx.clientId);
+    async ({ product, include_archived }) => {
+      let rows = listAudiences(ctx.clientId, {
+        includeArchived: include_archived,
+      });
       if (product) rows = rows.filter((r) => r.product === product);
       return jsonResult(rows);
     },
@@ -163,11 +172,16 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
     "list_topics",
     {
       description:
-        "List topics for the active client, optionally filtered by product.",
-      inputSchema: { product: z.string().optional() },
+        "List topics for the active client. Filters: product. Default excludes soft-archived rows; pass include_archived=true to see them.",
+      inputSchema: {
+        product: z.string().optional(),
+        include_archived: z.boolean().optional(),
+      },
     },
-    async ({ product }) => {
-      let rows = listTopics(ctx.clientId);
+    async ({ product, include_archived }) => {
+      let rows = listTopics(ctx.clientId, {
+        includeArchived: include_archived,
+      });
       if (product) rows = rows.filter((r) => r.product === product);
       return jsonResult(rows);
     },
@@ -177,7 +191,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
     "list_mc",
     {
       description:
-        "List messages (MCs). Filters: topic_key, audience_key, product (matches either audience.product or topic.product), status, monitoring_status (matches reporting.adform_status for the MC), limit (default 100).",
+        "List messages (MCs). Filters: topic_key, audience_key, product (matches either audience.product or topic.product), status, monitoring_status (matches reporting.adform_status for the MC), limit (default 100). Default excludes soft-archived rows; pass include_archived=true to see them.",
       inputSchema: {
         topic_key: z.string().optional(),
         audience_key: z.string().optional(),
@@ -185,10 +199,12 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
         status: z.string().optional(),
         monitoring_status: z.string().optional(),
         limit: z.number().int().positive().max(1000).optional(),
+        include_archived: z.boolean().optional(),
       },
     },
     async (args) => {
       const conds = [eq(messages.clientId, ctx.clientId)];
+      if (!args.include_archived) conds.push(isNull(messages.archivedAt));
       if (args.topic_key) conds.push(eq(messages.topic, args.topic_key));
       if (args.audience_key) conds.push(eq(messages.audience, args.audience_key));
       if (args.status) conds.push(eq(messages.status, args.status));
@@ -553,6 +569,38 @@ function registerAudienceWriteTools(server: McpServer, ctx: McpContext): void {
       });
     },
   );
+
+  server.registerTool(
+    "audience_restore",
+    {
+      description:
+        "Restore an archived audience by key. Required: key, version (the current archived row's version). Does NOT cascade-restore messages — call mc_restore on each one explicitly once the parent is back.",
+      inputSchema: {
+        key: z.string(),
+        version: z.number().int(),
+      },
+    },
+    async ({ key, version }) => {
+      const limited = requireRate(ctx);
+      if (limited) return limited;
+      const existing = findAudienceByKey(ctx.clientId, key);
+      if (!existing) return errorResult(`audience '${key}' not found`);
+      const result = restoreAudience(ctx.clientId, existing.id, version);
+      if (!result.ok) {
+        return errorResult("version_conflict", { current: result.current });
+      }
+      writeAudit({
+        clientId: ctx.clientId,
+        userId: mcpUserId(ctx),
+        entityType: "audiences",
+        entityId: result.row.id,
+        action: "restore",
+        before: existing,
+        after: result.row,
+      });
+      return jsonResult({ ok: true, restored: result.row });
+    },
+  );
 }
 
 function registerTopicWriteTools(server: McpServer, ctx: McpContext): void {
@@ -658,6 +706,38 @@ function registerTopicWriteTools(server: McpServer, ctx: McpContext): void {
         archived: result.row,
         cascadedMessageIds: result.cascadedMessageIds,
       });
+    },
+  );
+
+  server.registerTool(
+    "topic_restore",
+    {
+      description:
+        "Restore an archived topic by key. Required: key, version. Does NOT cascade-restore messages.",
+      inputSchema: {
+        key: z.string(),
+        version: z.number().int(),
+      },
+    },
+    async ({ key, version }) => {
+      const limited = requireRate(ctx);
+      if (limited) return limited;
+      const existing = findTopicByKey(ctx.clientId, key);
+      if (!existing) return errorResult(`topic '${key}' not found`);
+      const result = restoreTopic(ctx.clientId, existing.id, version);
+      if (!result.ok) {
+        return errorResult("version_conflict", { current: result.current });
+      }
+      writeAudit({
+        clientId: ctx.clientId,
+        userId: mcpUserId(ctx),
+        entityType: "topics",
+        entityId: result.row.id,
+        action: "restore",
+        before: existing,
+        after: result.row,
+      });
+      return jsonResult({ ok: true, restored: result.row });
     },
   );
 }
@@ -766,6 +846,44 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
         after: result.row,
       });
       return jsonResult({ ok: true, archived: result.row });
+    },
+  );
+
+  server.registerTool(
+    "mc_restore",
+    {
+      description:
+        "Restore an archived message (MC) by mc_label. Required: mc_label, version. Parent-first: returns parent_archived if the message's audience or topic is currently archived — restore those first.",
+      inputSchema: {
+        mc_label: z.string(),
+        version: z.number().int(),
+      },
+    },
+    async ({ mc_label, version }) => {
+      const limited = requireRate(ctx);
+      if (limited) return limited;
+      const existing = findMessageByPmmid(ctx.clientId, mc_label);
+      if (!existing) return errorResult(`message '${mc_label}' not found`);
+      const result = restoreMessage(ctx.clientId, existing.id, version);
+      if (!result.ok) {
+        if (result.reason === "parent_archived") {
+          return errorResult("parent_archived", {
+            parent: result.parent,
+            hint: `restore the ${result.parent?.type} '${result.parent?.key}' first`,
+          });
+        }
+        return errorResult("version_conflict", { current: result.current });
+      }
+      writeAudit({
+        clientId: ctx.clientId,
+        userId: mcpUserId(ctx),
+        entityType: "messages",
+        entityId: result.row.id,
+        action: "restore",
+        before: existing,
+        after: result.row,
+      });
+      return jsonResult({ ok: true, restored: result.row });
     },
   );
 }

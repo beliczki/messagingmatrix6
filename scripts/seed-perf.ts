@@ -13,6 +13,8 @@ import {
   topics,
 } from "../src/db/schema";
 import { getActiveClient } from "../src/lib/active-client";
+import { createSnapshot } from "../src/lib/snapshots";
+import { writeAudit } from "../src/lib/audit";
 
 const N_AUDIENCES = 100;
 const N_TOPICS = 100;
@@ -30,6 +32,32 @@ function rand<T>(arr: readonly T[]): T {
 async function main() {
   const client = getActiveClient();
   console.log(`Seeding perf dataset for client ${client.key} (id=${client.id})`);
+
+  // Safety net (Phase 10b): auto-snapshot the live state before we wipe the
+  // four tables. If someone runs this against production by accident, the
+  // Settings → Snapshots tab can roll the deploy back with one click.
+  const ts = new Date().toISOString().replace(/[:.]/g, "-");
+  const snap = createSnapshot(
+    client.id,
+    `auto-before-perf-seed-${ts}`,
+    "seed-perf-script",
+  );
+  writeAudit({
+    clientId: client.id,
+    userId: null,
+    entityType: "snapshots",
+    entityId: snap.id,
+    action: "create",
+    after: { id: snap.id, label: snap.label, counts: snap.counts },
+  });
+  console.log(
+    `Pre-wipe snapshot saved: id=${snap.id} "${snap.label}" ` +
+      `(aud=${snap.counts.audiences}, top=${snap.counts.topics}, ` +
+      `mc=${snap.counts.messages}, creative=${snap.counts.creatives})`,
+  );
+  console.log(
+    `If anything goes wrong, restore via Settings → Snapshots in the UI.\n`,
+  );
 
   const sqlite = (await import("../src/db")).getSqlite();
   sqlite.exec("BEGIN");

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { SettingsHeaderActions } from "../SettingsView";
 
 type ConfigRow = { key: string; value: unknown };
 
@@ -87,10 +88,34 @@ export function StorageTab() {
   if (!draft) return <p className="text-sm text-slate-500">Loading…</p>;
 
   return (
-    <div className="storage-tab max-w-2xl pb-24">
+    <div className="storage-tab max-w-2xl">
+      <SettingsHeaderActions>
+        {m.isError ? (
+          <span className="text-sm text-rose-600">
+            {(m.error as Error).message}
+          </span>
+        ) : null}
+        {m.isSuccess && !m.isPending ? (
+          <span className="text-sm text-emerald-600">Saved</span>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => q.data && setDraft(q.data)}
+          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Revert
+        </button>
+        <button
+          type="button"
+          onClick={() => m.mutate(draft)}
+          disabled={m.isPending}
+          className="toolbar-btn--primary rounded-md bg-brand-button px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+        >
+          {m.isPending ? "Saving…" : "Save"}
+        </button>
+      </SettingsHeaderActions>
       <header className="mb-6">
-        <h2 className="text-xl font-semibold text-slate-900">Storage</h2>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="text-sm text-slate-500">
           External integrations scoped to this client. Tokens are stored
           plaintext in the <code className="font-mono">config</code> table.
         </p>
@@ -120,31 +145,6 @@ export function StorageTab() {
         </div>
       </section>
 
-      <div className="storage-tab__actions sticky bottom-0 -mx-6 mt-6 flex items-center gap-3 border-t border-slate-200 bg-white px-6 py-3">
-        <button
-          type="button"
-          onClick={() => m.mutate(draft)}
-          disabled={m.isPending}
-          className="toolbar-btn--primary rounded-md bg-brand-button px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {m.isPending ? "Saving…" : "Save"}
-        </button>
-        <button
-          type="button"
-          onClick={() => q.data && setDraft(q.data)}
-          className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Revert
-        </button>
-        {m.isError ? (
-          <span className="text-sm text-rose-600">
-            {(m.error as Error).message}
-          </span>
-        ) : null}
-        {m.isSuccess && !m.isPending ? (
-          <span className="text-sm text-emerald-600">Saved</span>
-        ) : null}
-      </div>
     </div>
   );
 }

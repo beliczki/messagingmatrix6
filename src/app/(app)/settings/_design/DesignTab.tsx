@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_LOOK_AND_FEEL } from "@/db/defaults";
+import { SettingsHeaderActions } from "../SettingsView";
 
 type LookAndFeel = typeof DEFAULT_LOOK_AND_FEEL;
 
@@ -131,10 +132,32 @@ export function DesignTab() {
   }
 
   return (
-    <div className="design-tab max-w-3xl pb-24">
+    <div className="design-tab max-w-3xl">
+      <SettingsHeaderActions>
+        {m.isError ? (
+          <span className="text-sm text-rose-600">Save failed</span>
+        ) : null}
+        {m.isSuccess && !m.isPending ? (
+          <span className="text-sm text-emerald-600">Saved</span>
+        ) : null}
+        <button
+          type="button"
+          onClick={revert}
+          className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Revert
+        </button>
+        <button
+          type="button"
+          onClick={() => m.mutate(draft)}
+          disabled={m.isPending}
+          className="toolbar-btn--primary rounded-md bg-brand-button px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+        >
+          {m.isPending ? "Saving…" : "Save"}
+        </button>
+      </SettingsHeaderActions>
       <header className="design-tab__header mb-6">
-        <h2 className="text-xl font-semibold text-slate-900">Design</h2>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="text-sm text-slate-500">
           Brand and status colors flow into CSS variables on{" "}
           <code className="rounded bg-slate-100 px-1 font-mono text-xs">
             &lt;html&gt;
@@ -222,29 +245,6 @@ export function DesignTab() {
         ))}
       </Section>
 
-      <div className="design-tab__actions sticky bottom-0 -mx-6 mt-6 flex items-center gap-3 border-t border-slate-200 bg-white px-6 py-3">
-        <button
-          type="button"
-          onClick={() => m.mutate(draft)}
-          disabled={m.isPending}
-          className="toolbar-btn--primary rounded-md bg-brand-button px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {m.isPending ? "Saving…" : "Save"}
-        </button>
-        <button
-          type="button"
-          onClick={revert}
-          className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Revert
-        </button>
-        {m.isError ? (
-          <span className="text-sm text-rose-600">Save failed</span>
-        ) : null}
-        {m.isSuccess && !m.isPending ? (
-          <span className="text-sm text-emerald-600">Saved</span>
-        ) : null}
-      </div>
     </div>
   );
 }

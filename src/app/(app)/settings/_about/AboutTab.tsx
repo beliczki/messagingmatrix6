@@ -24,8 +24,7 @@ export function AboutTab({ info }: { info: AboutInfo }) {
   return (
     <div className="about-tab max-w-2xl">
       <header className="mb-6">
-        <h2 className="text-xl font-semibold text-slate-900">About</h2>
-        <p className="mt-1 text-sm text-slate-500">
+        <p className="text-sm text-slate-500">
           Read-only deploy + runtime information.
         </p>
       </header>

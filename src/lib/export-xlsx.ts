@@ -53,11 +53,6 @@ const topicCols: Col<Topic>[] = [
   { header: "Order", get: (r) => num(r.orderIndex) },
   { header: "Status", get: (r) => s(r.status) },
   { header: "Product", get: (r) => s(r.product) },
-  { header: "Strategy", get: (r) => s(r.strategy) },
-  { header: "Buying_platform", get: (r) => s(r.buyingPlatform) },
-  { header: "Data_source", get: (r) => s(r.dataSource) },
-  { header: "Targeting_type", get: (r) => s(r.targetingType) },
-  { header: "Device", get: (r) => s(r.device) },
   { header: "Tag", get: (r) => s(r.tag) },
   { header: "Tag1", get: (r) => s(r.tag1) },
   { header: "Tag2", get: (r) => s(r.tag2) },
@@ -65,10 +60,6 @@ const topicCols: Col<Topic>[] = [
   { header: "Tag4", get: (r) => s(r.tag4) },
   { header: "Created", get: (r) => s(r.created) },
   { header: "Comment", get: (r) => s(r.comment) },
-  { header: "Campaign_name", get: (r) => s(r.campaignName) },
-  { header: "Campaign_ID", get: (r) => s(r.campaignId) },
-  { header: "Lineitem_name", get: (r) => s(r.lineitemName) },
-  { header: "Lineitem_ID", get: (r) => s(r.lineitemId) },
 ];
 
 const messageCols: Col<Message>[] = [

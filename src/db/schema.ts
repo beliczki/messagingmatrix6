@@ -156,7 +156,7 @@ export const audiences = sqliteTable(
   ],
 );
 
-// §3.2 — same headers as audiences plus tag1-4 + created
+// §3.2 — narrower than audiences: no targeting/trafficking columns
 export const topics = sqliteTable(
   "topics",
   {
@@ -169,21 +169,12 @@ export const topics = sqliteTable(
     orderIndex: integer("order_index").notNull(),
     status: text("status"),
     product: text("product"),
-    strategy: text("strategy"),
-    buyingPlatform: text("buying_platform"),
-    dataSource: text("data_source"),
-    targetingType: text("targeting_type"),
-    device: text("device"),
     tag: text("tag"),
     tag1: text("tag1"),
     tag2: text("tag2"),
     tag3: text("tag3"),
     tag4: text("tag4"),
     comment: text("comment"),
-    campaignName: text("campaign_name"),
-    campaignId: text("campaign_id"),
-    lineitemName: text("lineitem_name"),
-    lineitemId: text("lineitem_id"),
     created: text("created"),
     version: integer("version").notNull().default(1),
     createdAt: text("created_at")

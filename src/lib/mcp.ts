@@ -608,7 +608,7 @@ function registerTopicWriteTools(server: McpServer, ctx: McpContext): void {
     "topic_create",
     {
       description:
-        "Create a topic. Required: name. Optional fields object: key, orderIndex, status, product, strategy, buyingPlatform, dataSource, targetingType, device, tag, tag1..4, comment, campaignName, campaignId, lineitemName, lineitemId, created. Returns the new row.",
+        "Create a topic. Required: name. Optional fields object: key, orderIndex, status, product, tag, tag1..4, comment, created. Returns the new row.",
       inputSchema: { name: z.string(), fields: fieldsArg },
     },
     async ({ name, fields }) => {

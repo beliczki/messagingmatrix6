@@ -106,3 +106,25 @@ export function extractAudienceKeysFromRowSet(rowSet: FeedRowSet): string[] {
   }
   return [...keys];
 }
+
+// Pull the (number, variant) of the message that was used as the DEFAULT row
+// in this AdForm snapshot. Reads the `messaging_card_id` + `messaging_card_variant`
+// cells of the row whose IsDefault flag is truthy. Both columns are looked up
+// by clean name so any prefix the user has on them works (Text:, Bool:, …).
+// Returns null if the snapshot has no DEFAULT row or the cells aren't present.
+export function extractDefaultMc(
+  rowSet: FeedRowSet,
+): { number: number; variant: string } | null {
+  if (rowSet.defaultRowIndex < 0) return null;
+  const row = rowSet.rows[rowSet.defaultRowIndex];
+  if (!row) return null;
+  const numIdx = findCleanColumnIdx(rowSet.columns, "messaging_card_id");
+  const varIdx = findCleanColumnIdx(rowSet.columns, "messaging_card_variant");
+  if (numIdx < 0 || varIdx < 0) return null;
+  const rawNum = (row[rowSet.columns[numIdx]] ?? "").trim();
+  const variant = (row[rowSet.columns[varIdx]] ?? "").trim();
+  if (!rawNum || !variant) return null;
+  const number = Number(rawNum);
+  if (!Number.isFinite(number) || !Number.isInteger(number)) return null;
+  return { number, variant };
+}

@@ -5,12 +5,14 @@ import {
   audiences as audiencesTable,
   config,
   feedExports,
+  messages as messagesTable,
   users,
 } from "@/db/schema";
 import { withSession, denyDemo } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 import {
   extractAudienceKeysFromRowSet,
+  extractDefaultMc,
   parseAdformXlsx,
 } from "@/lib/adform-snapshot";
 import { serializePayload } from "@/lib/feed-export";
@@ -251,6 +253,31 @@ export const POST = withSession(async ({ req, claims }) => {
     db.delete(feedExports).where(eq(feedExports.id, previous.id)).run();
   }
 
+  // Default label: read the (number, variant) of the snapshot's DEFAULT row
+  // and look the message up in the matrix. If found, label = "MC<num><var> —
+  // <name>" (matching MM6 export convention); if the message isn't in the
+  // matrix yet, label = "MC<num><var>" alone — we still surface the MC so the
+  // user can see what AdForm has, but the name slot stays blank.
+  const defaultMc = extractDefaultMc(parsed.rowSet);
+  let defaultLabel: string | null = null;
+  let defaultMessageId: number | null = null;
+  if (defaultMc) {
+    const defaultMsg = db
+      .select()
+      .from(messagesTable)
+      .where(
+        and(
+          eq(messagesTable.clientId, claims.cid),
+          eq(messagesTable.number, defaultMc.number),
+          eq(messagesTable.variant, defaultMc.variant),
+        ),
+      )
+      .get();
+    const base = `MC${defaultMc.number}${defaultMc.variant}`;
+    defaultLabel = defaultMsg?.name ? `${base} — ${defaultMsg.name}` : base;
+    defaultMessageId = defaultMsg?.id ?? null;
+  }
+
   const inserted = db
     .insert(feedExports)
     .values({
@@ -263,8 +290,8 @@ export const POST = withSession(async ({ req, claims }) => {
       exportedBy: claims.sub,
       uploadedToAdformAt: new Date().toISOString(),
       uploadedBy: claims.sub,
-      defaultMessageId: null,
-      defaultLabel: null,
+      defaultMessageId,
+      defaultLabel,
       rowCount: parsed.rowSet.rows.length,
       payloadJson: serializePayload(parsed.rowSet),
       notes: `Uploaded from AdForm: ${file.name}`,

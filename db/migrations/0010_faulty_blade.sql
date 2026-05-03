@@ -1,0 +1,1 @@
+ALTER TABLE `share_comments` ADD `annotation` text;

@@ -2,13 +2,24 @@ import { NextResponse } from "next/server";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/db";
-import { messages, shareGalleries } from "@/db/schema";
+import { creatives, messages, shareGalleries, uploadedFiles } from "@/db/schema";
 import { withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
+import { readTemplate } from "@/lib/templates";
 
 type SnapshotMetadata = {
   generatedAt: string;
   messages: Array<typeof messages.$inferSelect>;
+  /** (messageId, size) pairs the user picked — drives the public renderer. */
+  matrixItems?: Array<{ messageId: number; size: string }>;
+  creatives?: Array<typeof creatives.$inferSelect>;
+  files?: Array<{
+    id: string;
+    filename: string;
+    mimeType: string | null;
+    sizeBytes: number | null;
+    dimensions: string | null;
+  }>;
 };
 
 export const GET = withSession(({ req, claims }) => {
@@ -43,7 +54,13 @@ function messageCountFromMetadata(raw: string | null): number {
   if (!raw) return 0;
   try {
     const parsed = JSON.parse(raw) as Partial<SnapshotMetadata>;
-    return Array.isArray(parsed.messages) ? parsed.messages.length : 0;
+    const m = Array.isArray(parsed.matrixItems)
+      ? parsed.matrixItems.length
+      : Array.isArray(parsed.messages)
+        ? parsed.messages.length
+        : 0;
+    const c = Array.isArray(parsed.creatives) ? parsed.creatives.length : 0;
+    return m + c;
   } catch {
     return 0;
   }
@@ -51,47 +68,145 @@ function messageCountFromMetadata(raw: string | null): number {
 
 export const POST = withSession(async ({ req, claims }) => {
   const body = (await req.json().catch(() => null)) as
-    | { title?: unknown; description?: unknown; mcIds?: unknown }
+    | {
+        title?: unknown;
+        description?: unknown;
+        mcIds?: unknown;
+        matrix?: unknown;
+        creativeIds?: unknown;
+      }
     | null;
-  if (!body || !Array.isArray(body.mcIds) || body.mcIds.length === 0) {
+  const mcIds = Array.isArray(body?.mcIds)
+    ? body!.mcIds.map((v) => Number(v)).filter((n) => Number.isFinite(n))
+    : [];
+  const matrixPairsIn: Array<{ messageId: number; size: string }> =
+    Array.isArray(body?.matrix)
+      ? (body!.matrix as Array<unknown>)
+          .map((p) => {
+            if (!p || typeof p !== "object") return null;
+            const o = p as Record<string, unknown>;
+            const id = Number(o.messageId);
+            const size = typeof o.size === "string" ? o.size : null;
+            if (!Number.isFinite(id) || !size) return null;
+            return { messageId: id, size };
+          })
+          .filter((x): x is { messageId: number; size: string } => x !== null)
+      : [];
+  const creativeIds = Array.isArray(body?.creativeIds)
+    ? body!.creativeIds.map((v) => Number(v)).filter((n) => Number.isFinite(n))
+    : [];
+  if (
+    mcIds.length === 0 &&
+    matrixPairsIn.length === 0 &&
+    creativeIds.length === 0
+  ) {
     return NextResponse.json(
-      { error: "mcIds (non-empty array) required" },
-      { status: 400 },
-    );
-  }
-  const ids = body.mcIds
-    .map((v) => Number(v))
-    .filter((n) => Number.isFinite(n));
-  if (ids.length === 0) {
-    return NextResponse.json(
-      { error: "mcIds must be numeric ids" },
+      {
+        error:
+          "matrix, mcIds, or creativeIds (at least one non-empty) required",
+      },
       { status: 400 },
     );
   }
 
   const title =
-    typeof body.title === "string" && body.title.trim().length > 0
+    typeof body?.title === "string" && body.title.trim().length > 0
       ? body.title.trim()
       : null;
   const description =
-    typeof body.description === "string" ? body.description.trim() : null;
+    typeof body?.description === "string" ? body.description.trim() : null;
 
-  const rows = db
-    .select()
-    .from(messages)
-    .where(and(eq(messages.clientId, claims.cid), inArray(messages.id, ids)))
-    .all();
+  // Resolve all referenced message ids — both the size-aware `matrix` pairs
+  // and the legacy `mcIds` (which need a default size resolved server-side
+  // from the template registry).
+  const allMessageIds = Array.from(
+    new Set([...mcIds, ...matrixPairsIn.map((p) => p.messageId)]),
+  );
+  const messageRows = allMessageIds.length
+    ? db
+        .select()
+        .from(messages)
+        .where(
+          and(
+            eq(messages.clientId, claims.cid),
+            inArray(messages.id, allMessageIds),
+          ),
+        )
+        .all()
+    : [];
 
-  if (rows.length === 0) {
+  // Fan out legacy mcIds → matrix pairs by defaulting each to the message's
+  // template defaultSize (or the first available size).
+  const messageById = new Map(messageRows.map((m) => [m.id, m]));
+  const fannedFromMcIds: Array<{ messageId: number; size: string }> = [];
+  for (const id of mcIds) {
+    const m = messageById.get(id);
+    if (!m || !m.template) continue;
+    const tinfo = readTemplate(m.template);
+    const size = tinfo?.defaultSize ?? tinfo?.sizes[0] ?? null;
+    if (!size) continue;
+    fannedFromMcIds.push({ messageId: id, size });
+  }
+  // Dedupe (messageId, size) pairs across both inputs.
+  const matrixSeen = new Set<string>();
+  const matrixItems: Array<{ messageId: number; size: string }> = [];
+  for (const p of [...matrixPairsIn, ...fannedFromMcIds]) {
+    if (!messageById.has(p.messageId)) continue;
+    const k = `${p.messageId}|${p.size}`;
+    if (matrixSeen.has(k)) continue;
+    matrixSeen.add(k);
+    matrixItems.push(p);
+  }
+  const creativeRows = creativeIds.length
+    ? db
+        .select()
+        .from(creatives)
+        .where(
+          and(
+            eq(creatives.clientId, claims.cid),
+            inArray(creatives.id, creativeIds),
+          ),
+        )
+        .all()
+    : [];
+  if (messageRows.length === 0 && creativeRows.length === 0) {
     return NextResponse.json(
-      { error: "no matching messages found in this client" },
+      { error: "no matching messages or creatives found in this client" },
       { status: 400 },
     );
   }
 
+  // Snapshot file metadata for any creative that references one — the public
+  // share viewer cannot hit the auth-gated /api/files endpoints, so we expose
+  // these via a share-scoped proxy that checks the file id is in this list.
+  const fileIds = Array.from(
+    new Set(creativeRows.map((c) => c.fileId).filter((s): s is string => !!s)),
+  );
+  const fileRows = fileIds.length
+    ? db
+        .select({
+          id: uploadedFiles.id,
+          filename: uploadedFiles.filename,
+          mimeType: uploadedFiles.mimeType,
+          sizeBytes: uploadedFiles.sizeBytes,
+          dimensions: uploadedFiles.dimensions,
+        })
+        .from(uploadedFiles)
+        .where(
+          and(
+            eq(uploadedFiles.clientId, claims.cid),
+            inArray(uploadedFiles.id, fileIds),
+          ),
+        )
+        .all()
+    : [];
+
   const metadata: SnapshotMetadata = {
     generatedAt: new Date().toISOString(),
-    messages: rows,
+    messages: messageRows,
+    matrixItems,
+    creatives: creativeRows,
+    files: fileRows,
   };
 
   const id = nanoid(12);
@@ -117,7 +232,8 @@ export const POST = withSession(async ({ req, claims }) => {
     after: {
       id: inserted.id,
       title: inserted.title,
-      messageCount: rows.length,
+      matrixCount: matrixItems.length,
+      creativeCount: creativeRows.length,
     },
   });
 
@@ -128,7 +244,8 @@ export const POST = withSession(async ({ req, claims }) => {
         title: inserted.title,
         description: inserted.description,
         createdAt: inserted.createdAt,
-        messageCount: rows.length,
+        matrixCount: matrixItems.length,
+        creativeCount: creativeRows.length,
       },
     },
     { status: 201 },

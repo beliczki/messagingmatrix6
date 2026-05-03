@@ -419,7 +419,9 @@ export const shareGalleries = sqliteTable(
 );
 
 // Per-item comments on a public share gallery. itemKey is "matrix:{messageId}:{size}"
-// for matrix items and "creative:{id}" for uploaded creatives.
+// for matrix items and "creative:{id}" for uploaded creatives. annotation is
+// optional JSON: {type:"point", x, y} or {type:"rect", x, y, w, h} where all
+// coords are normalized 0-1 (relative to the item's preview surface).
 export const shareComments = sqliteTable(
   "share_comments",
   {
@@ -430,6 +432,7 @@ export const shareComments = sqliteTable(
     itemKey: text("item_key").notNull(),
     authorName: text("author_name").notNull(),
     body: text("body").notNull(),
+    annotation: text("annotation"),
     createdAt: text("created_at")
       .notNull()
       .default(sql`(CURRENT_TIMESTAMP)`),

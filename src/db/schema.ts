@@ -504,6 +504,56 @@ export const snapshots = sqliteTable(
 
 export type Snapshot = typeof snapshots.$inferSelect;
 
+// AdForm-aware feed export history. One row per "Preview & Export" action
+// from the Matrix Feed view (one product, ACTIVE-status filter). The user
+// may export multiple drafts before manually marking one as "uploaded to
+// AdForm" (uploaded_to_adform_at). Subsequent exports for the same
+// (client, product, feed_version) diff against the latest *uploaded* row
+// and may force a new feed_version when the diff would require deleting a
+// live row (sticky-superset rule) or when row_count > 500.
+//
+// payload_json shape:
+//   {
+//     columns: string[],            // verbatim feedStructure split
+//     rows:    Array<Record<string,string>>,  // each cell pre-evaluated
+//     messageIds: number[],         // one per row (DEFAULT row → -1 sentinel)
+//     defaultRowIndex: number       // index of the DEFAULT row in `rows`
+//   }
+export const feedExports = sqliteTable(
+  "feed_exports",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    clientId: integer("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    product: text("product").notNull(),
+    feedVersion: integer("feed_version").notNull(),
+    exportedAt: text("exported_at")
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+    exportedBy: text("exported_by"),
+    uploadedToAdformAt: text("uploaded_to_adform_at"),
+    uploadedBy: text("uploaded_by"),
+    defaultMessageId: integer("default_message_id"),
+    defaultLabel: text("default_label"),
+    rowCount: integer("row_count").notNull(),
+    payloadJson: text("payload_json").notNull(),
+    notes: text("notes"),
+  },
+  (t) => [
+    index("feed_exports_client_product_idx").on(t.clientId, t.product),
+    index("feed_exports_client_uploaded_idx").on(t.clientId, t.uploadedToAdformAt),
+    index("feed_exports_client_product_version_idx").on(
+      t.clientId,
+      t.product,
+      t.feedVersion,
+    ),
+  ],
+);
+
+export type FeedExport = typeof feedExports.$inferSelect;
+export type NewFeedExport = typeof feedExports.$inferInsert;
+
 export type ConfigRow = typeof config.$inferSelect;
 export type NewConfigRow = typeof config.$inferInsert;
 export type Client = typeof clients.$inferSelect;

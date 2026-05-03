@@ -18,6 +18,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { matchesScope } from "@/lib/entities/text-formatting";
+import { mcLabelFor } from "@/lib/mc-label";
 import type { TextFormatting } from "@/db/schema";
 
 export type RenderInput = {
@@ -87,13 +88,6 @@ function lookupField(
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function mcLabelFor(message: Record<string, unknown>): string {
-  const n = message.number ?? message.Number;
-  const v = message.variant ?? message.Variant;
-  if (n === null || n === undefined || !v) return "";
-  return `MC${n}${v}`;
 }
 
 export function renderTemplate(input: RenderInput): RenderResult {

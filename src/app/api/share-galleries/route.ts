@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/db";
-import { creatives, messages, shareGalleries, uploadedFiles } from "@/db/schema";
+import {
+  creatives,
+  messages,
+  shareComments,
+  shareGalleries,
+  uploadedFiles,
+  users,
+} from "@/db/schema";
 import { withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 import { readTemplate } from "@/lib/templates";
@@ -37,15 +44,55 @@ export const GET = withSession(({ req, claims }) => {
     .where(where)
     .orderBy(desc(shareGalleries.createdAt))
     .all();
+
+  const userIds = [
+    ...new Set(rows.map((r) => r.createdBy).filter((s): s is string => !!s)),
+  ];
+  const emailById = userIds.length
+    ? new Map(
+        db
+          .select({ id: users.id, email: users.email })
+          .from(users)
+          .where(inArray(users.id, userIds))
+          .all()
+          .map((u) => [u.id, u.email]),
+      )
+    : new Map<string, string>();
+
+  const shareIds = rows.map((r) => r.id);
+  const commentCountById = shareIds.length
+    ? new Map(
+        db
+          .select({
+            id: shareComments.shareGalleryId,
+            count: sql<number>`count(*)`.as("count"),
+          })
+          .from(shareComments)
+          .where(
+            and(
+              inArray(shareComments.shareGalleryId, shareIds),
+              isNull(shareComments.archivedAt),
+            ),
+          )
+          .groupBy(shareComments.shareGalleryId)
+          .all()
+          .map((c) => [c.id, Number(c.count)]),
+      )
+    : new Map<string, number>();
+
   return NextResponse.json({
     shares: rows.map((r) => ({
       id: r.id,
       title: r.title,
       description: r.description,
       createdBy: r.createdBy,
+      createdByEmail: r.createdBy ? emailById.get(r.createdBy) ?? null : null,
       createdAt: r.createdAt,
       archivedAt: r.archivedAt,
       messageCount: messageCountFromMetadata(r.metadata),
+      commentCount: commentCountById.get(r.id) ?? 0,
+      viewCount: r.viewCount,
+      downloadCount: r.downloadCount,
     })),
   });
 });

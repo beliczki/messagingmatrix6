@@ -407,6 +407,8 @@ export const shareGalleries = sqliteTable(
     description: text("description"),
     createdBy: text("created_by"),
     metadata: text("metadata"),
+    viewCount: integer("view_count").notNull().default(0),
+    downloadCount: integer("download_count").notNull().default(0),
     createdAt: text("created_at")
       .notNull()
       .default(sql`(CURRENT_TIMESTAMP)`),

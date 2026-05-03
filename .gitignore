@@ -8,6 +8,7 @@ out
 db/matrix.db
 db/matrix.db-shm
 db/matrix.db-wal
+db/matrix.db.backup-*
 storage/
 docs/
 

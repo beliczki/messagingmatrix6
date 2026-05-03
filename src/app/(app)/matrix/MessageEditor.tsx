@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   X,
@@ -14,6 +14,9 @@ import {
   Loader2,
   Check,
   CircleAlert,
+  Type,
+  Trash2,
+  ChevronDown,
 } from "lucide-react";
 import clsx from "clsx";
 import { type Audience, type Message, type Topic, STATUS_COLOR } from "./types";
@@ -80,6 +83,8 @@ type EditableFields = Pick<
   | "customCss"
   | "template"
   | "templateVariantClasses"
+  | "startDate"
+  | "endDate"
 >;
 
 const EDITABLE_KEYS: Array<keyof EditableFields> = [
@@ -108,6 +113,8 @@ const EDITABLE_KEYS: Array<keyof EditableFields> = [
   "customCss",
   "template",
   "templateVariantClasses",
+  "startDate",
+  "endDate",
 ];
 
 function toEditable(m: Message): EditableFields {
@@ -495,9 +502,26 @@ export default function MessageEditor({
               {tab === "naming" ? (
                 <NamingTab message={message} aud={aud} top={top} draft={draft} setDraft={setDraft} />
               ) : null}
-              {tab === "content" ? <ContentTab draft={draft} setDraft={setDraft} /> : null}
+              {tab === "content" ? (
+                <ContentTab
+                  draft={draft}
+                  setDraft={setDraft}
+                  mcLabel={mcLabel}
+                  templateSizes={
+                    templatesQ.data?.templates.find(
+                      (t) => t.name === (draft.template ?? "html"),
+                    )?.sizes ?? []
+                  }
+                />
+              ) : null}
               {tab === "styles" ? <StylesTab draft={draft} setDraft={setDraft} /> : null}
-              {tab === "trafficking" ? <TraffickingTab message={committedSnapshot ?? message} /> : null}
+              {tab === "trafficking" ? (
+                <TraffickingTab
+                  message={committedSnapshot ?? message}
+                  draft={draft}
+                  setDraft={setDraft}
+                />
+              ) : null}
               {tab === "template" ? (
                 <TemplateTab
                   draft={draft}
@@ -700,84 +724,148 @@ function NamingTab({
         </Field>
       </div>
 
-      <Field label="Audience">
-        <input
-          readOnly
-          value={aud ? `${aud.name} — ${aud.key}` : message.audience}
-          className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm text-slate-700"
-        />
-      </Field>
-      <Field label="Topic">
-        <input
-          readOnly
-          value={top ? `${top.name} — ${top.key}` : message.topic}
-          className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm text-slate-700"
-        />
-      </Field>
+      <div className="col-span-2">
+        <Field label="Audience key">
+          <input
+            disabled
+            value={aud?.key ?? message.audience}
+            className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-xs text-slate-500 disabled:cursor-not-allowed"
+          />
+        </Field>
+      </div>
+      <div className="col-span-2">
+        <Field label="Topic key">
+          <input
+            disabled
+            value={top?.key ?? message.topic}
+            className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-xs text-slate-500 disabled:cursor-not-allowed"
+          />
+        </Field>
+      </div>
+
+      <EntityBlock title="Audience properties" rows={audienceRows(aud)} />
+      <EntityBlock title="Topic properties" rows={topicRows(top)} />
     </div>
   );
 }
 
+type EntityRow = { label: string; value: string };
+
+function audienceRows(aud: Audience | undefined): EntityRow[] {
+  return [
+    { label: "Name", value: aud?.name ?? "—" },
+    { label: "Product", value: aud?.product ?? "—" },
+    { label: "Tag", value: aud?.tag ?? "—" },
+    { label: "Strategy", value: aud?.strategy ?? "—" },
+    { label: "Data source", value: aud?.dataSource ?? "—" },
+    { label: "Targeting type", value: aud?.targetingType ?? "—" },
+    { label: "Campaign ID", value: aud?.campaignId ?? "—" },
+    { label: "Lineitem ID", value: aud?.lineitemId ?? "—" },
+    { label: "Comment", value: aud?.comment ?? "—" },
+  ];
+}
+
+function topicRows(top: Topic | undefined): EntityRow[] {
+  return [
+    { label: "Name", value: top?.name ?? "—" },
+    { label: "Product", value: top?.product ?? "—" },
+    { label: "Tag", value: top?.tag ?? "—" },
+    { label: "Tag 1", value: top?.tag1 ?? "—" },
+    { label: "Tag 2", value: top?.tag2 ?? "—" },
+    { label: "Tag 3", value: top?.tag3 ?? "—" },
+    { label: "Tag 4", value: top?.tag4 ?? "—" },
+    { label: "Created", value: top?.created ?? "—" },
+    { label: "Comment", value: top?.comment ?? "—" },
+  ];
+}
+
+function EntityBlock({ title, rows }: { title: string; rows: EntityRow[] }) {
+  return (
+    <div className="naming-tab__entity-block rounded-md border border-slate-200 bg-slate-50/50 p-3">
+      <div className="naming-tab__entity-title mb-2 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+        {title}
+      </div>
+      <dl className="naming-tab__entity-rows grid grid-cols-[auto_1fr] gap-x-3 gap-y-1.5">
+        {rows.map((r) => (
+          <Fragment key={r.label}>
+            <dt className="naming-tab__entity-row-label text-[10px] font-medium uppercase tracking-wide text-slate-500 self-center">
+              {r.label}
+            </dt>
+            <dd
+              className="naming-tab__entity-row-value break-words text-xs text-slate-800"
+              title={r.value}
+            >
+              {r.value}
+            </dd>
+          </Fragment>
+        ))}
+      </dl>
+    </div>
+  );
+}
+
+type FormattingRule = {
+  id: number;
+  textOriginal: string;
+  textFormatted: string;
+  formattingScope: string | null;
+  formattingMcScope: string | null;
+  version: number;
+  archivedAt: string | null;
+};
+
+const FORMATTABLE_FIELDS = [
+  { key: "headline", label: "Headline", kind: "input" as const },
+  { key: "copy1", label: "Copy 1", kind: "textarea" as const, rows: 3 },
+  { key: "copy2", label: "Copy 2", kind: "textarea" as const, rows: 2 },
+  { key: "disclaimer", label: "Disclaimer", kind: "textarea" as const, rows: 2 },
+  { key: "flash", label: "Flash badge", kind: "input" as const },
+  { key: "cta", label: "CTA text", kind: "input" as const },
+] as const;
+
 function ContentTab({
   draft,
   setDraft,
+  mcLabel,
+  templateSizes,
 }: {
   draft: EditableFields;
   setDraft: (d: EditableFields) => void;
+  mcLabel: string;
+  templateSizes: string[];
 }) {
   function set(k: keyof EditableFields, v: string) {
     setDraft({ ...draft, [k]: v || null });
   }
+  const rulesQ = useQuery({
+    queryKey: ["text-formatting"],
+    queryFn: async () => {
+      const r = await fetch("/api/text-formatting", { credentials: "include" });
+      if (!r.ok) throw new Error("text-formatting");
+      return (await r.json()) as { text_formatting: FormattingRule[] };
+    },
+  });
+  const allRules = useMemo(
+    () => (rulesQ.data?.text_formatting ?? []).filter((r) => r.archivedAt === null),
+    [rulesQ.data],
+  );
+
   return (
     <>
-      <Field label="Headline">
-        <input
-          type="text"
-          value={draft.headline ?? ""}
-          onChange={(e) => set("headline", e.target.value)}
-          className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+      {FORMATTABLE_FIELDS.map((f) => (
+        <TextFieldWithFormatting
+          key={f.key}
+          fieldKey={f.key}
+          label={f.label}
+          kind={f.kind}
+          rows={"rows" in f ? f.rows : undefined}
+          value={(draft[f.key] as string | null) ?? ""}
+          onChange={(v) => set(f.key, v)}
+          allRules={allRules}
+          mcLabel={mcLabel}
+          templateSizes={templateSizes}
         />
-      </Field>
-      <Field label="Copy 1">
-        <textarea
-          value={draft.copy1 ?? ""}
-          onChange={(e) => set("copy1", e.target.value)}
-          rows={3}
-          className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
-        />
-      </Field>
-      <Field label="Copy 2">
-        <textarea
-          value={draft.copy2 ?? ""}
-          onChange={(e) => set("copy2", e.target.value)}
-          rows={2}
-          className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
-        />
-      </Field>
-      <Field label="Disclaimer">
-        <textarea
-          value={draft.disclaimer ?? ""}
-          onChange={(e) => set("disclaimer", e.target.value)}
-          rows={2}
-          className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
-        />
-      </Field>
-      <Field label="Flash badge">
-        <input
-          type="text"
-          value={draft.flash ?? ""}
-          onChange={(e) => set("flash", e.target.value)}
-          className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
-        />
-      </Field>
-      <Field label="CTA text">
-        <input
-          type="text"
-          value={draft.cta ?? ""}
-          onChange={(e) => set("cta", e.target.value)}
-          className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
-        />
-      </Field>
+      ))}
       <Field label="Landing URL">
         <input
           type="url"
@@ -811,6 +899,426 @@ function ContentTab({
       </div>
     </>
   );
+}
+
+function TextFieldWithFormatting({
+  fieldKey,
+  label,
+  kind,
+  rows,
+  value,
+  onChange,
+  allRules,
+  mcLabel,
+  templateSizes,
+}: {
+  fieldKey: keyof EditableFields;
+  label: string;
+  kind: "input" | "textarea";
+  rows?: number;
+  value: string;
+  onChange: (v: string) => void;
+  allRules: FormattingRule[];
+  mcLabel: string;
+  templateSizes: string[];
+}) {
+  const qc = useQueryClient();
+  // Drafts (unsaved rules) live locally per field. Each draft has a stable
+  // local id so React keys are stable across renders.
+  const [drafts, setDrafts] = useState<
+    Array<{ key: string; textFormatted: string; scope: string[]; isGlobal: boolean }>
+  >([]);
+  const draftCounter = useRef(0);
+
+  function addDraft() {
+    draftCounter.current += 1;
+    const k = `draft-${fieldKey}-${draftCounter.current}`;
+    setDrafts((prev) => [...prev, { key: k, textFormatted: "", scope: [], isGlobal: true }]);
+  }
+
+  function updateDraft(key: string, patch: Partial<{ textFormatted: string; scope: string[]; isGlobal: boolean }>) {
+    setDrafts((prev) =>
+      prev.map((d) => (d.key === key ? { ...d, ...patch } : d)),
+    );
+  }
+
+  function removeDraft(key: string) {
+    setDrafts((prev) => prev.filter((d) => d.key !== key));
+  }
+
+  async function saveDraft(key: string) {
+    const d = drafts.find((x) => x.key === key);
+    if (!d) return;
+    if (!value || !d.textFormatted) return;
+    const payload = {
+      textOriginal: value,
+      textFormatted: d.textFormatted,
+      formattingScope: d.scope.length === 0 ? null : d.scope.join(","),
+      formattingMcScope: d.isGlobal ? null : mcLabel,
+    };
+    const r = await fetch("/api/text-formatting", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) return;
+    removeDraft(key);
+    qc.invalidateQueries({ queryKey: ["text-formatting"] });
+  }
+
+  // Rules visible under this field: existing rules whose textOriginal matches
+  // the field's current value (case-sensitive — render.ts also uses literal
+  // regex match). Once the user changes the field, formerly-matching rules
+  // disappear from this list, exactly as in v5.
+  const matching = useMemo(
+    () => allRules.filter((r) => r.textOriginal === value && value.length > 0),
+    [allRules, value],
+  );
+
+  const InputEl = kind === "textarea" ? "textarea" : "input";
+  const inputClass =
+    "w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none";
+
+  return (
+    <div className="form-field formatted-field mb-3">
+      <div className="formatted-field__label-row mb-1 flex items-center justify-between">
+        <div className="form-field__label text-xs font-medium text-slate-700">
+          {label}
+        </div>
+        <button
+          type="button"
+          onClick={addDraft}
+          disabled={!value}
+          title={value ? "Add a formatting rule for this text" : "Type something first"}
+          className="link-button inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <Type className="size-3" />
+          add text formatting
+        </button>
+      </div>
+      <InputEl
+        type={kind === "input" ? "text" : undefined}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        rows={kind === "textarea" ? rows : undefined}
+        className={inputClass}
+      />
+      {matching.map((rule) => (
+        <TextFormattingRuleRow
+          key={`r-${rule.id}`}
+          rule={rule}
+          mcLabel={mcLabel}
+          templateSizes={templateSizes}
+        />
+      ))}
+      {drafts.map((d) => (
+        <TextFormattingDraftRow
+          key={d.key}
+          draft={d}
+          templateSizes={templateSizes}
+          onChange={(patch) => updateDraft(d.key, patch)}
+          onRemove={() => removeDraft(d.key)}
+          onCommit={() => saveDraft(d.key)}
+          canSave={value.length > 0 && d.textFormatted.length > 0}
+        />
+      ))}
+    </div>
+  );
+}
+
+function TextFormattingRuleRow({
+  rule,
+  mcLabel,
+  templateSizes,
+}: {
+  rule: FormattingRule;
+  mcLabel: string;
+  templateSizes: string[];
+}) {
+  const qc = useQueryClient();
+  // Local edit buffer mirrors persisted state but lets the user type freely;
+  // a 400ms debounce flushes PATCH calls.
+  const [textFormatted, setTextFormatted] = useState(rule.textFormatted);
+  const [scope, setScope] = useState<string[]>(parseCsv(rule.formattingScope));
+  const [isGlobal, setIsGlobal] = useState<boolean>(rule.formattingMcScope === null);
+  // Track the last-known persisted version to send in If-Match payloads.
+  const versionRef = useRef(rule.version);
+  // Keep buffers fresh if the rule rerenders with new server data.
+  useEffect(() => {
+    setTextFormatted(rule.textFormatted);
+    setScope(parseCsv(rule.formattingScope));
+    setIsGlobal(rule.formattingMcScope === null);
+    versionRef.current = rule.version;
+  }, [rule.id, rule.version]);
+
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dirty =
+    textFormatted !== rule.textFormatted ||
+    csvOf(scope) !== (rule.formattingScope ?? "") ||
+    (isGlobal ? null : mcLabel) !== rule.formattingMcScope;
+
+  useEffect(() => {
+    if (!dirty) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      const payload = {
+        version: versionRef.current,
+        textFormatted,
+        formattingScope: scope.length === 0 ? null : scope.join(","),
+        formattingMcScope: isGlobal ? null : mcLabel,
+      };
+      const r = await fetch(`/api/text-formatting/${rule.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (r.ok) {
+        const body = (await r.json()) as { rule: FormattingRule };
+        versionRef.current = body.rule.version;
+        qc.invalidateQueries({ queryKey: ["text-formatting"] });
+      }
+    }, 400);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [textFormatted, scope, isGlobal, dirty, rule.id, mcLabel, qc]);
+
+  async function onDelete() {
+    const r = await fetch(`/api/text-formatting/${rule.id}`, {
+      method: "DELETE",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        "If-Match": String(versionRef.current),
+      },
+    });
+    if (r.ok) qc.invalidateQueries({ queryKey: ["text-formatting"] });
+  }
+
+  return (
+    <FormattingRow
+      textFormatted={textFormatted}
+      onTextFormattedChange={setTextFormatted}
+      scope={scope}
+      onScopeChange={setScope}
+      isGlobal={isGlobal}
+      onIsGlobalChange={setIsGlobal}
+      templateSizes={templateSizes}
+      onDelete={onDelete}
+    />
+  );
+}
+
+function TextFormattingDraftRow({
+  draft,
+  templateSizes,
+  onChange,
+  onRemove,
+  onCommit,
+  canSave,
+}: {
+  draft: { textFormatted: string; scope: string[]; isGlobal: boolean };
+  templateSizes: string[];
+  onChange: (patch: Partial<{ textFormatted: string; scope: string[]; isGlobal: boolean }>) => void;
+  onRemove: () => void;
+  onCommit: () => void;
+  canSave: boolean;
+}) {
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!canSave) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => onCommit(), 600);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [canSave, draft.textFormatted, draft.scope, draft.isGlobal, onCommit]);
+
+  return (
+    <FormattingRow
+      textFormatted={draft.textFormatted}
+      onTextFormattedChange={(v) => onChange({ textFormatted: v })}
+      scope={draft.scope}
+      onScopeChange={(v) => onChange({ scope: v })}
+      isGlobal={draft.isGlobal}
+      onIsGlobalChange={(v) => onChange({ isGlobal: v })}
+      templateSizes={templateSizes}
+      onDelete={onRemove}
+      placeholder="Enter formatted text…"
+    />
+  );
+}
+
+function FormattingRow({
+  textFormatted,
+  onTextFormattedChange,
+  scope,
+  onScopeChange,
+  isGlobal,
+  onIsGlobalChange,
+  templateSizes,
+  onDelete,
+  placeholder,
+}: {
+  textFormatted: string;
+  onTextFormattedChange: (v: string) => void;
+  scope: string[];
+  onScopeChange: (s: string[]) => void;
+  isGlobal: boolean;
+  onIsGlobalChange: (v: boolean) => void;
+  templateSizes: string[];
+  onDelete: () => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="text-format-rule mt-2 flex items-center gap-2">
+      <input
+        type="text"
+        value={textFormatted}
+        onChange={(e) => onTextFormattedChange(e.target.value)}
+        placeholder={placeholder}
+        className="text-format-rule__input min-w-0 flex-1 rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+      />
+      <ScopeMultiSelect
+        scope={scope}
+        onChange={onScopeChange}
+        sizes={templateSizes}
+      />
+      <button
+        type="button"
+        onClick={() => onIsGlobalChange(!isGlobal)}
+        className={clsx(
+          "text-format-rule__toggle toggle-tag rounded-md border px-2 py-1 text-[11px] font-medium",
+          isGlobal
+            ? "border-slate-900 bg-slate-900 text-white"
+            : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+        )}
+        title={isGlobal ? "Applies in every MC" : "Applies in this MC only"}
+      >
+        {isGlobal ? "Global" : "Local"}
+      </button>
+      <button
+        type="button"
+        onClick={onDelete}
+        aria-label="Remove formatting rule"
+        className="text-format-rule__delete row-delete-btn rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-rose-600"
+      >
+        <Trash2 className="size-4" />
+      </button>
+    </div>
+  );
+}
+
+function ScopeMultiSelect({
+  scope,
+  onChange,
+  sizes,
+}: {
+  scope: string[];
+  onChange: (s: string[]) => void;
+  sizes: string[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (!ref.current) return;
+      if (!ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    window.addEventListener("mousedown", onDoc);
+    return () => window.removeEventListener("mousedown", onDoc);
+  }, [open]);
+  const allSelected = scope.length === 0;
+  const label = allSelected
+    ? "All sizes"
+    : scope.length === 1
+      ? scope[0]
+      : `${scope.length} sizes`;
+  function toggleAll() {
+    onChange([]);
+    setOpen(false);
+  }
+  function toggleSize(size: string) {
+    if (scope.includes(size)) {
+      const next = scope.filter((s) => s !== size);
+      onChange(next);
+    } else {
+      onChange([...scope, size]);
+    }
+  }
+  return (
+    <div ref={ref} className="text-format-rule__scope dropdown relative shrink-0">
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((v) => !v);
+        }}
+        className="dropdown-trigger inline-flex min-w-[96px] items-center justify-between gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50"
+      >
+        <span>{label}</span>
+        <ChevronDown className="size-3" />
+      </button>
+      {open ? (
+        <div className="dropdown-menu absolute right-0 top-full z-30 mt-1 min-w-[160px] rounded-md border border-slate-200 bg-white py-1 shadow-md">
+          <button
+            type="button"
+            onClick={toggleAll}
+            className={clsx(
+              "dropdown-item flex w-full items-center gap-2 px-2 py-1 text-left text-xs hover:bg-slate-100",
+              allSelected && "bg-slate-50 font-medium",
+            )}
+          >
+            <span
+              className={clsx(
+                "flex size-3.5 items-center justify-center rounded-sm border",
+                allSelected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-400",
+              )}
+            >
+              {allSelected ? <Check className="size-2.5" strokeWidth={3} /> : null}
+            </span>
+            All sizes
+          </button>
+          {sizes.map((s) => {
+            const selected = scope.includes(s);
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => toggleSize(s)}
+                className="dropdown-item flex w-full items-center gap-2 px-2 py-1 text-left text-xs hover:bg-slate-100"
+              >
+                <span
+                  className={clsx(
+                    "flex size-3.5 items-center justify-center rounded-sm border",
+                    selected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-400",
+                  )}
+                >
+                  {selected ? <Check className="size-2.5" strokeWidth={3} /> : null}
+                </span>
+                {s}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function parseCsv(s: string | null): string[] {
+  if (!s) return [];
+  return s
+    .split(/[,\s]+/)
+    .map((x) => x.trim())
+    .filter((x) => x.length > 0);
+}
+
+function csvOf(arr: string[]): string {
+  return arr.join(",");
 }
 
 function MediaField({
@@ -907,13 +1415,44 @@ function StylesTab({
   );
 }
 
-function TraffickingTab({ message }: { message: Message }) {
+function TraffickingTab({
+  message,
+  draft,
+  setDraft,
+}: {
+  message: Message;
+  draft: EditableFields;
+  setDraft: (d: EditableFields) => void;
+}) {
   const ro = "w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-xs text-slate-700";
   return (
     <>
-      <p className="mb-3 text-xs text-slate-500">
-        Generated from <code className="font-mono">config.patterns.trafficking</code>{" "}
-        on every save. Read-only here.
+      <div className="grid grid-cols-2 gap-x-4">
+        <Field label="Start date">
+          <input
+            type="date"
+            value={draft.startDate ?? ""}
+            onChange={(e) =>
+              setDraft({ ...draft, startDate: e.target.value || null })
+            }
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+          />
+        </Field>
+        <Field label="End date">
+          <input
+            type="date"
+            value={draft.endDate ?? ""}
+            onChange={(e) =>
+              setDraft({ ...draft, endDate: e.target.value || null })
+            }
+            className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+          />
+        </Field>
+      </div>
+
+      <p className="mb-3 mt-2 text-xs text-slate-500">
+        PMMID and UTM fields below are generated from{" "}
+        <code className="font-mono">config.patterns.trafficking</code> on every save.
       </p>
       <Field label="PMMID">
         <input readOnly value={message.pmmid ?? ""} className={ro} />

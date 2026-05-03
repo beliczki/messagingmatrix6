@@ -5,9 +5,5 @@ import { SharesView } from "./SharesView";
 export default async function Page() {
   const claims = await readSessionFromCookies();
   if (!claims) redirect("/login");
-  return (
-    <div className="shares flex h-full flex-col">
-      <SharesView />
-    </div>
-  );
+  return <SharesView />;
 }

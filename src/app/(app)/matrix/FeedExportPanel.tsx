@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Download, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -70,6 +70,39 @@ export default function FeedExportPanel({
   const [defaultMessageId, setDefaultMessageId] = useState<number | "">("");
   const [dialogOpen, setDialogOpen] = useState(false);
 
+  // Persist the default-row selection per product so users don't have to
+  // re-pick it every time they switch products or come back later.
+  const storageKey = product ? `mm6_feed_export_default_${product}` : "";
+  const lastLoadedKey = useRef<string>("");
+  useEffect(() => {
+    if (!storageKey) {
+      setDefaultMessageId("");
+      lastLoadedKey.current = "";
+      return;
+    }
+    let next: number | "" = "";
+    try {
+      const raw = localStorage.getItem(storageKey);
+      if (raw !== null) {
+        const parsed = Number(raw);
+        if (Number.isFinite(parsed)) next = parsed;
+      }
+    } catch {}
+    setDefaultMessageId(next);
+    lastLoadedKey.current = storageKey;
+  }, [storageKey]);
+  useEffect(() => {
+    if (!storageKey) return;
+    if (lastLoadedKey.current !== storageKey) return;
+    try {
+      if (defaultMessageId === "") {
+        localStorage.removeItem(storageKey);
+      } else {
+        localStorage.setItem(storageKey, String(defaultMessageId));
+      }
+    } catch {}
+  }, [storageKey, defaultMessageId]);
+
   const mcOptions = useMemo(
     () => (ready ? uniqueMcOptions(filteredMessages) : []),
     [ready, filteredMessages],
@@ -116,11 +149,41 @@ export default function FeedExportPanel({
     );
   }
 
+  const filterChips: Array<{ key: string; label: string }> = [
+    { key: "product", label: product! },
+  ];
+  const trimmedSearch = filters.search.trim();
+  if (trimmedSearch) {
+    filterChips.push({ key: "search", label: trimmedSearch });
+  }
+  filterChips.push({ key: "status", label: "ACTIVE" });
+
+  const filteredIds = useMemo(
+    () => filteredMessages.map((m) => m.id),
+    [filteredMessages],
+  );
+
   return (
     <>
       <div className="feed-export-panel rounded-md border border-slate-200 bg-white p-3">
         <div className="feed-export-panel__title text-[10px] font-medium uppercase tracking-wider text-slate-500">
-          Feed export · {product}
+          Feed export
+        </div>
+
+        <div className="feed-export-panel__filters mt-2 flex flex-wrap items-center gap-1.5">
+          {filterChips.map((c) => (
+            <span
+              key={c.key}
+              className="filter-chip inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-medium text-slate-700"
+              title={`Filter: ${c.key}`}
+            >
+              {c.label}
+            </span>
+          ))}
+          <span className="feed-export-panel__row-count ml-auto text-[10px] tabular-nums text-slate-500">
+            {filteredMessages.length} row
+            {filteredMessages.length === 1 ? "" : "s"}
+          </span>
         </div>
 
         {liveExport ? (
@@ -137,7 +200,7 @@ export default function FeedExportPanel({
           </div>
         ) : (
           <div className="feed-export-panel__live mt-2 rounded bg-slate-50 px-2 py-1.5 text-[11px] text-slate-500">
-            No prior upload — first export.
+            No published feed for {product} yet.
           </div>
         )}
 
@@ -193,6 +256,7 @@ export default function FeedExportPanel({
         defaultMessageId={
           defaultMessageId === "" ? null : (defaultMessageId as number)
         }
+        messageIds={filteredIds}
       />
     </>
   );

@@ -311,6 +311,45 @@ A `RightToolbar` (globalis) `children`-ként kapja:
 - **Open mód:** `matrix-view-controls` (3a fent)
 - **Collapsed mód:** 2× `cycle-icon-btn` (View + Density)
 
+### 3g. HeaderDetailDialog (audience/topic edit + steppable preview) — `matrix/HeaderDetailDialog.tsx`
+
+A row/col header kattintásra nyíló osztott modal: bal pane szerkeszthető audience/topic form, jobb pane stepperrel végigmegy az adott audience/topic-ra eső MC-ken, élő iframe preview-val.
+
+| Egység | Javasolt név | Sor |
+|---|---|---|
+| Modal root | `matrix-header-dialog modal` | – |
+| Pane order modifier wide aspect-ben | `matrix-header-dialog--landscape` | – |
+| Header strip | `matrix-header-dialog__header modal__header` | – |
+| Heading kind (Audience / Topic kis label) | `matrix-header-dialog__kind` | – |
+| Címke (entity name) | `matrix-header-dialog__title` | – |
+| Kulcs (font-mono kis szürke) | `matrix-header-dialog__key` | – |
+| SaveIndicator | `save-indicator` (globalis, lásd 3e) | – |
+| Autosave toggle | `matrix-header-dialog__autosave-toggle` | – |
+| Manual Save / Cancel gombok | `toolbar-btn--primary` / `toolbar-btn` | – |
+| Close (X) | `modal__close` | – |
+| Body flex container | `matrix-header-dialog__body` | – |
+| Edit form pane | `matrix-header-dialog__pane--form` | – |
+| Form scroll content | `matrix-header-dialog__form-content` | – |
+| Audience/Topic form grid | `matrix-header-form form-grid` | – |
+| Draggable divider | `divider-handle--vertical` / `--horizontal` (globalis) | – |
+| Preview pane | `matrix-header-dialog__pane--preview` | – |
+| Stepper strip (prev/next + label + counter) | `matrix-header-dialog__stepper` | – |
+| Prev nav | `matrix-header-dialog__nav-prev` | – |
+| Next nav | `matrix-header-dialog__nav-next` | – |
+| Counter (3/12) | `matrix-header-dialog__nav-counter` | – |
+| Current MC label | `matrix-header-dialog__mc-label` | – |
+| Current MC name (cím melletti truncate) | `matrix-header-dialog__mc-name` | – |
+| Empty preview placeholder | `matrix-header-dialog__empty-preview` | – |
+| Belső preview (`PreviewPane`) | `preview-pane` (globalis) | – |
+
+A header `<th>` kattintható lett: `matrix-grid__col-header-btn` és `matrix-grid__row-header-btn` belső gomb. A korábbi `matrix-grid__col-header-label` / `matrix-grid__row-header-label` továbbra is a gombon belül él.
+
+Persisted localStorage kulcsok:
+- `mm6_media_dialog_preview_bg` — **shared** a `MatrixDetailDialog`-gal (light/dark/checker).
+- `mm6_matrix_header_dialog_size` — utoljára választott méret (string vagy null).
+- `mm6_matrix_header_dialog_skip_anim` — bool.
+- `mm6_matrix_header_dialog_split` — divider %-os pozíciója (number).
+
 ---
 
 ## 4. Creative Library — `creative-library/CreativeLibrary.tsx` (860 sor)
@@ -488,3 +527,15 @@ Ezeket NEM most refaktoráljuk, de jelölöm hogy ne felejtsük el:
 
 **Tile szemantika változott:** `Card` / `ImageTile` / `ListRow` mind `<button>`-ok mindkét library-ben (CL + Assets) — kattintásra nyitja a detail dialog-ot. Az archive/restore overlay-ek megszűntek (a dialog header-jében van Archive/Restore gomb).
 3. Sorrend: kicsi shared komponensek → page-szintű komponensek → nagyok (MessageEditor, TemplateEditor több commitra). Minden lépés után typecheck + te ránézel hogy nem tört semmi.
+
+---
+
+## Változások 2026-05-02 — MC iframe creative-ek a Creative Library-ben
+
+**Új komponensek:**
+- `_components/MatrixIframeTile.tsx` — három variánsban (`MatrixIframeTile` / `MatrixIframeCard` / `MatrixIframeListRow`) a CL masonry / grid / list view-jaiba. Belül `MatrixIframePreview` IntersectionObserver-rel lazy-mount-olja az iframe-et és cache-eli a `/api/render` HTML-t modul-szintű `Map`-ben (key: `msgId|version|template|size`).
+- `creative-library/MatrixDetailDialog.tsx` — read-only fullscreen iframe preview MC virtuális creative kattintásra; „Open in matrix →" link a `MessageEditor`-re.
+
+**Új BEM block-ok:** `matrix-iframe-tile`, `matrix-iframe-card`, `matrix-iframe-row`, `matrix-iframe-preview` (`__frame`, `__placeholder`, `__error`), `matrix-detail-dialog` (`__header`, `__stage`).
+
+**Reuse:** a card / list variánsok a meglévő `creative-card` / `creative-row` chrome-ot hordják (közös meta-blokk + tag-chip-ek), így a vizuális rítmus megegyezik az uploaded creative tile-okkal.

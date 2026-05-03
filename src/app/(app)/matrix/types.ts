@@ -6,7 +6,19 @@ export type Audience = {
   orderIndex: number;
   status: string | null;
   strategy: string | null;
+  buyingPlatform: string | null;
+  dataSource: string | null;
+  targetingType: string | null;
   device: string | null;
+  tag: string | null;
+  comment: string | null;
+  campaignName: string | null;
+  campaignId: string | null;
+  lineitemName: string | null;
+  lineitemId: string | null;
+  version: number;
+  updatedAt: string;
+  archivedAt: string | null;
 };
 
 export type Topic = {
@@ -16,10 +28,16 @@ export type Topic = {
   product: string | null;
   orderIndex: number;
   status: string | null;
+  tag: string | null;
   tag1: string | null;
   tag2: string | null;
   tag3: string | null;
   tag4: string | null;
+  comment: string | null;
+  created: string | null;
+  version: number;
+  updatedAt: string;
+  archivedAt: string | null;
 };
 
 export type Message = {
@@ -68,6 +86,19 @@ export type Message = {
   finalTraffickedUrl: string | null;
 };
 
+export const STATUS_OPTIONS = [
+  "INCOMING",
+  "NAMING",
+  "CONTENT",
+  "PREVIEW",
+  "APPROVED",
+  "ACTIVE",
+  "INACTIVE",
+  "ERROR",
+  "DEAD",
+  "MEMORY",
+] as const;
+
 export const STATUS_COLOR: Record<string, string> = {
   INCOMING: "bg-slate-300",
   NAMING: "bg-amber-400",
@@ -82,7 +113,7 @@ export const STATUS_COLOR: Record<string, string> = {
 };
 
 export type View = "grid" | "feed";
-export type Density = "informative" | "minimal";
+export type Density = "detailed" | "compact" | "dense";
 
 export type Filters = {
   products: Set<string>;

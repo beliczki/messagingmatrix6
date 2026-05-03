@@ -12,9 +12,29 @@ type User = {
   createdAt: string;
   updatedAt: string;
   archivedAt: string | null;
+  lastActive: string | null;
+  lastAction: string | null;
+  live: boolean;
 };
 
-export function UsersView({ currentUserId }: { currentUserId: string }) {
+function formatTimestamp(s: string | null): string {
+  if (!s) return "—";
+  // Mixed sources: presence emits ISO ("…T…Z"); audit_log fallback emits
+  // SQLite TEXT ("YYYY-MM-DD HH:MM:SS" UTC). Normalize both to a Date.
+  const normalized = s.includes("T") ? s : s.replace(" ", "T") + "Z";
+  const d = new Date(normalized);
+  if (Number.isNaN(d.getTime())) return s;
+  return d.toLocaleString();
+}
+
+export function UsersView({
+  currentUserId,
+  inDialog = false,
+}: {
+  currentUserId: string;
+  /** When rendered inside AppDialog, leave room for the floating X close button. */
+  inDialog?: boolean;
+}) {
   const qc = useQueryClient();
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
@@ -29,6 +49,9 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
       const data = (await r.json()) as { users: User[] };
       return data.users;
     },
+    // Refresh the live dot without manual reload. Server-side presence is
+    // authoritative; this just polls for changes.
+    refetchInterval: 15_000,
   });
 
   const archiveM = useMutation({
@@ -67,7 +90,12 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
 
   return (
     <>
-      <header className="users__header toolbar flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4">
+      <header
+        className={clsx(
+          "users__header toolbar flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4",
+          inDialog && "pr-12",
+        )}
+      >
         <h1 className="text-lg font-semibold text-slate-900">Users</h1>
         <div className="flex items-center gap-2">
           <ArchiveToggle showArchived={showArchived} onChange={setShowArchived} />
@@ -82,7 +110,7 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
       </header>
 
       <div className="users__content flex-1 overflow-auto p-6">
-        <div className="users__table-wrap max-w-3xl">
+        <div className="users__table-wrap w-full">
           {q.isLoading ? (
             <p className="text-sm text-slate-500">Loading…</p>
           ) : q.isError ? (
@@ -102,6 +130,9 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
                   <th className="px-2 py-2 font-medium">Email</th>
                   <th className="px-2 py-2 font-medium">Role</th>
                   <th className="px-2 py-2 font-medium">Created</th>
+                  <th className="px-2 py-2 font-medium">Last active</th>
+                  <th className="px-2 py-2 font-medium">Last action</th>
+                  <th className="px-2 py-2 font-medium">Live</th>
                   <th className="px-2 py-2"></th>
                 </tr>
               </thead>
@@ -143,6 +174,36 @@ export function UsersView({ currentUserId }: { currentUserId: string }) {
                       </td>
                       <td className="px-2 py-2 text-xs text-slate-500">
                         {u.createdAt.slice(0, 10)}
+                      </td>
+                      <td className="px-2 py-2 text-xs text-slate-500">
+                        {formatTimestamp(u.lastActive)}
+                      </td>
+                      <td className="px-2 py-2 text-xs text-slate-500">
+                        {u.lastAction ? (
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-700">
+                            {u.lastAction}
+                          </span>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
+                      <td className="px-2 py-2 text-xs">
+                        <span
+                          className={clsx(
+                            "status-badge inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[11px]",
+                            u.live
+                              ? "bg-emerald-100 text-emerald-800"
+                              : "bg-slate-100 text-slate-600",
+                          )}
+                        >
+                          <span
+                            className={clsx(
+                              "status-dot size-1.5 rounded-full",
+                              u.live ? "bg-emerald-500" : "bg-slate-400",
+                            )}
+                          />
+                          {u.live ? "true" : "false"}
+                        </span>
                       </td>
                       <td className="px-2 py-2 text-right">
                         <button

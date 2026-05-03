@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import clsx from "clsx";
 import {
   type Audience,
@@ -15,15 +15,20 @@ export default function GridView({
   topics,
   messages,
   density,
+  transposed,
+  setTransposed,
   onOpenMessage,
+  onOpenHeader,
 }: {
   audiences: Audience[];
   topics: Topic[];
   messages: Message[];
   density: Density;
+  transposed: boolean;
+  setTransposed: (v: boolean) => void;
   onOpenMessage: (id: number) => void;
+  onOpenHeader: (kind: "audience" | "topic", key: string) => void;
 }) {
-  const [transposed, setTransposed] = useState(false);
 
   const cells = useMemo(() => {
     const m = new Map<string, Message[]>();
@@ -48,6 +53,8 @@ export default function GridView({
   const cols = transposed ? audiences : topics;
   const rowLabel = transposed ? "Topic" : "Audience";
   const colLabel = transposed ? "Audience" : "Topic";
+  const rowKind: "audience" | "topic" = transposed ? "topic" : "audience";
+  const colKind: "audience" | "topic" = transposed ? "audience" : "topic";
 
   return (
     <div className="matrix-grid h-full overflow-auto">
@@ -58,7 +65,7 @@ export default function GridView({
               <div className="flex h-full min-h-20 items-center justify-center p-2">
                 <button
                   type="button"
-                  onClick={() => setTransposed((v) => !v)}
+                  onClick={() => setTransposed(!transposed)}
                   title={`Transpose — show ${transposed ? "audiences" : "topics"} as rows`}
                   aria-label="Transpose matrix"
                   className="matrix-grid__transpose-btn inline-flex items-center gap-1.5 rounded px-1.5 py-1 hover:bg-slate-200/60"
@@ -74,13 +81,47 @@ export default function GridView({
             {cols.map((c) => (
               <th
                 key={c.id}
-                className="matrix-grid__col-header sticky top-0 z-20 h-20 min-h-20 min-w-[160px] border-b border-r border-slate-200 bg-slate-50 p-2 align-top text-left text-xs font-medium text-slate-700"
+                className={clsx(
+                  "matrix-grid__col-header sticky top-0 z-20 border-b border-r border-slate-200 bg-slate-50 align-top text-left font-medium text-slate-700",
+                  density === "dense"
+                    ? "matrix-grid__col-header--dense h-40 min-h-40 w-7 min-w-7 max-w-7 p-0"
+                    : "h-20 min-h-20 min-w-[160px] p-0",
+                )}
                 title={c.key}
               >
-                <div className="matrix-grid__col-header-label font-semibold">{c.name}</div>
-                <div className="matrix-grid__col-header-key truncate font-mono text-[10px] text-slate-400">
-                  {c.key}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => onOpenHeader(colKind, c.key)}
+                  className={clsx(
+                    "matrix-grid__col-header-btn block size-full text-left transition hover:bg-slate-200/60",
+                    density === "dense" ? "p-1" : "p-2",
+                  )}
+                  aria-label={`Open ${colKind} ${c.name}`}
+                >
+                  {density === "dense" ? (
+                    <div className="matrix-grid__col-header-label--vertical flex h-full items-end justify-center">
+                      <span className="font-semibold text-[10px] text-slate-700 [writing-mode:vertical-rl] [transform:rotate(180deg)] truncate max-h-full">
+                        {c.name}
+                      </span>
+                    </div>
+                  ) : (
+                    <>
+                      <div
+                        className={clsx(
+                          "matrix-grid__col-header-label font-semibold",
+                          density === "compact" ? "text-[10px]" : "text-xs",
+                        )}
+                      >
+                        {c.name}
+                      </div>
+                      {density === "detailed" ? (
+                        <div className="matrix-grid__col-header-key truncate font-mono text-[10px] text-slate-400">
+                          {c.key}
+                        </div>
+                      ) : null}
+                    </>
+                  )}
+                </button>
               </th>
             ))}
           </tr>
@@ -89,13 +130,35 @@ export default function GridView({
           {rows.map((r) => (
             <tr key={r.id} className="matrix-grid__row">
               <th
-                className="matrix-grid__row-header sticky left-0 z-10 min-w-[180px] border-b border-r border-slate-200 bg-slate-50 p-2 text-left text-xs font-medium text-slate-700"
+                className={clsx(
+                  "matrix-grid__row-header sticky left-0 z-10 border-b border-r border-slate-200 bg-slate-50 text-left font-medium text-slate-700",
+                  density === "dense" ? "min-w-[140px] p-0" : "min-w-[180px] p-0",
+                )}
                 title={r.key}
               >
-                <div className="matrix-grid__row-header-label font-semibold">{r.name}</div>
-                <div className="matrix-grid__row-header-key font-mono text-[10px] text-slate-400">
-                  {r.key}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => onOpenHeader(rowKind, r.key)}
+                  className={clsx(
+                    "matrix-grid__row-header-btn block size-full text-left transition hover:bg-slate-200/60",
+                    density === "dense" ? "p-1" : "p-2",
+                  )}
+                  aria-label={`Open ${rowKind} ${r.name}`}
+                >
+                  <div
+                    className={clsx(
+                      "matrix-grid__row-header-label font-semibold",
+                      density === "detailed" ? "text-xs" : "text-[10px]",
+                    )}
+                  >
+                    {r.name}
+                  </div>
+                  {density === "detailed" ? (
+                    <div className="matrix-grid__row-header-key font-mono text-[10px] text-slate-400">
+                      {r.key}
+                    </div>
+                  ) : null}
+                </button>
               </th>
               {cols.map((c) => {
                 const audKey = transposed ? c.key : r.key;
@@ -136,7 +199,10 @@ function Cell({
   return (
     <td
       className={clsx(
-        "matrix-grid__cell min-w-[160px] border-b border-r border-slate-200 align-top p-1.5",
+        "matrix-grid__cell border-b border-r border-slate-200 align-top",
+        density === "dense"
+          ? "matrix-grid__cell--dense w-7 min-w-7 max-w-7 p-0.5"
+          : "min-w-[160px] p-1.5",
         messages.length === 0 ? "bg-slate-50/50" : "matrix-grid__cell--has-messages bg-white",
       )}
       data-audience={audience}
@@ -144,8 +210,9 @@ function Cell({
     >
       <div
         className={clsx(
-          "flex flex-wrap gap-1",
-          density === "minimal" && "gap-1.5",
+          "flex flex-wrap",
+          density === "dense" ? "gap-0.5 justify-center" : "gap-1",
+          density === "compact" && "gap-1.5",
         )}
       >
         {messages.map((m) => (
@@ -172,26 +239,45 @@ function McChip({
 }) {
   const label = `MC${message.number}${message.variant}`;
   const dot = STATUS_COLOR[message.status ?? ""] ?? "bg-slate-300";
-  if (density === "minimal") {
+  if (density === "dense") {
     return (
       <button
         onClick={onClick}
         title={`${label} · ${message.name ?? "(unnamed)"}`}
         className={clsx(
-          "mc-chip mc-chip--minimal size-2.5 cursor-pointer rounded-full transition hover:ring-2 hover:ring-slate-300",
+          "mc-chip mc-chip--dense size-2.5 cursor-pointer rounded-full transition hover:ring-2 hover:ring-slate-300",
           dot,
         )}
       />
+    );
+  }
+  if (density === "compact") {
+    return (
+      <button
+        onClick={onClick}
+        title={`${label} · ${message.name ?? "(unnamed)"}`}
+        className="mc-chip mc-chip--compact inline-flex max-w-full cursor-pointer items-center gap-1.5 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] transition hover:border-slate-400 hover:bg-slate-50"
+      >
+        <span className={clsx("mc-chip__dot status-dot size-1.5 rounded-full", dot)} />
+        <span className="mc-chip__label font-mono text-slate-700">{label}</span>
+      </button>
     );
   }
   return (
     <button
       onClick={onClick}
       title={`${label} · ${message.name ?? "(unnamed)"}`}
-      className="mc-chip mc-chip--informative inline-flex max-w-full cursor-pointer items-center gap-1.5 rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs transition hover:border-slate-400 hover:bg-slate-50"
+      className="mc-chip mc-chip--detailed flex max-w-full cursor-pointer flex-col items-start gap-0.5 rounded border border-slate-200 bg-white px-1.5 py-1 text-xs transition hover:border-slate-400 hover:bg-slate-50"
     >
-      <span className={clsx("mc-chip__dot status-dot size-1.5 rounded-full", dot)} />
-      <span className="mc-chip__label font-mono text-slate-700">{label}</span>
+      <span className="mc-chip__line mc-chip__line--label inline-flex items-center gap-1.5">
+        <span className={clsx("mc-chip__dot status-dot size-1.5 rounded-full", dot)} />
+        <span className="mc-chip__label font-mono text-slate-700">{label}</span>
+      </span>
+      {message.name ? (
+        <span className="mc-chip__line mc-chip__line--name max-w-full truncate text-[10px] text-slate-500">
+          {message.name}
+        </span>
+      ) : null}
     </button>
   );
 }

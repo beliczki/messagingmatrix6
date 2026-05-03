@@ -6,6 +6,10 @@
 //   {{Var}}                       — case-insensitive lookup
 //   {{x|upper}}                   — modifier
 //   {{x|noext|upper}}             — chained modifiers
+//   {{x|formatted}}               — wrap value into per-size <span> blocks
+//                                   from text-formatter rules (feed-export
+//                                   only; needs __formattingRules / __sizes /
+//                                   __mcLabel in the context to do anything).
 //   {{arr[key].field}}            — array-by-key access
 //   {{arr[var].field}}            — array key resolved from another var
 //   {{obj.field}}                 — object access (case-insensitive incl. snake_case)
@@ -14,15 +18,38 @@
 // Missing values resolve to "". Unknown modifiers pass through unchanged.
 // Numbers coerce to string; null/undefined → "".
 
+import type { TextFormatting } from "@/db/schema";
+import { buildSizeSpans } from "@/lib/feed-spans";
+
 export type PatternContext = Record<string, unknown>;
 
-const MODS: Record<string, (s: string) => string> = {
+/** Reserved ctx keys read by the `formatted` modifier. */
+export const FORMATTING_CTX_KEYS = {
+  rules: "__formattingRules",
+  sizes: "__sizes",
+  mcLabel: "__mcLabel",
+} as const;
+
+type ModFn = (s: string, ctx: PatternContext) => string;
+
+const MODS: Record<string, ModFn> = {
   upper: (s) => s.toUpperCase(),
   lower: (s) => s.toLowerCase(),
   trim: (s) => s.trim(),
   noext: (s) => {
     const dot = s.lastIndexOf(".");
     return dot > 0 ? s.slice(0, dot) : s;
+  },
+  formatted: (s, ctx) => {
+    if (!s) return s;
+    const rules = ctx[FORMATTING_CTX_KEYS.rules] as
+      | TextFormatting[]
+      | undefined;
+    const sizes = ctx[FORMATTING_CTX_KEYS.sizes] as string[] | undefined;
+    const mcLabel = ctx[FORMATTING_CTX_KEYS.mcLabel] as string | undefined;
+    // No formatting context (e.g. matrix preview, generic eval) — pass through.
+    if (!rules || !sizes || mcLabel === undefined) return s;
+    return buildSizeSpans(s, sizes, mcLabel, rules);
   },
 };
 
@@ -111,7 +138,7 @@ function evalSingleVar(expr: string, ctx: PatternContext): string {
   let value = resolvePath(path, ctx);
   for (const m of mods) {
     const fn = MODS[m];
-    if (fn) value = fn(value);
+    if (fn) value = fn(value, ctx);
     // unknown modifier: pass through unchanged (matches v5)
   }
   return value;

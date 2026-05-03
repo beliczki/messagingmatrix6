@@ -4,7 +4,7 @@ import { useMemo, useState, type FormEvent } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Upload as UploadIcon,
-  Search,
+  Filter as FilterIcon,
   X,
   Image as ImageIcon,
   Loader2,
@@ -26,8 +26,13 @@ import {
   LIBRARY_VIEW_CODEC,
   type LibraryViewMode,
 } from "../_components/LibraryViewSwitcher";
-import { usePersistent } from "../_components/usePersistent";
+import {
+  usePersistent,
+  STRING_CODEC,
+  SET_CODEC,
+} from "../_components/usePersistent";
 import type { ParseRules } from "@/lib/parse-filename";
+import { parseSearchQuery } from "@/lib/search-query";
 
 type Asset = {
   id: number;
@@ -61,9 +66,21 @@ async function fetchJSON<T>(url: string): Promise<T> {
 }
 
 export default function AssetsLibrary() {
-  const [search, setSearch] = useState("");
-  const [products, setProducts] = useState<Set<string>>(new Set());
-  const [types, setTypes] = useState<Set<string>>(new Set());
+  const [search, setSearch] = usePersistent(
+    "mm6_assets_filter_search",
+    "",
+    STRING_CODEC,
+  );
+  const [products, setProducts] = usePersistent<Set<string>>(
+    "mm6_assets_filter_products",
+    new Set(),
+    SET_CODEC,
+  );
+  const [types, setTypes] = usePersistent<Set<string>>(
+    "mm6_assets_filter_types",
+    new Set(),
+    SET_CODEC,
+  );
   const [uploadOpen, setUploadOpen] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(null);
@@ -140,19 +157,23 @@ export default function AssetsLibrary() {
     return [...s].sort();
   }, [assets]);
 
+  const predicate = useMemo(() => parseSearchQuery(search), [search]);
   const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
     return assets.filter((a) => {
       if (products.size > 0 && (!a.product || !products.has(a.product))) return false;
       if (types.size > 0 && (!a.type || !types.has(a.type))) return false;
-      if (term) {
-        const haystack =
-          `${a.fileName ?? ""} ${a.brand ?? ""} ${a.product ?? ""} ${a.visualKeyword ?? ""}`.toLowerCase();
-        if (!haystack.includes(term)) return false;
-      }
-      return true;
+      const free =
+        `${a.fileName ?? ""} ${a.brand ?? ""} ${a.product ?? ""} ${a.type ?? ""} ${a.visualKeyword ?? ""} ${a.comment ?? ""}`.toLowerCase();
+      return predicate({
+        audience: "",
+        topic: "",
+        strategy: "",
+        platform: "",
+        mc: "",
+        free,
+      });
     });
-  }, [assets, products, types, search]);
+  }, [assets, products, types, predicate]);
 
   const qc = useQueryClient();
 
@@ -165,13 +186,14 @@ export default function AssetsLibrary() {
         </div>
 
         <div className="input-box input-box--with-icon relative ml-2">
-          <Search className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+          <FilterIcon className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
           <input
             type="search"
-            placeholder="Filename, brand, keyword…"
+            placeholder="Filter… filename, brand, keyword OR …"
+            title='Free text searches all fields. OR for alternatives. Quote "two words" for phrases.'
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="input-box__field w-56 rounded-md border border-slate-300 py-1 pl-7 pr-2 text-xs focus:border-slate-500 focus:outline-none"
+            className="input-box__field w-72 rounded-md border border-slate-300 py-1 pl-7 pr-2 text-xs focus:border-slate-500 focus:outline-none"
           />
         </div>
 

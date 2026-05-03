@@ -1,13 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Upload as UploadIcon,
-  Search,
+  Filter as FilterIcon,
   X,
   Image as ImageIcon,
   Loader2,
+  Check,
+  Share2,
 } from "lucide-react";
 import clsx from "clsx";
 import { Masonry } from "../_components/Masonry";
@@ -20,6 +30,14 @@ import MultiPill from "../_components/MultiPill";
 import ArchiveToggle from "../_components/ArchiveToggle";
 import RightToolbar from "../_components/RightToolbar";
 import CreativeDetailDialog from "./CreativeDetailDialog";
+import MatrixDetailDialog from "./MatrixDetailDialog";
+import ShareCreateDialog from "./ShareCreateDialog";
+import { useLongPress } from "@/app/_components/useLongPress";
+import {
+  MatrixIframeTile,
+  MatrixIframeCard,
+  MatrixIframeListRow,
+} from "../_components/MatrixIframeTile";
 import {
   LibraryViewSwitcher,
   LIBRARY_VIEW_CODEC,
@@ -31,6 +49,14 @@ import {
   SET_CODEC,
 } from "../_components/usePersistent";
 import type { ParseRules } from "@/lib/parse-filename";
+import type { Message, Audience, Topic } from "../matrix/types";
+import { parseSearchQuery } from "@/lib/search-query";
+
+type TemplateInfo = {
+  name: string;
+  sizes: string[];
+  defaultSize: string | null;
+};
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -62,6 +88,19 @@ type Creative = {
   createdAt: string;
   archivedAt: string | null;
 };
+
+// Library items mix two sources: real uploaded creatives (kind: "uploaded")
+// and synthesized per-MC×size virtual creatives rendered live via /api/render
+// (kind: "matrix"). Matrix items carry the underlying Message + size +
+// templateName so the tile and detail dialog can render the iframe.
+type LibraryItem =
+  | (Creative & { kind: "uploaded" })
+  | (Creative & {
+      kind: "matrix";
+      message: Message;
+      liveSize: string;
+      liveTemplateName: string;
+    });
 
 type UploadedFile = {
   id: string;
@@ -106,6 +145,52 @@ export default function CreativeLibrary() {
     "masonry",
     LIBRARY_VIEW_CODEC,
   );
+  const [selectorMode, setSelectorMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [shareOpen, setShareOpen] = useState(false);
+
+  const clearSelection = useCallback(() => {
+    setSelectorMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const toggleSelected = useCallback((id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const beginSelection = useCallback((id: number) => {
+    setSelectorMode(true);
+    setSelectedIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }, []);
+
+  // Esc clears selection (only when not editing in an input).
+  useEffect(() => {
+    if (!selectorMode) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      clearSelection();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectorMode, clearSelection]);
+
+  // Toggling off the last selected item should exit selectorMode so the
+  // toolbar reverts and clicks resume opening the detail dialog.
+  useEffect(() => {
+    if (selectorMode && selectedIds.size === 0) setSelectorMode(false);
+  }, [selectorMode, selectedIds]);
 
   const debouncedSearch = useDebouncedValue(search, 200);
   const [visibleCount, setVisibleCount] = useState(200);
@@ -123,6 +208,23 @@ export default function CreativeLibrary() {
     queryKey: ["files", "creative"],
     queryFn: () =>
       fetchJSON<{ files: UploadedFile[] }>("/api/files?category=creative"),
+  });
+  const messagesQ = useQuery({
+    queryKey: ["messages"],
+    queryFn: () => fetchJSON<{ messages: Message[] }>("/api/messages"),
+  });
+  const audiencesQ = useQuery({
+    queryKey: ["audiences"],
+    queryFn: () => fetchJSON<{ audiences: Audience[] }>("/api/audiences"),
+  });
+  const topicsQ = useQuery({
+    queryKey: ["topics"],
+    queryFn: () => fetchJSON<{ topics: Topic[] }>("/api/topics"),
+  });
+  const templatesQ = useQuery({
+    queryKey: ["templates", "folders"],
+    queryFn: () =>
+      fetchJSON<{ templates: TemplateInfo[] }>("/api/templates/folders"),
   });
   const rulesQ = useQuery({
     queryKey: ["parsingRules"],
@@ -171,34 +273,111 @@ export default function CreativeLibrary() {
 
   const creatives = creativesQ.data?.creatives ?? [];
   const files = filesQ.data?.files ?? [];
+  const messages = messagesQ.data?.messages ?? [];
+  const audiences = audiencesQ.data?.audiences ?? [];
+  const topics = topicsQ.data?.topics ?? [];
+  const templates = templatesQ.data?.templates ?? [];
   const filesById = useMemo(
     () => new Map(files.map((f) => [f.id, f])),
     [files],
   );
+  const audienceProductMap = useMemo(
+    () => new Map(audiences.map((a) => [a.key, a.product])),
+    [audiences],
+  );
+  const audienceMap = useMemo(
+    () => new Map(audiences.map((a) => [a.key, a])),
+    [audiences],
+  );
+  const topicMap = useMemo(
+    () => new Map(topics.map((t) => [t.key, t])),
+    [topics],
+  );
+  const templateMap = useMemo(
+    () => new Map(templates.map((t) => [t.name, t])),
+    [templates],
+  );
+
+  // Synthesize one virtual creative per (MC number, variant, size). The same
+  // MC may appear across multiple audiences in the messages table — they
+  // share content, so we dedupe by `${number}|${variant}|${size}`. Status
+  // filter: live nézet csak ACTIVE-ot mutat; archived nézet minden egyebet
+  // (INCOMING/NAMING/CONTENT/PREVIEW/APPROVED/INACTIVE/ERROR/DEAD/MEMORY).
+  const matrixItems: LibraryItem[] = useMemo(() => {
+    if (messages.length === 0 || templates.length === 0) return [];
+    const seen = new Set<string>();
+    const out: LibraryItem[] = [];
+    for (const m of messages) {
+      if (!m.template) continue;
+      const tinfo = templateMap.get(m.template);
+      if (!tinfo || tinfo.sizes.length === 0) continue;
+      const isActive = (m.status ?? "").toUpperCase() === "ACTIVE";
+      if (showArchived ? isActive : !isActive) continue;
+      const product = audienceProductMap.get(m.audience) ?? null;
+      const variant = m.variant ?? "";
+      for (let i = 0; i < tinfo.sizes.length; i++) {
+        const size = tinfo.sizes[i]!;
+        const dedupKey = `${m.number}|${variant}|${size}`;
+        if (seen.has(dedupKey)) continue;
+        seen.add(dedupKey);
+        out.push({
+          kind: "matrix",
+          id: -(m.id * 1000 + i + 1),
+          brand: null,
+          product,
+          type: "html",
+          template: m.template,
+          bannerVersion: null,
+          visualKeyword: null,
+          copyKeyword: null,
+          mcNumber: m.number,
+          mcVariant: variant,
+          fileId: null,
+          fileName: `MC${m.number}${variant} · ${size}`,
+          fileFormat: "html",
+          fileSize: null,
+          fileDimensions: size,
+          comment: null,
+          version: m.version,
+          createdAt: m.updatedAt,
+          archivedAt: null,
+          message: m,
+          liveSize: size,
+          liveTemplateName: m.template,
+        });
+      }
+    }
+    return out;
+  }, [messages, templates, audienceProductMap, templateMap, showArchived]);
+
+  const items: LibraryItem[] = useMemo(() => {
+    const uploaded: LibraryItem[] = creatives.map((c) => ({ ...c, kind: "uploaded" }));
+    return [...uploaded, ...matrixItems];
+  }, [creatives, matrixItems]);
 
   const productOptions = useMemo(() => {
     const s = new Set<string>();
-    for (const c of creatives) if (c.product) s.add(c.product);
+    for (const c of items) if (c.product) s.add(c.product);
     return [...s].sort();
-  }, [creatives]);
+  }, [items]);
   const typeOptions = useMemo(() => {
     const s = new Set<string>();
-    for (const c of creatives) if (c.type) s.add(c.type);
+    for (const c of items) if (c.type) s.add(c.type);
     return [...s].sort();
-  }, [creatives]);
+  }, [items]);
   const sizeOptions = useMemo(() => {
     const s = new Set<string>();
-    for (const c of creatives) if (c.fileDimensions) s.add(c.fileDimensions);
+    for (const c of items) if (c.fileDimensions) s.add(c.fileDimensions);
     return [...s].sort((a, b) => {
       const [aw = 0] = a.split("x").map(Number);
       const [bw = 0] = b.split("x").map(Number);
       return aw - bw || a.localeCompare(b);
     });
-  }, [creatives]);
+  }, [items]);
 
+  const predicate = useMemo(() => parseSearchQuery(debouncedSearch), [debouncedSearch]);
   const filtered = useMemo(() => {
-    const term = debouncedSearch.trim().toLowerCase();
-    return creatives.filter((c) => {
+    return items.filter((c) => {
       if (products.size > 0 && (!c.product || !products.has(c.product))) {
         return false;
       }
@@ -208,16 +387,35 @@ export default function CreativeLibrary() {
       if (sizes.size > 0 && (!c.fileDimensions || !sizes.has(c.fileDimensions))) {
         return false;
       }
-      if (term) {
-        const haystack =
-          `${c.fileName ?? ""} ${c.brand ?? ""} ${c.product ?? ""} ${c.template ?? ""} ${c.visualKeyword ?? ""} ${c.copyKeyword ?? ""}`
-            .toLowerCase();
-        const mc = c.mcNumber !== null ? `mc${c.mcNumber}${c.mcVariant ?? ""}`.toLowerCase() : "";
-        if (!haystack.includes(term) && !mc.includes(term)) return false;
+      const mc =
+        c.mcNumber !== null
+          ? `mc${c.mcNumber}${c.mcVariant ?? ""}`.toLowerCase()
+          : "";
+      let audience = "";
+      let topic = "";
+      let strategy = "";
+      let platform = "";
+      let free = `${c.fileName ?? ""} ${c.brand ?? ""} ${c.product ?? ""} ${c.template ?? ""} ${c.visualKeyword ?? ""} ${c.copyKeyword ?? ""} ${c.comment ?? ""}`;
+      if (c.kind === "matrix") {
+        const m = c.message;
+        const a = audienceMap.get(m.audience);
+        const t = topicMap.get(m.topic);
+        audience = `${m.audience} ${a?.name ?? ""}`;
+        topic = `${m.topic} ${t?.name ?? ""}`;
+        strategy = a?.strategy ?? "";
+        platform = a?.buyingPlatform ?? "";
+        free += ` ${m.headline ?? ""} ${m.copy1 ?? ""} ${m.copy2 ?? ""} ${m.disclaimer ?? ""} ${m.name ?? ""} ${m.cta ?? ""} ${m.pmmid ?? ""} ${audience} ${topic} ${strategy} ${platform} ${a?.lineitemId ?? ""} ${a?.comment ?? ""} ${t?.comment ?? ""}`;
       }
-      return true;
+      return predicate({
+        audience: audience.toLowerCase(),
+        topic: topic.toLowerCase(),
+        strategy: strategy.toLowerCase(),
+        platform: platform.toLowerCase(),
+        mc,
+        free: free.toLowerCase(),
+      });
     });
-  }, [creatives, products, types, sizes, debouncedSearch]);
+  }, [items, products, types, sizes, predicate, audienceMap, topicMap]);
 
   useEffect(() => {
     setVisibleCount(200);
@@ -245,6 +443,31 @@ export default function CreativeLibrary() {
 
   const qc = useQueryClient();
 
+  // Resolve selected items into the two id streams the share-galleries
+  // endpoint accepts. Matrix-kind tiles preserve their (messageId, size) pair
+  // so the share viewer can render each banner at the size the user picked.
+  // Uploaded creatives contribute their creatives.id.
+  const { selectedMatrixPairs, selectedCreativeIds } = useMemo(() => {
+    const seen = new Set<string>();
+    const matrix: Array<{ messageId: number; size: string }> = [];
+    const creatives = new Set<number>();
+    for (const c of items) {
+      if (!selectedIds.has(c.id)) continue;
+      if (c.kind === "matrix") {
+        const key = `${c.message.id}|${c.liveSize}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        matrix.push({ messageId: c.message.id, size: c.liveSize });
+      } else {
+        creatives.add(c.id);
+      }
+    }
+    return {
+      selectedMatrixPairs: matrix,
+      selectedCreativeIds: Array.from(creatives),
+    };
+  }, [items, selectedIds]);
+
   return (
     <div className="creative-library flex h-full">
       <div className="creative-library__content flex flex-1 flex-col overflow-hidden">
@@ -260,7 +483,7 @@ export default function CreativeLibrary() {
           sizeOptions={sizeOptions}
           sizes={sizes}
           setSizes={setSizes}
-          total={creatives.length}
+          total={items.length}
           visible={filtered.length}
         />
 
@@ -279,13 +502,13 @@ export default function CreativeLibrary() {
               </div>
             </div>
           ) : null}
-          {creativesQ.isLoading ? (
+          {creativesQ.isLoading || messagesQ.isLoading || templatesQ.isLoading ? (
             <div className="flex h-full items-center justify-center text-sm text-slate-500">
               <Loader2 className="mr-2 size-4 animate-spin" />
               Loading…
             </div>
           ) : filtered.length === 0 ? (
-            <EmptyState empty={creatives.length === 0} onUpload={() => setUploadOpen(true)} />
+            <EmptyState empty={items.length === 0} onUpload={() => setUploadOpen(true)} />
           ) : (
             <>
               {view === "masonry" ? (
@@ -293,34 +516,87 @@ export default function CreativeLibrary() {
                   <Masonry
                     items={visible}
                     render={(c) => (
-                      <ImageTile
-                        creative={c}
-                        file={c.fileId ? filesById.get(c.fileId) : undefined}
-                        onOpen={() => setDetailId(c.id)}
-                      />
+                      <SelectableItem
+                        id={c.id}
+                        selectorMode={selectorMode}
+                        selected={selectedIds.has(c.id)}
+                        onLongPress={beginSelection}
+                        onSelect={toggleSelected}
+                      >
+                        {c.kind === "matrix" ? (
+                          <MatrixIframeTile
+                            message={c.message}
+                            templateName={c.liveTemplateName}
+                            size={c.liveSize}
+                            onOpen={() => setDetailId(c.id)}
+                          />
+                        ) : (
+                          <ImageTile
+                            creative={c}
+                            file={c.fileId ? filesById.get(c.fileId) : undefined}
+                            onOpen={() => setDetailId(c.id)}
+                          />
+                        )}
+                      </SelectableItem>
                     )}
                   />
                 </div>
               ) : view === "grid" ? (
                 <div className="creative-library__view creative-library__view--grid grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
                   {visible.map((c) => (
-                    <Card
+                    <SelectableItem
                       key={c.id}
-                      creative={c}
-                      file={c.fileId ? filesById.get(c.fileId) : undefined}
-                      onOpen={() => setDetailId(c.id)}
-                    />
+                      id={c.id}
+                      selectorMode={selectorMode}
+                      selected={selectedIds.has(c.id)}
+                      onLongPress={beginSelection}
+                      onSelect={toggleSelected}
+                    >
+                      {c.kind === "matrix" ? (
+                        <MatrixIframeCard
+                          message={c.message}
+                          templateName={c.liveTemplateName}
+                          size={c.liveSize}
+                          product={c.product}
+                          onOpen={() => setDetailId(c.id)}
+                        />
+                      ) : (
+                        <Card
+                          creative={c}
+                          file={c.fileId ? filesById.get(c.fileId) : undefined}
+                          onOpen={() => setDetailId(c.id)}
+                        />
+                      )}
+                    </SelectableItem>
                   ))}
                 </div>
               ) : (
                 <div className="creative-library__view creative-library__view--list flex flex-col gap-1.5">
                   {visible.map((c) => (
-                    <ListRow
+                    <SelectableItem
                       key={c.id}
-                      creative={c}
-                      file={c.fileId ? filesById.get(c.fileId) : undefined}
-                      onOpen={() => setDetailId(c.id)}
-                    />
+                      id={c.id}
+                      selectorMode={selectorMode}
+                      selected={selectedIds.has(c.id)}
+                      onLongPress={beginSelection}
+                      onSelect={toggleSelected}
+                    >
+                      {c.kind === "matrix" ? (
+                        <MatrixIframeListRow
+                          message={c.message}
+                          templateName={c.liveTemplateName}
+                          size={c.liveSize}
+                          product={c.product}
+                          onOpen={() => setDetailId(c.id)}
+                        />
+                      ) : (
+                        <ListRow
+                          creative={c}
+                          file={c.fileId ? filesById.get(c.fileId) : undefined}
+                          onOpen={() => setDetailId(c.id)}
+                        />
+                      )}
+                    </SelectableItem>
                   ))}
                 </div>
               )}
@@ -345,11 +621,36 @@ export default function CreativeLibrary() {
           )}
         />
 
+        <ShareCreateDialog
+          open={shareOpen}
+          matrix={selectedMatrixPairs}
+          creativeIds={selectedCreativeIds}
+          onClose={() => setShareOpen(false)}
+          onCreated={clearSelection}
+        />
+
         {detailId !== null
           ? (() => {
-              const c = filtered.find((x) => x.id === detailId)
-                ?? creatives.find((x) => x.id === detailId);
+              const c =
+                filtered.find((x) => x.id === detailId) ??
+                items.find((x) => x.id === detailId);
               if (!c) return null;
+              if (c.kind === "matrix") {
+                return (
+                  <MatrixDetailDialog
+                    item={{
+                      id: c.id,
+                      message: c.message,
+                      liveSize: c.liveSize,
+                      liveTemplateName: c.liveTemplateName,
+                      product: c.product,
+                    }}
+                    navItems={filtered}
+                    onJump={(id) => setDetailId(id)}
+                    onClose={() => setDetailId(null)}
+                  />
+                );
+              }
               return (
                 <CreativeDetailDialog
                   creative={c}
@@ -365,8 +666,17 @@ export default function CreativeLibrary() {
 
       <RightToolbar storageKey="mm6_creative_library_right_toolbar_open">
         {(collapsed) => {
+          const selectionBlock = selectedIds.size > 0 ? (
+            <SelectionActions
+              collapsed={collapsed}
+              count={selectedIds.size}
+              onShare={() => setShareOpen(true)}
+              onCancel={clearSelection}
+            />
+          ) : null;
           const content = (
             <>
+              {selectionBlock}
               <LibraryViewSwitcher view={view} setView={setView} collapsed={collapsed}>
                 <ArchiveToggle
                   showArchived={showArchived}
@@ -433,13 +743,14 @@ function Toolbar({
       </div>
 
       <div className="input-box input-box--with-icon relative ml-2">
-        <Search className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+        <FilterIcon className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
         <input
           type="search"
-          placeholder="Filename, brand, MC…"
+          placeholder="Filter… a: t: s: p: mc: OR …"
+          title='Free text searches all fields. Prefixes: a: (audience), t: (topic), s: (strategy), p: (platform), mc: (MC#). AND implicit, OR explicit. Quote "two words" for phrases.'
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="input-box__field w-56 rounded-md border border-slate-300 py-1 pl-7 pr-2 text-xs focus:border-slate-500 focus:outline-none"
+          className="input-box__field w-72 rounded-md border border-slate-300 py-1 pl-7 pr-2 text-xs focus:border-slate-500 focus:outline-none"
         />
       </div>
 
@@ -789,6 +1100,135 @@ function Field({
       </div>
       {children}
     </label>
+  );
+}
+
+function SelectionActions({
+  collapsed,
+  count,
+  onShare,
+  onCancel,
+}: {
+  collapsed: boolean;
+  count: number;
+  onShare: () => void;
+  onCancel: () => void;
+}) {
+  if (collapsed) {
+    return (
+      <div className="selection-actions selection-actions--collapsed flex flex-col items-center gap-2 border-b border-slate-200 pb-2">
+        <span
+          className="selection-actions__count flex size-9 items-center justify-center rounded-md bg-slate-900 text-xs font-semibold text-white"
+          title={`${count} selected`}
+        >
+          {count}
+        </span>
+        <button
+          type="button"
+          onClick={onShare}
+          title="Share selected"
+          aria-label="Share selected"
+          className="toolbar-btn--primary flex size-9 items-center justify-center rounded-md bg-slate-900 text-white hover:bg-slate-800"
+        >
+          <Share2 className="size-4" />
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          title="Cancel selection"
+          aria-label="Cancel selection"
+          className="toolbar-btn flex size-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="selection-actions flex flex-col gap-2 border-b border-slate-200 pb-3">
+      <div className="selection-actions__count text-xs font-semibold text-slate-700">
+        {count} selected
+      </div>
+      <button
+        type="button"
+        onClick={onShare}
+        className="toolbar-btn--primary inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
+      >
+        <Share2 className="size-3.5" />
+        Share
+      </button>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="toolbar-btn inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+      >
+        <X className="size-3" />
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+function SelectableItem({
+  id,
+  selectorMode,
+  selected,
+  onLongPress,
+  onSelect,
+  children,
+}: {
+  id: number;
+  selectorMode: boolean;
+  selected: boolean;
+  onLongPress: (id: number) => void;
+  onSelect: (id: number) => void;
+  children: ReactNode;
+}) {
+  const longPress = useLongPress(() => onLongPress(id));
+  return (
+    <div
+      className={clsx(
+        "selectable-item relative",
+        selected && "selectable-item--selected",
+      )}
+      onPointerDown={longPress.onPointerDown}
+      onPointerUp={longPress.onPointerUp}
+      onPointerLeave={longPress.onPointerLeave}
+      onPointerMove={longPress.onPointerMove}
+      onClickCapture={(e) => {
+        if (longPress.consumeNextClick()) {
+          e.stopPropagation();
+          e.preventDefault();
+          return;
+        }
+        if (selectorMode) {
+          e.stopPropagation();
+          e.preventDefault();
+          onSelect(id);
+        }
+      }}
+    >
+      {children}
+      {selectorMode ? (
+        <span
+          aria-hidden
+          className={clsx(
+            "selector-checkbox pointer-events-none absolute right-2 top-2 z-20 flex size-5 items-center justify-center rounded-full border shadow-sm",
+            selected
+              ? "border-slate-900 bg-slate-900 text-white"
+              : "border-slate-400 bg-white/80 text-transparent",
+          )}
+        >
+          <Check className="size-3" strokeWidth={3} />
+        </span>
+      ) : null}
+      {selected ? (
+        <span
+          aria-hidden
+          className="selectable-item__ring pointer-events-none absolute inset-0 z-10 rounded-md ring-2 ring-slate-900"
+        />
+      ) : null}
+    </div>
   );
 }
 

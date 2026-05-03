@@ -1,35 +1,74 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Archive as ArchiveIcon, ArchiveRestore, Copy, ExternalLink } from "lucide-react";
+import {
+  Archive as ArchiveIcon,
+  ArchiveRestore,
+  ArrowDown,
+  ArrowUp,
+  Copy,
+  ExternalLink,
+} from "lucide-react";
 import clsx from "clsx";
 import ArchiveToggle from "../_components/ArchiveToggle";
+import RightToolbar from "../_components/RightToolbar";
+import { useAlertDialog } from "../_components/AlertDialog";
 
 type Share = {
   id: string;
   title: string | null;
   description: string | null;
   createdBy: string | null;
+  createdByEmail: string | null;
   createdAt: string;
   archivedAt: string | null;
   messageCount: number;
+  commentCount: number;
+  viewCount: number;
+  downloadCount: number;
 };
 
-type Message = {
-  id: number;
-  number: number;
-  variant: string;
-  audience: string;
-  topic: string;
-  status: string | null;
-  headline: string | null;
-};
+type SortKey =
+  | "title"
+  | "id"
+  | "createdAt"
+  | "messageCount"
+  | "commentCount"
+  | "viewCount"
+  | "downloadCount"
+  | "createdByEmail";
+type SortState = { key: SortKey; dir: "asc" | "desc" } | null;
+
+const COLUMNS: Array<{ key: SortKey; label: string; width: number }> = [
+  { key: "title", label: "Title", width: 280 },
+  { key: "id", label: "URL", width: 180 },
+  { key: "createdAt", label: "Created", width: 180 },
+  { key: "messageCount", label: "Items", width: 70 },
+  { key: "commentCount", label: "Comments", width: 90 },
+  { key: "viewCount", label: "Views", width: 70 },
+  { key: "downloadCount", label: "Downloads", width: 100 },
+  { key: "createdByEmail", label: "Created by", width: 200 },
+];
+
+const TOTAL_WIDTH = 40 + COLUMNS.reduce((s, c) => s + c.width, 0);
+const ROW_HEIGHT = 32;
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleString();
+}
 
 export function SharesView() {
   const qc = useQueryClient();
-  const [showNew, setShowNew] = useState(false);
+  const dialog = useAlertDialog();
   const [showArchived, setShowArchived] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [lastClickedId, setLastClickedId] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortState>({
+    key: "createdAt",
+    dir: "desc",
+  });
 
   const sharesQ = useQuery({
     queryKey: ["share-galleries", { showArchived }],
@@ -46,9 +85,7 @@ export function SharesView() {
 
   const archiveM = useMutation({
     mutationFn: async (id: string) => {
-      const r = await fetch(`/api/share-galleries/${id}`, {
-        method: "DELETE",
-      });
+      const r = await fetch(`/api/share-galleries/${id}`, { method: "DELETE" });
       if (!r.ok) {
         const body = await r.json().catch(() => ({}));
         throw new Error(body.error ?? "archive failed");
@@ -75,340 +112,467 @@ export function SharesView() {
     },
   });
 
-  function confirmArchive(s: Share) {
-    if (
-      !window.confirm(
-        `Archive share "${s.title ?? "untitled"}"? The public link will stop working until restored.`,
-      )
-    ) {
-      return;
+  const rows = sharesQ.data ?? [];
+
+  const filtered = useMemo(() => {
+    const out = rows.slice();
+    if (sort) {
+      out.sort((a, b) => {
+        const cmp = compareRows(a, b, sort.key);
+        return sort.dir === "asc" ? cmp : -cmp;
+      });
     }
-    archiveM.mutate(s.id);
+    return out;
+  }, [rows, sort]);
+
+  const filteredIds = useMemo(() => filtered.map((r) => r.id), [filtered]);
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every((r) => selected.has(r.id));
+  const someFilteredSelected =
+    !allFilteredSelected && filtered.some((r) => selected.has(r.id));
+
+  const selectedRows = useMemo(
+    () => filtered.filter((r) => selected.has(r.id)),
+    [filtered, selected],
+  );
+
+  function toggleSort(key: SortKey) {
+    setSort((prev) => {
+      if (!prev || prev.key !== key) return { key, dir: "asc" };
+      if (prev.dir === "asc") return { key, dir: "desc" };
+      return null;
+    });
   }
 
-  function copyLink(id: string) {
-    const url = `${window.location.origin}/share/${id}`;
-    navigator.clipboard.writeText(url);
+  function toggleSelectAllFiltered() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allFilteredSelected) {
+        for (const id of filteredIds) next.delete(id);
+      } else {
+        for (const id of filteredIds) next.add(id);
+      }
+      return next;
+    });
   }
+
+  function toggleRowSelection(rowId: string, shiftKey: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (shiftKey && lastClickedId !== null) {
+        const startIdx = filteredIds.indexOf(lastClickedId);
+        const endIdx = filteredIds.indexOf(rowId);
+        if (startIdx >= 0 && endIdx >= 0) {
+          const [lo, hi] =
+            startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
+          const shouldAdd = !prev.has(rowId);
+          for (let i = lo; i <= hi; i++) {
+            const id = filteredIds[i]!;
+            if (shouldAdd) next.add(id);
+            else next.delete(id);
+          }
+          return next;
+        }
+      }
+      if (next.has(rowId)) next.delete(rowId);
+      else next.add(rowId);
+      return next;
+    });
+    setLastClickedId(rowId);
+  }
+
+  function handleRowClick(
+    e: React.MouseEvent<HTMLDivElement>,
+    rowId: string,
+  ) {
+    if ((e.target as HTMLElement).closest("a")) return;
+    toggleRowSelection(rowId, e.shiftKey);
+  }
+
+  async function copySelected() {
+    if (selectedRows.length === 0) return;
+    const origin = window.location.origin;
+    const text = selectedRows
+      .map((r) => `${origin}/share/${r.id}`)
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (err) {
+      await dialog.alert({
+        title: "Couldn't copy to clipboard",
+        message: err instanceof Error ? err.message : String(err),
+        variant: "danger",
+      });
+    }
+  }
+
+  async function archiveSelected() {
+    const targets = selectedRows.filter((r) => r.archivedAt === null);
+    if (targets.length === 0) return;
+    const ok = await dialog.confirm({
+      title: `Archive ${targets.length} share${targets.length === 1 ? "" : "s"}?`,
+      message: "The public link will stop working until restored.",
+      confirmLabel: "Archive",
+      variant: "warning",
+    });
+    if (!ok) return;
+    for (const r of targets) archiveM.mutate(r.id);
+  }
+
+  async function restoreSelected() {
+    const targets = selectedRows.filter((r) => r.archivedAt !== null);
+    if (targets.length === 0) return;
+    for (const r of targets) restoreM.mutate(r.id);
+  }
+
+  const selectedCount = selectedRows.length;
+  const selectedActiveCount = selectedRows.filter(
+    (r) => r.archivedAt === null,
+  ).length;
+  const selectedArchivedCount = selectedRows.filter(
+    (r) => r.archivedAt !== null,
+  ).length;
 
   return (
-    <>
-      <header className="shares__header toolbar flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4">
-        <h1 className="text-lg font-semibold text-slate-900">Shares</h1>
-        <div className="flex items-center gap-2">
-          <ArchiveToggle showArchived={showArchived} onChange={setShowArchived} />
-          <button
-            type="button"
-            onClick={() => setShowNew(true)}
-            className="toolbar-btn--primary rounded-md bg-brand-button px-3 py-1.5 text-sm font-medium text-white"
-          >
-            New share
-          </button>
-        </div>
-      </header>
+    <div className="shares flex h-full">
+      <div className="shares__content flex flex-1 flex-col overflow-hidden">
+        <header className="shares__toolbar toolbar sticky top-0 z-40 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
+          <div className="flex items-baseline gap-2">
+            <h1 className="toolbar__title text-sm font-semibold text-slate-900">
+              Shares
+            </h1>
+          </div>
+          <div className="toolbar__count ml-auto text-[11px] tabular-nums text-slate-500">
+            {filtered.length}/{rows.length}
+            {selected.size > 0 ? ` · ${selected.size} selected` : ""}
+          </div>
+        </header>
 
-      <div className="shares__content flex-1 overflow-auto p-6">
-        <div className="shares__list-wrap mx-auto max-w-4xl">
+        <div className="shares__body relative flex-1 overflow-auto">
           {sharesQ.isLoading ? (
-            <p className="text-sm text-slate-500">Loading…</p>
+            <p className="p-6 text-sm text-slate-500">Loading…</p>
           ) : sharesQ.isError ? (
-            <p className="error-alert rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            <p className="error-alert m-6 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               Failed to load shares.
             </p>
-          ) : (sharesQ.data ?? []).length === 0 ? (
-            <div className="empty-state mx-auto max-w-md rounded-lg border border-dashed border-slate-300 p-8 text-center">
+          ) : filtered.length === 0 ? (
+            <div className="empty-state mx-auto mt-12 max-w-md rounded-lg border border-dashed border-slate-300 p-8 text-center">
               <p className="text-sm text-slate-500">
-                No shares yet. Click <strong>New share</strong> to create the
-                first one.
+                No shares yet. Create new shares from{" "}
+                <Link
+                  href="/creative-library"
+                  className="font-medium text-blue-600 hover:underline"
+                >
+                  Creative Library
+                </Link>
+                {" "}by selecting creatives.
               </p>
             </div>
           ) : (
-            <ul className="shares__list space-y-3">
-              {(sharesQ.data ?? []).map((s) => {
-                const archived = s.archivedAt !== null;
-                return (
-                  <li
-                    key={s.id}
-                    className={clsx(
-                      "shares__row flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-4",
-                      archived && "row--archived",
-                    )}
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="row--archived__title truncate text-sm font-semibold text-slate-900">
-                        {s.title ?? (
-                          <span className="italic text-slate-400">untitled</span>
-                        )}
-                        {archived ? (
-                          <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">
-                            archived
-                          </span>
-                        ) : null}
-                      </p>
-                      <p className="mt-0.5 text-xs text-slate-500">
-                        {s.messageCount} message
-                        {s.messageCount === 1 ? "" : "s"} · created{" "}
-                        {s.createdAt.slice(0, 10)}
-                      </p>
-                      <p className="mt-1 truncate font-mono text-xs text-slate-400">
-                        /share/{s.id}
-                      </p>
-                    </div>
+            <div style={{ width: TOTAL_WIDTH, position: "relative" }}>
+              {/* Header */}
+              <div
+                className="shares-table__header sticky top-0 z-10 flex border-b border-slate-200 bg-slate-50 text-[11px] font-medium uppercase tracking-wider text-slate-600"
+                style={{ width: TOTAL_WIDTH }}
+              >
+                <div
+                  className="shares-table__cell--checkbox flex h-8 shrink-0 items-center justify-center border-r border-slate-200"
+                  style={{ width: 40 }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={allFilteredSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someFilteredSelected;
+                    }}
+                    onChange={toggleSelectAllFiltered}
+                    aria-label="Select all (filtered)"
+                  />
+                </div>
+                {COLUMNS.map((c) => {
+                  const sortIcon =
+                    sort?.key === c.key ? (
+                      sort.dir === "asc" ? (
+                        <ArrowUp className="size-3" />
+                      ) : (
+                        <ArrowDown className="size-3" />
+                      )
+                    ) : null;
+                  return (
                     <button
                       type="button"
-                      onClick={() => copyLink(s.id)}
-                      title="Copy public link"
-                      disabled={archived}
-                      className="rounded border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                      key={c.key}
+                      onClick={() => toggleSort(c.key)}
+                      className="shares-table__cell--header flex h-8 shrink-0 items-center gap-1 border-r border-slate-200 px-2 hover:bg-slate-100"
+                      style={{ width: c.width }}
+                      title={`Sort by ${c.label}`}
                     >
-                      <Copy className="size-4" />
+                      <span className="truncate">{c.label}</span>
+                      {sortIcon}
                     </button>
-                    <a
-                      href={`/share/${s.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={archived ? "Archived shares aren't viewable" : "Open public page"}
+                  );
+                })}
+              </div>
+
+              {/* Body */}
+              <div className="shares-table__body">
+                {filtered.map((r) => {
+                  const isSelected = selected.has(r.id);
+                  const archived = r.archivedAt !== null;
+                  const linkClass = clsx(
+                    "truncate text-blue-600 hover:underline",
+                    archived && "pointer-events-none opacity-60",
+                  );
+                  const linkTitle = archived
+                    ? "Archived shares aren't viewable"
+                    : `Open public share /share/${r.id}`;
+                  return (
+                    <div
+                      key={r.id}
+                      onClick={(e) => handleRowClick(e, r.id)}
                       className={clsx(
-                        "rounded border border-slate-300 bg-white p-2 text-slate-600 hover:bg-slate-50",
-                        archived && "pointer-events-none opacity-40",
+                        "shares-table__row flex cursor-pointer select-none border-b border-slate-100",
+                        isSelected && "shares-table__row--selected bg-blue-50",
+                        !isSelected && "hover:bg-slate-50",
+                        archived && "shares-table__row--archived opacity-60",
                       )}
+                      style={{ height: ROW_HEIGHT, width: TOTAL_WIDTH }}
                     >
-                      <ExternalLink className="size-4" />
-                    </a>
-                    {archived ? (
-                      <button
-                        type="button"
-                        onClick={() => restoreM.mutate(s.id)}
-                        disabled={restoreM.isPending}
-                        title="Restore from archive"
-                        className="rounded border border-emerald-200 bg-white p-2 text-emerald-600 hover:bg-emerald-50 disabled:opacity-40"
+                      <div
+                        className="shares-table__cell--checkbox flex shrink-0 items-center justify-center border-r border-slate-100"
+                        style={{ width: 40 }}
                       >
-                        <ArchiveRestore className="size-4" />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => confirmArchive(s)}
-                        disabled={archiveM.isPending}
-                        title="Archive share"
-                        className="rounded border border-rose-200 bg-white p-2 text-rose-600 hover:bg-rose-50 disabled:opacity-40"
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          readOnly
+                          tabIndex={-1}
+                          aria-label={`Select share ${r.title ?? r.id}`}
+                        />
+                      </div>
+                      <div
+                        className="shares-table__cell flex shrink-0 items-center border-r border-slate-100 px-2 text-xs"
+                        style={{ width: 280 }}
+                        title={r.title ?? "(untitled)"}
                       >
-                        <ArchiveIcon className="size-4" />
-                      </button>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
+                        <a
+                          href={`/share/${r.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={linkClass}
+                          title={linkTitle}
+                        >
+                          {r.title ?? (
+                            <span className="italic text-slate-400">
+                              untitled
+                            </span>
+                          )}
+                        </a>
+                      </div>
+                      <div
+                        className="shares-table__cell flex shrink-0 items-center border-r border-slate-100 px-2 text-xs"
+                        style={{ width: 180 }}
+                        title={`/share/${r.id}`}
+                      >
+                        <a
+                          href={`/share/${r.id}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className={clsx(linkClass, "font-mono")}
+                          title={linkTitle}
+                        >
+                          {r.id}
+                        </a>
+                      </div>
+                      <div
+                        className="shares-table__cell flex shrink-0 items-center border-r border-slate-100 px-2 text-xs text-slate-700"
+                        style={{ width: 180 }}
+                      >
+                        <span className="truncate">
+                          {formatDate(r.createdAt)}
+                        </span>
+                      </div>
+                      <div
+                        className="shares-table__cell flex shrink-0 items-center border-r border-slate-100 px-2 text-xs tabular-nums text-slate-900"
+                        style={{ width: 70 }}
+                      >
+                        {r.messageCount}
+                      </div>
+                      <div
+                        className="shares-table__cell flex shrink-0 items-center border-r border-slate-100 px-2 text-xs tabular-nums text-slate-900"
+                        style={{ width: 90 }}
+                      >
+                        {r.commentCount}
+                      </div>
+                      <div
+                        className="shares-table__cell flex shrink-0 items-center border-r border-slate-100 px-2 text-xs tabular-nums text-slate-900"
+                        style={{ width: 70 }}
+                      >
+                        {r.viewCount}
+                      </div>
+                      <div
+                        className="shares-table__cell flex shrink-0 items-center border-r border-slate-100 px-2 text-xs tabular-nums text-slate-900"
+                        style={{ width: 100 }}
+                      >
+                        {r.downloadCount}
+                      </div>
+                      <div
+                        className="shares-table__cell flex shrink-0 items-center border-r border-slate-100 px-2 text-xs text-slate-700"
+                        style={{ width: 200 }}
+                        title={r.createdByEmail ?? r.createdBy ?? ""}
+                      >
+                        <span className="truncate">
+                          {r.createdByEmail ?? r.createdBy ?? "—"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
       </div>
 
-      {showNew ? (
-        <NewShareModal
-          onClose={() => setShowNew(false)}
-          onCreated={() => {
-            qc.invalidateQueries({ queryKey: ["share-galleries"] });
-            setShowNew(false);
-          }}
-        />
-      ) : null}
-    </>
+      <RightToolbar storageKey="mm6_shares_right_toolbar_open">
+        {(collapsed) => (
+          <div
+            className={clsx(
+              "shares__right-toolbar-content h-full",
+              collapsed ? "flex flex-col items-center gap-2" : "flex flex-col gap-3",
+            )}
+          >
+            {!collapsed ? (
+              <p className="shares__right-toolbar-hint text-[11px] leading-relaxed text-slate-500">
+                Create new shares from{" "}
+                <Link
+                  href="/creative-library"
+                  className="font-medium text-blue-600 hover:underline"
+                >
+                  Creative Library
+                </Link>
+                {" "}by selecting creatives.
+              </p>
+            ) : null}
+
+            <ArchiveToggle
+              showArchived={showArchived}
+              onChange={setShowArchived}
+              collapsed={collapsed}
+            />
+
+            {selectedCount > 0 ? (
+              <div
+                className={clsx(
+                  "selection-actions flex flex-col gap-2 border-t border-slate-200 pt-3",
+                  collapsed && "items-center",
+                )}
+              >
+                {!collapsed ? (
+                  <div className="selection-actions__count text-[11px] font-semibold text-slate-700">
+                    {selectedCount} selected
+                  </div>
+                ) : (
+                  <span
+                    className="selection-actions__count flex size-8 items-center justify-center rounded-md bg-slate-900 text-[11px] font-semibold text-white"
+                    title={`${selectedCount} selected`}
+                  >
+                    {selectedCount}
+                  </span>
+                )}
+
+                <button
+                  type="button"
+                  onClick={archiveSelected}
+                  disabled={archiveM.isPending || selectedActiveCount === 0}
+                  title={
+                    selectedActiveCount === 0
+                      ? "Selected shares are already archived"
+                      : `Archive ${selectedActiveCount} share${selectedActiveCount === 1 ? "" : "s"}`
+                  }
+                  aria-label="Archive selected"
+                  className={clsx(
+                    "toolbar-btn inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40",
+                    collapsed ? "size-9" : "px-3 py-1.5 text-xs font-medium",
+                  )}
+                >
+                  <ArchiveIcon className="size-3.5" />
+                  {!collapsed ? "Archive" : null}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={restoreSelected}
+                  disabled={restoreM.isPending || selectedArchivedCount === 0}
+                  title={
+                    selectedArchivedCount === 0
+                      ? "No archived shares in selection"
+                      : `Restore ${selectedArchivedCount} share${selectedArchivedCount === 1 ? "" : "s"}`
+                  }
+                  aria-label="Restore selected"
+                  className={clsx(
+                    "toolbar-btn inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40",
+                    collapsed ? "size-9" : "px-3 py-1.5 text-xs font-medium",
+                  )}
+                >
+                  <ArchiveRestore className="size-3.5" />
+                  {!collapsed ? "Restore" : null}
+                </button>
+              </div>
+            ) : null}
+
+            {selectedCount > 0 ? (
+              <div
+                className={clsx(
+                  "shares__bottom-actions mt-auto flex gap-2",
+                  collapsed ? "flex-col items-center" : "flex-row",
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={copySelected}
+                  title={`Copy ${selectedCount} public link${selectedCount === 1 ? "" : "s"}`}
+                  aria-label="Copy public link"
+                  className={clsx(
+                    "toolbar-btn--primary inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-900 font-medium text-white hover:bg-slate-800",
+                    collapsed ? "size-9" : "flex-1 px-3 py-1.5 text-xs",
+                  )}
+                >
+                  <Copy className="size-3.5" />
+                  {!collapsed ? "Copy link" : null}
+                </button>
+                {selectedCount === 1 ? (
+                  <a
+                    href={`/share/${selectedRows[0]!.id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Open public page"
+                    aria-label="Open public page"
+                    className={clsx(
+                      "toolbar-btn inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+                      selectedRows[0]!.archivedAt !== null &&
+                        "pointer-events-none opacity-40",
+                      collapsed ? "size-9" : "size-9 shrink-0",
+                    )}
+                  >
+                    <ExternalLink className="size-3.5" />
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+        )}
+      </RightToolbar>
+    </div>
   );
 }
 
-function NewShareModal({
-  onClose,
-  onCreated,
-}: {
-  onClose: () => void;
-  onCreated: () => void;
-}) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [selected, setSelected] = useState<Set<number>>(new Set());
-
-  const messagesQ = useQuery({
-    queryKey: ["messages", "for-share"],
-    queryFn: async (): Promise<Message[]> => {
-      const r = await fetch("/api/messages");
-      if (!r.ok) throw new Error("messages fetch failed");
-      const data = (await r.json()) as { messages: Message[] };
-      return data.messages;
-    },
-  });
-
-  const sorted = useMemo(() => {
-    return (messagesQ.data ?? [])
-      .slice()
-      .sort((a, b) => a.number - b.number || a.variant.localeCompare(b.variant));
-  }, [messagesQ.data]);
-
-  const m = useMutation({
-    mutationFn: async () => {
-      const r = await fetch("/api/share-galleries", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title.trim() || null,
-          description: description.trim() || null,
-          mcIds: Array.from(selected),
-        }),
-      });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error ?? "create failed");
-      return data;
-    },
-    onSuccess: onCreated,
-  });
-
-  function toggle(id: number) {
-    const next = new Set(selected);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    setSelected(next);
-  }
-  function selectAll() {
-    setSelected(new Set(sorted.map((s) => s.id)));
-  }
-  function selectNone() {
-    setSelected(new Set());
-  }
-
-  return (
-    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="modal flex max-h-[90vh] w-full max-w-2xl flex-col rounded-xl bg-white p-6 shadow-2xl">
-        <header className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-900">New share</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="modal__close rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </header>
-
-        <form
-          className="flex flex-1 flex-col gap-3 overflow-hidden"
-          onSubmit={(e) => {
-            e.preventDefault();
-            m.mutate();
-          }}
-        >
-          <label className="form-field block">
-            <span className="form-field__label mb-1 block text-sm font-medium text-slate-700">
-              Title (optional)
-            </span>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Q2 banner approvals"
-              className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
-            />
-          </label>
-
-          <label className="form-field block">
-            <span className="form-field__label mb-1 block text-sm font-medium text-slate-700">
-              Description (optional)
-            </span>
-            <input
-              type="text"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Short note for the recipient"
-              className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
-            />
-          </label>
-
-          <div className="form-field flex min-h-0 flex-1 flex-col">
-            <div className="form-field__head mb-1 flex items-center justify-between">
-              <span className="form-field__label text-sm font-medium text-slate-700">
-                Messages ({selected.size} selected)
-              </span>
-              <div className="form-field__actions text-xs">
-                <button
-                  type="button"
-                  onClick={selectAll}
-                  className="text-slate-600 hover:underline"
-                >
-                  All
-                </button>
-                <span className="mx-1 text-slate-300">·</span>
-                <button
-                  type="button"
-                  onClick={selectNone}
-                  className="text-slate-600 hover:underline"
-                >
-                  None
-                </button>
-              </div>
-            </div>
-            <div className="form-field__list min-h-0 flex-1 overflow-auto rounded-md border border-slate-200">
-              {messagesQ.isLoading ? (
-                <p className="p-3 text-sm text-slate-500">Loading…</p>
-              ) : sorted.length === 0 ? (
-                <p className="p-3 text-sm text-slate-500">
-                  No messages in this client yet.
-                </p>
-              ) : (
-                <ul className="divide-y divide-slate-100">
-                  {sorted.map((msg) => (
-                    <li
-                      key={msg.id}
-                      className="flex items-center gap-2 px-3 py-2 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selected.has(msg.id)}
-                        onChange={() => toggle(msg.id)}
-                        className="size-4 shrink-0"
-                      />
-                      <span className="font-mono text-xs font-semibold text-slate-700">
-                        MC{msg.number}
-                        {msg.variant}
-                      </span>
-                      <span className="text-xs text-slate-500">
-                        {msg.audience} / {msg.topic}
-                      </span>
-                      <span className="ml-auto truncate text-xs text-slate-600">
-                        {msg.headline ?? ""}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </div>
-
-          {m.isError ? (
-            <p className="error-alert rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {(m.error as Error).message}
-            </p>
-          ) : null}
-
-          <div className="mt-2 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={m.isPending || selected.size === 0}
-              className="toolbar-btn--primary rounded-md bg-brand-button px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-            >
-              {m.isPending
-                ? "Creating…"
-                : `Create share (${selected.size})`}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+function compareRows(a: Share, b: Share, key: SortKey): number {
+  const av = a[key];
+  const bv = b[key];
+  if (av === bv) return 0;
+  if (av === null || av === undefined) return -1;
+  if (bv === null || bv === undefined) return 1;
+  if (typeof av === "number" && typeof bv === "number") return av - bv;
+  return String(av).localeCompare(String(bv));
 }

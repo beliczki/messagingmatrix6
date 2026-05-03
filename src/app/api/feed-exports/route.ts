@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { feedExports } from "@/db/schema";
+import { feedExports, users } from "@/db/schema";
 import { withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 import {
@@ -19,28 +19,52 @@ type ExportRowOut = {
   feedVersion: number;
   exportedAt: string;
   exportedBy: string | null;
+  exportedByEmail: string | null;
   uploadedToAdformAt: string | null;
   uploadedBy: string | null;
+  uploadedByEmail: string | null;
   defaultMessageId: number | null;
   defaultLabel: string | null;
   rowCount: number;
   notes: string | null;
 };
 
-function shapeRow(r: typeof feedExports.$inferSelect): ExportRowOut {
+function shapeRow(
+  r: typeof feedExports.$inferSelect,
+  emailById: Map<string, string>,
+): ExportRowOut {
   return {
     id: r.id,
     product: r.product,
     feedVersion: r.feedVersion,
     exportedAt: r.exportedAt,
     exportedBy: r.exportedBy,
+    exportedByEmail: r.exportedBy ? emailById.get(r.exportedBy) ?? null : null,
     uploadedToAdformAt: r.uploadedToAdformAt,
     uploadedBy: r.uploadedBy,
+    uploadedByEmail: r.uploadedBy ? emailById.get(r.uploadedBy) ?? null : null,
     defaultMessageId: r.defaultMessageId,
     defaultLabel: r.defaultLabel,
     rowCount: r.rowCount,
     notes: r.notes,
   };
+}
+
+function resolveEmails(
+  rows: Array<{ exportedBy: string | null; uploadedBy: string | null }>,
+): Map<string, string> {
+  const ids = new Set<string>();
+  for (const r of rows) {
+    if (r.exportedBy) ids.add(r.exportedBy);
+    if (r.uploadedBy) ids.add(r.uploadedBy);
+  }
+  if (ids.size === 0) return new Map();
+  const found = db
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(inArray(users.id, [...ids]))
+    .all();
+  return new Map(found.map((u) => [u.id, u.email]));
 }
 
 export const GET = withSession(({ req, claims }) => {
@@ -61,7 +85,10 @@ export const GET = withSession(({ req, claims }) => {
     .orderBy(desc(feedExports.exportedAt))
     .all();
 
-  return NextResponse.json({ feedExports: rows.map(shapeRow) });
+  const emailById = resolveEmails(rows);
+  return NextResponse.json({
+    feedExports: rows.map((r) => shapeRow(r, emailById)),
+  });
 });
 
 export const POST = withSession(async ({ req, claims }) => {
@@ -71,6 +98,7 @@ export const POST = withSession(async ({ req, claims }) => {
         defaultMessageId?: unknown;
         forceNewVersion?: unknown;
         notes?: unknown;
+        messageIds?: unknown;
       }
     | null;
   if (!body) {
@@ -84,12 +112,16 @@ export const POST = withSession(async ({ req, claims }) => {
     typeof body.defaultMessageId === "number" ? body.defaultMessageId : null;
   const forceNewVersion = body.forceNewVersion === true;
   const notes = typeof body.notes === "string" ? body.notes : null;
+  const messageIds = Array.isArray(body.messageIds)
+    ? body.messageIds.filter((v): v is number => typeof v === "number")
+    : null;
 
   const built = buildFeedRowSet({
     clientId: claims.cid,
     product,
     defaultMessageId,
     forceNewVersion,
+    messageIds,
   });
 
   if (built.rowSet.columns.length === 0) {
@@ -153,8 +185,9 @@ export const POST = withSession(async ({ req, claims }) => {
     },
   });
 
+  const emailById = resolveEmails([inserted]);
   return NextResponse.json({
-    feedExport: shapeRow(inserted),
+    feedExport: shapeRow(inserted, emailById),
     decision,
     diff: {
       added: diff.added.length,

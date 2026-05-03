@@ -64,21 +64,30 @@ const DEFAULT_FEED_PATTERN_MAP: Record<string, string> = {
   image5: "{{image5}}",
 };
 
+/**
+ * Parse the Feed structure CSV into clean column names. The legacy "Type:"
+ * prefix (e.g. "Text:advert_id", "URL:landing_url") is stripped silently so
+ * the rest of the codebase only ever sees the bare column name. Toggles that
+ * used to live in the prefix slot are now expressed as pattern modifiers
+ * (e.g. {{headline|formatted}}).
+ */
 export function parseFeedColumns(feedStructure: string): string[] {
   if (!feedStructure) return [];
   return feedStructure
     .split(",")
     .map((c) => c.trim())
-    .filter((c) => c.length > 0);
+    .filter((c) => c.length > 0)
+    .map(stripLegacyPrefix);
 }
 
-export function cleanColumnName(column: string): string {
-  // Strip "Type:" prefix (e.g. "Text:advert_id" → "advert_id").
-  return column.replace(/^[^:]+:/, "");
+function stripLegacyPrefix(raw: string): string {
+  const colon = raw.indexOf(":");
+  if (colon < 0) return raw;
+  return raw.slice(colon + 1);
 }
 
 export function defaultFeedPattern(column: string): string {
-  const clean = cleanColumnName(column).toLowerCase();
+  const clean = column.toLowerCase();
   return DEFAULT_FEED_PATTERN_MAP[clean] ?? `{{${clean}}}`;
 }
 
@@ -86,7 +95,21 @@ export function resolveFeedPattern(
   column: string,
   feedPatterns: Record<string, string> | null | undefined,
 ): string {
+  // Direct hit on the clean column name (the canonical key).
   const explicit = feedPatterns?.[column];
   if (explicit && explicit.trim()) return explicit;
+  // Legacy fallback: existing rows in the DB may still hold "Type:column"
+  // keys from before the prefix story was removed. Match any key that ends
+  // with ":<column>" so the user's custom pattern keeps working until the
+  // next Settings save rewrites the keys.
+  if (feedPatterns) {
+    const suffix = `:${column}`;
+    for (const key of Object.keys(feedPatterns)) {
+      if (key.endsWith(suffix)) {
+        const v = feedPatterns[key];
+        if (v && v.trim()) return v;
+      }
+    }
+  }
   return defaultFeedPattern(column);
 }

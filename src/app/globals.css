@@ -78,4 +78,33 @@
   .row--archived .row--archived__title {
     text-decoration: line-through;
   }
+
+  /* Public share page annotation marks — v5 "marching ants" style: stroke
+     dasharray with animated offset + color swap so the outline stays
+     visible on any background. See AnnotationLayer / ShareDetailDialog. */
+  @keyframes annotation-dash {
+    to { stroke-dashoffset: -20; }
+  }
+  @keyframes annotation-dash-color {
+    0%, 100% { stroke: rgba(255, 255, 255, 1); }
+    50% { stroke: rgba(0, 0, 0, 1); }
+  }
+  @keyframes annotation-pulse {
+    0%, 100% { transform: scale(0.9); }
+    50% { transform: scale(0.4); }
+  }
+  .annotation-dash {
+    animation:
+      annotation-dash 1s linear infinite,
+      annotation-dash-color 0.75s ease-in-out infinite;
+  }
+  .annotation-dash--pending {
+    animation: annotation-dash 1s linear infinite;
+    stroke: #f59e0b;
+  }
+  .annotation-pulse {
+    transform-origin: center;
+    transform-box: fill-box;
+    animation: annotation-pulse 1.5s ease-in-out infinite;
+  }
 }

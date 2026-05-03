@@ -5,9 +5,5 @@ import { FeedsView } from "./FeedsView";
 export default async function Page() {
   const claims = await readSessionFromCookies();
   if (!claims) redirect("/login");
-  return (
-    <div className="feeds flex h-full flex-col">
-      <FeedsView />
-    </div>
-  );
+  return <FeedsView />;
 }

@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { db } from "@/db";
 import { clients, creatives, messages, shareGalleries } from "@/db/schema";
@@ -37,6 +37,13 @@ export default async function SharePage({
     .where(eq(shareGalleries.id, id))
     .get();
   if (!share) notFound();
+
+  if (share.archivedAt === null) {
+    db.update(shareGalleries)
+      .set({ viewCount: sql`${shareGalleries.viewCount} + 1` })
+      .where(eq(shareGalleries.id, id))
+      .run();
+  }
 
   const client = db
     .select()

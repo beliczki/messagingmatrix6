@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import path from "node:path";
 import fs from "node:fs/promises";
 import sharp from "sharp";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, shareGalleries, uploadedFiles } from "@/db/schema";
 import { readFileBytes, resolveStoragePath } from "@/lib/storage";
@@ -103,6 +103,10 @@ export async function GET(
   } catch {
     return NextResponse.json({ error: "storage_missing" }, { status: 410 });
   }
+  db.update(shareGalleries)
+    .set({ downloadCount: sql`${shareGalleries.downloadCount} + 1` })
+    .where(eq(shareGalleries.id, id))
+    .run();
   return new NextResponse(new Uint8Array(bytes), {
     headers: {
       "Content-Type": file.mimeType ?? "application/octet-stream",

@@ -37,6 +37,7 @@ async function postCreate(body: {
   defaultMessageId: number | null;
   forceNewVersion: boolean;
   notes: string | null;
+  messageIds: number[];
 }): Promise<CreateResponse> {
   const r = await fetch("/api/feed-exports", {
     method: "POST",
@@ -56,11 +57,13 @@ export default function FeedExportDialog({
   onClose,
   product,
   defaultMessageId,
+  messageIds,
 }: {
   open: boolean;
   onClose: () => void;
   product: string;
   defaultMessageId: number | null;
+  messageIds: number[];
 }) {
   const router = useRouter();
   const qc = useQueryClient();
@@ -75,6 +78,7 @@ export default function FeedExportDialog({
         defaultMessageId,
         forceNewVersion,
         notes: notes.trim() || null,
+        messageIds,
       }),
     onSuccess: (data) => {
       setResult(data);

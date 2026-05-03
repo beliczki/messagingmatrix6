@@ -161,31 +161,6 @@ export function restoreTextFormatting(
   return { ok: true, row: updated };
 }
 
-// Spec §3.6 — scope parsing helpers, used at render time.
-//   formattingScope: "" → universal; otherwise CSV/whitespace separated sizes
-//   formattingMcScope: "" → universal; otherwise CSV/whitespace separated MC labels
-function parseScope(raw: string | null | undefined): string[] | null {
-  if (raw == null) return null; // null/undefined → universal
-  const trimmed = raw.trim();
-  if (trimmed === "") return null; // empty → universal
-  return trimmed
-    .split(/[,\s]+/)
-    .map((s) => s.trim().toLowerCase())
-    .filter((s) => s.length > 0);
-}
-
-export function matchesScope(
-  rule: TextFormatting,
-  size: string,
-  mcLabel: string,
-): boolean {
-  const sizeScope = parseScope(rule.formattingScope);
-  if (sizeScope !== null && !sizeScope.includes(size.toLowerCase())) {
-    return false;
-  }
-  const mcScope = parseScope(rule.formattingMcScope);
-  if (mcScope !== null && !mcScope.includes(mcLabel.toLowerCase())) {
-    return false;
-  }
-  return true;
-}
+// Spec §3.6 — scope parsing helpers re-exported from the pure module so
+// server callers can keep importing them from the entity module unchanged.
+export { parseScope, matchesScope } from "@/lib/text-formatting-scope";

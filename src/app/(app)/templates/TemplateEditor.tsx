@@ -191,12 +191,13 @@ function isLandscape(size: string | null): boolean {
 
 export default function TemplateEditor() {
   const qc = useQueryClient();
-  const persistedRef = useRef<Persisted>(loadPersisted());
-  const persisted = persistedRef.current;
+  // SSR-safe initial state: persistedRef starts empty so the first render
+  // produces identical HTML on server and client. The hydration effect below
+  // reads localStorage post-mount and applies stored values via setters.
+  const persistedRef = useRef<Persisted>({});
+  const [hydrated, setHydrated] = useState(false);
 
-  const [activeTemplate, setActiveTemplate] = useState<string | null>(
-    persisted.activeTemplate ?? null,
-  );
+  const [activeTemplate, setActiveTemplate] = useState<string | null>(null);
   const [activeFile, setActiveFile] = useState<string | null>(null);
   const [buffer, setBuffer] = useState<string>("");
   const [dirty, setDirty] = useState(false);
@@ -204,29 +205,41 @@ export default function TemplateEditor() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [previewSize, setPreviewSize] = useState<string | null>(null);
   const [previewBg, setPreviewBg] = useState<"light" | "dark" | "checker">(
-    persisted.previewBg ?? "light",
+    "light",
   );
-  const [skipAnim, setSkipAnim] = useState(persisted.skipAnim ?? false);
-  const [splitPercent, setSplitPercent] = useState(persisted.splitPercent ?? 50);
+  const [skipAnim, setSkipAnim] = useState(false);
+  const [splitPercent, setSplitPercent] = useState(50);
   const containerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef(false);
-  const [selectedMcId, setSelectedMcId] = useState<number | null>(() => {
-    const t = persisted.activeTemplate;
-    if (!t) return null;
-    return persisted.perTemplate?.[t]?.selectedMcId ?? null;
-  });
-  const lastMcRestoredTemplateRef = useRef<string | null>(persisted.activeTemplate ?? null);
+  const [selectedMcId, setSelectedMcId] = useState<number | null>(null);
+  const lastMcRestoredTemplateRef = useRef<string | null>(null);
   const [filesOpen, setFilesOpen] = useState(false);
   const [bindingsOpen, setBindingsOpen] = useState(false);
-  const [typeFilters, setTypeFilters] = useState<Record<PHType, boolean>>(() => {
-    const stored = persisted.typeFilters;
-    const dflt: Record<PHType, boolean> = {
-      text: true, var: true, image: true, video: true,
-      url: true, tag: true, style: true,
-    };
-    if (!stored) return dflt;
-    return { ...dflt, ...stored } as Record<PHType, boolean>;
+  const [typeFilters, setTypeFilters] = useState<Record<PHType, boolean>>({
+    text: true, var: true, image: true, video: true,
+    url: true, tag: true, style: true,
   });
+
+  // One-shot hydration: load persisted state from localStorage on mount and
+  // apply it. The save effect below is gated on `hydrated` so it can't
+  // overwrite stored values during the gap between mount and this effect.
+  useEffect(() => {
+    const stored = loadPersisted();
+    persistedRef.current = stored;
+    if (stored.activeTemplate) {
+      setActiveTemplate(stored.activeTemplate);
+      lastMcRestoredTemplateRef.current = stored.activeTemplate;
+      const mc = stored.perTemplate?.[stored.activeTemplate]?.selectedMcId;
+      if (mc !== undefined && mc !== null) setSelectedMcId(mc);
+    }
+    if (stored.previewBg) setPreviewBg(stored.previewBg);
+    if (stored.skipAnim !== undefined) setSkipAnim(stored.skipAnim);
+    if (stored.splitPercent !== undefined) setSplitPercent(stored.splitPercent);
+    if (stored.typeFilters) {
+      setTypeFilters((cur) => ({ ...cur, ...stored.typeFilters }));
+    }
+    setHydrated(true);
+  }, []);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [previewHtml, setPreviewHtml] = useState<string>("");
 
@@ -332,6 +345,9 @@ export default function TemplateEditor() {
 
   // Persist user preferences to localStorage whenever they change.
   useEffect(() => {
+    // Wait until hydration completed so we never overwrite stored state with
+    // the SSR-safe defaults during the mount window.
+    if (!hydrated) return;
     // Skip until the MC selection has been restored for the current template,
     // otherwise we'd overwrite the persisted value with the previous template's state.
     if (activeTemplate && lastMcRestoredTemplateRef.current !== activeTemplate) return;
@@ -354,6 +370,7 @@ export default function TemplateEditor() {
       perTemplate,
     });
   }, [
+    hydrated,
     activeTemplate,
     activeFile,
     previewSize,
@@ -548,6 +565,9 @@ export default function TemplateEditor() {
     <div className={clsx("template-editor flex h-screen flex-col", wide && "template-editor--landscape")}>
       <header className="template-editor__header flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
         <div className="flex items-center gap-2">
+          <span className="template-editor__title text-sm font-semibold text-slate-900">
+            Templates
+          </span>
           <select
             value={activeTemplate ?? ""}
             onChange={(e) => {

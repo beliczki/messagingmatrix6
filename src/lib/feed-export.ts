@@ -16,13 +16,17 @@ import {
   type Audience as DbAudience,
   type FeedExport,
   type Message as DbMessage,
+  type TextFormatting,
   type Topic as DbTopic,
 } from "@/db/schema";
-import { evaluatePattern } from "@/lib/patterns";
+import { evaluatePattern, FORMATTING_CTX_KEYS } from "@/lib/patterns";
 import {
   parseFeedColumns,
   resolveFeedPattern,
 } from "@/lib/feed-patterns";
+import { listTextFormatting } from "@/lib/entities/text-formatting";
+import { mcLabelFor } from "@/lib/mc-label";
+import { readTemplate } from "@/lib/templates";
 
 const MAX_ROWS_PER_FEED = 500;
 
@@ -61,6 +65,12 @@ export type BuildOptions = {
   product: string;
   defaultMessageId: number | null;
   forceNewVersion?: boolean;
+  /**
+   * If provided, restrict the export's row set to messages whose id is in
+   * this list (intersected with product + ACTIVE + carry-forward rules).
+   * Mirrors the user's matrix filter so the export reflects what they see.
+   */
+  messageIds?: number[] | null;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -185,9 +195,11 @@ function buildDefaultRow(
   topics: DbTopic[],
   columns: string[],
   feedPatterns: Record<string, string>,
+  formattingCtxOverlay: Record<string, unknown> | null,
 ): FeedRow {
   const defaultRow: FeedRow = { ...base };
   const ctx = buildContext(defaultMessage, aud, top, audiences, topics, "default");
+  if (formattingCtxOverlay) Object.assign(ctx, formattingCtxOverlay);
   for (const col of columns) {
     const pattern = resolveFeedPattern(col, feedPatterns);
     if (patternUsesAudienceKey(pattern)) {
@@ -260,9 +272,48 @@ export function buildFeedRowSet(opts: BuildOptions): {
   liveExport: FeedExport | null;
 } {
   const { clientId, product, defaultMessageId } = opts;
+  const allowed =
+    opts.messageIds && opts.messageIds.length > 0
+      ? new Set(opts.messageIds)
+      : null;
 
-  const columns = parseFeedColumns(readFeedStructure(clientId));
+  const feedStructure = readFeedStructure(clientId);
+  const columns = parseFeedColumns(feedStructure);
   const feedPatterns = readFeedPatterns(clientId);
+
+  // Per-row text-formatter context. Loaded only if any resolved pattern
+  // actually uses the `|formatted` modifier — otherwise we save the SELECT.
+  const usesFormatted = columns.some((col) =>
+    /\|\s*formatted\b/.test(resolveFeedPattern(col, feedPatterns)),
+  );
+  const formattingRules: TextFormatting[] = usesFormatted
+    ? listTextFormatting(clientId)
+    : [];
+
+  // Cache per-template size lookups across messages — buildFeedRowSet may
+  // touch hundreds of rows but typically only a handful of templates.
+  const sizesByTemplate = new Map<string, string[]>();
+  function sizesFor(templateName: string | null | undefined): string[] {
+    if (!templateName) return [];
+    const cached = sizesByTemplate.get(templateName);
+    if (cached) return cached;
+    const sizes = readTemplate(templateName)?.sizes ?? [];
+    sizesByTemplate.set(templateName, sizes);
+    return sizes;
+  }
+
+  function buildFormattingCtx(
+    m: DbMessage,
+  ): Record<string, unknown> | null {
+    if (!usesFormatted) return null;
+    return {
+      [FORMATTING_CTX_KEYS.rules]: formattingRules,
+      [FORMATTING_CTX_KEYS.sizes]: sizesFor(m.template),
+      [FORMATTING_CTX_KEYS.mcLabel]: mcLabelFor(
+        m as unknown as Record<string, unknown>,
+      ),
+    };
+  }
 
   const audiences = db
     .select()
@@ -307,6 +358,7 @@ export function buildFeedRowSet(opts: BuildOptions): {
 
   const inSet: DbMessage[] = [];
   for (const m of allMessages) {
+    if (allowed && !allowed.has(m.id)) continue;
     const matchesProduct =
       productAudKeys.has(m.audience) && productTopicKeys.has(m.topic);
     const isActive =
@@ -333,6 +385,8 @@ export function buildFeedRowSet(opts: BuildOptions): {
     const aud = audIndex.get(m.audience) ?? null;
     const top = topIndex.get(m.topic) ?? null;
     const ctx = buildContext(m, aud, top, audiences, topics);
+    const fmt = buildFormattingCtx(m);
+    if (fmt) Object.assign(ctx, fmt);
     const row = evaluateRow(m, columns, feedPatterns, ctx);
     if (isActiveCol && m.archivedAt !== null) {
       // Archive trumps status — message has been retired in the system.
@@ -353,6 +407,8 @@ export function buildFeedRowSet(opts: BuildOptions): {
       const aud = audIndex.get(defaultMsg.audience) ?? null;
       const top = topIndex.get(defaultMsg.topic) ?? null;
       const baseCtx = buildContext(defaultMsg, aud, top, audiences, topics);
+      const fmt = buildFormattingCtx(defaultMsg);
+      if (fmt) Object.assign(baseCtx, fmt);
       const baseRow = evaluateRow(defaultMsg, columns, feedPatterns, baseCtx);
       const defaultRow = buildDefaultRow(
         baseRow,
@@ -363,6 +419,7 @@ export function buildFeedRowSet(opts: BuildOptions): {
         topics,
         columns,
         feedPatterns,
+        fmt,
       );
       // DEFAULT row is always Active=TRUE regardless of message archive state —
       // it's a serving fallback, not a real message.

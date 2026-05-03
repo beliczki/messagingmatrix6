@@ -4,11 +4,13 @@ import { useMemo, useState } from "react";
 import clsx from "clsx";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp } from "lucide-react";
-import { evaluatePattern } from "@/lib/patterns";
+import { evaluatePattern, FORMATTING_CTX_KEYS } from "@/lib/patterns";
 import {
   parseFeedColumns,
   resolveFeedPattern,
 } from "@/lib/feed-patterns";
+import { mcLabelFor } from "@/lib/mc-label";
+import type { TextFormatting } from "@/db/schema";
 import { type Audience, type Message, type Topic, STATUS_COLOR } from "./types";
 
 type SortDir = "asc" | "desc";
@@ -19,6 +21,8 @@ type Patterns = {
   feed?: Record<string, string>;
   [key: string]: unknown;
 };
+
+type TemplateInfo = { name: string; sizes: string[] };
 
 async function fetchFeedStructure(): Promise<string> {
   const r = await fetch("/api/config?key=feedStructure", {
@@ -71,6 +75,44 @@ export default function FeedView({
     [feedStructure],
   );
 
+  // Detect whether any column uses the |formatted modifier so we only fetch
+  // the supporting data (text-formatter rules + template sizes) when needed.
+  const usesFormatted = useMemo(
+    () =>
+      columns.some((col) =>
+        /\|\s*formatted\b/.test(resolveFeedPattern(col, feedPatterns)),
+      ),
+    [columns, feedPatterns],
+  );
+
+  const formattingRulesQ = useQuery({
+    queryKey: ["text-formatting"],
+    queryFn: async (): Promise<TextFormatting[]> => {
+      const r = await fetch("/api/text-formatting", { credentials: "include" });
+      if (!r.ok) return [];
+      const data = (await r.json()) as { text_formatting: TextFormatting[] };
+      return data.text_formatting ?? [];
+    },
+    enabled: usesFormatted,
+  });
+
+  const templatesQ = useQuery({
+    queryKey: ["templates", "for-feed-formatted"],
+    queryFn: async (): Promise<TemplateInfo[]> => {
+      const r = await fetch("/api/templates", { credentials: "include" });
+      if (!r.ok) return [];
+      const data = (await r.json()) as { templates: TemplateInfo[] };
+      return data.templates ?? [];
+    },
+    enabled: usesFormatted,
+  });
+
+  const sizesByTemplate = useMemo(() => {
+    const m = new Map<string, string[]>();
+    for (const t of templatesQ.data ?? []) m.set(t.name, t.sizes ?? []);
+    return m;
+  }, [templatesQ.data]);
+
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
@@ -87,6 +129,7 @@ export default function FeedView({
   // re-evaluate patterns on every comparator call.
   const rows = useMemo(() => {
     if (columns.length === 0) return [];
+    const formattingRules = usesFormatted ? formattingRulesQ.data ?? [] : [];
     return messages.map((m) => {
       const aud = audIndex.get(m.audience) ?? null;
       const top = topIndex.get(m.topic) ?? null;
@@ -103,6 +146,15 @@ export default function FeedView({
         audiences,
         topics,
       };
+      if (usesFormatted) {
+        ctx[FORMATTING_CTX_KEYS.rules] = formattingRules;
+        ctx[FORMATTING_CTX_KEYS.sizes] = m.template
+          ? sizesByTemplate.get(m.template) ?? []
+          : [];
+        ctx[FORMATTING_CTX_KEYS.mcLabel] = mcLabelFor(
+          m as unknown as Record<string, unknown>,
+        );
+      }
       const cells: Record<string, string> = {};
       for (const col of columns) {
         const pattern = resolveFeedPattern(col, feedPatterns);
@@ -112,7 +164,18 @@ export default function FeedView({
       }
       return { message: m, cells };
     });
-  }, [messages, columns, feedPatterns, audIndex, topIndex, audiences, topics]);
+  }, [
+    messages,
+    columns,
+    feedPatterns,
+    audIndex,
+    topIndex,
+    audiences,
+    topics,
+    usesFormatted,
+    formattingRulesQ.data,
+    sizesByTemplate,
+  ]);
 
   const sorted = useMemo(() => {
     if (!sortColumn) return rows;

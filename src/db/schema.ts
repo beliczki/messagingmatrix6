@@ -418,6 +418,29 @@ export const shareGalleries = sqliteTable(
   (t) => [index("share_galleries_client_idx").on(t.clientId)],
 );
 
+// Per-item comments on a public share gallery. itemKey is "matrix:{messageId}:{size}"
+// for matrix items and "creative:{id}" for uploaded creatives.
+export const shareComments = sqliteTable(
+  "share_comments",
+  {
+    id: text("id").primaryKey(),
+    shareGalleryId: text("share_gallery_id")
+      .notNull()
+      .references(() => shareGalleries.id, { onDelete: "cascade" }),
+    itemKey: text("item_key").notNull(),
+    authorName: text("author_name").notNull(),
+    body: text("body").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+    archivedAt: text("archived_at"),
+  },
+  (t) => [
+    index("share_comments_share_idx").on(t.shareGalleryId),
+    index("share_comments_share_item_idx").on(t.shareGalleryId, t.itemKey),
+  ],
+);
+
 // §3.11 — unified file registry
 export const uploadedFiles = sqliteTable(
   "uploaded_files",
@@ -492,4 +515,5 @@ export type Creative = typeof creatives.$inferSelect;
 export type TextFormatting = typeof textFormatting.$inferSelect;
 export type Reporting = typeof reporting.$inferSelect;
 export type ShareGallery = typeof shareGalleries.$inferSelect;
+export type ShareComment = typeof shareComments.$inferSelect;
 export type UploadedFile = typeof uploadedFiles.$inferSelect;

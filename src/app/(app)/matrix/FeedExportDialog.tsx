@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, AlertTriangle, CheckCircle2 } from "lucide-react";
 import AppDialog from "../_components/AppDialog";
 
@@ -38,13 +38,22 @@ type CreateResponse = {
   diff: DiffPreview;
 };
 
-async function postCreate(body: {
+type PreviewResponse = {
+  feedExport: null;
+  decision: Decision;
+  diff: DiffPreview;
+  previewRowCount: number;
+};
+
+type PostBody = {
   product: string;
   defaultMessageId: number | null;
   forceNewVersion: boolean;
   notes: string | null;
   messageIds: number[];
-}): Promise<CreateResponse> {
+};
+
+async function postFeedExport<T>(body: PostBody & { dryRun?: boolean }): Promise<T> {
   const r = await fetch("/api/feed-exports", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -53,9 +62,9 @@ async function postCreate(body: {
   });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
-    throw new Error(err.error ?? `${r.status}`);
+    throw new Error(err.reason ?? err.error ?? `${r.status}`);
   }
-  return r.json();
+  return r.json() as Promise<T>;
 }
 
 export default function FeedExportDialog({
@@ -77,9 +86,33 @@ export default function FeedExportDialog({
   const [notes, setNotes] = useState("");
   const [result, setResult] = useState<CreateResponse | null>(null);
 
+  // Live dry-run: builds the row set + diff + decision on the server without
+  // persisting, so the user sees impact before clicking Build & Download.
+  // Re-fires when forceNewVersion toggles (the decision depends on it).
+  const previewQ = useQuery({
+    queryKey: [
+      "feed-export-preview",
+      product,
+      defaultMessageId ?? "none",
+      forceNewVersion,
+      messageIds.join(","),
+    ],
+    queryFn: () =>
+      postFeedExport<PreviewResponse>({
+        product,
+        defaultMessageId,
+        forceNewVersion,
+        notes: null,
+        messageIds,
+        dryRun: true,
+      }),
+    enabled: open && !result,
+    staleTime: 30_000,
+  });
+
   const createM = useMutation({
     mutationFn: () =>
-      postCreate({
+      postFeedExport<CreateResponse>({
         product,
         defaultMessageId,
         forceNewVersion,
@@ -106,15 +139,21 @@ export default function FeedExportDialog({
   return (
     <AppDialog open={open} onClose={close} ariaLabel="Feed export preview">
       <div className="feed-export-dialog flex h-full flex-col overflow-hidden">
-        <header className="feed-export-dialog__header flex items-center justify-between border-b border-slate-200 px-6 py-4">
-          <div>
-            <h2 className="text-base font-semibold text-slate-900">
-              Feed export · {product}
-            </h2>
-            <p className="text-xs text-slate-500">
-              Preview the row set and AdForm-impact diff before downloading.
-            </p>
-          </div>
+        <header className="feed-export-dialog__header flex items-center justify-between gap-3 border-b border-slate-200 px-6 py-4 pr-14">
+          <h2 className="text-base font-semibold text-slate-900">
+            Feed export · {product}
+          </h2>
+          {!result ? (
+            <button
+              type="button"
+              onClick={() => createM.mutate()}
+              disabled={createM.isPending || previewQ.isLoading}
+              className="toolbar-btn--primary flex items-center gap-2 rounded-md bg-brand-button px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+            >
+              <Download className="size-4" />
+              {createM.isPending ? "Building…" : "Build & Download XLSX"}
+            </button>
+          ) : null}
         </header>
 
         <div className="feed-export-dialog__body flex-1 overflow-auto px-6 py-4">
@@ -126,6 +165,9 @@ export default function FeedExportDialog({
               setNotes={setNotes}
               error={createM.error as Error | null}
               isPending={createM.isPending}
+              preview={previewQ.data ?? null}
+              previewLoading={previewQ.isLoading}
+              previewError={previewQ.error as Error | null}
             />
           ) : (
             <PostEmitView
@@ -138,37 +180,6 @@ export default function FeedExportDialog({
             />
           )}
         </div>
-
-        <footer className="feed-export-dialog__footer flex items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-6 py-3">
-          {!result ? (
-            <>
-              <button
-                type="button"
-                onClick={close}
-                className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => createM.mutate()}
-                disabled={createM.isPending}
-                className="toolbar-btn--primary flex items-center gap-2 rounded-md bg-brand-button px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
-              >
-                <Download className="size-4" />
-                {createM.isPending ? "Building…" : "Build & Download XLSX"}
-              </button>
-            </>
-          ) : (
-            <button
-              type="button"
-              onClick={close}
-              className="toolbar-btn--primary rounded-md bg-brand-button px-3 py-1.5 text-sm font-medium text-white"
-            >
-              Done
-            </button>
-          )}
-        </footer>
       </div>
     </AppDialog>
   );
@@ -181,6 +192,9 @@ function PreEmitForm({
   setNotes,
   error,
   isPending,
+  preview,
+  previewLoading,
+  previewError,
 }: {
   forceNewVersion: boolean;
   setForceNewVersion: (b: boolean) => void;
@@ -188,39 +202,51 @@ function PreEmitForm({
   setNotes: (s: string) => void;
   error: Error | null;
   isPending: boolean;
+  preview: PreviewResponse | null;
+  previewLoading: boolean;
+  previewError: Error | null;
 }) {
   return (
     <div className="space-y-4">
-      <p className="text-sm text-slate-600">
-        Building the export will run the live filtered messages through{" "}
-        <code className="rounded bg-slate-100 px-1 font-mono text-xs">
-          patterns.feed
-        </code>{" "}
-        + sticky-superset carry-forwards from the last AdForm upload, then diff
-        against that upload to decide append vs. new version.
-      </p>
-
-      <label className="flex items-center gap-2 text-sm text-slate-700">
-        <input
-          type="checkbox"
-          checked={forceNewVersion}
-          onChange={(e) => setForceNewVersion(e.target.checked)}
+      {previewLoading && !preview ? (
+        <div className="rounded border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
+          Computing diff against the live AdForm baseline…
+        </div>
+      ) : previewError ? (
+        <div className="rounded border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+          <strong>Preview failed:</strong> {previewError.message}
+        </div>
+      ) : preview ? (
+        <PreviewBlock
+          decision={preview.decision}
+          diff={preview.diff}
+          rowCount={preview.previewRowCount}
         />
-        Force new feed version (bumps version even if append would be allowed)
-      </label>
+      ) : null}
 
-      <label className="form-field block">
-        <span className="form-field__label mb-1 block text-xs font-medium text-slate-700">
-          Notes (optional)
-        </span>
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          rows={2}
-          placeholder="Why this export, what changed since last…"
-          className="input-box w-full rounded border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
-        />
-      </label>
+      <div className="space-y-3 border-t border-slate-200 pt-4">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={forceNewVersion}
+            onChange={(e) => setForceNewVersion(e.target.checked)}
+          />
+          Force new feed version (bumps version even if append would be allowed)
+        </label>
+
+        <label className="form-field block">
+          <span className="form-field__label mb-1 block text-xs font-medium text-slate-700">
+            Notes (optional)
+          </span>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={2}
+            placeholder="Why this export, what changed since last…"
+            className="input-box w-full rounded border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
+          />
+        </label>
+      </div>
 
       {error ? (
         <div className="rounded border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
@@ -231,6 +257,96 @@ function PreEmitForm({
       {isPending ? (
         <div className="text-xs text-slate-500">Building feed…</div>
       ) : null}
+    </div>
+  );
+}
+
+function PreviewBlock({
+  decision,
+  diff,
+  rowCount,
+}: {
+  decision: Decision;
+  diff: DiffPreview;
+  rowCount: number;
+}) {
+  const action =
+    decision.action === "first"
+      ? { label: "First export (v1)", tone: "ok" as const }
+      : decision.action === "append"
+        ? { label: `Append to v${decision.feedVersion}`, tone: "ok" as const }
+        : {
+            label: `New version v${decision.feedVersion}`,
+            tone: "warn" as const,
+          };
+
+  return (
+    <div className="space-y-3">
+      <div className="diff-source rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        {diff.source === "adform_snapshot" && diff.snapshot ? (
+          <>
+            Diff vs <strong>actual AdForm state</strong> from{" "}
+            <span className="font-mono text-[11px]">{diff.snapshot.filename}</span>{" "}
+            ({diff.snapshot.rowCount} rows, uploaded{" "}
+            {new Date(diff.snapshot.uploadedAt).toLocaleDateString()}). Matched
+            by PMMID.
+          </>
+        ) : diff.source === "mm6_last_export" ? (
+          <>
+            Diff vs <strong>last MM6 export uploaded to AdForm</strong>. Upload an
+            AdForm reference in /feeds to diff against actual AdForm state instead.
+          </>
+        ) : (
+          <>
+            No baseline to diff against — this is the first export and no AdForm
+            reference is uploaded.
+          </>
+        )}
+      </div>
+
+      <div
+        className={
+          action.tone === "ok"
+            ? "rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
+            : "rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+        }
+      >
+        <div className="flex items-center gap-2 font-medium">
+          {action.tone === "ok" ? (
+            <CheckCircle2 className="size-4" />
+          ) : (
+            <AlertTriangle className="size-4" />
+          )}
+          {action.label}
+        </div>
+        {decision.reasons.length > 0 ? (
+          <ul className="mt-1 list-inside list-disc text-xs">
+            {decision.reasons.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+
+      <div className="grid grid-cols-4 gap-2 text-center text-xs">
+        <Stat label="Rows" value={rowCount} />
+        <Stat label="Added" value={diff.added} tone="ok" />
+        <Stat label="Changed" value={diff.changed} />
+        <Stat
+          label="Removed"
+          value={diff.removed}
+          tone={diff.removed > 0 ? "warn" : "neutral"}
+        />
+      </div>
+
+      <details className="rounded border border-slate-200 bg-white p-3 text-xs">
+        <summary className="cursor-pointer font-medium text-slate-700">
+          Diff details
+        </summary>
+        <DiffSection title="Added rows" rows={diff.addedPreview} />
+        <DiffSection title="Removed rows" rows={diff.removedPreview} />
+        <ChangedSection rows={diff.changedPreview} />
+      </details>
     </div>
   );
 }

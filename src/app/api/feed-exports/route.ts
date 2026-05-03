@@ -102,6 +102,7 @@ export const POST = withSession(async ({ req, claims }) => {
         forceNewVersion?: unknown;
         notes?: unknown;
         messageIds?: unknown;
+        dryRun?: unknown;
       }
     | null;
   if (!body) {
@@ -118,6 +119,10 @@ export const POST = withSession(async ({ req, claims }) => {
   const messageIds = Array.isArray(body.messageIds)
     ? body.messageIds.filter((v): v is number => typeof v === "number")
     : null;
+  // Dry-run: build + diff + decide, but skip the insert/audit so the dialog
+  // can render the impact preview the moment it opens (before the user
+  // commits to a download). Same response shape minus the persisted row.
+  const dryRun = body.dryRun === true;
 
   const built = buildFeedRowSet({
     clientId: claims.cid,
@@ -184,6 +189,44 @@ export const POST = withSession(async ({ req, claims }) => {
     ? defaultLabelFor(built.defaultMessage)
     : null;
 
+  const diffPayload = {
+    added: diff.added.length,
+    removed: diff.removed.length,
+    changed: diff.changed.length,
+    unchangedCount: diff.unchangedCount,
+    // Lightweight per-bucket previews so the modal doesn't need a second
+    // round-trip. Cap at 50 each.
+    addedPreview: diff.added.slice(0, 50).map((i) => built.rowSet.rows[i]),
+    removedPreview: prevPayload
+      ? diff.removed.slice(0, 50).map((i) => prevPayload.rows[i])
+      : [],
+    changedPreview: diff.changed.slice(0, 50).map((c) => ({
+      fields: c.fields,
+      prev: prevPayload?.rows[c.prevIndex] ?? null,
+      next: built.rowSet.rows[c.nextIndex] ?? null,
+    })),
+    source: diffSource,
+    snapshot: snapshotRow
+      ? {
+          filename:
+            snapshotRow.notes?.replace(/^Uploaded from AdForm:\s*/, "") ?? "",
+          uploadedAt: snapshotRow.uploadedToAdformAt ?? snapshotRow.exportedAt,
+          rowCount: snapshotRow.rowCount,
+        }
+      : null,
+  };
+
+  if (dryRun) {
+    return NextResponse.json({
+      feedExport: null,
+      decision,
+      diff: diffPayload,
+      // Surface the would-be-built row count so the dialog can show a
+      // "Rows: N" stat alongside the diff before the user commits.
+      previewRowCount: built.rowSet.rows.length,
+    });
+  }
+
   const inserted = db
     .insert(feedExports)
     .values({
@@ -221,33 +264,7 @@ export const POST = withSession(async ({ req, claims }) => {
   return NextResponse.json({
     feedExport: shapeRow(inserted, emailById),
     decision,
-    diff: {
-      added: diff.added.length,
-      removed: diff.removed.length,
-      changed: diff.changed.length,
-      unchangedCount: diff.unchangedCount,
-      // Lightweight per-bucket previews so the modal doesn't need a second
-      // round-trip. Cap at 50 each.
-      addedPreview: diff.added.slice(0, 50).map((i) => built.rowSet.rows[i]),
-      removedPreview: prevPayload
-        ? diff.removed.slice(0, 50).map((i) => prevPayload.rows[i])
-        : [],
-      changedPreview: diff.changed.slice(0, 50).map((c) => ({
-        fields: c.fields,
-        prev: prevPayload?.rows[c.prevIndex] ?? null,
-        next: built.rowSet.rows[c.nextIndex] ?? null,
-      })),
-      source: diffSource,
-      snapshot: snapshotRow
-        ? {
-            filename:
-              snapshotRow.notes?.replace(/^Uploaded from AdForm:\s*/, "") ?? "",
-            uploadedAt:
-              snapshotRow.uploadedToAdformAt ?? snapshotRow.exportedAt,
-            rowCount: snapshotRow.rowCount,
-          }
-        : null,
-    },
+    diff: diffPayload,
   });
 });
 

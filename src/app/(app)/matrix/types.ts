@@ -21,6 +21,18 @@ export type Audience = {
   archivedAt: string | null;
 };
 
+export type TextFormattingRule = {
+  id: number;
+  textOriginal: string;
+  textFormatted: string;
+  formattingScope: string | null;
+  formattingMcScope: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt: string | null;
+};
+
 export type Topic = {
   id: number;
   key: string;

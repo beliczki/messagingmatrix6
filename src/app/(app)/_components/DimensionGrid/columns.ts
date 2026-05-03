@@ -1,4 +1,9 @@
-import { type Audience, type Topic, STATUS_OPTIONS } from "../../matrix/types";
+import {
+  type Audience,
+  type TextFormattingRule,
+  type Topic,
+  STATUS_OPTIONS,
+} from "../../matrix/types";
 
 export type CellType =
   | { kind: "text"; readOnly?: boolean }
@@ -46,4 +51,13 @@ export const TOPIC_COLUMNS: Column<Topic>[] = [
   { key: "tag4", label: "Tag 4", width: 120, type: { kind: "text" }, defaultVisible: true },
   { key: "created", label: "Created", width: 120, type: { kind: "text" } },
   { key: "comment", label: "Comment", width: 240, type: { kind: "text" } },
+];
+
+export const TEXT_FORMATTING_COLUMNS: Column<TextFormattingRule>[] = [
+  { key: "id", label: "ID", width: 70, type: { kind: "text", readOnly: true }, defaultVisible: true },
+  { key: "textOriginal", label: "Original", width: 280, type: { kind: "text" }, defaultVisible: true },
+  { key: "textFormatted", label: "Formatted", width: 280, type: { kind: "text" }, defaultVisible: true },
+  { key: "formattingScope", label: "Scope", width: 220, type: { kind: "text" }, defaultVisible: true },
+  { key: "formattingMcScope", label: "MC scope", width: 180, type: { kind: "text" }, defaultVisible: true },
+  { key: "updatedAt", label: "Updated", width: 160, type: { kind: "text", readOnly: true } },
 ];

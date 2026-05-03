@@ -13,6 +13,7 @@ import {
   Settings as SettingsIcon,
   Share2,
   Rss,
+  Type,
   LogOut,
 } from "lucide-react";
 import { useState, type ComponentType, type SVGProps } from "react";
@@ -26,6 +27,7 @@ const ITEMS: Array<{ href: string; label: string; Icon: IconType }> = [
   { href: "/matrix", label: "Matrix", Icon: Table2 },
   { href: "/creative-library", label: "Creative Library", Icon: ImageIcon },
   { href: "/assets", label: "Assets", Icon: Package },
+  { href: "/texts", label: "Texts", Icon: Type },
   { href: "/audiences", label: "Audiences", Icon: UsersIcon },
   { href: "/topics", label: "Topics", Icon: ListTree },
   { href: "/templates", label: "Templates", Icon: FileCode },

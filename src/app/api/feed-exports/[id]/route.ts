@@ -80,7 +80,11 @@ export const DELETE = withSession<Params>(({ claims, params }) => {
   if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
   const row = loadRow(claims.cid, id);
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  if (row.uploadedToAdformAt) {
+  // MM6-built exports that have been published can't be deleted (the
+  // sticky-superset rule depends on them as the AdForm baseline). AdForm
+  // snapshots have no such constraint — they're a user-managed mirror of
+  // current AdForm state and can be removed/replaced freely.
+  if (row.uploadedToAdformAt && row.source !== "adform_snapshot") {
     return NextResponse.json(
       {
         error: "uploaded_immutable",

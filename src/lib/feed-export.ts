@@ -224,6 +224,14 @@ function buildDefaultRow(
     }
   }
 
+  // AdForm-allocated / scheduling fields don't apply to the DEFAULT row —
+  // AdForm ignores them on the default anyway, so emit empty cells instead of
+  // carrying the chosen-message values forward (which looks misleading).
+  for (const cleanName of ["adfplaid", "datefrom", "dateto"]) {
+    const col = findColumnByCleanName(columns, cleanName);
+    if (col) defaultRow[col] = "";
+  }
+
   return defaultRow;
 }
 
@@ -440,6 +448,18 @@ export function buildFeedRowSet(opts: BuildOptions): {
 // ─────────────────────────────────────────────────────────────────────────────
 // Diff
 
+export type RowKeyFn = (row: FeedRow, columns: string[]) => string;
+
+// PMMID-only key. Used for diffing an AdForm snapshot against a freshly built
+// MM6 export — MM6 has no advert_id (AdForm allocates it on first upload),
+// so the default rowKey would mismatch every row. PMMID is deterministic in
+// both systems so it's the only honest cross-system identifier.
+export function pmmidRowKey(row: FeedRow, columns: string[]): string {
+  const pmmidCol = findColumnByCleanName(columns, "pmmid");
+  if (pmmidCol) return row[pmmidCol] ?? "";
+  return columns.length > 0 ? row[columns[0]] ?? "" : "";
+}
+
 function rowKey(row: FeedRow, columns: string[]): string {
   // Prefer (advert_id, reporting_label) — the AdForm-stable identity. Fall
   // back to the column 0 value if those aren't in the feed.
@@ -454,6 +474,7 @@ function rowKey(row: FeedRow, columns: string[]): string {
 export function diffRowSets(
   prev: FeedRowSet | null,
   next: FeedRowSet,
+  keyOf: RowKeyFn = rowKey,
 ): FeedDiff {
   if (!prev) {
     return {
@@ -465,10 +486,10 @@ export function diffRowSets(
   }
 
   const prevByKey = new Map<string, number>();
-  prev.rows.forEach((r, i) => prevByKey.set(rowKey(r, prev.columns), i));
+  prev.rows.forEach((r, i) => prevByKey.set(keyOf(r, prev.columns), i));
 
   const nextByKey = new Map<string, number>();
-  next.rows.forEach((r, i) => nextByKey.set(rowKey(r, next.columns), i));
+  next.rows.forEach((r, i) => nextByKey.set(keyOf(r, next.columns), i));
 
   const added: number[] = [];
   const removed: number[] = [];

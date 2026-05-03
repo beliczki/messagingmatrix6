@@ -1,115 +1,36 @@
 // Feed-view column → pattern resolution.
-// v5 parity: each feedStructure column ("Type:field_name" or just "field_name")
-// maps to a pattern in config.patterns.feed[column]. If the user has not
-// defined a pattern, fall back to a built-in mapping based on the cleaned
-// (prefix-stripped) column name. Anything still unmapped renders the cleaned
-// name as a {{placeholder}}.
+//
+// The feedStructure CSV is the source of truth for both column ordering AND
+// column naming. Whatever the user types in Settings → Structure is what gets
+// stored, what's keyed in patterns.feed, and what's emitted as the AdForm
+// column header. Typed prefixes like "Text:", "Asset:", "AdformSignal:", "LP:"
+// are part of the column name — they round-trip verbatim. Nothing here strips,
+// rewrites, or "knows about" specific column names.
+//
+// If a column has no entry in patterns.feed, the fallback is a placeholder
+// built from the part after ":" (or the whole name if no colon), e.g.
+// "Text:headline_text_1" → "{{headline_text_1}}". The user overrides this in
+// Settings → Feed patterns when they want it to render a different field.
 
-const DEFAULT_FEED_PATTERN_MAP: Record<string, string> = {
-  // Text fields
-  headline_text_1: "{{headline}}",
-  headline_text: "{{headline}}",
-  headline: "{{headline}}",
-  copy_text_1: "{{copy1}}",
-  copy1: "{{copy1}}",
-  copy_text_2: "{{copy2}}",
-  copy2: "{{copy2}}",
-  click_text: "{{cta}}",
-  cta_text_1: "{{cta}}",
-  cta: "{{cta}}",
-  flash_text: "{{flash}}",
-  sticker_text_1: "{{flash}}",
-  flash: "{{flash}}",
-  disclaimer_text: "{{disclaimer}}",
-  disclaimer: "{{disclaimer}}",
-  // Style fields
-  headline_style_1: "{{headlineStyle}}",
-  headline_style: "{{headlineStyle}}",
-  copy_style_1: "{{copy1Style}}",
-  copy1_style: "{{copy1Style}}",
-  copy_style_2: "{{copy2Style}}",
-  copy2_style: "{{copy2Style}}",
-  flash_style: "{{flashStyle}}",
-  sticker_style_1: "{{flashStyle}}",
-  cta_style: "{{ctaStyle}}",
-  cta_style_1: "{{ctaStyle}}",
-  disclaimer_style: "{{disclaimerStyle}}",
-  css_styles: "{{customCss}}",
-  css: "{{customCss}}",
-  // Identity / naming
-  template_variant_class: "{{templateVariantClasses}}",
-  template_variant_classes: "{{templateVariantClasses}}",
-  messaging_card_id: "{{number}}",
-  messaging_card_variant: "{{variant}}",
-  advert_name: "{{name}}",
-  name: "{{name}}",
-  number: "{{number}}",
-  variant: "{{variant}}",
-  pmmid: "{{pmmid}}",
-  advert_id: "{{pmmid}}",
-  landingurl: "{{landingUrl}}",
-  clicktag: "{{landingUrl}}",
-  // Image fields
-  background_image_1: "{{image1}}",
-  image1: "{{image1}}",
-  background_image_2: "{{image2}}",
-  image2: "{{image2}}",
-  background_image_3: "{{image3}}",
-  image3: "{{image3}}",
-  background_image_4: "{{image4}}",
-  image4: "{{image4}}",
-  sticker_image_1: "{{image6}}",
-  image6: "{{image6}}",
-  background_image_logo: "{{image5}}",
-  image5: "{{image5}}",
-};
-
-/**
- * Parse the Feed structure CSV into clean column names. The legacy "Type:"
- * prefix (e.g. "Text:advert_id", "URL:landing_url") is stripped silently so
- * the rest of the codebase only ever sees the bare column name. Toggles that
- * used to live in the prefix slot are now expressed as pattern modifiers
- * (e.g. {{headline|formatted}}).
- */
 export function parseFeedColumns(feedStructure: string): string[] {
   if (!feedStructure) return [];
   return feedStructure
     .split(",")
     .map((c) => c.trim())
-    .filter((c) => c.length > 0)
-    .map(stripLegacyPrefix);
-}
-
-function stripLegacyPrefix(raw: string): string {
-  const colon = raw.indexOf(":");
-  if (colon < 0) return raw;
-  return raw.slice(colon + 1);
+    .filter((c) => c.length > 0);
 }
 
 export function defaultFeedPattern(column: string): string {
-  const clean = column.toLowerCase();
-  return DEFAULT_FEED_PATTERN_MAP[clean] ?? `{{${clean}}}`;
+  const colon = column.indexOf(":");
+  const fieldName = colon < 0 ? column : column.slice(colon + 1);
+  return `{{${fieldName.toLowerCase()}}}`;
 }
 
 export function resolveFeedPattern(
   column: string,
   feedPatterns: Record<string, string> | null | undefined,
 ): string {
-  // Direct hit on the clean column name (the canonical key).
   const explicit = feedPatterns?.[column];
   if (explicit && explicit.trim()) return explicit;
-  // Legacy fallback: existing rows in the DB may still hold "Type:column"
-  // keys from before the prefix story was removed. Match any key that ends
-  // with ":<column>" so the user's custom pattern keeps working until the
-  // next Settings save rewrites the keys.
-  if (feedPatterns) {
-    const suffix = `:${column}`;
-    for (const key of Object.keys(feedPatterns)) {
-      if (key.endsWith(suffix)) {
-        const v = feedPatterns[key];
-        if (v && v.trim()) return v;
-      }
-    }
-  }
   return defaultFeedPattern(column);
 }

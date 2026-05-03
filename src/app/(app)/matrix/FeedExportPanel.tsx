@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Download, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
@@ -67,41 +67,41 @@ export default function FeedExportPanel({
     enabled: !!product,
   });
 
+  // Persist the default-row selection per product so users don't have to
+  // re-pick it every time they switch products or come back later.
+  // Save is driven by the user's onChange (chooseDefault), not by an effect —
+  // an effect that wrote on every state change would erase the loaded value
+  // on first render (stale closure) and double-fire under React StrictMode.
+  const storageKey = product ? `mm6_feed_export_default_${product}` : "";
   const [defaultMessageId, setDefaultMessageId] = useState<number | "">("");
   const [dialogOpen, setDialogOpen] = useState(false);
 
-  // Persist the default-row selection per product so users don't have to
-  // re-pick it every time they switch products or come back later.
-  const storageKey = product ? `mm6_feed_export_default_${product}` : "";
-  const lastLoadedKey = useRef<string>("");
   useEffect(() => {
     if (!storageKey) {
       setDefaultMessageId("");
-      lastLoadedKey.current = "";
       return;
     }
-    let next: number | "" = "";
     try {
       const raw = localStorage.getItem(storageKey);
       if (raw !== null) {
         const parsed = Number(raw);
-        if (Number.isFinite(parsed)) next = parsed;
+        if (Number.isFinite(parsed)) {
+          setDefaultMessageId(parsed);
+          return;
+        }
       }
     } catch {}
-    setDefaultMessageId(next);
-    lastLoadedKey.current = storageKey;
+    setDefaultMessageId("");
   }, [storageKey]);
-  useEffect(() => {
+
+  function chooseDefault(v: number | "") {
+    setDefaultMessageId(v);
     if (!storageKey) return;
-    if (lastLoadedKey.current !== storageKey) return;
     try {
-      if (defaultMessageId === "") {
-        localStorage.removeItem(storageKey);
-      } else {
-        localStorage.setItem(storageKey, String(defaultMessageId));
-      }
+      if (v === "") localStorage.removeItem(storageKey);
+      else localStorage.setItem(storageKey, String(v));
     } catch {}
-  }, [storageKey, defaultMessageId]);
+  }
 
   const mcOptions = useMemo(
     () => (ready ? uniqueMcOptions(filteredMessages) : []),
@@ -211,9 +211,7 @@ export default function FeedExportPanel({
           <select
             value={defaultMessageId}
             onChange={(e) =>
-              setDefaultMessageId(
-                e.target.value === "" ? "" : Number(e.target.value),
-              )
+              chooseDefault(e.target.value === "" ? "" : Number(e.target.value))
             }
             className="input-box w-full rounded border border-slate-300 px-2 py-1 text-xs focus:border-slate-500 focus:outline-none"
           >

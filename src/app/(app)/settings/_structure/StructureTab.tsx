@@ -64,38 +64,6 @@ function defaultDraft(): Draft {
   };
 }
 
-function stripKeyPrefix(key: string): string {
-  const colon = key.indexOf(":");
-  return colon < 0 ? key : key.slice(colon + 1);
-}
-
-/**
- * Rename feedPatterns keys from "Type:col" → "col" so saved drafts persist
- * the canonical clean keys. Legacy DB rows get cleaned the next time the user
- * saves the Structure tab.
- */
-function normalizeFeedPatternKeys(
-  feed: Record<string, string>,
-): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(feed)) {
-    const clean = stripKeyPrefix(k);
-    // If both "headline" and "Text:headline" exist, keep the clean key's value
-    // (it was set most recently or by the user explicitly).
-    if (out[clean] === undefined) out[clean] = v;
-  }
-  return out;
-}
-
-function stripStructurePrefixes(structure: string): string {
-  return structure
-    .split(",")
-    .map((c) => c.trim())
-    .filter((c) => c.length > 0)
-    .map(stripKeyPrefix)
-    .join(",");
-}
-
 function rowsToDraft(structureRows: ConfigRow[], patterns: Patterns): Draft {
   const d = defaultDraft();
   for (const r of structureRows) {
@@ -110,11 +78,8 @@ function rowsToDraft(structureRows: ConfigRow[], patterns: Patterns): Draft {
       (d as Record<string, string | unknown>)[r.key] = r.value;
     }
   }
-  // Strip legacy Type: prefixes from the Feed structure CSV so the user only
-  // sees clean column names. Saving the tab persists the cleaned version.
-  d.feedStructure = stripStructurePrefixes(d.feedStructure);
   d.patternsBlob = patterns;
-  d.feedPatterns = normalizeFeedPatternKeys(patterns.feed ?? {});
+  d.feedPatterns = patterns.feed ?? {};
   return d;
 }
 

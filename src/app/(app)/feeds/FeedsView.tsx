@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   useMutation,
@@ -13,11 +13,30 @@ import {
   Trash2,
   ArrowUp,
   ArrowDown,
+  Upload as UploadIcon,
+  X,
 } from "lucide-react";
 import clsx from "clsx";
 import MultiPill from "../_components/MultiPill";
 import RightToolbar from "../_components/RightToolbar";
 import { useAlertDialog } from "../_components/AlertDialog";
+
+type AdformSnapshot = {
+  id: number;
+  product: string;
+  uploadedAt: string;
+  uploadedBy: string | null;
+  uploadedByEmail: string | null;
+  filename: string;
+  rowCount: number;
+};
+
+async function fetchAllSnapshots(): Promise<AdformSnapshot[]> {
+  const r = await fetch(`/api/adform-snapshots`, { credentials: "include" });
+  if (!r.ok) return [];
+  const data = (await r.json()) as { snapshots: AdformSnapshot[] };
+  return data.snapshots ?? [];
+}
 
 type FeedExportRow = {
   id: number;
@@ -33,6 +52,7 @@ type FeedExportRow = {
   defaultLabel: string | null;
   rowCount: number;
   notes: string | null;
+  source: "export" | "adform_snapshot" | string;
 };
 
 type SortKey =
@@ -144,6 +164,55 @@ export function FeedsView() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["feed-exports"] }),
   });
 
+  // AdForm snapshot upload — server infers the product from PMMID audience
+  // keys, so the user doesn't have to filter or pick one. The uploaded XLSX
+  // must match Settings → Structure → Feed structure verbatim (server
+  // enforces); otherwise the diff would be meaningless.
+  const snapshotsQ = useQuery({
+    queryKey: ["adform-snapshots", "all"],
+    queryFn: fetchAllSnapshots,
+  });
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [snapshotError, setSnapshotError] = useState<string | null>(null);
+  const uploadM = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.set("file", file);
+      const r = await fetch("/api/adform-snapshots", {
+        method: "POST",
+        credentials: "include",
+        body: fd,
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.reason ?? body.error ?? `${r.status}`);
+      }
+      return r.json();
+    },
+    onSuccess: () => {
+      setSnapshotError(null);
+      qc.invalidateQueries({ queryKey: ["adform-snapshots", "all"] });
+    },
+    onError: (e) => setSnapshotError((e as Error).message),
+  });
+  const removeSnapshotM = useMutation({
+    mutationFn: async (product: string) => {
+      const r = await fetch(
+        `/api/adform-snapshots?product=${encodeURIComponent(product)}`,
+        { method: "DELETE", credentials: "include" },
+      );
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.reason ?? body.error ?? `${r.status}`);
+      }
+    },
+    onSuccess: () => {
+      setSnapshotError(null);
+      qc.invalidateQueries({ queryKey: ["adform-snapshots", "all"] });
+    },
+    onError: (e) => setSnapshotError((e as Error).message),
+  });
+
   function toggleSort(key: SortKey) {
     setSort((prev) => {
       if (!prev || prev.key !== key) return { key, dir: "asc" };
@@ -209,7 +278,9 @@ export function FeedsView() {
   }
 
   async function publishSelected() {
-    const targets = selectedRows.filter((r) => !r.uploadedToAdformAt);
+    const targets = selectedRows.filter(
+      (r) => r.source !== "adform_snapshot" && !r.uploadedToAdformAt,
+    );
     if (targets.length === 0) return;
     const ok = await dialog.confirm({
       title: `Set ${targets.length} export${targets.length === 1 ? "" : "s"} as published?`,
@@ -223,22 +294,29 @@ export function FeedsView() {
   }
 
   async function deleteSelected() {
-    const targets = selectedRows.filter((r) => !r.uploadedToAdformAt);
-    if (targets.length === 0) return;
+    if (selectedDeletable.length === 0) return;
     const ok = await dialog.confirm({
-      title: `Delete ${targets.length} export${targets.length === 1 ? "" : "s"}?`,
+      title: `Delete ${selectedDeletable.length} feed${selectedDeletable.length === 1 ? "" : "s"}?`,
       message: "This cannot be undone.",
       confirmLabel: "Delete",
       variant: "danger",
     });
     if (!ok) return;
-    for (const r of targets) deleteM.mutate(r.id);
+    for (const r of selectedDeletable) deleteM.mutate(r.id);
     setSelected(new Set());
+    qc.invalidateQueries({ queryKey: ["adform-snapshots", "all"] });
   }
 
   const selectedCount = selectedRows.length;
-  const selectedNonUploadedCount = selectedRows.filter(
-    (r) => !r.uploadedToAdformAt,
+  // MM6 exports can only be deleted before they're marked as uploaded
+  // (sticky-superset relies on the latest uploaded as baseline). AdForm
+  // snapshots are user-managed mirrors, deletable any time.
+  const selectedDeletable = selectedRows.filter(
+    (r) => r.source === "adform_snapshot" || !r.uploadedToAdformAt,
+  );
+  const selectedDeletableCount = selectedDeletable.length;
+  const selectedPublishableCount = selectedRows.filter(
+    (r) => r.source !== "adform_snapshot" && !r.uploadedToAdformAt,
   ).length;
 
   return (
@@ -365,15 +443,33 @@ export function FeedsView() {
                         className="feeds-table__cell flex shrink-0 items-center border-r border-slate-100 px-2 font-mono text-xs text-slate-900"
                         style={{ width: 80 }}
                       >
-                        v{r.feedVersion}
+                        {r.source === "adform_snapshot" ? (
+                          <span
+                            className="feeds-table__source-badge rounded bg-slate-200 px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-slate-700"
+                            title="Uploaded from AdForm (not generated by MM6)"
+                          >
+                            AdForm
+                          </span>
+                        ) : (
+                          `v${r.feedVersion}`
+                        )}
                       </div>
                       <div
                         className="feeds-table__cell flex shrink-0 items-center border-r border-slate-100 px-2 text-xs text-slate-700"
                         style={{ width: 280 }}
-                        title={r.defaultLabel ?? ""}
+                        title={
+                          r.source === "adform_snapshot"
+                            ? r.notes ?? ""
+                            : r.defaultLabel ?? ""
+                        }
                       >
                         <span className="truncate">
-                          {r.defaultLabel ?? "—"}
+                          {r.source === "adform_snapshot"
+                            ? (r.notes ?? "").replace(
+                                /^Uploaded from AdForm:\s*/,
+                                "",
+                              ) || "—"
+                            : r.defaultLabel ?? "—"}
                         </span>
                       </div>
                       <div
@@ -444,6 +540,47 @@ export function FeedsView() {
               </p>
             ) : null}
 
+            {!collapsed && (snapshotsQ.data?.length ?? 0) > 0 ? (
+              <div className="adform-snapshot-list flex flex-col gap-1.5">
+                <div className="text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                  AdForm snapshots
+                </div>
+                {snapshotsQ.data!.map((s) => (
+                  <div
+                    key={s.id}
+                    className="adform-snapshot-item rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-[11px]"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                          {s.product}
+                        </div>
+                        <div
+                          className="mt-0.5 truncate font-medium text-slate-700"
+                          title={s.filename}
+                        >
+                          {s.filename}
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          {s.rowCount} row{s.rowCount === 1 ? "" : "s"} ·{" "}
+                          {new Date(s.uploadedAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeSnapshotM.mutate(s.product)}
+                        disabled={removeSnapshotM.isPending}
+                        className="text-[10px] text-slate-400 hover:text-rose-600 disabled:opacity-50"
+                        title={`Remove ${s.product} snapshot`}
+                      >
+                        <X className="size-3" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+
             {selectedCount > 0 ? (
               <div
                 className={clsx(
@@ -468,12 +605,12 @@ export function FeedsView() {
                   type="button"
                   onClick={publishSelected}
                   disabled={
-                    markUploadedM.isPending || selectedNonUploadedCount === 0
+                    markUploadedM.isPending || selectedPublishableCount === 0
                   }
                   title={
-                    selectedNonUploadedCount === 0
-                      ? "Selected exports are already published"
-                      : `Set ${selectedNonUploadedCount} as published`
+                    selectedPublishableCount === 0
+                      ? "Selected rows can't be published (snapshots or already live)"
+                      : `Set ${selectedPublishableCount} as published`
                   }
                   aria-label="Set selected as published"
                   className={clsx(
@@ -490,7 +627,7 @@ export function FeedsView() {
             {selectedCount > 0 ? (
               <div
                 className={clsx(
-                  "feeds-view__bottom-actions mt-auto flex gap-2",
+                  "feeds-view__bottom-actions flex gap-2",
                   collapsed ? "flex-col items-center" : "flex-row",
                 )}
               >
@@ -510,11 +647,11 @@ export function FeedsView() {
                 <button
                   type="button"
                   onClick={deleteSelected}
-                  disabled={deleteM.isPending || selectedNonUploadedCount === 0}
+                  disabled={deleteM.isPending || selectedDeletableCount === 0}
                   title={
-                    selectedNonUploadedCount === 0
-                      ? "Published exports cannot be deleted"
-                      : `Delete ${selectedNonUploadedCount} export${selectedNonUploadedCount === 1 ? "" : "s"}`
+                    selectedDeletableCount === 0
+                      ? "Selected rows can't be deleted (already-published exports are immutable)"
+                      : `Delete ${selectedDeletableCount} feed${selectedDeletableCount === 1 ? "" : "s"}`
                   }
                   aria-label="Delete selected"
                   className={clsx(
@@ -526,6 +663,56 @@ export function FeedsView() {
                 </button>
               </div>
             ) : null}
+
+            <div
+              className={clsx(
+                "adform-snapshot-upload mt-auto flex flex-col gap-2",
+                collapsed && "items-center",
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadM.isPending}
+                title="Upload feed reference (product inferred from file)"
+                aria-label="Upload feed reference"
+                className={clsx(
+                  "toolbar-btn--primary inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-900 font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40",
+                  collapsed ? "size-9" : "px-3 py-1.5 text-xs",
+                )}
+              >
+                <UploadIcon className="size-3.5" />
+                {!collapsed
+                  ? uploadM.isPending
+                    ? "Uploading…"
+                    : "Upload feed reference"
+                  : null}
+              </button>
+              {!collapsed ? (
+                <>
+                  <p className="text-[10px] leading-snug text-slate-500">
+                    Uploaded feed must match Settings → Structure → Feed
+                    structure, otherwise upload will be dropped.
+                  </p>
+                  {snapshotError ? (
+                    <p className="text-[10px] leading-snug text-rose-600">
+                      {snapshotError}
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                className="hidden"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) uploadM.mutate(f);
+                  e.target.value = "";
+                }}
+              />
+            </div>
           </div>
         )}
       </RightToolbar>

@@ -541,6 +541,12 @@ export const feedExports = sqliteTable(
     rowCount: integer("row_count").notNull(),
     payloadJson: text("payload_json").notNull(),
     notes: text("notes"),
+    // Discriminator. Default rows ("export") are produced by MM6's Preview &
+    // Export flow. "adform_snapshot" rows are user-uploaded XLSX files
+    // captured directly from AdForm — the actual current live state. They
+    // share the same payload shape so they can be diffed and downloaded
+    // through the same code paths.
+    source: text("source").notNull().default("export"),
   },
   (t) => [
     index("feed_exports_client_product_idx").on(t.clientId, t.product),
@@ -550,6 +556,7 @@ export const feedExports = sqliteTable(
       t.product,
       t.feedVersion,
     ),
+    index("feed_exports_client_source_idx").on(t.clientId, t.source),
   ],
 );
 

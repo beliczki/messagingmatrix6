@@ -24,6 +24,12 @@ type DiffPreview = {
     prev: Record<string, string> | null;
     next: Record<string, string> | null;
   }>;
+  source: "adform_snapshot" | "mm6_last_export" | "none";
+  snapshot: {
+    filename: string;
+    uploadedAt: string;
+    rowCount: number;
+  } | null;
 };
 
 type CreateResponse = {
@@ -272,6 +278,28 @@ function PostEmitView({
             ))}
           </ul>
         ) : null}
+      </div>
+
+      <div className="diff-source rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+        {diff.source === "adform_snapshot" && diff.snapshot ? (
+          <>
+            Diff vs <strong>actual AdForm state</strong> from{" "}
+            <span className="font-mono text-[11px]">{diff.snapshot.filename}</span>{" "}
+            ({diff.snapshot.rowCount} rows, uploaded{" "}
+            {new Date(diff.snapshot.uploadedAt).toLocaleDateString()}). Matched
+            by PMMID.
+          </>
+        ) : diff.source === "mm6_last_export" ? (
+          <>
+            Diff vs <strong>last MM6 export uploaded to AdForm</strong>. Upload an
+            AdForm download to diff against actual AdForm state instead.
+          </>
+        ) : (
+          <>
+            No baseline to diff against — this is the first export and no AdForm
+            snapshot is uploaded.
+          </>
+        )}
       </div>
 
       <div className="grid grid-cols-4 gap-2 text-center text-xs">

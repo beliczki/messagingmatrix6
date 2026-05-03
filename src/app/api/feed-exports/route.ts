@@ -10,6 +10,7 @@ import {
   defaultLabelFor,
   deserializePayload,
   diffRowSets,
+  pmmidRowKey,
   serializePayload,
 } from "@/lib/feed-export";
 
@@ -27,6 +28,7 @@ type ExportRowOut = {
   defaultLabel: string | null;
   rowCount: number;
   notes: string | null;
+  source: string;
 };
 
 function shapeRow(
@@ -47,6 +49,7 @@ function shapeRow(
     defaultLabel: r.defaultLabel,
     rowCount: r.rowCount,
     notes: r.notes,
+    source: r.source,
   };
 }
 
@@ -137,16 +140,45 @@ export const POST = withSession(async ({ req, claims }) => {
     );
   }
 
-  const prevPayload = built.liveExport
+  // Version decision (append vs new_version) is keyed off the MM6 last upload
+  // because that's the only source of stable advert_id / lineitem identity.
+  const lastExportPayload = built.liveExport
     ? deserializePayload(built.liveExport.payloadJson)
     : null;
-  const diff = diffRowSets(prevPayload, built.rowSet);
+  const versionDiff = diffRowSets(lastExportPayload, built.rowSet);
   const decision = decideVersion(
     built.liveExport,
     built.rowSet,
-    diff,
+    versionDiff,
     forceNewVersion,
   );
+
+  // The user-facing preview diff uses an AdForm snapshot if one is uploaded
+  // (matched by PMMID — MM6 has no advert_id, AdForm has). Otherwise fall
+  // back to the MM6-last-export diff we already computed for versioning.
+  const snapshotRow = db
+    .select()
+    .from(feedExports)
+    .where(
+      and(
+        eq(feedExports.clientId, claims.cid),
+        eq(feedExports.source, "adform_snapshot"),
+        eq(feedExports.product, product),
+      ),
+    )
+    .get();
+  const snapshotPayload = snapshotRow
+    ? deserializePayload(snapshotRow.payloadJson)
+    : null;
+  const diffSource: "adform_snapshot" | "mm6_last_export" | "none" = snapshotPayload
+    ? "adform_snapshot"
+    : built.liveExport
+      ? "mm6_last_export"
+      : "none";
+  const prevPayload = snapshotPayload ?? lastExportPayload;
+  const diff = snapshotPayload
+    ? diffRowSets(snapshotPayload, built.rowSet, pmmidRowKey)
+    : versionDiff;
 
   const defaultLabel = built.defaultMessage
     ? defaultLabelFor(built.defaultMessage)
@@ -205,6 +237,16 @@ export const POST = withSession(async ({ req, claims }) => {
         prev: prevPayload?.rows[c.prevIndex] ?? null,
         next: built.rowSet.rows[c.nextIndex] ?? null,
       })),
+      source: diffSource,
+      snapshot: snapshotRow
+        ? {
+            filename:
+              snapshotRow.notes?.replace(/^Uploaded from AdForm:\s*/, "") ?? "",
+            uploadedAt:
+              snapshotRow.uploadedToAdformAt ?? snapshotRow.exportedAt,
+            rowCount: snapshotRow.rowCount,
+          }
+        : null,
     },
   });
 });

@@ -1,0 +1,352 @@
+import { NextResponse } from "next/server";
+import { and, eq, inArray } from "drizzle-orm";
+import { db } from "@/db";
+import {
+  audiences as audiencesTable,
+  config,
+  feedExports,
+  users,
+} from "@/db/schema";
+import { withSession, denyDemo } from "@/lib/scoped";
+import { writeAudit } from "@/lib/audit";
+import {
+  extractAudienceKeysFromRowSet,
+  parseAdformXlsx,
+} from "@/lib/adform-snapshot";
+import { serializePayload } from "@/lib/feed-export";
+import { parseFeedColumns } from "@/lib/feed-patterns";
+
+// Snapshots live in `feed_exports` with source='adform_snapshot'. The XLSX
+// notes column carries the original filename ("Uploaded from AdForm: <name>").
+// The shape returned here is a tighter projection — sidebar UI only needs a
+// few fields. The full feedExports rows still surface in the /feeds table via
+// /api/feed-exports.
+
+const SNAPSHOT_SOURCE = "adform_snapshot";
+
+type SnapshotOut = {
+  id: number;
+  product: string;
+  uploadedAt: string;
+  uploadedBy: string | null;
+  uploadedByEmail: string | null;
+  filename: string;
+  rowCount: number;
+};
+
+function filenameFromNotes(notes: string | null): string {
+  if (!notes) return "";
+  const m = notes.match(/^Uploaded from AdForm:\s*(.*)$/);
+  return m ? m[1] : notes;
+}
+
+function shape(
+  r: typeof feedExports.$inferSelect,
+  emailById: Map<string, string>,
+): SnapshotOut {
+  return {
+    id: r.id,
+    product: r.product,
+    uploadedAt: r.uploadedToAdformAt ?? r.exportedAt,
+    uploadedBy: r.uploadedBy,
+    uploadedByEmail: r.uploadedBy ? emailById.get(r.uploadedBy) ?? null : null,
+    filename: filenameFromNotes(r.notes),
+    rowCount: r.rowCount,
+  };
+}
+
+function emailLookup(userId: string | null): Map<string, string> {
+  if (!userId) return new Map();
+  const found = db
+    .select({ id: users.id, email: users.email })
+    .from(users)
+    .where(eq(users.id, userId))
+    .all();
+  return new Map(found.map((u) => [u.id, u.email]));
+}
+
+export const GET = withSession(({ req, claims }) => {
+  const url = new URL(req.url);
+  const product = url.searchParams.get("product");
+  if (product) {
+    const row = db
+      .select()
+      .from(feedExports)
+      .where(
+        and(
+          eq(feedExports.clientId, claims.cid),
+          eq(feedExports.source, SNAPSHOT_SOURCE),
+          eq(feedExports.product, product),
+        ),
+      )
+      .get();
+    if (!row) return NextResponse.json({ snapshot: null });
+    return NextResponse.json({
+      snapshot: shape(row, emailLookup(row.uploadedBy)),
+    });
+  }
+  const rows = db
+    .select()
+    .from(feedExports)
+    .where(
+      and(
+        eq(feedExports.clientId, claims.cid),
+        eq(feedExports.source, SNAPSHOT_SOURCE),
+      ),
+    )
+    .all();
+  const ids = rows.map((r) => r.uploadedBy).filter((v): v is string => !!v);
+  const found =
+    ids.length === 0
+      ? []
+      : db
+          .select({ id: users.id, email: users.email })
+          .from(users)
+          .where(inArray(users.id, ids))
+          .all();
+  const emailById = new Map(found.map((u) => [u.id, u.email]));
+  return NextResponse.json({
+    snapshots: rows.map((r) => shape(r, emailById)),
+  });
+});
+
+export const POST = withSession(async ({ req, claims }) => {
+  const denied = denyDemo(claims);
+  if (denied) return denied;
+
+  const form = await req.formData().catch(() => null);
+  if (!form) {
+    return NextResponse.json(
+      { error: "multipart/form-data required" },
+      { status: 400 },
+    );
+  }
+  const file = form.get("file");
+  if (!(file instanceof File)) {
+    return NextResponse.json({ error: "file required" }, { status: 400 });
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  let parsed;
+  try {
+    parsed = parseAdformXlsx(buffer);
+  } catch (e) {
+    return NextResponse.json(
+      { error: "parse_failed", reason: (e as Error).message },
+      { status: 422 },
+    );
+  }
+
+  // The uploaded file's headers must equal Settings → Structure → Feed
+  // structure verbatim (same names, same order). Otherwise the diff would be
+  // meaningless — we'd be comparing apples to oranges. Drop the upload with a
+  // specific reason so the user knows which column to fix.
+  const structureRow = db
+    .select()
+    .from(config)
+    .where(
+      and(eq(config.clientId, claims.cid), eq(config.key, "feedStructure")),
+    )
+    .get();
+  const expected = parseFeedColumns(
+    typeof structureRow?.value === "string"
+      ? (() => {
+          try {
+            const parsedVal = JSON.parse(structureRow.value);
+            return typeof parsedVal === "string" ? parsedVal : structureRow.value;
+          } catch {
+            return structureRow.value;
+          }
+        })()
+      : "",
+  );
+  if (expected.length === 0) {
+    return NextResponse.json(
+      {
+        error: "structure_not_configured",
+        reason:
+          "Settings → Structure → Feed structure is empty. Configure it before uploading an AdForm snapshot.",
+      },
+      { status: 422 },
+    );
+  }
+  const uploaded = parsed.rowSet.columns;
+  const mismatch = findColumnMismatch(uploaded, expected);
+  if (mismatch) {
+    return NextResponse.json(
+      {
+        error: "structure_mismatch",
+        reason: mismatch,
+        expectedColumns: expected,
+        uploadedColumns: uploaded,
+      },
+      { status: 422 },
+    );
+  }
+
+  // Infer the product from PMMID audience keys: every PMMID encodes the
+  // audience key (between -a_ and -m_), and each audience belongs to a
+  // product in this client's audiences table. A snapshot is per-product so
+  // the file must resolve to exactly one product.
+  const audKeys = extractAudienceKeysFromRowSet(parsed.rowSet);
+  if (audKeys.length === 0) {
+    return NextResponse.json(
+      {
+        error: "no_audience_keys",
+        reason:
+          "Couldn't find any audience keys in PMMID column — file appears empty or PMMIDs are malformed.",
+      },
+      { status: 422 },
+    );
+  }
+  const knownAudiences = db
+    .select({ key: audiencesTable.key, product: audiencesTable.product })
+    .from(audiencesTable)
+    .where(
+      and(
+        eq(audiencesTable.clientId, claims.cid),
+        inArray(audiencesTable.key, audKeys),
+      ),
+    )
+    .all();
+  const inferredProducts = new Set(
+    knownAudiences.map((a) => a.product).filter((p): p is string => !!p),
+  );
+  if (inferredProducts.size === 0) {
+    const unknown = audKeys.slice(0, 5).join(", ");
+    return NextResponse.json(
+      {
+        error: "audience_not_found",
+        reason: `None of the audience keys in this file (${unknown}${audKeys.length > 5 ? ", …" : ""}) match any audience in this client. Import audiences first.`,
+      },
+      { status: 422 },
+    );
+  }
+  if (inferredProducts.size > 1) {
+    return NextResponse.json(
+      {
+        error: "multiple_products",
+        reason: `Snapshot mixes ${inferredProducts.size} products (${[...inferredProducts].join(", ")}). Each snapshot must be a single product — split the file.`,
+      },
+      { status: 422 },
+    );
+  }
+  const product = [...inferredProducts][0];
+
+  // Upsert: one snapshot per (clientId, product). Re-uploading replaces the
+  // previous one — explicit delete first so the audit log shows the
+  // lifecycle and the autoincrement id reflects the new upload.
+  const previous = db
+    .select()
+    .from(feedExports)
+    .where(
+      and(
+        eq(feedExports.clientId, claims.cid),
+        eq(feedExports.source, SNAPSHOT_SOURCE),
+        eq(feedExports.product, product),
+      ),
+    )
+    .get();
+  if (previous) {
+    db.delete(feedExports).where(eq(feedExports.id, previous.id)).run();
+  }
+
+  const inserted = db
+    .insert(feedExports)
+    .values({
+      clientId: claims.cid,
+      product,
+      // Snapshots aren't part of the MM6 version sequence — they represent the
+      // current AdForm state, not a numbered build. feedVersion=0 keeps them
+      // out of the version-decision math while satisfying the NOT NULL.
+      feedVersion: 0,
+      exportedBy: claims.sub,
+      uploadedToAdformAt: new Date().toISOString(),
+      uploadedBy: claims.sub,
+      defaultMessageId: null,
+      defaultLabel: null,
+      rowCount: parsed.rowSet.rows.length,
+      payloadJson: serializePayload(parsed.rowSet),
+      notes: `Uploaded from AdForm: ${file.name}`,
+      source: SNAPSHOT_SOURCE,
+    })
+    .returning()
+    .get();
+
+  writeAudit({
+    clientId: claims.cid,
+    userId: claims.sub,
+    entityType: "feed_exports",
+    entityId: inserted.id,
+    action: previous ? "update" : "create",
+    after: {
+      id: inserted.id,
+      product,
+      filename: file.name,
+      rowCount: inserted.rowCount,
+      sheetName: parsed.sheetName,
+      source: SNAPSHOT_SOURCE,
+      replacedId: previous?.id ?? null,
+    },
+  });
+
+  return NextResponse.json({
+    snapshot: shape(inserted, emailLookup(inserted.uploadedBy)),
+  });
+});
+
+function findColumnMismatch(
+  uploaded: string[],
+  expected: string[],
+): string | null {
+  if (uploaded.length !== expected.length) {
+    return `Column count mismatch: file has ${uploaded.length}, Settings → Structure → Feed structure has ${expected.length}.`;
+  }
+  for (let i = 0; i < uploaded.length; i += 1) {
+    if (uploaded[i] !== expected[i]) {
+      return `Column ${i + 1} mismatch: file has "${uploaded[i]}", expected "${expected[i]}".`;
+    }
+  }
+  return null;
+}
+
+export const DELETE = withSession(({ req, claims }) => {
+  const denied = denyDemo(claims);
+  if (denied) return denied;
+
+  const url = new URL(req.url);
+  const product = url.searchParams.get("product");
+  if (!product) {
+    return NextResponse.json({ error: "product required" }, { status: 400 });
+  }
+
+  const row = db
+    .select()
+    .from(feedExports)
+    .where(
+      and(
+        eq(feedExports.clientId, claims.cid),
+        eq(feedExports.source, SNAPSHOT_SOURCE),
+        eq(feedExports.product, product),
+      ),
+    )
+    .get();
+  if (!row) return NextResponse.json({ deleted: false });
+
+  db.delete(feedExports).where(eq(feedExports.id, row.id)).run();
+  writeAudit({
+    clientId: claims.cid,
+    userId: claims.sub,
+    entityType: "feed_exports",
+    entityId: row.id,
+    action: "delete",
+    before: {
+      id: row.id,
+      product,
+      filename: filenameFromNotes(row.notes),
+      rowCount: row.rowCount,
+      source: SNAPSHOT_SOURCE,
+    },
+  });
+  return NextResponse.json({ deleted: true });
+});

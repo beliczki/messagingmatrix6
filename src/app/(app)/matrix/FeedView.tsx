@@ -2,20 +2,43 @@
 
 import { useMemo, useState } from "react";
 import clsx from "clsx";
+import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp } from "lucide-react";
+import { evaluatePattern } from "@/lib/patterns";
+import {
+  parseFeedColumns,
+  resolveFeedPattern,
+} from "@/lib/feed-patterns";
 import { type Audience, type Message, type Topic, STATUS_COLOR } from "./types";
 
-type SortKey =
-  | "mcLabel"
-  | "status"
-  | "audience"
-  | "topic"
-  | "name"
-  | "headline"
-  | "template"
-  | "updatedAt";
-
 type SortDir = "asc" | "desc";
+
+type ConfigRow = { key: string; value: unknown };
+
+type Patterns = {
+  feed?: Record<string, string>;
+  [key: string]: unknown;
+};
+
+async function fetchFeedStructure(): Promise<string> {
+  const r = await fetch("/api/config?key=feedStructure", {
+    credentials: "include",
+  });
+  if (!r.ok) return "";
+  const data = (await r.json()) as { rows: ConfigRow[] };
+  const v = data.rows[0]?.value;
+  return typeof v === "string" ? v : "";
+}
+
+async function fetchPatterns(): Promise<Patterns> {
+  const r = await fetch("/api/config?key=patterns", {
+    credentials: "include",
+  });
+  if (!r.ok) return {};
+  const data = (await r.json()) as { rows: ConfigRow[] };
+  const v = data.rows[0]?.value;
+  return v && typeof v === "object" ? (v as Patterns) : {};
+}
 
 export default function FeedView({
   messages,
@@ -28,7 +51,27 @@ export default function FeedView({
   topics: Topic[];
   onOpenMessage: (id: number) => void;
 }) {
-  const [sortKey, setSortKey] = useState<SortKey>("mcLabel");
+  const feedStructureQ = useQuery({
+    queryKey: ["config", "feedStructure"],
+    queryFn: fetchFeedStructure,
+  });
+  const patternsQ = useQuery({
+    queryKey: ["config", "patterns"],
+    queryFn: fetchPatterns,
+  });
+
+  const feedStructure = feedStructureQ.data ?? "";
+  const feedPatterns = useMemo(
+    () => patternsQ.data?.feed ?? {},
+    [patternsQ.data],
+  );
+
+  const columns = useMemo(
+    () => parseFeedColumns(feedStructure),
+    [feedStructure],
+  );
+
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   const audIndex = useMemo(
@@ -40,61 +83,96 @@ export default function FeedView({
     [topics],
   );
 
+  // Pre-compute every cell for every visible message so sorting doesn't
+  // re-evaluate patterns on every comparator call.
+  const rows = useMemo(() => {
+    if (columns.length === 0) return [];
+    return messages.map((m) => {
+      const aud = audIndex.get(m.audience) ?? null;
+      const top = topIndex.get(m.topic) ?? null;
+      const ctx: Record<string, unknown> = {
+        ...m,
+        audience_key: m.audience,
+        topic_key: m.topic,
+        audience_name: aud?.name ?? "",
+        topic_name: top?.name ?? "",
+        product: aud?.product ?? top?.product ?? "",
+        strategy: aud?.strategy ?? "",
+        device: aud?.device ?? "",
+        targeting_type: aud?.targetingType ?? "",
+        audiences,
+        topics,
+      };
+      const cells: Record<string, string> = {};
+      for (const col of columns) {
+        const pattern = resolveFeedPattern(col, feedPatterns);
+        let value = evaluatePattern(pattern, ctx);
+        if (value) value = value.replace(/[\r\n]+/g, " ").trim();
+        cells[col] = value;
+      }
+      return { message: m, cells };
+    });
+  }, [messages, columns, feedPatterns, audIndex, topIndex, audiences, topics]);
+
   const sorted = useMemo(() => {
-    const arr = [...messages];
+    if (!sortColumn) return rows;
+    const arr = [...rows];
     arr.sort((a, b) => {
-      const va = sortValue(a, sortKey);
-      const vb = sortValue(b, sortKey);
-      if (va < vb) return sortDir === "asc" ? -1 : 1;
-      if (va > vb) return sortDir === "asc" ? 1 : -1;
-      return 0;
+      const va = a.cells[sortColumn] ?? "";
+      const vb = b.cells[sortColumn] ?? "";
+      const cmp = va.localeCompare(vb, undefined, { numeric: true });
+      return sortDir === "asc" ? cmp : -cmp;
     });
     return arr;
-  }, [messages, sortKey, sortDir]);
+  }, [rows, sortColumn, sortDir]);
 
-  function toggleSort(k: SortKey) {
-    if (k === sortKey) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else {
-      setSortKey(k);
+  function toggleSort(col: string) {
+    if (col === sortColumn) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortColumn(col);
       setSortDir("asc");
     }
   }
 
+  if (feedStructureQ.isLoading || patternsQ.isLoading) {
+    return (
+      <div className="matrix-feed__loading flex h-full items-center justify-center text-sm text-slate-500">
+        Loading feed configuration…
+      </div>
+    );
+  }
+
+  if (columns.length === 0) {
+    return (
+      <div className="matrix-feed__empty p-8 text-center text-sm text-slate-500">
+        No feed columns defined. Configure{" "}
+        <span className="font-mono">Feed structure</span> in Settings →
+        Structure to populate the feed view.
+      </div>
+    );
+  }
+
   return (
     <div className="matrix-feed h-full overflow-auto">
-      <table className="w-full text-sm">
+      <table className="matrix-feed__table border-collapse text-sm" style={{ width: "max-content", minWidth: "100%" }}>
         <thead className="matrix-feed__head sticky top-0 z-10 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
           <tr>
-            <Th sk="mcLabel" cur={sortKey} dir={sortDir} onClick={toggleSort}>
-              MC
-            </Th>
-            <Th sk="status" cur={sortKey} dir={sortDir} onClick={toggleSort}>
-              Status
-            </Th>
-            <Th sk="audience" cur={sortKey} dir={sortDir} onClick={toggleSort}>
-              Audience
-            </Th>
-            <Th sk="topic" cur={sortKey} dir={sortDir} onClick={toggleSort}>
-              Topic
-            </Th>
-            <Th sk="name" cur={sortKey} dir={sortDir} onClick={toggleSort}>
-              Name
-            </Th>
-            <Th sk="headline" cur={sortKey} dir={sortDir} onClick={toggleSort}>
-              Headline
-            </Th>
-            <Th sk="template" cur={sortKey} dir={sortDir} onClick={toggleSort}>
-              Template
-            </Th>
-            <Th sk="updatedAt" cur={sortKey} dir={sortDir} onClick={toggleSort}>
-              Updated
-            </Th>
+            {columns.map((col) => (
+              <Th
+                key={col}
+                column={col}
+                cur={sortColumn}
+                dir={sortDir}
+                onClick={() => toggleSort(col)}
+              >
+                {col}
+              </Th>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {sorted.map((m) => {
-            const aud = audIndex.get(m.audience);
-            const top = topIndex.get(m.topic);
+          {sorted.map(({ message: m, cells }) => {
             const dot = STATUS_COLOR[m.status ?? ""] ?? "bg-slate-300";
             return (
               <tr
@@ -102,46 +180,33 @@ export default function FeedView({
                 onClick={() => onOpenMessage(m.id)}
                 className="matrix-feed__row matrix-feed__row--clickable cursor-pointer border-b border-slate-100 hover:bg-slate-50"
               >
-                <td className="matrix-feed__cell px-3 py-1.5 font-mono text-slate-900">
-                  MC{m.number}
-                  {m.variant}
-                </td>
-                <td className="matrix-feed__cell matrix-feed__status px-3 py-1.5">
-                  <span className="inline-flex items-center gap-1.5 text-xs">
-                    <span className={clsx("status-dot size-2 rounded-full", dot)} />
-                    <span className="text-slate-700">
-                      {m.status ?? "—"}
-                    </span>
-                  </span>
-                </td>
-                <td className="matrix-feed__cell px-3 py-1.5 text-xs">
-                  <div className="font-medium text-slate-700">
-                    {aud?.name ?? m.audience}
-                  </div>
-                  <div className="font-mono text-[10px] text-slate-400">
-                    {m.audience}
-                  </div>
-                </td>
-                <td className="matrix-feed__cell px-3 py-1.5 text-xs">
-                  <div className="font-medium text-slate-700">
-                    {top?.name ?? m.topic}
-                  </div>
-                  <div className="truncate font-mono text-[10px] text-slate-400">
-                    {m.topic}
-                  </div>
-                </td>
-                <td className="matrix-feed__cell max-w-[220px] truncate px-3 py-1.5">
-                  {m.name ?? <span className="text-slate-400">—</span>}
-                </td>
-                <td className="matrix-feed__cell max-w-[280px] truncate px-3 py-1.5 text-slate-600">
-                  {m.headline ?? <span className="text-slate-400">—</span>}
-                </td>
-                <td className="matrix-feed__cell px-3 py-1.5 text-xs text-slate-500">
-                  {m.template ?? "—"}
-                </td>
-                <td className="matrix-feed__cell px-3 py-1.5 text-xs text-slate-400">
-                  {m.updatedAt}
-                </td>
+                {columns.map((col, idx) => {
+                  const raw = cells[col] ?? "";
+                  const display = truncateForDisplay(col, raw);
+                  return (
+                    <td
+                      key={col}
+                      className="matrix-feed__cell relative border border-slate-200 px-3 py-1.5 text-slate-700"
+                      title={raw}
+                    >
+                      {idx === 0 ? (
+                        <span
+                          className={clsx(
+                            "matrix-feed__status-stripe absolute left-0 top-0 h-full w-1",
+                            dot,
+                          )}
+                          aria-label={m.status ?? "no status"}
+                          title={m.status ?? ""}
+                        />
+                      ) : null}
+                      <div className="whitespace-pre-wrap break-words">
+                        {display || (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </div>
+                    </td>
+                  );
+                })}
               </tr>
             );
           })}
@@ -156,48 +221,37 @@ export default function FeedView({
   );
 }
 
-function sortValue(m: Message, k: SortKey): string | number {
-  switch (k) {
-    case "mcLabel":
-      // Sort by number then variant.
-      return m.number * 1000 + m.variant.charCodeAt(0);
-    case "status":
-      return m.status ?? "";
-    case "audience":
-      return m.audience;
-    case "topic":
-      return m.topic;
-    case "name":
-      return (m.name ?? "").toLowerCase();
-    case "headline":
-      return (m.headline ?? "").toLowerCase();
-    case "template":
-      return m.template ?? "";
-    case "updatedAt":
-      return m.updatedAt;
+function truncateForDisplay(column: string, value: string): string {
+  if (!value) return value;
+  const lower = column.toLowerCase();
+  if (lower.includes("clicktag") || lower.includes("landing") || lower.includes("css")) {
+    return value.length > 24 ? value.slice(0, 24) + "…" : value;
   }
+  return value;
 }
 
 function Th({
-  sk,
+  column,
   cur,
   dir,
   onClick,
   children,
 }: {
-  sk: SortKey;
-  cur: SortKey;
+  column: string;
+  cur: string | null;
   dir: SortDir;
-  onClick: (k: SortKey) => void;
+  onClick: (k: string) => void;
   children: React.ReactNode;
 }) {
-  const active = cur === sk;
+  const active = cur === column;
   return (
     <th
-      onClick={() => onClick(sk)}
+      onClick={() => onClick(column)}
       className={clsx(
-        "matrix-feed__col-header cursor-pointer select-none border-b border-slate-200 px-3 py-2 text-left",
-        active ? "matrix-feed__col-header--sorted text-slate-900" : "hover:text-slate-700",
+        "matrix-feed__col-header cursor-pointer select-none whitespace-nowrap border border-slate-200 bg-slate-100 px-3 py-2 text-left",
+        active
+          ? "matrix-feed__col-header--sorted text-slate-900"
+          : "hover:text-slate-700",
       )}
     >
       <div className="inline-flex items-center gap-1">

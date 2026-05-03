@@ -974,3 +974,338 @@ Generic `<MediaEntityDialog<E,D>>` egyetlen shared komponensben. `CreativeDetail
 - Globalis class: `.thumb-checker` (`app/globals.css`).
 - BEM blokkok: `media-entity-dialog`, `scaled-preview`, `library-view-switcher`, `creative-row` / `asset-row` (átalakítva `<button>`-ra).
 
+---
+
+## MC iframe creatives a Creative Library-ben (Option B)
+
+**Cél:** a Creative Library image/video tile-ok mellé jelenjenek meg a matrix MC-k is, élő `template + message` render-rel (HTML iframe). Nincs új DB-mező, nincs új API; lazy-mount IntersectionObserver-rel a perf miatt.
+
+### Lockolt döntések
+
+- [x] **Filterek:** MC tile-ok IS szűrődnek Product / Size pill-lel. Audience-ből jön a product (`/api/audiences` → `audience.key → product`); Size = a tile saját size-ja.
+- [x] **MC × size:** minden MC × minden size egy külön tile. Virtual id: `mc-${msg.id}-${size}`.
+- [x] **Status / archived:** uploaded creative-eknél marad `archivedAt`. MC-knél: live nézet (`showArchived=false`) → csak `status === "ACTIVE"`. Archived nézet (`showArchived=true`) → minden más status (INCOMING, NAMING, CONTENT, PREVIEW, APPROVED, INACTIVE, ERROR, DEAD, MEMORY).
+- [x] **Detail dialog (saját pref):** MC tile kattintásra read-only `CreativeDetailDialog` az iframe-mel (size-váltó dropdown a fejlécben). Egy „Open in matrix →" link a MessageEditor-re; NEM nyitunk teljes edit-et a library-ben.
+
+### Munka
+
+- [x] **Adatforrás merge** (`CreativeLibrary.tsx`): új `useQuery`-k `/api/messages`, `/api/audiences`, `/api/templates/folders`. `LibraryItem` discriminated union (`kind: "uploaded" | "matrix"`); matrix item-ek MC × size dimenzióban, audience.product → `product`. Type filter options auto-felveszi a `"html"`-t.
+- [x] **`_components/MatrixIframeTile.tsx`**: `MatrixIframeTile` (masonry, csak iframe) + `MatrixIframeCard` (grid, iframe + meta) + `MatrixIframeListRow` (list, kis iframe + horizontális meta). Közös belső `MatrixIframePreview`: IntersectionObserver lazy-mount, transform-scale fit-to-width, modul-szintű render-cache (`msgId|version|template|size`).
+- [x] **Tile switch a CL render-ben**: `c.kind === "matrix"` → matrix variánsok; egyébként a meglévő `ImageTile` / `Card` / `ListRow` fut tovább.
+- [x] **Detail dialog**: új `creative-library/MatrixDetailDialog.tsx` — read-only iframe natív méreten center-scale-elve, „Open in matrix →" link a MessageEditor-re. `setDetailId(c.id)` után `c.kind` szerint vagy `MatrixDetailDialog`-ot vagy `CreativeDetailDialog`-ot rendereli (uploaded steppert filterezve csak uploaded-re).
+- [x] **Empty state**: `EmptyState empty={items.length === 0}` (uploaded ÉS matrix is 0 → CTA), nem `creatives.length`.
+- [x] **Counts**: `{visible}/{items.length} creatives` — összes (uploaded + matrix) számít be.
+- [x] **Loading guard**: `creativesQ.isLoading || messagesQ.isLoading || templatesQ.isLoading` → spinner, hogy ne villanjon az „Upload first creative" CTA mialatt MC-k töltődnek.
+
+### Komponens-inventárium frissítés
+
+- [x] `tasks/component-inventory.md` 2026-05-02 második blokk: `matrix-iframe-tile`, `matrix-iframe-card`, `matrix-iframe-row`, `matrix-iframe-preview`, `matrix-detail-dialog`.
+
+### Review (2026-05-02)
+
+**Mit változtattam:**
+- 1 új fájl: `_components/MatrixIframeTile.tsx` (3 export + belső preview, ~250 sor).
+- 1 új fájl: `creative-library/MatrixDetailDialog.tsx` (~140 sor).
+- 1 módosítás: `creative-library/CreativeLibrary.tsx` — új query-k, `LibraryItem` típus, items merge, `kind`-szerinti tile + dialog branch, loading guard, count + empty state forrás `items`-re cserélve.
+- `tasks/component-inventory.md` és `tasks/todo.md` frissítve.
+
+**Mit NEM csináltam (root-cause: nincs rá igény):**
+- Új DB séma vagy új API route (Option A/B mind a `/api/render`-rel megy).
+- Snapshot-thumbnail pipeline (Option C — csak ha 200+ MC mellett a lazy-mount nem elég).
+- Uploaded HTML banner zip-ek (külön topic).
+- MC mező-szerkesztés a library-ből (a MatrixDetailDialog read-only; az „Open in matrix" link visz a MessageEditor-be, ahol a meglévő edit-flow fut).
+
+**Tesztelés:** `npx tsc --noEmit` zöld. UI-t headless nem futtattam — a user dev-szervere fut a 6001-es porton, HMR-rel kell látnia a változást. Manuális verifikáció szükséges:
+- Creative Library nyit → image/video tile-ok mellett megjelennek-e a `type: "html"` matrix tile-ok (ACTIVE státuszú MC × template-mérete).
+- Type pill-ben „html" választható → szűr.
+- Archived toggle → matrix tile-ok cserélődnek nem-ACTIVE státuszúakra.
+- Matrix tile-ra kattintás → fullscreen iframe preview, „Open in matrix" link működik.
+- Sok MC mellett (>200) a scroll perf rendben (lazy-mount).
+
+**Ismert édge case-ek / follow-up jelölve, NEM most:**
+- Render-cache nem invalidálódik, ha a template forrásfájlja változik (csak ha `m.version` nő). Ha valaki a `templates/`-ben CSS-t vált, sessionön belül a régi HTML-t látja.
+- Iframe `sandbox="allow-scripts allow-same-origin"` — same-origin renderTemplate output miatt, biztonsági kockázat csak akkor, ha a template engine nem trusted source-ból veszi a template-et. Jelenlegi setup-ban OK.
+
+### Nem-cél (most nem)
+
+- Snapshot-thumbnail pipeline (Option C). Ha 200+ MC mellett a lazy-mount nem elég, akkor visszatérünk rá.
+- Uploaded HTML banner zip-ek (külön téma; a user 2/per-MC-t választott).
+- Új DB-tábla a virtuális creative-ekhez. Minden render-on-the-fly.
+
+## 2026-05-02 — Matrix grid: 3-mode density (detailed / compact / dense)
+
+A korábbi két density mode (`informative` / `minimal`) helyén egy háromfokozatú skála: **detailed → compact → dense**. Az ikonok csere (sokkal beszédesebbek), a Density toggle pedig icon-only lett (csak ikon, tooltip + aria-label).
+
+- [x] **`Density` típus átírva**: `"detailed" | "compact" | "dense"` (`src/app/(app)/matrix/types.ts`).
+- [x] **localStorage migráció** transzparensen: `"informative" → "detailed"`, `"minimal" → "compact"` (`MatrixGrid.tsx` hydrate ágban). Régi user nem veszi észre.
+- [x] **Default density**: `"detailed"` (volt `"informative"`).
+- [x] **`GridView.tsx` — header-ek**:
+  - **detailed**: column header `name + key`, row header `name + key` (mai informative).
+  - **compact**: column header `name` only @ `text-[10px]`, row header `name` only @ `text-[10px]` (no key).
+  - **dense**: column header label `[writing-mode:vertical-rl] [transform:rotate(180deg)]` (vertikális spine, alulról-felfelé olvasható), `h-40 w-7` (28px wide, 160px tall); row header `name` only @ `text-[10px]`, tighter `p-1 min-w-[140px]`.
+- [x] **`GridView.tsx` — cellák**:
+  - **detailed**: 2-soros MC chip (dot + `MC{n}{v}` row 1, `m.name` truncated row 2).
+  - **compact**: 1-soros MC chip (dot + `MC{n}{v}`).
+  - **dense**: csak status dot (`mc-chip--dense size-2.5 rounded-full`), `min-w-7 max-w-7 p-0.5` cella, `gap-0.5 justify-center` a wrap-elt dot-ok között.
+- [x] **Új ikon set** (`MatrixGrid.tsx`): `LayoutList` (Detailed) / `List` (Compact) / `Grip` (Dense — vizuálisan egy 3×3 dot grid, pont a dense view rendert tükrözi). A régi `Layers` / `Rows3` / `Columns3` lecserélve.
+- [x] **Density toggle icon-only**: a `ViewControls` Density szegmensén nincs többé szöveg label, csak ikon. `ToggleBtn` kapott opcionális `title` + `ariaLabel` propot. Collapsed `CycleIconButton` ugyanígy ikon-only marad, tooltipje cycle-jelző.
+- [x] **Spec frissítve** (`docs/REBUILD_SPEC.md` §6.2 grid + §7.3a right toolbar) — három mode és icon-only toggle dokumentálva.
+
+**Tesztelés:** `npx tsc --noEmit` zöld. UI-t headless nem futtattam — manuális verifikáció a 6001 deve szerveren:
+- Density toggle (RightToolbar expanded + collapsed) cycle-el detailed → compact → dense → detailed között.
+- localStorage-ban régi `"informative"` / `"minimal"` érték → új mode-ra mappingol load-kor.
+- Dense mode oszlopfejlécek vertikálisan olvashatóak, oszlopok ~28px szélesek, cellák csak dot-okat mutatnak.
+- Detailed mode pill 2-soros (label + name); compact pill 1-soros (label only).
+
+**Mit NEM csináltam:**
+- Grid/Feed view toggle szöveges maradt — user csak a Density-ről kérdezett, ha vizuális konzisztencia kell, külön kérésre.
+- CSS migráció (Tailwind utilities → semantic class file) — a CLAUDE.md szerint elfogadott a Tailwind utility, és a semantic class-ok (`mc-chip--dense`, `matrix-grid__col-header--dense`, `toggle-group--icon-only` stb.) felkerültek a hook-okra; külön CSS fájlt nem nyitottam egy ilyen kis változásra.
+- Component inventory frissítés — csak a meglévő `mc-chip` és `matrix-grid__*` BEM modifier-ek bővültek, nem új top-level block.
+
+## 2026-05-02 — Matrix: Audience/Topic header dialog (divided + steppable preview)
+
+User: *"in matrix when I click an audience or a topic, show a divided dialog (with draggable devider), like mc editor, with data left and all MCs on that audience or MCs in that row, steppable preview, with the usual preview setting using the same locally saved values"*
+
+### What I'm building
+
+A new dialog opened by clicking a **row header** (audience by default, topic when transposed) or a **column header** (topic by default, audience when transposed) in the Matrix grid. Mirrors the `MessageEditor` / `MatrixDetailDialog` modal shell.
+
+- 90vw × 90vh modal backdrop, draggable vertical divider (horizontal in `wide`/landscape mode — same `isLandscape` rule as `MessageEditor`).
+- **Left pane** (editable form, mirrors `MessageEditor` autosave pattern):
+  - Audience kind: name, status, product, strategy, device + read-only key + read-only MC count.
+  - Topic kind: name, status, product, strategy, device, tag1–4 + read-only key + read-only MC count.
+  - Editing uses `PATCH /api/audiences/:id` / `/api/topics/:id` with `If-Match: <version>` (existing endpoints, optimistic-lock pattern matches `MessageEditor`).
+  - Same `Autosave` toggle + `Save` / `Cancel` / SaveIndicator as `MessageEditor`. Conflict path: refresh from server, surface "Refreshed" badge.
+  - `key` stays read-only — renaming would orphan every `message.audience` / `message.topic` reference (no FK cascade); flag with a hint, expose later if needed.
+- **Right pane** (steppable preview):
+  - Header strip: prev / next buttons, counter (`3/12`), current MC label, status badge.
+  - `PreviewPane` underneath, fed `html` from `/api/render` for the current MC, with size dropdown / bg toggle / skip-animation toggle.
+- Stepper walks the **filtered & visible** message list (`filtered.msgs`) intersected with `audience===entity.key` or `topic===entity.key`, sorted by `(number, variant)`. The dialog stacks an entity-key filter *on top of* the matrix toolbar filters — so search, product pill, status pill all apply to the stepper's MC set.
+- ESC closes; arrow keys step prev/next when focus isn't in an input.
+
+### Locally saved preview values (`usePersistent`)
+
+- `mm6_media_dialog_preview_bg` — **shared key** with `MatrixDetailDialog` so bg toggle is consistent across both dialogs ("the same locally saved values").
+- `mm6_matrix_header_dialog_size` — last picked preview size (string). On step to an MC whose template doesn't include this size, fall back to that template's `defaultSize`; don't overwrite the persisted preference.
+- `mm6_matrix_header_dialog_skip_anim` — last skip-anim toggle.
+- `mm6_matrix_header_dialog_split` — last divider split-percent.
+
+### Files
+
+- **NEW** `src/app/(app)/matrix/HeaderDetailDialog.tsx` — the dialog (modal shell, header, edit form, preview, divider drag, ESC/arrow keys, autosave + version-mismatch handling).
+- **EDIT** `src/app/(app)/matrix/types.ts` — widen `Audience` and `Topic` types to expose `version: number` (and `updatedAt: string` for parity with `Message`); the API already returns these via `$inferSelect`, the FE type just hasn't declared them.
+- **EDIT** `src/app/(app)/matrix/GridView.tsx` — make row/col header `<th>` content a clickable `matrix-grid__row-header-btn` / `matrix-grid__col-header-btn` button that fires `onOpenHeader({ kind, key })`. Corner cell stays the transpose button (no overlap). Add `onOpenHeader` prop.
+- **EDIT** `src/app/(app)/matrix/MatrixGrid.tsx` — state `headerDialog: { kind: "audience" | "topic", key: string } | null`; thread `onOpenHeader` into `GridView`; fetch `/api/templates/folders` (so the preview knows each template's `sizes` + `defaultSize`); render `<HeaderDetailDialog>` when state is set; on successful PATCH invalidate `["audiences"]` / `["topics"]`.
+- **EDIT** `tasks/component-inventory.md` — register `matrix-header-dialog` (and any new sub-blocks beyond reused `divider-handle`, `tab-bar`, `status-badge`, `bg-toggle`, etc.).
+
+### Steps
+
+- [x] 1. Widen `Audience` / `Topic` FE types in `matrix/types.ts` to include `version` + `updatedAt`. Also added `strategy` / `device` to `Topic` (DB has both; types didn't expose them).
+- [x] 2. `HeaderDetailDialog.tsx` skeleton: modal shell + header (close X) + draggable divider + two panes + ESC/arrow handlers.
+- [x] 3. Left **edit form** with autosave + manual mode + `If-Match` PATCH + 409-conflict handling.
+- [x] 4. Right steppable preview: stepper strip + `PreviewPane` + `/api/render` fetch + size fallback to `template.defaultSize` when persisted size unsupported (without overwriting the persisted preference).
+- [x] 5. `usePersistent` keys: `mm6_media_dialog_preview_bg` (shared with `MatrixDetailDialog`), `mm6_matrix_header_dialog_size`, `..._skip_anim`, `..._split`.
+- [x] 6. `GridView`: `matrix-grid__col-header-btn` and `matrix-grid__row-header-btn` clickable wrappers; `onOpenHeader` prop threaded through. Corner cell still hosts the transpose button.
+- [x] 7. `MatrixGrid`: `headerDialog` state, `templates/folders` query, render `<HeaderDetailDialog>`. Mutation in the dialog itself invalidates `["audiences"]` / `["topics"]` on success — parent doesn't need an explicit hook.
+- [x] 8. `tasks/component-inventory.md` updated with §3g.
+- [x] 9. `npx tsc --noEmit` green; manual verify pending on the dev server.
+
+### Review (2026-05-02)
+
+**Files touched:**
+- NEW `src/app/(app)/matrix/HeaderDetailDialog.tsx` (~620 lines).
+- EDIT `src/app/(app)/matrix/types.ts` — `Audience` and `Topic` widened (version, updatedAt; `Topic` also gets strategy + device).
+- EDIT `src/app/(app)/matrix/GridView.tsx` — `transposed` lifted to props (separate prior commit), new `onOpenHeader` prop, header `<th>`-ek belső gombbá alakítva.
+- EDIT `src/app/(app)/matrix/MatrixGrid.tsx` — header dialog state, templates query, dialog render block.
+- EDIT `tasks/component-inventory.md` — §3g new section.
+
+**One bug caught & fixed during implementation:**
+- Initial draft reseed effect depended on `[entity.id, entity.version, kind]`. After a save, parent re-fetch + invalidation would push a new `entity.version` and reseed the draft, wiping any edits typed in the meantime. Switched to `[entity.id, kind]` — matches `MessageEditor`'s pattern. Conflict resolution (409 → `setCommitted(e.current)`) handles external edits without needing the reseed.
+
+**Manual verification needed (UI-t headless nem futtattam):**
+- Click an audience row header (default orientation) → Audience dialog with editable name/status/product/strategy/device, key read-only, MC count read-only.
+- Click a topic column header → Topic dialog with same fields + tag1–4.
+- Toggle transpose → row/col swap, header clicks open the corresponding kind.
+- Type into a field → after ~400ms "Saving" → "Saved"; reload page; value persists.
+- Toggle Autosave off → modify → Save / Cancel buttons appear.
+- Step prev/next → current MC label + counter update; iframe re-renders.
+- Change size dropdown → persists across re-opens; if a stepped MC's template doesn't include that size, falls back to its `defaultSize` *without* overwriting the saved preference.
+- bg toggle in this dialog reflects in the `MatrixDetailDialog` and vice versa (shared key).
+- ESC closes; Arrow keys step (only when focus isn't in an input).
+- Drag divider → splitPercent persists.
+
+**Out of scope, deliberate (NOT now):**
+- Editing `key` (would orphan messages — no FK cascade).
+- Editing extended writables: `comment`, `tag`, `campaign*`, `lineitem*`, `buyingPlatform`, `dataSource`, `targetingType`, `orderIndex`. Easy to extend by adding `<Field>` rows.
+- Audience/Topic PATCH endpoint changes — used as-is.
+- Sharing `size` / `skipAnim` persistence with `MessageEditor` (which uses local state) — different context, left alone.
+
+### Out of scope (NOT now)
+
+- Renaming the `key` of an audience/topic from this dialog. No FK cascade in the schema (`messages.audience` / `messages.topic` are plain text columns) so a rename would orphan messages. Skipped for safety; surface as read-only with hint.
+- Editing `orderIndex` / `archivedAt` / `comment` / extended `buyingPlatform` / `dataSource` / `targetingType` / `tag` / `campaign*` / `lineitem*` from this dialog. The DB supports them, but the user only listed the visible "data left" fields as needing editing. Easy to extend later by adding more `<Field>` rows.
+- Per-MC editing tabs in this dialog — `MessageEditor` is the path; user can still click an MC chip in the grid to edit.
+- Bulk operations across MCs (status changes, etc.).
+- Sharing size persistence with `MessageEditor`'s (non-persisted) preview size dropdown — different context, leave alone.
+
+
+## Current task (2026-05-02) — Filter input improvements (icons + persistence + query syntax)
+
+**Cél:** Egységes, perzisztált, prefix-támogatású szűrőmező a Creative Library, Assets és Matrix nézetekben.
+
+### Felmért állapot
+- **Creative Library** (`CreativeLibrary.tsx:594-603`): Search ikon van, search **már perzisztált** `usePersistent` + `STRING_CODEC`. Default haystack: `fileName, brand, product, template, visualKeyword, copyKeyword`, matrix-kind plusz `headline, copy1, copy2, disclaimer, name, topic, audience, cta`. Plusz `mc{number}{variant}` separate match.
+- **Assets** (`AssetsLibrary.tsx:64, 167-175`): Search ikon van, search **NEM perzisztált** (`useState`). Default haystack: `fileName, brand, product, visualKeyword`.
+- **Matrix** (`MatrixToolbar.tsx:25-33`): **Nincs** ikon a search input-on. A `MatrixGrid.tsx:30-96` egész state-et perzisztál `mm6_matrix_state_v1` alatt (search benne van). Default match: `mc{n}{v}`, `name`, `headline`, `pmmid`.
+
+### Plan (commit-sized lépésekre bontva)
+
+- [x] **F1 — `parseSearchQuery` helper + tests (~20 min)**: Új `src/lib/search-query.ts` modul. Tokenizer: szétvágja whitespace-en, tiszteli a `"quoted phrases"`-t. Minden token vagy prefixelt (`a:`, `s:`, `t:`, `mc:`) vagy szabad. AND default két token közt, `OR` (case-insensitive) választó. AND > OR precedencia. Visszatér egy `MatchPredicate`-tel: `(fields: SearchFields) => boolean`, ahol `SearchFields` egy egyszerű object (`{ audience, topic, strategy, mc, free }`) — minden mező egy `string` (lowercased, space-separated haystack). Üres query → predicate mindig true. Vitest fixture file. **Nem érint UI fájlt.**
+- [x] **F2 — Filter ikon csere + Matrix-ra hozzáadás (~10 min)**: `lucide-react` `Filter` ikont használjuk a `Search` helyett mind a 3 helyen. CreativeLibrary `Toolbar` (line 595), AssetsLibrary toolbar (line 168), MatrixToolbar (line 25 — wrap `<input>`-et `input-box input-box--with-icon`-be, reusing the existing class). Csak ikoncsere + Matrix esetén pl-7 padding. **Stilizálás:** semantic class marad (`input-box--with-icon`), Tailwind utility-k a meglévők.
+- [x] **F3 — Assets search persist (~5 min)**: `useState("")` → `usePersistent("mm6_assets_filter_search", "", STRING_CODEC)`. Plusz products/types is, ugyanezzel a mintával (`mm6_assets_filter_products` / `mm6_assets_filter_types` `SET_CODEC`-kel) — a Creative Library szimmetrikus minta. **Csak az Assets-en, mert a többiek már perzisztáltak.**
+- [x] **F4 — Library haystack-ek bővítése + parseSearchQuery integráció (~20 min)**: Mindhárom view filter-helyén:
+  - Creative Library `filtered` useMemo (line 306-331): a `term`-alapú `lc.includes(term)` lecserélése `predicate(fields)`-re. `fields.mc` = `mc{n}{v}` + null-ra üres. `fields.audience`/`topic`/`strategy` = `c.kind === "matrix"` esetén a `message.audience`+resolved audience.name + audience.strategy + topic.name + topic.strategy; uploaded esetén üres (sosem fog matchelni `a:`/`s:`/`t:` token-re — explicit decision). `fields.free` = a meglévő haystack + audience/topic name + strategy + lineitem id + comment.
+  - Assets: nincs audience/topic/strategy → `a:`/`s:`/`t:` mindig false; `mc:` mindig false; `fields.free` = filename, brand, product, visualKeyword, type, comment.
+  - Matrix `filtered` useMemo (`MatrixGrid.tsx:136-161`): audiencesById/topicsById Map-pel feloldjuk message.audience-key és topic-key → audience.name/strategy/lineitemId stb. `fields.mc` = `mc{n}{v}` + pmmid. `fields.audience` = audience.key + audience.name. `fields.topic` = topic.key + topic.name. `fields.strategy` = audience.strategy + topic.strategy. `fields.free` = m.name + m.headline + m.copy1 + m.copy2 + audience.name + audience.key + topic.name + topic.key + audience.strategy + topic.strategy + audience.lineitemId + topic.lineitemId + audience.comment + topic.comment.
+- [x] **F5 — Placeholder + tooltip (~5 min)**: A 3 input placeholder-jét frissítjük: `"Filter… a:xy s:xy t:xy mc:xy OR …"`. `title` attribútum (hover tooltip) hosszabb hint-tel. Nincs külön help-popover most — YAGNI.
+- [x] **F6 — Manual smoke (browser, ~10 min)**: Dev server + Erste seed alatt:
+  - Creative Library: `mc4`, `a:retail`, `s:perform OR mc:1`, `"happy moments"` quoted phrase, mind működik; F5 után megmarad a bevitel.
+  - Assets: `brand:`-t nem használunk de `kep` filename-en match; F5 után megmarad.
+  - Matrix: `t:cf`, `s:awareness`, `a:retail t:cf` (AND), `s:perf OR pmmid`, mind szűr.
+
+### Mit NEM csinálunk most
+- **Parentheses** (`(a:x OR a:y) AND s:z`) — túl nagy ugrás v1-hez, nincs kérve.
+- **NOT operator** — nincs kérve.
+- **Field auto-complete dropdown** — később, ha a syntax beüt.
+- **Regex / wildcard** — `includes` lowercased substring match elég.
+- **Külön help-popover ikon** a search mellett — `title` attr elég v1-hez.
+
+### Open questions (várok rád)
+1. Creative Library uploaded-creative item-ekre `a:` / `s:` / `t:` mind false legyen (kiszűri őket)? **Default igen.**
+2. `s:` = `audience.strategy OR topic.strategy` matrix-on? **Default igen.**
+3. `AND > OR` precedencia, no parens? **Default igen.**
+4. `"quoted phrases"` támogatva? **Default igen.**
+5. Default haystack a teljes lista (topic name+key, audience name, strategies, lineitem id, comments, MC fields, plusz headline/copy mert a meglévő ezt már tartalmazza) — tartsam, vagy szigorúan a te listád?
+
+Várom a "mehet F1 a fenti default-okkal" zöld jelzést, vagy javítást a 5 question-ön.
+
+### Review (2026-05-02)
+**4 forrásfájl + 1 új lib + 1 új test = 6 fájl. 187/187 tests green (170 → 187, +17 a new search-query suite-ból). Typecheck clean. /matrix /creative-library /assets pages 200-asak dev serveren.**
+
+- `src/lib/search-query.ts` (új, 130 sor): `parseSearchQuery(input)` → `MatchPredicate`. Prefix-ek `a: t: s: mc:` (ismeretlen prefix free-textként kezelve), `OR` case-insensitive választó, AND>OR precedencia, `"quoted phrases"`. Minden case-insensitive (input lowercased a parse során). Üres query mindig true.
+- `tests/unit/search-query.test.ts` (új, 17 test): empty query, free term, mind a 4 prefix, AND több termmel, OR alternatívák, AND>OR precedencia, OR case-insensitive, idézőjeles phrase, prefix utáni quoted phrase, ismeretlen prefix mint free, üres prefix-érték, csak whitespace, trailing OR.
+- `CreativeLibrary.tsx`: `Search` → `Filter` ikon, w-56 → w-72 (a hosszabb placeholder miatt). Új `topicsQ` fetch, `audienceMap` + `topicMap` a matrix-kind item-ekhez. `filtered` useMemo: `term.includes()` lecserélve `predicate(fields)`-re. Uploaded creatives `audience/topic/strategy` mezője üres → prefix query nem matchel rájuk (default decision). Free haystack tartalmaz mindent: filename, brand, product, template, visualKeyword, copyKeyword, comment, plus matrix-kind esetén audience name+key, topic name+key, strategy, lineitemId, comment, headline, copy1, copy2, disclaimer, name, cta, pmmid.
+- `AssetsLibrary.tsx`: `Search` → `Filter`. `useState` → `usePersistent` mind a 3 filter state-re (`mm6_assets_filter_search/products/types`). Free haystack: filename, brand, product, type, visualKeyword, comment. Audience/topic/strategy/mc üres → prefix query nem matchel.
+- `MatrixToolbar.tsx`: input `<input>`-ből `<div input-box--with-icon>` wrappel, `Filter` ikonnal. Placeholder + title hint.
+- `MatrixGrid.tsx`: `audienceById` + `topicById` Map-ek. `filtered` useMemo: term-helyett predicate; `mc` field tartalmaz pmmid-et is (megőrizve a régi viselkedést, hogy pmmid-re free search működjön); free haystack: name, headline, copy1, copy2, disclaimer, cta, audience name+key, topic name+key, strategy(audience+topic), lineitemId(audience+topic), comment(audience+topic), pmmid.
+
+**Per-view localStorage keys (final):**
+- Creative Library: `mm6_creative_library_filter_search` (volt), `_filter_products`, `_filter_types`, `_filter_sizes` — mind már perzisztált, nem érintettem.
+- Assets: új keys `mm6_assets_filter_search`, `_filter_products`, `_filter_types`.
+- Matrix: `mm6_matrix_state_v1` blob (egész state-et tartalmaz, search benne), nem érintettem.
+
+**Default decisions (5 open question, mind default → confirmed by user):**
+1. Uploaded creatives: prefix query (`a:`/`s:`/`t:`/`mc:`) sosem matchel — kiszűri őket. Free term match marad.
+2. `s:` matrix-on = audience.strategy OR topic.strategy.
+3. AND > OR precedencia, no parens.
+4. Quoted phrases támogatva (`"two words"`).
+5. Default haystack a teljes lista: topic name+key, audience name+key, strategies, lineitem id, comments, MC#, pmmid, headline, copy1, copy2, disclaimer, name, cta. Mert a meglévő free-text már tartalmazta a copy/headline-t, nem akartam regressziót.
+
+**Manual smoke (browser, user verifikálandó):**
+A 3 page kompillált (200) de a tényleges UI-t nem nyitottam meg headless-ben. User: kérlek nézd meg a dev serveren (http://localhost:6001) a Matrix / Creative Library / Assets oldalakat — `mc174`, `a:retail`, `s:performance`, `s:perf OR mc:1`, `"happy moments"` query-kkel. F5 után a bevitelek megmaradnak-e (Asset filtereken most már perzisztáltak; Matrix és Creative Library már korábban is perzisztáltak voltak).
+
+**Component inventory:**
+A `tasks/component-inventory.md`-t nem frissítem, mert nem új semantic block-ot vezettem be, csak meglévő `input-box--with-icon`-t terjesztettem ki Matrix-ra.
+
+## Follow-up (2026-05-02) — `p:` prefix + matrix row/col narrowing
+
+- [x] **G1 — `p:` prefix + `hasNarrowingPrefix` helper + tests**: `SearchFields`-be új `platform` mező; `PREFIX_MAP` kiegészítve `p → platform`-mal; új export `hasNarrowingPrefix(input: string): boolean` (true ha bármely token `a:`/`t:`/`s:`/`p:` prefixszel kezdődik). Tests: `p:dv360` matchel platform-on, `hasNarrowingPrefix("a:retail")` → true, `hasNarrowingPrefix("mc:1")` → false (mc nem narrowing).
+- [x] **G2 — Matrix narrow auds/tops + `p:` field-ek**: `MatrixGrid` `filtered` useMemo: `platform` mező `audience.buyingPlatform`-ból. Predicate után, ha `hasNarrowingPrefix(filters.search)`: `usedAudKeys = new Set(msgs.map(m => m.audience))`, `usedTopKeys = new Set(msgs.map(m => m.topic))`, és narrow `auds` + `tops` ezek alapján. Free-text only (vagy `mc:`-csak) → változatlan, üres cellák maradnak.
+- [x] **G3 — Creative Library + Assets `platform` field + placeholder update**: CreativeLibrary `platform` mező matrix-kind item-en `audience.buyingPlatform`-ból (uploaded → üres, prefix nem matchel). Assets üres. Mind a 3 input placeholder/title hint kapja meg `p:xy`-t.
+
+### Review (2026-05-02, follow-up)
+**4 fájl + 2 test bővítés. 195/195 green (+8 új test). Typecheck clean. Pages 200.**
+
+- `search-query.ts`: `SearchFields` + `platform` mező; `p` prefix; új `hasNarrowingPrefix(query)` ami `a:`/`t:`/`s:`/`p:` prefixszel kezdődő (nem-üres) token-re true. `mc:` szándékosan nem narrowing — egy MC szűrés nem zár ki audience/topic-ot, csak üres cellákat hagy. Free term mostantól a `platform` mezőt is végignézi (`FREE_FIELDS` bővülve).
+- `MatrixGrid.tsx`: `platform` field `audience.buyingPlatform`-ból (topic-on nincs ilyen mező). Ha `hasNarrowingPrefix(filters.search)` → narrow `auds`/`tops` `usedAudKeys`/`usedTopKeys`-szal a survived msgs-ből. **Free-text-only vagy `mc:`-csak query nem narrowol** — üres cellák maradnak (régi viselkedés).
+- `CreativeLibrary.tsx`: `platform` field a matrix-kind item-en (`audience.buyingPlatform`); uploaded creative-eken üres → `p:` query nem matchel rájuk (default decision, konzisztens `a:`/`t:`/`s:`-szel). **Nem narrowol Library-ban** — a Masonry/Grid/List nézet nem rács, nincs row/col concept; minden survived item csak rendereldik.
+- `AssetsLibrary.tsx`: `platform: ""` — asset-en nincs ilyen mező; `p:` query kiszűri őket (free-text tovább működik).
+- Placeholder + title frissítve a Matrix és Creative Library input-okon (`a: t: s: p: mc:` + Matrix-on plusz hint a row/col narrowingról). Assets placeholder marad a free-text fókuszú változat — nincs ott audience/topic/platform mező.
+
+---
+
+## Phase H (2026-05-02) — Audiences/Topics editors, sidebar restructure, presence
+
+Six discrete chunks shipped in one session. Typecheck clean throughout, dev server on 6001 stayed up.
+
+### H1 — Compact toolbar counter on `/matrix`
+- `MatrixToolbar.tsx`: count readout went from `100/1361 messages · 165 audiences · 80 topics` to a tri-segment `mc: 100/1361  [Users-icon] 12/60  [ListTree-icon] 8/80`. Three inline-flex segments with gap-2; icons match `HeaderDetailDialog` (`Users` for audience, `ListTree` for topic). Wrapper `title` keeps the natural-language full text.
+- `MatrixGrid.tsx`: counts now also include `visibleAudiences` and `visibleTopics` from `filtered.auds.length` / `filtered.tops.length`.
+
+### H2 — Sidebar nav reorder + Audiences/Topics + Monitoring move
+- `Sidebar.tsx`: new order `Matrix · Creative Library · Assets · Audiences · Topics · Templates · Shares · Monitoring`. Audiences uses `Users` icon, Topics uses `ListTree` (matching the dialog convention).
+- Routes work: `/audiences` and `/topics` return 307 to `/login` when unauthed (auth gate hits) → routing wired.
+
+### H3 — Audiences / Topics editors (Excel-like grid)
+- New shared `_components/DimensionGrid/`:
+  - `useRowAutosave.ts` — focused `Map<userId, RowSaveState>` + PATCH-with-If-Match + 409-silent-invalidate. Independent of the dialog's draft-diff pattern — the grid commits one field at a time so that overhead wasn't justified.
+  - `columns.ts` — `Column<T>` config + `AUDIENCE_COLUMNS` / `TOPIC_COLUMNS`. Cell types: `text`/`number`/`select`/`select-dynamic`. `key` is `readOnly` on both.
+  - `BulkEditPanel.tsx` — bottom-floating panel; concurrency cap 8 (`Promise.all(Array.from({length: 8}, worker))`); per-row 409s surface as a tooltip on the result chip.
+  - `DimensionGrid.tsx` — `@tanstack/react-virtual`-driven body, sticky header, sticky checkbox col, click-to-edit cells (Enter/blur commit, Escape cancel), shift-click range selection, `parseSearchQuery` filter, `ArchiveToggle` in `RightToolbar`, column-visibility via `MultiPill`, per-row save-state dot.
+- Pages: `audiences/page.tsx` + `AudiencesEditor.tsx`, `topics/page.tsx` + `TopicsEditor.tsx`. Each adapts its row to `SearchFields` for predicate parity with the rest of the app. Reuses TanStack query keys `["audiences"]` / `["topics"]` so edits invalidate the matrix view too.
+- Title + filter ordering matches Assets/Creative Library: `[Title] [Filter input] [Columns pill] [Count]`. RightToolbar holds `ArchiveToggle` (collapsed-aware) and a hint badge.
+- Refactored `STATUS_OPTIONS` out of `HeaderDetailDialog` into `matrix/types.ts` so dialog + grid share one list.
+
+### H4 — Topics schema trimmed to its own field set
+- Spec §3.2 rewritten as a real field table. The columns `strategy`, `buyingPlatform`, `dataSource`, `targetingType`, `device`, `campaignName`, `campaignId`, `lineitemName`, `lineitemId` are now declared **omitted** — they're audience-side concerns.
+- DB migration `0008_silky_charles_xavier.sql` (drizzle-kit `db:generate` + `db:migrate`): nine `ALTER TABLE topics DROP COLUMN`. Applied; verified all 80 topic rows preserved.
+- DB backed up to `db/matrix.db.backup-20260502-152313` before migration.
+- Code touched: `src/db/schema.ts`, `src/lib/entities/topics.ts` (WRITABLE_FIELDS + createTopic insert), `src/app/(app)/matrix/types.ts` (Topic type), `HeaderDetailDialog.tsx` (TopicDraft + topicDraft + TopicForm "Targeting" / "Trafficking" sections removed), `_components/DimensionGrid/columns.ts` (TOPIC_COLUMNS), `topics/TopicsEditor.tsx` (search adapter), `lib/export-xlsx.ts` (topicCols), `lib/mcp.ts` (topic_create description), `MatrixGrid.tsx` + `CreativeLibrary.tsx` (search predicate concatenations stopped reaching into `t?.strategy`/`t?.lineitemId`).
+- XLSX import was already aligned. seed-perf and tests didn't touch the dropped fields.
+
+### H5 — Sidebar bottom group + dialog Users/Settings
+- `Sidebar.tsx`: removed Users + Settings from the main nav `ITEMS` array; added a footer cluster of three identically-styled buttons (`Users`, `Settings`, `Sign out`) — `text-xs text-slate-600 hover:bg-slate-100`. Footer reserves `pb-12` (3rem) so the Next.js dev indicator doesn't overlap the buttons. Admin-only buttons receive `onOpenUsers` / `onOpenSettings` from the shell; non-admins simply don't get the props (and the buttons don't render).
+- New `_components/AppDialog.tsx`: generic 90vw × 90vh modal — backdrop, ESC, click-outside, floating top-right `X`. Mirrors `MessageEditor`'s chrome class names (`modal-backdrop`, `modal`, `modal__close`).
+- New `_components/UsersDialog.tsx` + `_components/SettingsDialog.tsx`: thin wrappers around the existing `UsersView` / `SettingsView`. Both views accept an `inDialog` prop that pads the toolbar/tab-bar `pr-12` so the floating X has clearance. Existing `/users` and `/settings` routes still render the same views directly.
+- New `_components/AppShell.tsx`: client wrapper owning the dialog open/close state, renders `Sidebar`, `<main>{children}</main>`, and the dialogs.
+- `(app)/layout.tsx`: server component now also computes `aboutInfo` (lifted from `settings/page.tsx`) and threads it through `AppShell` so the dialog mounts instantly.
+- `UsersView`: dropped the `max-w-3xl` constraint — table is full-width.
+
+### H6 — Live presence via SSE + visibility
+- Single-process in-memory registry — `src/lib/presence.ts`. `Map<userId, { connections: Set, lastSeen, pendingRemoval }>`. `addConnection` cancels any pending removal (refresh doesn't flicker). `removeConnection` schedules an 8s grace before clearing. `isLive(userId)` returns true while connections > 0 OR pending-removal is set; `getLastSeen(userId)` for fallback formatting.
+- `app/api/events/route.ts`: hooked into existing `req.signal.abort` lifecycle. After `subscribe(...)` → `addConnection(userId, connectionId)`. Inside `close()` → `removeConnection(...)`. Connection IDs are `${userId}:${ts}:${rand}`.
+- `app/api/users/route.ts`: response now carries `live: boolean` (from registry) + `lastActive: string | null` (registry-formatted ISO; falls back to `audit_log.MAX(created_at)` when user hasn't connected this process). `lastAction` still derives from audit-log MAX.
+- New `app/_components/usePresenceConnection.ts`: owns one `EventSource('/api/events')` per tab. Opens on mount when `document.visibilityState === "visible"`. `visibilitychange` → close on `hidden`, open on `visible`. `online` reopens, `offline` closes. Cleanup on unmount.
+- `AppShell.tsx`: one-line `usePresenceConnection()` so every authed surface contributes presence without per-page wiring.
+- `UsersView`: dropped the local `now` interval and the `isLive(lastActive, now)` heuristic — server is authoritative. Renders `u.live` directly. Query polls `refetchInterval: 15_000` so the green dot ticks off within ~15s of someone closing/backgrounding their tab.
+
+### Single-process / multi-replica decision
+- Confirmed by user: 1–10 parallel users, no load balancing, MCP-heavy server traffic. In-memory registry is the right call. If this ever grows to multi-replica, swap `presence.ts` for a Redis-pub-sub-backed implementation with the same exported surface (`addConnection`, `removeConnection`, `isLive`, `getLastSeen`).
+
+### Files touched (Phase H)
+- New: `src/lib/presence.ts`, `src/app/_components/AppShell.tsx`, `src/app/_components/usePresenceConnection.ts`, `src/app/(app)/_components/AppDialog.tsx`, `src/app/(app)/_components/UsersDialog.tsx`, `src/app/(app)/_components/SettingsDialog.tsx`, `src/app/(app)/_components/DimensionGrid/{DimensionGrid,BulkEditPanel,columns,useRowAutosave}.{tsx,ts}`, `src/app/(app)/audiences/{page,AudiencesEditor}.tsx`, `src/app/(app)/topics/{page,TopicsEditor}.tsx`, `db/migrations/0008_silky_charles_xavier.sql`.
+- Modified: `src/app/_components/Sidebar.tsx`, `src/app/(app)/layout.tsx`, `src/app/(app)/matrix/{types,MatrixToolbar,MatrixGrid,HeaderDetailDialog}.tsx`, `src/app/(app)/users/UsersView.tsx`, `src/app/(app)/settings/SettingsView.tsx`, `src/app/(app)/creative-library/CreativeLibrary.tsx`, `src/app/api/events/route.ts`, `src/app/api/users/route.ts`, `src/db/schema.ts`, `src/lib/entities/topics.ts`, `src/lib/export-xlsx.ts`, `src/lib/mcp.ts`, `docs/REBUILD_SPEC.md`.
+
+### Manual smoke (user verifies)
+- Open app in tab A, open Users dialog in tab B → tab A shows `live: true` within 1–2s.
+- Close tab A → green goes off in tab B within ~15s (refetch interval).
+- Background tab A (cmd+T) → green goes off within ~15s; refocus → green back on within 1–2s.
+- Hard refresh tab A → green stays on (8s grace covers it).
+- `/audiences`: edit a name cell, reload — persists. Open same row in matrix `HeaderDetailDialog`, edit there, then edit grid row again — expect 409 → silent refresh, second edit applies.
+- `/topics`: confirm tag1–tag4 columns work; confirm strategy/buyingPlatform/etc are gone.
+- Bulk edit: select 5 rows, set Product, Apply — `5 ok`; matrix Product filter sees them under the new product.
+
+
+
+
+
+
+### 2026-05-03 followups folded into spec
+- §5 MCP — opener now states the agent-ready positioning ("AI generates records and manages variations through MCP, humans curate") to match messagingmatrix.ai home-page copy.
+- §6.4 `/creative-library` toolbar — Upload + Show archived moved out of the top filter bar into the `RightToolbar` (Show archived inside VIEW section, Upload pinned to bottom); count indicator right-aligned, `text-[11px]`.
+- §6.5 `/assets` — same toolbar arrangement (back-reference to §6.4).
+- §6.7 `/templates` localStorage — `mcLabel` added to `perTemplate[name]`; "Preview with: …" MC selection now persists per template.
+- §6.9 `/settings` — dialog header gets `Settings · {Tab}` title bar; Save/Revert (Design/Storage/Structure) portal into header actions slot, no sticky bottom bar.
+- §6.2 Feed view — columns now driven by `config.feedStructure`; cells rendered via `evaluatePattern(resolveFeedPattern(col, patterns.feed), ctx)` with v5-parity smart fallback in `src/lib/feed-patterns.ts`. Status moved to a 1px left edge stripe on the first cell (no dedicated column). Sort runs over pre-computed cell strings.
+- §6.9 Structure tab — added Feed Patterns subsection: per-column pattern inputs parsed live from Feed Structure, blank input falls back to `defaultFeedPattern`. Save merges `feed: {…}` into the existing `patterns` config row (preserves pmmid/topicKey/trafficking). Bug fixed in same pass: StructureTab + FeedView shared the react-query key `["config", "patterns"]` with mismatched return shapes — both now return the parsed `Patterns` object so the cache stays consistent.
+- §14 — `src/lib/feed-patterns.ts` referenced alongside `src/lib/patterns.ts` (parseFeedColumns / cleanColumnName / defaultFeedPattern / resolveFeedPattern).

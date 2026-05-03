@@ -290,8 +290,12 @@ export function buildFeedRowSet(opts: BuildOptions): {
     .where(eq(messagesTable.clientId, clientId))
     .all();
 
-  // Decide which audiences belong to the product (audience.product matches).
-  // Topic.product is a fallback for audience-product gap. v5 used both.
+  // Match the v6 matrix view's product-filter semantics exactly: a message is
+  // in the product when BOTH its audience and its topic carry that product.
+  // Earlier versions OR'd audience/topic, which let in messages whose audience
+  // had a different product but happened to share a topic with the requested
+  // product (e.g. an adform-product topic dragging in dv360-audience rows).
+  // Topics with NULL product are excluded — same as the matrix UI behaviour.
   const productAudKeys = new Set(
     audiences.filter((a) => a.product === product).map((a) => a.key),
   );
@@ -304,7 +308,7 @@ export function buildFeedRowSet(opts: BuildOptions): {
   const inSet: DbMessage[] = [];
   for (const m of allMessages) {
     const matchesProduct =
-      productAudKeys.has(m.audience) || productTopicKeys.has(m.topic);
+      productAudKeys.has(m.audience) && productTopicKeys.has(m.topic);
     const isActive =
       m.status === "ACTIVE" && m.archivedAt === null && matchesProduct;
     if (isActive) {

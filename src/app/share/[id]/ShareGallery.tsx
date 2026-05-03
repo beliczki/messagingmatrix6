@@ -420,6 +420,7 @@ export default function ShareGallery({
           <div className="share-gallery__view share-gallery__view--masonry">
             <Masonry
               items={filtered}
+              itemKey={(it) => it.key}
               render={(it) => (
                 <MasonryTile
                   item={it}

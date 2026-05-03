@@ -515,6 +515,7 @@ export default function CreativeLibrary() {
                 <div className="creative-library__view creative-library__view--masonry">
                   <Masonry
                     items={visible}
+                    itemKey={(c) => c.id}
                     render={(c) => (
                       <SelectableItem
                         id={c.id}

@@ -265,6 +265,7 @@ export default function AssetsLibrary() {
           <div className="assets-library__view assets-library__view--masonry">
             <Masonry
               items={filtered}
+              itemKey={(a) => a.id}
               render={(a) => (
                 <ImageTile
                   asset={a}

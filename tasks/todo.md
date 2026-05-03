@@ -1,5 +1,23 @@
 # MessagingMatrix v6 — checkpoint after `/clear` (2026-04-27)
 
+## Hotfix (2026-05-03) — Creative Library masonry: wrong ad after size-filter change
+
+**Symptom:** in the masonry view, toggling the Size filter caused some tiles to render the previous tile's ad (iframe `srcDoc` stale) while the iframe `title` and the click → detail dialog used the new ad's ID. Result: visual mismatch + clicking the wrong ad opened a different preview than what was visible.
+
+**Root cause:** `Masonry.tsx` keyed items positionally (`key={i}`). When the filtered list changed, React reused the same `MatrixIframePreview` instance at a given column slot for a *different* message. `MatrixIframePreview` caches its rendered HTML in `useState` (lazy-init from a module cache, never reset on prop change), and its fetch effect bails when `html !== null` — so the stale `srcDoc` survived even though `title`/`onOpen` were computed fresh from new props.
+
+**Fix:** add `itemKey` prop to `Masonry`, supplied by all three callers (Creative Library, Assets Library, Share Gallery — all have stable item ids/keys). Stable keys → React unmounts/mounts cleanly → `MatrixIframePreview`'s lazy state init runs against the correct cache key.
+
+- [x] Add `itemKey?: (item, index) => React.Key` to `Masonry`, default to positional fallback
+- [x] Pass `itemKey` from Creative Library (`c.id`)
+- [x] Pass `itemKey` from Assets Library (`a.id`)
+- [x] Pass `itemKey` from Share Gallery (`it.key`)
+
+### Review
+Single-prop addition, three call-site updates, no behavior change beyond keying. The lazy-`useState` pattern in `MatrixIframePreview` is left as-is — it's correct *given* stable keys; tracking down a defensive in-component reset would be a band-aid for the keying bug we just fixed.
+
+---
+
 ## Current task (2026-05-01 dél) — Phase 10 kickoff (soft-delete + snapshots + perf/smoke)
 
 **Cél:** Master plan Phase 10, **újraszabva** (2026-05-01 user briefing alapján): a Cmd+K palette és Cmd+Z keyboard undo **kiesett**, helyette **soft-delete mindenre + snapshot-alapú restore + read-only changelog UI**. Logika: a v6 elsősorban agent-mátrix, az agentek mutálnak, és ha kavarodás van akkor egy snapshot restore (vagy kézi Claude Code / új XLSX import) a mentő — sor-szintű undo nem ér meg külön komplexitást. A soft-delete egyúttal megoldja a hard-delete cascade rekonstrukció problémáját. Becslés ~3.5–4 nap, 5 sub-fázis.
@@ -1398,3 +1416,25 @@ Six discrete chunks shipped in one session. Typecheck clean throughout, dev serv
 - Approach when picked up: introduce an internal `_components/icon/` shim (`<Icon name="…" />` wrapper) so the import surface is one file; swap the underlying provider; migrate sites one cluster at a time (sidebar → matrix → library → settings → feeds/shares) and verify visual parity per slice. Keep semantic classNames (`matrix-toolbar__filter-icon`, etc.) — only the inner SVG changes.
 - **Runtime-selectable from Settings → Design** (option, not blocker): once the shim exists, expose an "Icon set" picker in the Design tab (lucide / streamline-core-solid-free / future sets). Persist as `config.lookAndFeel.iconSet` (string), default lucide. The shim reads it via the same `lookAndFeel` query the rest of Design uses; per-icon name maps live in `_components/icon/sets/<set>.ts`. CSS-driven sizing/coloring stays the same — swap is a `<svg>` source change only. Per-client shipping default lives in `db/defaults.ts`.
 - Out of scope until picked up: don't bulk-replace; per global rule "NEVER run search-and-replace across the codebase".
+
+---
+
+## 2026-05-03 (continued) — Post-checkpoint ships
+
+The "Still uncommitted in working tree" list at the EOD checkpoint (themes #1–#8) is **fully resolved** — every theme that was untracked/modified there has since landed in `origin/main`. Working tree is clean as of this update.
+
+### Commits after `68e96cd` checkpoint
+- `a715668` fix(feed-export) — matrix product filter is AND, not OR (two-product selection returned union instead of intersection).
+- `564b9ca` feat(feed-export) — per-size span concat via `|formatted` modifier; shares + feeds page redesign in same pass.
+- `6e22ebd` feat(feeds) — AdForm reference upload (drop-in XLSX from AdForm dashboard becomes a `source='adform_snapshot'` feed_export row); first-class typed-prefix structure (`Text:` / `Bool:` / `Date:` … on column headers, parsed into structured cell types).
+- `103bbe1` feat(texts) — new `/texts` page lists `text_formatting` via the Topics-style `DimensionGrid` (sidebar entry between Assets and Audiences). Adds `TEXT_FORMATTING_COLUMNS` and `TextFormattingRule` type. Reuses inline-edit + archive-toggle + free-text-search pattern; product/status pills self-hide because `text_formatting` has neither field.
+- `f18adb2` feat(adform-snapshot) — on snapshot upload, auto-derive `default_label = "MC<n><v> — <name>"` from the DEFAULT row's `(messaging_card_id, messaging_card_variant)`. New `extractDefaultMc()` helper in `src/lib/adform-snapshot.ts`. Includes `scripts/backfill-snapshot-default-labels.ts` for retroactive fill of existing snapshot rows.
+- `4057921` feat(feed-export) — `POST /api/feed-exports` accepts `dryRun: true` to preview `{decision, diff, previewRowCount}` without persisting; same `diffPayload` shape across dry-run and commit paths. `FeedsView` drops standalone snapshots panel since `adform_snapshot` rows now surface in the unified feeds table.
+
+### Open follow-ups (next session)
+- **Backfill script — run on Erste DB.** `npx tsx scripts/backfill-snapshot-default-labels.ts` against the live DB so pre-`f18adb2` snapshots pick up `default_label` / `default_message_id`. Idempotent, but verify the count printed before/after.
+- **Dry-run dialog smoke.** `FeedExportDialog` should now render the diff stat block (added/removed/changed) the moment it opens, before the user clicks Export. Visually verify: open the dialog on a product with a live feed → counts populate without a download triggering.
+- **AdForm reference upload — round-trip with a fresh AdForm export.** Typed-prefix parser hasn't been exercised against every column type AdForm produces in the wild; pull a recent Erste AdForm-side XLSX and confirm it round-trips through the snapshot importer.
+
+### Memory hygiene (separate from todo.md)
+- `MEMORY.md` "Phase 6 sub-phase ordering" still reads "6d next as of 2026-04-26" — that record is stale. Phases 7/8/9/10 all shipped; current work is post-Phase-10 polish (feeds, shares, dimension editors, AdForm-aware export). Retire or rewrite that memory record next session.

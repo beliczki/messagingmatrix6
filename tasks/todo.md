@@ -1313,3 +1313,81 @@ Six discrete chunks shipped in one session. Typecheck clean throughout, dev serv
 - §6.10a — new `/feeds` top-level menupoint (icon `Rss`, sibling of `/shares`) for the AdForm-aware feed export history; sidebar nav order updated to include it before Monitoring.
 - §6.2 — Matrix Feed view's `RightToolbar` now hosts `FeedExportPanel` (gated to single-product + ACTIVE-only filters) with default-MC `<select>` + `Preview & Export` button → `FeedExportDialog` (decision banner, diff stats, auto-download).
 - AdForm rules baked in: never delete a live row (sticky-superset; carry forward with `IsActive=FALSE` derived from pattern), 500-row hard limit triggers new feed_version, content/end-date/active changes allowed in-place. Mark-uploaded is a manual user action — separate write endpoint, immutable thereafter.
+
+---
+
+## 2026-05-03 — Session checkpoint (end of day)
+
+### Shipped today (5 commits, all pushed to origin/main)
+- `d726bda` feat(matrix+settings) — feedStructure-driven Feed view + Feed Patterns editor (P1: ~1.5h earlier this session before the AdForm thinking).
+- `0aba30a` feat(schema) **0008** — drop strategy/buyingPlatform/dataSource/targetingType/device/campaign*/lineitem* from `topics`. Entity write-set + xlsx export columns + MCP topic_create description follow.
+- `4b727db` feat(schema) **0009** — new `share_comments` table (no annotation column yet — that's 0010).
+- `de71ea6` feat(shares) **0010** — `share_comments.annotation` (text JSON) + full share viewer overhaul: `/share/[id]` snapshot now distinguishes legacy `messages`, `matrixItems` ({messageId,size}), uploaded `creatives`, `files`. New `ShareGallery` + `ShareDetailDialog` + `AnnotationLayer` + `comments` route + `file/[fileId]` public stream + modified `/api/share-galleries` POST. (Did **not** include the bigger `CreativeLibrary.tsx` refactor that wires the Share button — left for the next "library media UX" slice.)
+- `3373fff` feat(matrix+feeds) **0011** — `feed_exports` table + `src/lib/feed-export.ts` (build/diff/decide) + 3 API routes (`POST/GET /api/feed-exports`, `GET/DELETE /api/feed-exports/[id]?download=1`, `POST /api/feed-exports/[id]/mark-uploaded`) + new `/feeds` menupoint (FeedsView + `[id]/FeedDetailView`) + `FeedExportPanel` and `FeedExportDialog` in matrix RightToolbar + Sidebar nav entry.
+
+### AdForm rules locked into feed-export (do not silently undo)
+1. **Never delete a row from a live (uploaded) feed.** Sticky-superset: the next export's message set is `(filtered ACTIVE current)` ∪ `(message_id ∈ live snapshot)`. Carry-forwards re-run through patterns; `IsActive` flips to FALSE naturally via `{{status}}=ACTIVE?TRUE:FALSE`. Archived messages get `IsActive=FALSE` post-override (archive trumps status).
+2. **Auto-bump `feed_version` when AdForm-incompatible.** Triggers: `row_count > 500`, `diff.removed.length > 0`, or `force_new_version` flag. Otherwise append-mode keeps current version.
+3. **Uploaded ≠ exported.** Two timestamps. The user manually marks an export as uploaded after pushing the XLSX to AdForm. Uploaded rows are immutable history (DELETE → 409).
+4. **Default row** is the v5 transform: `-a_<aud>- → -a_DEFAULT-`, `-l_<n> → -l_ANY`, `advert_id="1"`, `IsDefault="TRUE"`, `IsActive="TRUE"` regardless of source message archive state. Re-evaluates only columns whose pattern references `{{Audience_Key}}`.
+
+### Still uncommitted in working tree (next-session triage list)
+~15 modified + ~20 untracked, grouping themes the user can slice as separate features:
+
+**1. Settings/Users dialogs (modal-ize from sidebar bottom group)**
+- `?? src/app/(app)/_components/AppDialog.tsx`
+- `?? src/app/(app)/_components/SettingsDialog.tsx`
+- `?? src/app/(app)/_components/UsersDialog.tsx`
+- `?? src/app/_components/AppShell.tsx`
+- ` M src/app/(app)/layout.tsx` (mounts AppShell)
+- ` M src/app/(app)/settings/SettingsView.tsx` (inDialog prop, header actions slot)
+- ` M src/app/(app)/users/UsersView.tsx` (inDialog prop)
+- ` M src/app/api/users/route.ts` (last-active / last-action / live presence columns?)
+
+**2. Audiences/Topics dimension editors (Excel-like)**
+- `?? src/app/(app)/audiences/` (whole dir)
+- `?? src/app/(app)/topics/` (whole dir)
+- `?? src/app/(app)/_components/DimensionGrid/` (shared grid component)
+
+**3. Live presence (SSE-based)**
+- `?? src/lib/presence.ts`
+- `?? src/app/_components/usePresenceConnection.ts`
+- ` M src/app/api/events/route.ts` (presence registry hooks)
+
+**4. Unified filter syntax**
+- `?? src/lib/search-query.ts`
+- `?? tests/unit/search-query.test.ts`
+- ` M src/app/(app)/matrix/MatrixToolbar.tsx` (Filter icon, persistent search)
+- (already partly used in `MatrixGrid.tsx` from `d726bda`)
+
+**5. Library + Matrix media UX overhaul**
+- ` M src/app/(app)/creative-library/CreativeLibrary.tsx` (~520 lines — share button, dedupe, masonry, `MatrixDetailDialog` wiring)
+- `?? src/app/(app)/creative-library/MatrixDetailDialog.tsx`
+- `?? src/app/(app)/creative-library/ShareCreateDialog.tsx` (companion to commit `de71ea6`)
+- `?? src/app/(app)/_components/MatrixIframeTile.tsx`
+- ` M src/app/(app)/assets/AssetsLibrary.tsx`
+- ` M src/app/(app)/matrix/MessageEditor.tsx`
+- ` M src/app/(app)/matrix/GridView.tsx`
+- `?? src/app/(app)/matrix/HeaderDetailDialog.tsx` (audience/topic header dialog)
+- ` M src/app/(app)/matrix/types.ts` (Audience/Topic type fill-out)
+
+**6. MCP relocation + connector public route**
+- `?? src/app/api/mcp/`
+- `?? src/app/(app)/settings/_mcp/`
+
+**7. Public render route**
+- `?? src/app/api/render/public/`
+
+**8. Misc helpers**
+- `?? src/app/_components/useLongPress.ts`
+- ` M src/app/globals.css` (semantic class additions for new components)
+- ` M tasks/component-inventory.md` (new component names from above)
+- ` M package.json` / `M package-lock.json` (presumably new deps for one of the above)
+
+### Files to ignore on next checkpoint
+- `?? db/matrix.db.backup-20260502-152313` — local backup, not for git.
+
+### Resumption
+- `git status` shows what's left. Each numbered theme above is a self-contained commit candidate; pick one, slice the relevant modified+untracked files into a coherent state (mind shared files like `globals.css` / `types.ts` / `MatrixGrid.tsx` which receive contributions from multiple themes).
+- AdForm flow is functional but **untested in the running app** — port collision blocked the smoke check at end of session. Next session: free port 6001 (or use `dev:demo` on 6000), navigate Matrix → filter to one product + ACTIVE → confirm `FeedExportPanel` ungates, pick a default, Preview & Export, verify XLSX downloads + `/feeds/[id]` opens.
+- The `de71ea6` share viewer commit needs a UI entry point — currently `ShareCreateDialog.tsx` is untracked (sits in CreativeLibrary slice). Without it, users can read existing shares but can't create new ones with the new matrix+creatives shape. Slice **#5** above is the natural next commit.

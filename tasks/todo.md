@@ -1391,3 +1391,9 @@ Six discrete chunks shipped in one session. Typecheck clean throughout, dev serv
 - `git status` shows what's left. Each numbered theme above is a self-contained commit candidate; pick one, slice the relevant modified+untracked files into a coherent state (mind shared files like `globals.css` / `types.ts` / `MatrixGrid.tsx` which receive contributions from multiple themes).
 - AdForm flow is functional but **untested in the running app** — port collision blocked the smoke check at end of session. Next session: free port 6001 (or use `dev:demo` on 6000), navigate Matrix → filter to one product + ACTIVE → confirm `FeedExportPanel` ungates, pick a default, Preview & Export, verify XLSX downloads + `/feeds/[id]` opens.
 - The `de71ea6` share viewer commit needs a UI entry point — currently `ShareCreateDialog.tsx` is untracked (sits in CreativeLibrary slice). Without it, users can read existing shares but can't create new ones with the new matrix+creatives shape. Slice **#5** above is the natural next commit.
+
+### Pinned future polish — icon system upgrade
+- Replace `lucide-react` with Streamline **core-solid-free** (https://www.streamlinehq.com/icons/core-solid-free).
+- Scope: ~33 import sites across `src/` (sidebar, toolbars, dialogs, status badges, FeedExportPanel, FeedsView, etc.). Currently `lucide-react@^1.11.0`.
+- Approach when picked up: introduce an internal `_components/icon/` shim (`<Icon name="…" />` wrapper) so the import surface is one file; swap the underlying provider; migrate sites one cluster at a time (sidebar → matrix → library → settings → feeds/shares) and verify visual parity per slice. Keep semantic classNames (`matrix-toolbar__filter-icon`, etc.) — only the inner SVG changes.
+- Out of scope until picked up: don't bulk-replace; per global rule "NEVER run search-and-replace across the codebase".

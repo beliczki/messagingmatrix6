@@ -34,7 +34,7 @@ export default function RootLayout({
   const laf = getActiveLookAndFeel();
   const style = lookAndFeelToCssVars(laf) as CSSProperties;
   return (
-    <html lang="en" style={style}>
+    <html lang="en" style={style} suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT(laf.colorMode) }}

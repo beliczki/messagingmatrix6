@@ -1438,3 +1438,127 @@ The "Still uncommitted in working tree" list at the EOD checkpoint (themes #1–
 
 ### Memory hygiene (separate from todo.md)
 - `MEMORY.md` "Phase 6 sub-phase ordering" still reads "6d next as of 2026-04-26" — that record is stale. Phases 7/8/9/10 all shipped; current work is post-Phase-10 polish (feeds, shares, dimension editors, AdForm-aware export). Retire or rewrite that memory record next session.
+
+---
+
+## 🚧 BLOCKING — pre-active-use punch list (added 2026-05-03)
+
+Items the user flagged as **must-be-handled before v6 goes into real day-to-day use**. Each item is now expanded against the actual schema + code surface. Steps are commit-sized; **do not start work** until the user picks one and green-lights it.
+
+### Anchor facts (from current-state survey)
+- `audiences.buyingPlatform` is freeform TEXT (`src/db/schema.ts:133`); spec line 90 lists DV360/DBM as examples but no enum. Topics/messages carry no platform field.
+- `creatives` has soft link `(mcNumber, mcVariant)` (`src/db/schema.ts:320-321`); no FK to messages, no join table. Index at `src/db/schema.ts:341`.
+- Creative Library mixes `kind:'uploaded'` + `kind:'matrix'` (synthesized) in `src/app/(app)/creative-library/CreativeLibrary.tsx:70-100`. No "unmatched" filter exists.
+- `reporting` table is AdForm-shaped (`src/db/schema.ts:370-396`), keyed by `mcLabel` (PMMID), no `platform` field, no FK to messages. Monitoring page is a Phase 6 placeholder (`src/app/(app)/monitoring/page.tsx`).
+- `feedExports` row has `source` discriminator: `'export'` | `'adform_snapshot'` (`src/db/schema.ts:549`). FeedRowSet shape is platform-neutral; AdForm-specific bits are PMMID parsing (`src/lib/adform-snapshot.ts:91-108`), DEFAULT-row rewrites + typed-prefix columns (`src/lib/feed-export.ts:165-170`), and `IsDefault`/`IsActive` autofill.
+- MCP tool surface complete for audience/topic/mc CRUD + batch (`src/lib/mcp.ts:1112-1124`). Bearer auth + deploy-pinned active-client check (`src/lib/mcp.ts:117-143`). 60/min write rate limit.
+
+---
+
+### 1. Meta as a first-class platform
+
+> **Push-back first** — before any code: is the user driving Meta campaigns out of MM6, or just *tracking* what's running on Meta? If the answer is "tracking + reporting only" then we're really only on the **Monitoring** half of this (item 5/6); audiences + feed-export do not need a Meta path. Ask the user to pick (a) full Meta audience+feed lifecycle in MM6, vs (b) Meta audiences are managed in Meta Ads Manager and we only ingest reports.
+
+If answer is (a), full lifecycle:
+- [ ] **1.1 Schema: `audiences.platform` enum.** Add `platform TEXT NOT NULL DEFAULT 'adform'` constraint-by-convention (`adform | meta | dv360 | direct_display`). Keep freeform `buyingPlatform` as the **DSP/seat label within a platform** (e.g. platform=meta + buyingPlatform="business_mgr_id_42"). Migration + per-row backfill (`platform='adform'` for all existing rows on Erste).
+- [ ] **1.2 Audiences UI: platform pill + filter.** Add a `platform` column to `DimensionGrid` (`src/app/(app)/_components/DimensionGrid/columns.ts`) with a fixed-options pill editor; add a top-of-page filter pill `Platform: All|AdForm|Meta|DV360|Direct`.
+- [ ] **1.3 Per-platform `feedStructure` + `feedPatterns` config.** Today `config.feedStructure` / `config.patterns.feed` are single strings. Promote to per-platform: `config.feedStructure.adform`, `config.feedStructure.meta`. Settings → Patterns gets a platform tab.
+- [ ] **1.4 Feed export route platform-aware.** `POST /api/feed-exports` resolves the audience's platform → picks the right `feedStructure`/`feedPatterns`. PMMID generation stays AdForm-only; Meta export emits a Meta-shape row (campaign_name / adset_name / ad_name / customer_list_csv depending on Meta's bulk-import format).
+- [ ] **1.5 Feeds UI: platform discriminator.** `FeedsView` (`src/app/(app)/feeds/FeedsView.tsx:62-71`) gets a `platform` column + filter pill. Row click routes to platform-specific detail view if shapes diverge enough; otherwise reuse with column-set switching.
+- [ ] **1.6 Decide Meta export shape.** **Open question to lock with user:** Meta's "feed" is typically a CSV upload to Custom Audience or a bulk Ads Manager spreadsheet. Pick one before designing 1.4. Most likely: bulk Ads Manager XLSX (campaign/adset/ad rows). Without this lock, 1.4 is unbuildable.
+
+If answer is (b), tracking only: skip 1.1–1.6, do **only** the audience-level field needed to tag a record as "this audience runs on Meta" — likely just expand `buyingPlatform` enum docs, add a Settings-managed list of allowed values, and wire item 5/6 to use it.
+
+### 2. Direct Display audiences
+
+Direct Display = manually-bought, vendor/publisher-direct placements (no DSP). Even smaller scope than Meta.
+- [ ] **2.1 Same schema move as 1.1** (`platform='direct_display'`). No new fields needed if `buyingPlatform` already captures the vendor/publisher (e.g. "Index.hu", "Origo").
+- [ ] **2.2 Direct-Display-specific fields TBD.** Open question: does the user need `placement_id`, `vendor_contact`, `insertion_order_ref`? **Lock with user before adding.** Likely answer: just the `platform` flag is enough; vendor name fits in `buyingPlatform`.
+- [ ] **2.3 Reporting ingest only — no feed-export.** Direct Display has no creative feed (creatives are sent as raw HTML5 ZIPs to the publisher). So this item is really an audiences-table tagging task + monitoring-side ingest (item 5).
+
+### 3. Match Creative Library uploads → matrix cells
+
+The soft `(mcNumber, mcVariant)` link in `creatives` is enough to *match*, but the user-facing flow to set those values on an upload doesn't exist as a first-class action.
+- [ ] **3.1 Inspect current upload path.** `src/app/(app)/creative-library/...` upload flow: does it set `mcNumber`/`mcVariant` from filename today? If yes, document the regex; if no, the field stays `null` until the new manual-match UI lands. (Survey only — no edit.)
+- [ ] **3.2 Manual match UI on creative detail.** `CreativeDetailDialog` gets a new "Matrix link" section: two dropdowns (audience+topic) + an MC number/variant picker filtered to that audience+topic's existing messages. Save → `PATCH /api/creatives/[id]` updates `mcNumber`/`mcVariant`. Same dialog also offers "Unlink" to set both to `null`.
+- [ ] **3.3 Filename auto-match heuristic on upload.** On `POST /api/creatives` extract `mc(\d+)([a-z])` (case-insensitive) from filename; if found, prefill `mcNumber`/`mcVariant`. Show as "Suggested match — click confirm" rather than committing silently (avoids the v5 mistake where wrong filenames silently mis-attached creatives). Confirmation lives in the same dialog as 3.2.
+- [ ] **3.4 Bulk-match dialog.** Toolbar action "Bulk match by filename" runs the regex over all uploaded-kind items where `mcNumber IS NULL` and shows a confirm-table (filename → suggested MC). User multi-selects + confirms → batch `PATCH`. Reuses the dialog pattern from `FeedExportDialog`'s diff-stats block (design-reuse rule).
+- [ ] **3.5 Decide: keep soft link, or add `creative_message_links` join table?** Soft `(mcNumber, mcVariant)` works for 1-creative-per-cell; a join table is needed if we want N creatives per cell (e.g. one MC has 3 banner variants in different sizes). **Open question.** v5 used soft link, never blocked anyone — default keep soft, revisit if a real workflow demands many-to-many.
+
+### 4. "Unmatrixed creatives" view
+
+Smaller than item 3 — just a filter, no schema change.
+- [ ] **4.1 Add filter pill to Creative Library toolbar.** Reuse the existing toolbar-pill style (design-reuse rule). Three states: `All | Matrixed | Unmatrixed`. Filter logic: `kind === 'uploaded' && (mcNumber == null || mcVariant == null)`.
+- [ ] **4.2 Tile badge for unmatrixed.** Small `status-badge--unmatrixed` corner badge so unmatrixed items are visible even when "All" is selected. Use existing badge component.
+- [ ] **4.3 Persist selected filter.** localStorage key per existing convention: `mm6_creative_library_match_filter`.
+- [ ] **4.4 Counts in toolbar.** Show `(N)` next to each filter pill — same pattern as DimensionGrid status filters.
+
+### 5. Upload Meta + AdForm reports into Monitoring
+
+Reporting table exists but ingest endpoint doesn't, and the table is AdForm-shaped. Two tasks: schema generalization + import endpoints + UI.
+- [ ] **5.1 Schema: `reporting.platform` field.** Add `platform TEXT NOT NULL DEFAULT 'adform'` to mirror item 1.1. Backfill existing rows. Keeps `mcLabel` as the AdForm-only PMMID; add `meta_ad_id`/`meta_ad_name`/`meta_campaign` nullable fields for Meta rows. Or — cleaner — add `external_id TEXT` + `external_name TEXT` as platform-agnostic identifiers and let parsers fill them appropriately.
+- [ ] **5.2 Shared importer route.** `POST /api/reporting/import` accepts `multipart/form-data` with `file` + `platform` field. Dispatches to per-platform parser. Returns `{ imported, skipped, diff }` like feed-export.
+- [ ] **5.3 AdForm parser.** Reads the AdForm reporting XLSX export shape (the user already has these — get a sample for the test fixtures). Maps `mcLabel` (banner name column) + impressions/clicks/CTR.
+- [ ] **5.4 Meta parser.** Reads Meta Ads Manager XLSX/CSV export. Maps `meta_ad_id` + `meta_ad_name` + impressions/clicks/CTR/spend. **Need a sample export file from the user before locking column names** — Meta export columns vary by report template.
+- [ ] **5.5 Monitoring page UI.** Replace `src/app/(app)/monitoring/page.tsx` placeholder with a `DimensionGrid`-style list of reporting rows. Filters: platform, date range, product (via audience join), mc number. Reuses inline-edit + archive patterns. **Design-reuse rule applies** — no new layout primitives; copy `/texts` page structure.
+- [ ] **5.6 Upload widget.** Top-of-Monitoring drag-drop XLSX/CSV (mirrors AdForm-snapshot upload UX in `/feeds`). Auto-detects platform from column header signature; lets user override.
+
+### 6. Match monitoring rows → matrix cells
+
+Builds on item 5. Two sub-paths because AdForm uses PMMID and Meta uses ad_name regex.
+- [ ] **6.1 Schema: `reporting.message_id` FK.** Nullable FK to `messages.id`. NOT a hard constraint (a reporting row can survive its message being archived). Backfill with the resolver below.
+- [ ] **6.2 AdForm resolver.** PMMID → message_id. The PMMID format is locked (`src/lib/adform-snapshot.ts:91-108`); reuse `extractDefaultMc` + the audience/topic/variant regex to look up the message. Atomic: backfill once across existing reporting rows in a transaction.
+- [ ] **6.3 Meta resolver.** Two strategies, in order: **(a)** if creative auto-match (item 3.3) embedded MC label in the filename, the imported `meta_ad_name` likely contains it → same regex; **(b)** fallback: surface unresolved rows in a "Needs match" table on Monitoring with manual-link UI (same dialog as 3.2).
+- [ ] **6.4 Matrix cell impression/CTR badge.** Once a message has linked reporting rows, MatrixGrid cell shows a small bottom-corner stat badge (impressions or CTR). Defer styling to a follow-up — the data wiring is the actual blocker.
+- [ ] **6.5 "Unmatched reporting" view.** Mirror of item 4 but for reporting: rows where `message_id IS NULL`. Filter pill on Monitoring page. Manual-link action per row.
+
+### 7. Manual UI test — add new MC + new audience + new topic
+
+Smoke test on the running app, not a build. Output is a written checklist in this file with verdicts.
+- [ ] **7.1 Start the dev server** (`npm run dev:erste` or whichever client) on a clean DB seed.
+- [ ] **7.2 Create a new audience** via Audiences page → "+ Add" → fill required fields → save. Verify: appears in DimensionGrid, audit_log row created, matrix grid header includes it.
+- [ ] **7.3 Create a new topic** via Topics page same flow. Verify: appears in matrix grid as a new row.
+- [ ] **7.4 Create a new MC** at the intersection of new audience + new topic. Verify: cell renders, status flow works (incoming→active→approved), iframe preview loads.
+- [ ] **7.5 Verify AdForm feed-export.** Open `/feeds` for the new audience's product → confirm the new MC appears in the next dry-run preview with the correct PMMID. Don't actually publish — dry-run is enough.
+- [ ] **7.6 Capture friction.** Every 4xx, every confusing copy, every step that needed two clicks where one would do — write back into this section as follow-up bullets.
+
+### 8. Same flow via MCP
+
+Drives the same create flow through `audience_create` / `topic_create` / `mc_create` tools.
+- [ ] **8.1 Provision MCP token.** Settings → MCP → generate token for the active client (e.g. Erste).
+- [ ] **8.2 Wire token into Claude Code's MCP config** (`~/.claude/claude_code_config.json` or equivalent — verify exact location). URL = the local dev server's `/api/mcp` route.
+- [ ] **8.3 Drive create-audience tool.** From Claude Code, call `audience_create` with the same fields as 7.2. Verify same DB row + audit_log shows agent as actor (`audit_log.actor_kind='mcp'`).
+- [ ] **8.4 Drive create-topic + create-mc tools.** Same pattern.
+- [ ] **8.5 Verify rate-limit + active-client guards.** Try with a token from a different client deploy → expect 401. Hammer 60+ writes/min → expect 429.
+- [ ] **8.6 Capture gaps.** Any tool param shape that didn't match what the agent naturally produces — write follow-up. E.g. if `mc_create` requires `audienceId` but the agent had only `audienceKey`, that's a usability bug.
+
+### 9. Agent test — MC add from a new prodlist
+
+The "is the matrix self-driving yet" check. End-to-end: agent reads a real product list, proposes MCs, creates them via MCP.
+- [ ] **9.1 Get a real Erste prodlist** (XLSX or paste). Realistic source — not a synthetic test fixture.
+- [ ] **9.2 Define the prompt.** "Here's the latest prodlist; for each new product not yet in the matrix, propose MC entries with name + status='incoming' and create them via MCP." Make this a saved prompt in the project's prompts library if one exists; otherwise capture it inline.
+- [ ] **9.3 Dry-run mode first.** Agent should call `list_products` + `list_audiences` to figure out what's already there, then **propose** the diff in a chat message before calling `mc_create_batch`. Confirm the proposal looks right.
+- [ ] **9.4 Full-auto mode.** Re-run with explicit "execute the create_batch directly". Verify: `audit_log` shows the batch operation, matrix UI shows the new MCs, no orphaned rows.
+- [ ] **9.5 Capture the gaps.** This is the highest-signal test of the whole system. Anything the agent had to ask back for — a missing list-tool, an awkward param, a confusing error — goes into the next iteration's todo. **Most likely outcome: the test reveals 2-3 small MCP tool ergonomics fixes.** Plan for that, not for "it just works".
+
+### Sequencing recommendation
+1. Items **7 + 8 + 9 first** (manual + MCP + agent smoke). Cheapest, highest signal, confirms the system is even pre-active-use-ready before we add platform/match work on top.
+2. Then **3 + 4** (creative→cell match + unmatrixed view). Self-contained, no schema migration risk, immediate user value.
+3. Then **5 + 6** (monitoring ingest + match). Bigger; depends on item 6.2's PMMID resolver being correct, which is exercised by AdForm-only first.
+4. **1 + 2 (Meta + Direct Display) last**, and **only after the push-back conversation** — the cheapest version of these is "tag audiences with a platform field, do nothing else" and may be enough.
+
+### 10. Dark-mode component sweep (post-launch polish)
+
+Infra port from the bizi project landed 2026-05-07: shadcn-style design tokens in `globals.css` (`--background`, `--surface{,-elevated,-alt}`, `--text-{primary,secondary,tertiary}`, `--border-{default,strong,subtle}` + light/dark variants) wired into `tailwind.config.ts` as semantic color names (`bg-background`, `bg-surface`, `text-text-primary`, `border-border`, etc.). Three base-layer rules in `globals.css` now flip `body` bg/text, all form inputs, and the default border color when `html.dark` is set. **Result: ~60–70% of the UI flips on toggle without per-component changes.**
+
+The remaining 30–40% is hardcoded utility classes that don't reference theme tokens. Migrate piecemeal — **never search-and-replace, one cluster at a time, verify visually**.
+- [ ] **10.1 Sidebar + top toolbar.** `bg-white` → `bg-surface-elevated`; `text-slate-700` → `text-text-primary`; `text-slate-500` → `text-text-secondary`; `border-slate-200` → `border-border` (or drop entirely, since `*` rule handles default).
+- [ ] **10.2 Matrix grid chrome.** Header row, audience/topic labels, status badges background. Cells with creative content stay light (banners are inherently white-bg).
+- [ ] **10.3 Modals + dialogs.** All dialog containers (`fixed inset-0`, `bg-white rounded-lg`) → `bg-surface-elevated`. SettingsView already uses `<html>` styles so check whether it inherits cleanly or needs explicit `bg-surface-elevated`.
+- [ ] **10.4 DimensionGrid + DataGrid.** Row backgrounds (zebra), header bg, hover states. Use `bg-surface-alt` for zebra alt-rows.
+- [ ] **10.5 Form fields specifically.** Inputs already flip via the global rule. But buttons/selects with explicit `bg-white border-slate-300` need migration. `bg-surface` + the global border color works for most.
+- [ ] **10.6 Status pills + brand chips.** These use `--brand-*` and `--status-*` already — verify legibility against dark backgrounds. May need `--status-*-fg` companion vars for dark-mode contrast.
+- [ ] **10.7 Iframe preview chrome.** `MatrixIframePreview` thumb-checker bg + "render failed" placeholder color. Banners themselves stay light (intentional).
+- [ ] **10.8 Visual QA pass** with the dev server in dark mode + screenshot diffing for key pages: Matrix, Creative Library, Assets, Texts, Audiences, Topics, Templates, Shares, Feeds, Monitoring, Settings (all tabs).
+
+Order suggestion: 10.1 (sidebar) → 10.3 (modals) → 10.4 (grids) → 10.2 (matrix chrome) → 10.5/10.6/10.7. Each is independently shippable; sequencing is just visual-priority order.

@@ -86,20 +86,35 @@ function MatrixIframePreview({
         skipAnimations: false,
       }),
     })
-      .then((r) => (r.ok ? r.text() : Promise.reject(r)))
+      .then(async (r) => {
+        if (r.ok) return r.text();
+        const detail = await r.text().catch(() => "");
+        return Promise.reject({ status: r.status, statusText: r.statusText, detail });
+      })
       .then((text) => {
         if (cancelled) return;
         renderCache.set(k, text);
         setHtml(text);
       })
-      .catch(() => {
+      .catch((err) => {
         if (cancelled) return;
+        console.error("[MatrixIframePreview] render failed", {
+          messageId: message.id,
+          version: message.version,
+          templateName,
+          size,
+          err,
+        });
         setHtml("");
       });
     return () => {
       cancelled = true;
     };
   }, [visible, html, message.id, message.version, templateName, size]);
+
+  function retry() {
+    setHtml(null);
+  }
 
   const { w: nativeW, h: nativeH } = useMemo(() => parseSize(size), [size]);
   const scale =
@@ -148,9 +163,14 @@ function MatrixIframePreview({
           />
         </>
       ) : html === "" ? (
-        <div className="matrix-iframe-preview__error flex size-full items-center justify-center text-[10px] text-rose-500">
-          render failed
-        </div>
+        <button
+          type="button"
+          onClick={retry}
+          title="Click to retry. See browser console for the failure detail."
+          className="matrix-iframe-preview__error flex size-full cursor-pointer items-center justify-center text-[10px] text-rose-500 hover:underline"
+        >
+          render failed — retry
+        </button>
       ) : (
         <div className="matrix-iframe-preview__placeholder flex size-full items-center justify-center text-slate-300">
           <Code2 className="size-6" />

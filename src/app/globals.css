@@ -3,6 +3,7 @@
 @tailwind utilities;
 
 :root {
+  color-scheme: light;
   --brand-primary: #1f2937;
   --brand-button: #2563eb;
   --brand-secondary-1: #f3f4f6;
@@ -21,6 +22,114 @@
   --status-error: #ef4444;
   --status-dead: #000000;
   --status-memory: #ec4899;
+
+  /* Neutral palette — shadcn-style design tokens (bizi pattern). All flip via
+     html.dark. Components reference via Tailwind tokens (bg-background,
+     bg-surface, text-text-primary, border-border) instead of hardcoded
+     bg-white / text-slate-700 — so a `.dark` class on <html> recolors the
+     whole tree. Hardcoded-color components stay light until migrated; the
+     body/input/border base rules below give a "rough dark mode" by default. */
+  --background: #ffffff;
+  --surface: #ffffff;
+  --surface-elevated: #ffffff;
+  --surface-alt: #f8f9fa;
+  --text-primary: #111111;
+  --text-secondary: #666666;
+  --text-tertiary: #999999;
+  --border-default: rgba(0, 0, 0, 0.1);
+  --border-strong: #000000;
+  --border-subtle: rgba(0, 0, 0, 0.15);
+}
+
+html.dark {
+  color-scheme: dark;
+  --background: #0a0a0a;
+  --surface: #1a1a1a;
+  --surface-elevated: #252525;
+  --surface-alt: #222222;
+  --text-primary: #e5e5e5;
+  --text-secondary: #999999;
+  --text-tertiary: #666666;
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-strong: #ffffff;
+  --border-subtle: rgba(255, 255, 255, 0.15);
+}
+
+@layer base {
+  /* Default border color flips with theme. Component-level border-{color}
+     utilities (e.g. border-slate-200) still win — this only affects elements
+     without an explicit border-color. */
+  *, ::before, ::after {
+    border-color: var(--border-default);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--text-primary);
+  }
+  /* Form inputs get explicit themed bg + color so they don't inherit a stale
+     parent background or rely on UA defaults. Components can still override
+     per-input via Tailwind utilities. */
+  input, textarea, select {
+    background-color: var(--surface);
+    color: var(--text-primary);
+  }
+}
+
+@layer utilities {
+  /* Dark-mode shim: re-map the most common hardcoded Tailwind utility classes
+     to themed CSS vars when html.dark is set. Specificity (0,0,2,0) beats
+     plain Tailwind utilities (0,0,1,0) without !important.
+
+     Scope: only LIGHT-MODE-DEFAULT classes — bg-white, bg-slate-50/100/200/300,
+     text-slate-500..900, border-slate-100/200/300. Already-dark classes
+     (bg-slate-700/800/900, text-slate-100/200/300) are intentionally not
+     overridden — those are typically used as light-text-on-dark-bg and should
+     keep their meaning in dark mode.
+
+     This is a transitional shim; per-component migration to bg-surface /
+     text-text-primary / border-border tokens is tracked as item 10 in
+     tasks/todo.md. As components migrate, these rules become no-ops. */
+
+  html.dark .bg-white { background-color: var(--surface); }
+  html.dark .bg-slate-50 { background-color: var(--surface-alt); }
+  html.dark .bg-slate-100 { background-color: var(--surface-alt); }
+  html.dark .bg-slate-200 { background-color: var(--surface-elevated); }
+  html.dark .bg-slate-300 { background-color: var(--surface-elevated); }
+
+  html.dark .hover\:bg-white:hover { background-color: var(--surface); }
+  html.dark .hover\:bg-slate-50:hover { background-color: var(--surface-alt); }
+  html.dark .hover\:bg-slate-100:hover { background-color: var(--surface-alt); }
+  html.dark .hover\:bg-slate-200:hover { background-color: var(--surface-elevated); }
+
+  html.dark .text-slate-900 { color: var(--text-primary); }
+  html.dark .text-slate-800 { color: var(--text-primary); }
+  html.dark .text-slate-700 { color: var(--text-primary); }
+  html.dark .text-slate-600 { color: var(--text-secondary); }
+  html.dark .text-slate-500 { color: var(--text-secondary); }
+  html.dark .text-gray-700 { color: var(--text-primary); }
+  html.dark .text-gray-500 { color: var(--text-secondary); }
+
+  html.dark .border-slate-100 { border-color: var(--border-default); }
+  html.dark .border-slate-200 { border-color: var(--border-default); }
+  html.dark .border-slate-300 { border-color: var(--border-default); }
+  html.dark .border-gray-300 { border-color: var(--border-default); }
+
+  /* "Filled dark" primary-button pattern (bg-slate-900 + text-white) flips to
+     "filled light" so active toggles, filter-count chips, primary CTAs,
+     autosave/skip-anim toggles, view-selector active state, and the Upload
+     button stay visually distinct from the surrounding surface in dark mode.
+     The compound .bg-slate-900.text-white selector inverts text only when both
+     classes are present together — avoids breaking rare cases like
+     `bg-slate-900 text-rose-500`. */
+  html.dark .bg-slate-900 { background-color: var(--text-primary); }
+  html.dark .bg-slate-900.text-white { color: var(--background); }
+  html.dark .hover\:bg-slate-800:hover { background-color: var(--text-primary); }
+  html.dark .border-slate-900 { border-color: var(--text-primary); }
+  html.dark .text-slate-900 { color: var(--text-primary); }
+  /* Inverted-context border (e.g. inner check-box of an active autosave btn:
+     `bg-white border-white` on top of a dark filled button). In dark mode the
+     outer flips to light, so the inner border needs to be dark for contrast. */
+  html.dark .border-white { border-color: var(--background); }
 }
 
 @layer components {
@@ -61,12 +170,43 @@
   .status-badge--memory { background-color: color-mix(in srgb, var(--status-memory) 18%, white); color: var(--status-memory); }
 
   /* Transparency checkerboard behind thumbnails so PNG/SVG transparency is
-     visible. Two-tone gray, 16px tile. */
+     visible. Two-tone gray, 16px tile. Flips to dark checker in dark mode so
+     transparent ad previews stay legible against a themed surface. */
   .thumb-checker {
     background-color: #fff;
     background-image:
       conic-gradient(#e5e7eb 25%, transparent 0 50%, #e5e7eb 0 75%, transparent 0);
     background-size: 16px 16px;
+  }
+  html.dark .thumb-checker {
+    background-color: #1a1a1a;
+    background-image:
+      conic-gradient(#333333 25%, transparent 0 50%, #333333 0 75%, transparent 0);
+  }
+
+  /* Preview viewport backgrounds for the iframe pane. "light" / "dark" stay
+     deliberately fixed (so the user can see the ad against a chosen context),
+     only "checker" flips with theme — its purpose is to reveal transparency
+     against whatever surface the user is currently viewing. */
+  .preview-viewport--light { background-color: #ffffff; }
+  .preview-viewport--dark { background-color: #1f2937; }
+  .preview-viewport--checker {
+    background-color: #f9fafb;
+    background-image:
+      linear-gradient(45deg, #d1d5db 25%, transparent 25%),
+      linear-gradient(-45deg, #d1d5db 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #d1d5db 75%),
+      linear-gradient(-45deg, transparent 75%, #d1d5db 75%);
+    background-size: 20px 20px;
+    background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+  }
+  html.dark .preview-viewport--checker {
+    background-color: #1a1a1a;
+    background-image:
+      linear-gradient(45deg, #333333 25%, transparent 25%),
+      linear-gradient(-45deg, #333333 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #333333 75%),
+      linear-gradient(-45deg, transparent 75%, #333333 75%);
   }
 
   /* Soft-archive (Phase 10a) — applied to any list row whose archived_at is set. */

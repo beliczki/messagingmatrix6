@@ -58,12 +58,12 @@ export default function PreviewPane({
 
   return (
     <div className="preview-pane flex h-full flex-col">
-      <div className="preview-pane__toolbar flex h-10 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-3">
+      <div className="preview-pane__toolbar flex h-10 shrink-0 items-center justify-between border-b border-border bg-surface px-3">
         <div className="flex items-center gap-2">
           <select
             value={size ?? ""}
             onChange={(e) => onSizeChange(e.target.value)}
-            className="custom-dropdown preview-pane__size-select rounded border border-slate-300 bg-white px-2 py-1 text-xs"
+            className="custom-dropdown preview-pane__size-select rounded border border-border bg-surface px-2 py-1 text-xs"
             disabled={sizes.length === 0}
           >
             {sizes.map((s) => (
@@ -77,8 +77,8 @@ export default function PreviewPane({
             className={clsx(
               "preview-pane__skip-anim flex items-center gap-1 rounded border px-2 py-1 text-xs",
               skipAnim
-                ? "preview-pane__skip-anim--active border-slate-900 bg-slate-900 text-white"
-                : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+                ? "preview-pane__skip-anim--active border-text-primary bg-text-primary text-background"
+                : "border-border bg-surface text-text-primary hover:bg-surface-alt",
             )}
             title="Skip animations in preview"
           >
@@ -86,8 +86,8 @@ export default function PreviewPane({
               className={clsx(
                 "flex size-3.5 items-center justify-center rounded-sm border",
                 skipAnim
-                  ? "border-white bg-white text-slate-900"
-                  : "border-slate-400",
+                  ? "border-background bg-background text-text-primary"
+                  : "border-border-subtle",
               )}
             >
               {skipAnim && <Check className="size-2.5" strokeWidth={3} />}
@@ -96,7 +96,7 @@ export default function PreviewPane({
           </button>
         </div>
         <div className="flex items-center gap-1">
-          <div className="preview-pane__bg-group flex overflow-hidden rounded border border-slate-300">
+          <div className="preview-pane__bg-group flex overflow-hidden rounded border border-border">
             <BgBtn active={bg === "light"} onClick={() => onBgChange("light")} title="Light background">
               <Sun className="size-3.5" />
             </BgBtn>
@@ -110,7 +110,7 @@ export default function PreviewPane({
           {onRefresh ? (
             <button
               onClick={handleRefresh}
-              className="preview-pane__refresh rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50"
+              className="preview-pane__refresh rounded border border-border bg-surface p-1 text-text-primary hover:bg-surface-alt"
               title="Refresh preview"
             >
               <RefreshCw className="size-3.5" />
@@ -121,8 +121,12 @@ export default function PreviewPane({
       </div>
       <div
         ref={boxRef}
-        className="preview-pane__viewport flex flex-1 items-center justify-center overflow-hidden"
-        style={bgStyleFor(bg)}
+        className={clsx(
+          "preview-pane__viewport flex flex-1 items-center justify-center overflow-hidden",
+          bg === "light" && "preview-viewport--light",
+          bg === "dark" && "preview-viewport--dark",
+          bg === "checker" && "preview-viewport--checker",
+        )}
       >
         <PreviewIframe key={reloadKey} html={html} size={size} box={box} />
       </div>
@@ -148,30 +152,13 @@ function BgBtn({
       className={clsx(
         "preview-pane__bg-btn flex items-center justify-center px-1.5 py-1 transition-colors",
         active
-          ? "preview-pane__bg-btn--active bg-slate-900 text-white"
-          : "bg-white text-slate-700 hover:bg-slate-50",
+          ? "preview-pane__bg-btn--active bg-text-primary text-background"
+          : "bg-surface text-text-primary hover:bg-surface-alt",
       )}
     >
       {children}
     </button>
   );
-}
-
-function bgStyleFor(bg: PreviewBg): React.CSSProperties {
-  if (bg === "dark") return { backgroundColor: "#1f2937" };
-  if (bg === "checker") {
-    return {
-      backgroundColor: "#f9fafb",
-      backgroundImage:
-        "linear-gradient(45deg, #d1d5db 25%, transparent 25%), " +
-        "linear-gradient(-45deg, #d1d5db 25%, transparent 25%), " +
-        "linear-gradient(45deg, transparent 75%, #d1d5db 75%), " +
-        "linear-gradient(-45deg, transparent 75%, #d1d5db 75%)",
-      backgroundSize: "20px 20px",
-      backgroundPosition: "0 0, 0 10px, 10px -10px, -10px 0px",
-    };
-  }
-  return { backgroundColor: "#ffffff" };
 }
 
 function PreviewIframe({

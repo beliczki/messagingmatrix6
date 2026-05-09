@@ -498,8 +498,12 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
               </div>
             </div>
             <div
-              className="media-entity-dialog__preview-viewport flex flex-1 items-center justify-center overflow-hidden p-4"
-              style={bgStyleFor(bg)}
+              className={clsx(
+                "media-entity-dialog__preview-viewport flex flex-1 items-center justify-center overflow-hidden p-4",
+                bg === "light" && "preview-viewport--light",
+                bg === "dark" && "preview-viewport--dark",
+                bg === "checker" && "preview-viewport--checker",
+              )}
             >
               <ScaledMediaPreview
                 fileId={entity.fileId}
@@ -586,23 +590,6 @@ function BgBtn({
       {children}
     </button>
   );
-}
-
-function bgStyleFor(bg: PreviewBg): React.CSSProperties {
-  if (bg === "dark") return { backgroundColor: "#1f2937" };
-  if (bg === "checker") {
-    return {
-      backgroundColor: "#f9fafb",
-      backgroundImage:
-        "linear-gradient(45deg, #d1d5db 25%, transparent 25%), " +
-        "linear-gradient(-45deg, #d1d5db 25%, transparent 25%), " +
-        "linear-gradient(45deg, transparent 75%, #d1d5db 75%), " +
-        "linear-gradient(-45deg, transparent 75%, #d1d5db 75%)",
-      backgroundSize: "20px 20px",
-      backgroundPosition: "0 0, 0 10px, 10px -10px, -10px 0px",
-    };
-  }
-  return { backgroundColor: "#ffffff" };
 }
 
 function FileInfoBlock({ rows }: { rows: Array<[string, string | null]> }) {

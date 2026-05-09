@@ -77,7 +77,8 @@ export function Sidebar({ user, client, onOpenUsers, onOpenSettings }: Props) {
           onClick={() => setCollapsed((c) => !c)}
           className="rounded p-1 hover:bg-slate-100"
         >
-          <img src="/mmatrix.svg" alt="Messaging Matrix" className="app-sidebar__logo size-6" />
+          <img src="/mmatrix.svg" alt="Messaging Matrix" className="app-sidebar__logo size-6 dark:hidden" />
+          <img src="/mmatrix-dark.svg" alt="" aria-hidden className="app-sidebar__logo app-sidebar__logo--dark size-6 hidden dark:block" />
         </button>
         {!collapsed ? (
           <p className="app-sidebar__client-name text-sm font-semibold text-slate-900">{client.name}</p>

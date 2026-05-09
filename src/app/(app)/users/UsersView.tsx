@@ -102,7 +102,7 @@ export function UsersView({
           <button
             type="button"
             onClick={() => setShowAdd(true)}
-            className="toolbar-btn--primary rounded-md bg-brand-button px-3 py-1.5 text-sm font-medium text-white"
+            className="toolbar-btn--primary rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
           >
             Add user
           </button>
@@ -229,7 +229,7 @@ export function UsersView({
                             onClick={() => confirmArchive(u)}
                             disabled={isMe || archiveM.isPending}
                             title={isMe ? "You can't archive your own user" : ""}
-                            className="ml-2 rounded border border-rose-200 bg-white px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
+                            className="ml-2 rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                           >
                             Archive
                           </button>

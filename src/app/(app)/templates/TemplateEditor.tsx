@@ -7,6 +7,7 @@ import { html as htmlLang } from "@codemirror/lang-html";
 import { css as cssLang } from "@codemirror/lang-css";
 import { json as jsonLang } from "@codemirror/lang-json";
 import { javascript as jsLang } from "@codemirror/lang-javascript";
+import { oneDark } from "@codemirror/theme-one-dark";
 import {
   Plus,
   Save,
@@ -189,8 +190,26 @@ function isLandscape(size: string | null): boolean {
   return w / h >= 1.5;
 }
 
+// Tracks the `dark` class on <html> (toggled by DesignTab + the inline init
+// script in layout.tsx) so CodeMirror can swap to oneDark when the app is in
+// dark mode. MutationObserver picks up both user toggles and system-pref
+// changes that flow through the init script.
+function useIsDarkMode(): boolean {
+  const [isDark, setIsDark] = useState(false);
+  useEffect(() => {
+    const root = document.documentElement;
+    const update = () => setIsDark(root.classList.contains("dark"));
+    update();
+    const obs = new MutationObserver(update);
+    obs.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
+  return isDark;
+}
+
 export default function TemplateEditor() {
   const qc = useQueryClient();
+  const isDark = useIsDarkMode();
   // SSR-safe initial state: persistedRef starts empty so the first render
   // produces identical HTML on server and client. The hydration effect below
   // reads localStorage post-mount and applies stored values via setters.
@@ -757,6 +776,7 @@ export default function TemplateEditor() {
                 value={buffer}
                 onChange={onChange}
                 height="100%"
+                theme={isDark ? oneDark : "light"}
                 extensions={languageFor(
                   detailQ.data?.files.find((f) => f.name === activeFile)?.ext ?? "",
                 )}

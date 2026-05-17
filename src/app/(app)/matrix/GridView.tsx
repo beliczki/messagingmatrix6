@@ -442,7 +442,7 @@ function EditableCell({
     <td
       ref={setNodeRef}
       className={clsx(
-        "matrix-grid__cell border-b border-r border-border align-top",
+        "matrix-grid__cell group border-b border-r border-border align-top",
         density === "dense"
           ? "matrix-grid__cell--dense w-7 min-w-7 max-w-7 p-0.5"
           : "min-w-[160px] p-1.5",
@@ -484,7 +484,7 @@ function EditableCell({
             type="button"
             title="New MC in this cell"
             onClick={() => onCreateInCell(audience, topic)}
-            className="cell-add-btn inline-flex items-center gap-1 rounded border border-dashed border-slate-300 px-1.5 py-0.5 text-[10px] text-slate-500 hover:border-slate-500 hover:text-slate-700"
+            className="cell-add-btn hidden items-center gap-1 rounded border border-dashed border-slate-300 px-1.5 py-0.5 text-[10px] text-slate-500 hover:border-slate-500 hover:text-slate-700 group-hover:inline-flex focus-visible:inline-flex"
           >
             <Plus className="size-3" />
             new

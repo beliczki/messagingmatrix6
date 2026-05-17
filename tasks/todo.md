@@ -1586,3 +1586,13 @@ Both `Creative Library` (`/creative-library`) and `Assets` (`/assets`) gained a 
 **Manual verification needed (user-side, dev server already on :6001):** click each of the 6 headers on both pages, confirm direction toggle + arrow indicator + full-list ordering (scroll past row 200 in Creative Library), confirm Grid/Masonry inherit the order silently, confirm reload persists, confirm matrix-synthesized rows in Creative Library align column-perfectly with uploaded rows.
 
 **Not bumped** — `6.0.0-pre`; per CLAUDE.md, pre-launch bumps are deferred to the `6.0.0` graduation event.
+
+---
+
+## Asseteket dolgozzuk fel visszafele (külön feladat, később)
+
+Gyűjtsük ki a `messages` (mátrix) tábla alapján, hogy mely assetek (`uploaded_files` / `assets` táblák) vannak ténylegesen használva — message-enként van audience (→ product: SZK / SZA / HK / VAL …) és topic (→ topic_key). Ahol egy asset több message-ben szerepel, ott listázzuk az összes (product, topic_key) párt.
+
+Második lépésben: nevezzük át (vagy duplikáljuk át új névvel) az asset fileokat úgy, hogy a fájlnévhez **előre** hozzáfűzzük a használati kontextust — `{product}_{topic_key}_<eredeti_filename>` mintában. Több (product, topic_key) eset → vagy egy közös prefixált név `MULTI_<...>` jelöléssel, vagy minden használathoz külön kópia. (Döntsd el a feladat indításakor a használati arányok alapján.)
+
+Kimenet: a `_inbox-assets/` folder fileai átnevezve, és a DB `assets.fileName` mező + uploaded_files canonical path frissítve. Audit: melyik nevet honnan kapta. Cél: az asset könyvtárban szabad szemmel látni, hogy melyik file melyik termékhez/topikhoz tartozik, és így az új asset scan-script már parseolható filenevet kap.

@@ -27,7 +27,8 @@
     "seed:multi": "tsx scripts/seed-multi.ts",
     "import:erste": "ACTIVE_CLIENT_KEY=erste tsx scripts/import-erste.ts",
     "link:erste": "ACTIVE_CLIENT_KEY=erste tsx scripts/link-creative-files.ts",
-    "reimport:media:erste": "ACTIVE_CLIENT_KEY=erste tsx scripts/reimport-media.ts"
+    "reimport:media:erste": "ACTIVE_CLIENT_KEY=erste tsx scripts/reimport-media.ts",
+    "scan:creatives:erste": "ACTIVE_CLIENT_KEY=erste tsx scripts/scan-creatives.ts"
   },
   "dependencies": {
     "@codemirror/lang-css": "^6.3.1",

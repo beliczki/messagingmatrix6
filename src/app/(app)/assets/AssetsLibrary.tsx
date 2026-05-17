@@ -31,6 +31,15 @@ import {
   STRING_CODEC,
   SET_CODEC,
 } from "../_components/usePersistent";
+import {
+  ListSortHeader,
+  LIST_GRID_TEMPLATE,
+  LIST_SORT_CODEC,
+  DEFAULT_SORT,
+  formatListDate,
+  sortListRows,
+  type SortState,
+} from "../_components/ListSortHeader";
 import type { ParseRules } from "@/lib/parse-filename";
 import { parseSearchQuery } from "@/lib/search-query";
 
@@ -48,6 +57,7 @@ type Asset = {
   comment: string | null;
   version: number;
   createdAt: string;
+  updatedAt: string;
   archivedAt: string | null;
 };
 
@@ -88,6 +98,11 @@ export default function AssetsLibrary() {
     "mm6_assets_library_view",
     "masonry",
     LIBRARY_VIEW_CODEC,
+  );
+  const [sort, setSort] = usePersistent<SortState>(
+    "mm6_assets_library_sort",
+    DEFAULT_SORT,
+    LIST_SORT_CODEC,
   );
 
   const assetsQ = useQuery({
@@ -175,6 +190,8 @@ export default function AssetsLibrary() {
     });
   }, [assets, products, types, predicate]);
 
+  const sorted = useMemo(() => sortListRows(filtered, sort), [filtered, sort]);
+
   const qc = useQueryClient();
 
   return (
@@ -221,7 +238,8 @@ export default function AssetsLibrary() {
 
       <div
         className={clsx(
-          "assets-library__scroll relative flex-1 overflow-auto p-4 transition",
+          "assets-library__scroll relative flex-1 overflow-auto px-4 pb-4 pt-4 transition",
+          view === "list" && "pt-0",
           drop.over && "bg-slate-100 ring-2 ring-inset ring-slate-900",
         )}
         {...drop.handlers}
@@ -264,7 +282,7 @@ export default function AssetsLibrary() {
         ) : view === "masonry" ? (
           <div className="assets-library__view assets-library__view--masonry">
             <Masonry
-              items={filtered}
+              items={sorted}
               itemKey={(a) => a.id}
               render={(a) => (
                 <ImageTile
@@ -277,7 +295,7 @@ export default function AssetsLibrary() {
           </div>
         ) : view === "grid" ? (
           <div className="assets-library__view assets-library__view--grid grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {filtered.map((a) => (
+            {sorted.map((a) => (
               <Card
                 key={a.id}
                 asset={a}
@@ -288,7 +306,8 @@ export default function AssetsLibrary() {
           </div>
         ) : (
           <div className="assets-library__view assets-library__view--list flex flex-col gap-1.5">
-            {filtered.map((a) => (
+            <ListSortHeader sort={sort} onChange={setSort} />
+            {sorted.map((a) => (
               <ListRow
                 key={a.id}
                 asset={a}
@@ -312,13 +331,13 @@ export default function AssetsLibrary() {
 
       {detailId !== null
         ? (() => {
-            const a = filtered.find((x) => x.id === detailId)
+            const a = sorted.find((x) => x.id === detailId)
               ?? assets.find((x) => x.id === detailId);
             if (!a) return null;
             return (
               <AssetDetailDialog
                 asset={a}
-                assets={filtered}
+                assets={sorted}
                 file={a.fileId ? filesById.get(a.fileId) : undefined}
                 onJump={(id) => setDetailId(id)}
                 onClose={() => setDetailId(null)}
@@ -516,14 +535,17 @@ function ListRow({
   const isImage = file?.mimeType?.startsWith("image/");
   const isVideo = file?.mimeType?.startsWith("video/");
   const archived = asset.archivedAt !== null;
+  const createdTitle = asset.createdAt ? new Date(asset.createdAt).toLocaleString() : "";
+  const updatedTitle = asset.updatedAt ? new Date(asset.updatedAt).toLocaleString() : "";
   return (
     <button
       type="button"
       onClick={onOpen}
       className={clsx(
-        "asset-row group flex w-full items-center gap-3 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left transition hover:border-slate-400 hover:shadow-sm [content-visibility:auto] [contain-intrinsic-size:auto_56px]",
+        "asset-row group grid w-full items-center gap-3 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs transition hover:border-slate-400 hover:shadow-sm [content-visibility:auto] [contain-intrinsic-size:auto_56px]",
         archived && "row--archived",
       )}
+      style={{ gridTemplateColumns: LIST_GRID_TEMPLATE }}
     >
       <div className="asset-row__thumb thumb-checker size-12 shrink-0 overflow-hidden rounded">
         {isImage && asset.fileId ? (
@@ -548,19 +570,28 @@ function ListRow({
           </div>
         )}
       </div>
-      <div className="asset-row__meta min-w-0 flex-1 text-xs">
+      <div className="asset-row__name min-w-0">
         <span
           className="asset-row__filename row--archived__filename block truncate text-slate-700"
           title={asset.fileName ?? ""}
         >
           {asset.fileName ?? "(no file)"}
         </span>
-        <div className="asset-row__tags mt-0.5 flex flex-wrap gap-1 text-[10px] text-slate-500">
-          {asset.brand ? <span className="tag-chip">{asset.brand}</span> : null}
-          {asset.product ? <span className="tag-chip">· {asset.product}</span> : null}
-          {asset.type ? <span className="tag-chip">· {asset.type}</span> : null}
-          {asset.fileDimensions ? <span className="tag-chip">· {asset.fileDimensions}</span> : null}
-        </div>
+      </div>
+      <div className="asset-row__product truncate text-slate-600" title={asset.product ?? ""}>
+        {asset.product ?? "—"}
+      </div>
+      <div className="asset-row__type truncate text-slate-600">
+        {asset.type ?? "—"}
+      </div>
+      <div className="asset-row__size truncate font-mono text-[11px] text-slate-600">
+        {asset.fileDimensions ?? "—"}
+      </div>
+      <div className="asset-row__created truncate text-slate-500" title={createdTitle}>
+        {formatListDate(asset.createdAt)}
+      </div>
+      <div className="asset-row__updated truncate text-slate-500" title={updatedTitle}>
+        {formatListDate(asset.updatedAt)}
       </div>
     </button>
   );

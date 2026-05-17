@@ -48,6 +48,15 @@ import {
   STRING_CODEC,
   SET_CODEC,
 } from "../_components/usePersistent";
+import {
+  ListSortHeader,
+  LIST_GRID_TEMPLATE,
+  LIST_SORT_CODEC,
+  DEFAULT_SORT,
+  formatListDate,
+  sortListRows,
+  type SortState,
+} from "../_components/ListSortHeader";
 import type { ParseRules } from "@/lib/parse-filename";
 import type { Message, Audience, Topic } from "../matrix/types";
 import { parseSearchQuery } from "@/lib/search-query";
@@ -86,6 +95,7 @@ type Creative = {
   comment: string | null;
   version: number;
   createdAt: string;
+  updatedAt: string;
   archivedAt: string | null;
 };
 
@@ -144,6 +154,11 @@ export default function CreativeLibrary() {
     "mm6_creative_library_view",
     "masonry",
     LIBRARY_VIEW_CODEC,
+  );
+  const [sort, setSort] = usePersistent<SortState>(
+    "mm6_creative_library_sort",
+    DEFAULT_SORT,
+    LIST_SORT_CODEC,
   );
   const [selectorMode, setSelectorMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -340,6 +355,7 @@ export default function CreativeLibrary() {
           comment: null,
           version: m.version,
           createdAt: m.updatedAt,
+          updatedAt: m.updatedAt,
           archivedAt: null,
           message: m,
           liveSize: size,
@@ -417,9 +433,11 @@ export default function CreativeLibrary() {
     });
   }, [items, products, types, sizes, predicate, audienceMap, topicMap]);
 
+  const sorted = useMemo(() => sortListRows(filtered, sort), [filtered, sort]);
+
   useEffect(() => {
     setVisibleCount(200);
-  }, [products, types, sizes, debouncedSearch, view]);
+  }, [products, types, sizes, debouncedSearch, view, sort]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -434,11 +452,11 @@ export default function CreativeLibrary() {
     );
     obs.observe(sentinel);
     return () => obs.disconnect();
-  }, [filtered.length, visibleCount]);
+  }, [sorted.length, visibleCount]);
 
   const visible = useMemo(
-    () => filtered.slice(0, visibleCount),
-    [filtered, visibleCount],
+    () => sorted.slice(0, visibleCount),
+    [sorted, visibleCount],
   );
 
   const qc = useQueryClient();
@@ -490,7 +508,8 @@ export default function CreativeLibrary() {
         <div
           ref={scrollRef}
           className={clsx(
-            "creative-library__scroll relative flex-1 overflow-auto p-4 transition",
+            "creative-library__scroll relative flex-1 overflow-auto px-4 pb-4 pt-4 transition",
+            view === "list" && "pt-0",
             drop.over && "bg-slate-100 ring-2 ring-inset ring-slate-900",
           )}
           {...drop.handlers}
@@ -573,6 +592,7 @@ export default function CreativeLibrary() {
                 </div>
               ) : (
                 <div className="creative-library__view creative-library__view--list flex flex-col gap-1.5">
+                  <ListSortHeader sort={sort} onChange={setSort} />
                   {visible.map((c) => (
                     <SelectableItem
                       key={c.id}
@@ -588,6 +608,8 @@ export default function CreativeLibrary() {
                           templateName={c.liveTemplateName}
                           size={c.liveSize}
                           product={c.product}
+                          createdAt={c.createdAt}
+                          updatedAt={c.updatedAt}
                           onOpen={() => setDetailId(c.id)}
                         />
                       ) : (
@@ -601,7 +623,7 @@ export default function CreativeLibrary() {
                   ))}
                 </div>
               )}
-              {visibleCount < filtered.length ? (
+              {visibleCount < sorted.length ? (
                 <div ref={sentinelRef} className="h-1 w-full" aria-hidden />
               ) : null}
             </>
@@ -633,7 +655,7 @@ export default function CreativeLibrary() {
         {detailId !== null
           ? (() => {
               const c =
-                filtered.find((x) => x.id === detailId) ??
+                sorted.find((x) => x.id === detailId) ??
                 items.find((x) => x.id === detailId);
               if (!c) return null;
               if (c.kind === "matrix") {
@@ -646,7 +668,7 @@ export default function CreativeLibrary() {
                       liveTemplateName: c.liveTemplateName,
                       product: c.product,
                     }}
-                    navItems={filtered}
+                    navItems={sorted}
                     onJump={(id) => setDetailId(id)}
                     onClose={() => setDetailId(null)}
                   />
@@ -655,7 +677,7 @@ export default function CreativeLibrary() {
               return (
                 <CreativeDetailDialog
                   creative={c}
-                  creatives={filtered}
+                  creatives={sorted}
                   file={c.fileId ? filesById.get(c.fileId) : undefined}
                   onJump={(id) => setDetailId(id)}
                   onClose={() => setDetailId(null)}
@@ -911,14 +933,17 @@ function ListRow({
       ? `MC${creative.mcNumber}${creative.mcVariant ?? ""}`
       : null;
   const archived = creative.archivedAt !== null;
+  const createdTitle = creative.createdAt ? new Date(creative.createdAt).toLocaleString() : "";
+  const updatedTitle = creative.updatedAt ? new Date(creative.updatedAt).toLocaleString() : "";
   return (
     <button
       type="button"
       onClick={onOpen}
       className={clsx(
-        "creative-row group flex w-full items-center gap-3 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left transition hover:border-slate-400 hover:shadow-sm [content-visibility:auto] [contain-intrinsic-size:auto_56px]",
+        "creative-row group grid w-full items-center gap-3 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs transition hover:border-slate-400 hover:shadow-sm [content-visibility:auto] [contain-intrinsic-size:auto_56px]",
         archived && "row--archived",
       )}
+      style={{ gridTemplateColumns: LIST_GRID_TEMPLATE }}
     >
       <div className="creative-row__thumb thumb-checker size-12 shrink-0 overflow-hidden rounded">
         {isImage && creative.fileId ? (
@@ -943,21 +968,33 @@ function ListRow({
           </div>
         )}
       </div>
-      <div className="creative-row__meta min-w-0 flex-1 text-xs">
-        <div className="flex items-baseline gap-2">
-          {mcLabel ? (
-            <span className="creative-row__mc font-mono font-semibold text-slate-900">{mcLabel}</span>
-          ) : null}
-          <span className="creative-row__filename row--archived__filename truncate text-slate-700" title={creative.fileName ?? ""}>
-            {creative.fileName ?? "(no file)"}
+      <div className="creative-row__name flex min-w-0 items-baseline gap-2">
+        {mcLabel ? (
+          <span className="creative-row__mc font-mono font-semibold text-slate-900">
+            {mcLabel}
           </span>
-        </div>
-        <div className="creative-row__tags mt-0.5 flex flex-wrap gap-1 text-[10px] text-slate-500">
-          {creative.brand ? <span className="tag-chip">{creative.brand}</span> : null}
-          {creative.product ? <span className="tag-chip">· {creative.product}</span> : null}
-          {creative.template ? <span className="tag-chip">· {creative.template}</span> : null}
-          {creative.fileDimensions ? <span className="tag-chip">· {creative.fileDimensions}</span> : null}
-        </div>
+        ) : null}
+        <span
+          className="creative-row__filename row--archived__filename truncate text-slate-700"
+          title={creative.fileName ?? ""}
+        >
+          {creative.fileName ?? "(no file)"}
+        </span>
+      </div>
+      <div className="creative-row__product truncate text-slate-600" title={creative.product ?? ""}>
+        {creative.product ?? "—"}
+      </div>
+      <div className="creative-row__type truncate text-slate-600">
+        {creative.type ?? "—"}
+      </div>
+      <div className="creative-row__size truncate font-mono text-[11px] text-slate-600">
+        {creative.fileDimensions ?? "—"}
+      </div>
+      <div className="creative-row__created truncate text-slate-500" title={createdTitle}>
+        {formatListDate(creative.createdAt)}
+      </div>
+      <div className="creative-row__updated truncate text-slate-500" title={updatedTitle}>
+        {formatListDate(creative.updatedAt)}
       </div>
     </button>
   );

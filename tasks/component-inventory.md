@@ -122,7 +122,10 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `media-tile__filename` | Filename a meta-ban | – | – |
 | `media-tile__tags` | Tag-chip-ek konténere | – | – |
 | `creative-card` / `asset-card` | Grid-view card (`<button>` 2026-05-02-től, click-to-open dialog) | CL `Card`, Assets `Card` | hover archive overlay megszűnt |
-| `creative-row` / `asset-row` | List-view row (`<button>` 2026-05-02-től) | CL `ListRow`, Assets `ListRow` | – |
+| `creative-row` / `asset-row` | List-view row (`<button>` 2026-05-02-től, 2026-05-17 óta 7-cellás CSS grid: thumb / name / product / type / size / created / updated) | CL `ListRow`, Assets `ListRow`, `MatrixIframeListRow` | `LIST_GRID_TEMPLATE` constans tartja egyben a column width-eket |
+| `creative-row__name` / `__product` / `__type` / `__size` / `__created` / `__updated` (és `asset-row__*`) | Egy-egy oszlop cella a list-row gridben | CL/Assets `ListRow`, `MatrixIframeListRow` | – |
+| `list-sort-header` | Sticky sortable column header a list-view tetején; 6 kattintható oszlop (Name/Product/Type/Size/Created/Updated) ArrowUp/ArrowDown indikátorral | `_components/ListSortHeader.tsx`, CL + Assets list view | grid template egyezik a row-okkal |
+| `list-sort-header__cell` / `--active` | Egy header gomb; `--active` az aktuálisan rendezett oszlop | ListSortHeader | – |
 | `thumb-checker` | 16px conic-gradient kockás minta áttetsző PNG/SVG mögé | mind a 6 thumb wrapperben + dialog viewport | global, `app/globals.css` |
 | `status-dot` | Színes pötty (státusz / state) | FeedView, MessageEditor, TemplateEditor MC stepper | szín később (Phase 7) |
 | `status-badge` | Pötty + szöveg pill | MessageEditor SaveIndicator 546–581, FeedView | szín később (Phase 7) |

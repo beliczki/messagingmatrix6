@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Code2 } from "lucide-react";
 import type { Message } from "../matrix/types";
+import { LIST_GRID_TEMPLATE, formatListDate } from "./ListSortHeader";
 
 // Module-level cache: many tiles share the same render result if shown twice
 // in the same session (e.g. after filter toggles). Keyed by message version
@@ -257,26 +258,34 @@ export function MatrixIframeCard({
   );
 }
 
-// ── List row variant: small thumb + horizontal meta (matches ListRow) ──
+// ── List row variant: thumb + 6 aligned columns (matches ListRow) ──
 export function MatrixIframeListRow({
   message,
   templateName,
   size,
   product,
+  createdAt,
+  updatedAt,
   onOpen,
 }: {
   message: Message;
   templateName: string;
   size: string;
   product: string | null;
+  createdAt: string;
+  updatedAt: string;
   onOpen: () => void;
 }) {
   const mcLabel = `MC${message.number}${message.variant ?? ""}`;
+  const headline = message.headline ?? message.name ?? "(no headline)";
+  const createdTitle = createdAt ? new Date(createdAt).toLocaleString() : "";
+  const updatedTitle = updatedAt ? new Date(updatedAt).toLocaleString() : "";
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="creative-row matrix-iframe-row group flex w-full items-center gap-3 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left transition hover:border-slate-400 hover:shadow-sm [content-visibility:auto] [contain-intrinsic-size:auto_56px]"
+      className="creative-row matrix-iframe-row group grid w-full items-center gap-3 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs transition hover:border-slate-400 hover:shadow-sm [content-visibility:auto] [contain-intrinsic-size:auto_56px]"
+      style={{ gridTemplateColumns: LIST_GRID_TEMPLATE }}
     >
       <div className="creative-row__thumb size-12 shrink-0 overflow-hidden rounded">
         <MatrixIframePreview
@@ -286,21 +295,26 @@ export function MatrixIframeListRow({
           mode="fit-rect"
         />
       </div>
-      <div className="creative-row__meta min-w-0 flex-1 text-xs">
-        <div className="flex items-baseline gap-2">
-          <span className="creative-row__mc font-mono font-semibold text-slate-900">
-            {mcLabel}
-          </span>
-          <span className="creative-row__filename truncate text-slate-700">
-            {message.headline ?? message.name ?? "(no headline)"}
-          </span>
-        </div>
-        <div className="creative-row__tags mt-0.5 flex flex-wrap gap-1 text-[10px] text-slate-500">
-          {product ? <span className="tag-chip">{product}</span> : null}
-          {message.template ? <span className="tag-chip">· {message.template}</span> : null}
-          <span className="tag-chip">· {size}</span>
-          {message.status ? <span className="tag-chip">· {message.status}</span> : null}
-        </div>
+      <div className="creative-row__name flex min-w-0 items-baseline gap-2">
+        <span className="creative-row__mc font-mono font-semibold text-slate-900">
+          {mcLabel}
+        </span>
+        <span className="creative-row__filename truncate text-slate-700" title={headline}>
+          {headline}
+        </span>
+      </div>
+      <div className="creative-row__product truncate text-slate-600" title={product ?? ""}>
+        {product ?? "—"}
+      </div>
+      <div className="creative-row__type truncate text-slate-600">html</div>
+      <div className="creative-row__size truncate font-mono text-[11px] text-slate-600">
+        {size}
+      </div>
+      <div className="creative-row__created truncate text-slate-500" title={createdTitle}>
+        {formatListDate(createdAt)}
+      </div>
+      <div className="creative-row__updated truncate text-slate-500" title={updatedTitle}>
+        {formatListDate(updatedAt)}
       </div>
     </button>
   );

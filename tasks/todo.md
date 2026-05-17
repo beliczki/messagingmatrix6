@@ -1562,3 +1562,27 @@ The remaining 30–40% is hardcoded utility classes that don't reference theme t
 - [ ] **10.8 Visual QA pass** with the dev server in dark mode + screenshot diffing for key pages: Matrix, Creative Library, Assets, Texts, Audiences, Topics, Templates, Shares, Feeds, Monitoring, Settings (all tabs).
 
 Order suggestion: 10.1 (sidebar) → 10.3 (modals) → 10.4 (grids) → 10.2 (matrix chrome) → 10.5/10.6/10.7. Each is independently shippable; sequencing is just visual-priority order.
+
+---
+
+## Session checkpoint — 2026-05-17 — media-list-views: sortable aligned list header
+
+Branch `worktree-media-list-views`. Plan: `~/.claude/plans/so-the-assets-and-gentle-dragonfly.md`.
+
+Both `Creative Library` (`/creative-library`) and `Assets` (`/assets`) gained a sortable, sticky, aligned **column header** in list view with six sort fields: `name`, `product`, `type`, `size`, `createdAt`, `updatedAt`. Sort applies to the full filtered list (before the 200-row pagination slice in Creative Library) and is **inherited silently by Grid and Masonry** views on the same page. Default sort `createdAt desc` (visible change vs the previous insertion-order default — most recent floats to the top).
+
+**Files**
+- `src/app/(app)/_components/ListSortHeader.tsx` (new) — `LIST_GRID_TEMPLATE` constant (single source of truth: `48px minmax(0,1fr) 96px 80px 96px 88px 88px`), `ListSortKey`/`SortState` types, `<ListSortHeader>` component (sticky, lucide ArrowUp/Down arrows, two-state cycle asc↔desc — no third "none" state), `sortListRows()` (nulls-last regardless of dir, `id desc` tie-break for stable order), `formatListDate()` (`today` / `Nd ago` / `May 8`), and `LIST_SORT_CODEC` validator (falls back to `createdAt desc` on stale/corrupt localStorage).
+- `src/app/(app)/creative-library/CreativeLibrary.tsx` — added `updatedAt` to `Creative` type; matrix-synthesized items set `updatedAt: m.updatedAt`; new `sorted` memo between `filtered` and `visible.slice`; `visibleCount` resets on sort change; `ListRow` rewritten to 7-cell grid; chip pills dropped (brand/template/size no longer redundant); detail-dialog nav now uses `sorted` so prev/next matches display order; padding `p-4` → `px-4 pb-4 pt-4` with `pt-0` in list view so the sticky header sits flush.
+- `src/app/(app)/assets/AssetsLibrary.tsx` — same pattern, key `mm6_assets_library_sort`.
+- `src/app/(app)/_components/MatrixIframeTile.tsx` — `MatrixIframeListRow` rewritten to the same grid with new `createdAt`/`updatedAt` props; chip pills dropped. Other variants (`MatrixIframeTile`, `MatrixIframeCard`) untouched.
+- `tasks/component-inventory.md` — added `list-sort-header` / `__cell` / `--active` block plus the new `creative-row__*` / `asset-row__*` per-column cells; updated the `creative-row` / `asset-row` row to note the 7-cell grid layout.
+
+**Persistence**
+- `mm6_creative_library_sort` and `mm6_assets_library_sort` → `{"key":"createdAt","dir":"desc"}` (JSON via `LIST_SORT_CODEC`).
+
+**Tests** — `npm run typecheck` clean, `npm test` 195/195 passing. No new tests added (UI-only, no schema/API change).
+
+**Manual verification needed (user-side, dev server already on :6001):** click each of the 6 headers on both pages, confirm direction toggle + arrow indicator + full-list ordering (scroll past row 200 in Creative Library), confirm Grid/Masonry inherit the order silently, confirm reload persists, confirm matrix-synthesized rows in Creative Library align column-perfectly with uploaded rows.
+
+**Not bumped** — `6.0.0-pre`; per CLAUDE.md, pre-launch bumps are deferred to the `6.0.0` graduation event.

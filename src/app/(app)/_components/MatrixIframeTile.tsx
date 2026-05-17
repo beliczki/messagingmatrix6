@@ -295,11 +295,11 @@ export function MatrixIframeListRow({
           mode="fit-rect"
         />
       </div>
-      <div className="creative-row__name flex min-w-0 items-baseline gap-2 border-r border-slate-100 px-3 py-2">
-        <span className="creative-row__mc font-mono font-semibold text-slate-900">
-          {mcLabel}
-        </span>
-        <span className="creative-row__filename truncate text-slate-700" title={headline}>
+      <div className="creative-row__mc truncate border-r border-slate-100 px-3 py-2 font-mono text-[11px] font-semibold text-slate-900">
+        {mcLabel}
+      </div>
+      <div className="creative-row__name min-w-0 border-r border-slate-100 px-3 py-2">
+        <span className="creative-row__filename block truncate text-slate-700" title={headline}>
           {headline}
         </span>
       </div>

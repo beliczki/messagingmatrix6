@@ -4,9 +4,10 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 import clsx from "clsx";
 import type { Codec } from "./usePersistent";
 
-export const LIST_GRID_TEMPLATE = "48px minmax(0,1fr) 120px 80px 100px 88px 88px";
+export const LIST_GRID_TEMPLATE = "48px 80px minmax(0,1fr) 120px 80px 100px 88px 88px";
 
 export type ListSortKey =
+  | "mc"
   | "name"
   | "product"
   | "type"
@@ -17,6 +18,7 @@ export type ListSortKey =
 export type SortState = { key: ListSortKey; dir: "asc" | "desc" };
 
 const HEADER_COLS: ReadonlyArray<{ key: ListSortKey; label: string }> = [
+  { key: "mc", label: "MC" },
   { key: "name", label: "Name" },
   { key: "product", label: "Product" },
   { key: "type", label: "Type" },
@@ -105,6 +107,8 @@ type Sortable = {
   product: string | null;
   type: string | null;
   fileDimensions: string | null;
+  mcNumber?: number | null;
+  mcVariant?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -118,6 +122,8 @@ function parseArea(dims: string | null): number {
 
 function isMissing(row: Sortable, key: ListSortKey): boolean {
   switch (key) {
+    case "mc":
+      return row.mcNumber == null;
     case "name":
       return !row.fileName;
     case "product":
@@ -135,6 +141,14 @@ function isMissing(row: Sortable, key: ListSortKey): boolean {
 
 function compareValues(a: Sortable, b: Sortable, key: ListSortKey): number {
   switch (key) {
+    case "mc": {
+      const an = a.mcNumber ?? 0;
+      const bn = b.mcNumber ?? 0;
+      if (an !== bn) return an - bn;
+      const av = a.mcVariant ?? "";
+      const bv = b.mcVariant ?? "";
+      return av.localeCompare(bv);
+    }
     case "name": {
       const av = a.fileName ?? "";
       const bv = b.fileName ?? "";

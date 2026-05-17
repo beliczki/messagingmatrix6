@@ -570,6 +570,9 @@ function ListRow({
           </div>
         )}
       </div>
+      <div className="asset-row__mc truncate border-r border-slate-100 px-3 py-2 font-mono text-[11px] text-slate-400">
+        —
+      </div>
       <div className="asset-row__name min-w-0 border-r border-slate-100 px-3 py-2">
         <span
           className="asset-row__filename row--archived__filename block truncate text-slate-700"

@@ -1622,3 +1622,13 @@ Shipped on `feat/matrix-edit-mode-v1`:
 **Status:** still `6.0.0-pre`. No version bump per project `CLAUDE.md`.
 
 **Known limitations:** target-picker column-header click only works when audiences are columns (`transposed=true`, the default). In `transposed=false` mode the columns are topics and the picker becomes inert — DnD still works in both orientations.
+
+---
+
+## Asseteket dolgozzuk fel visszafele (külön feladat, később)
+
+Gyűjtsük ki a `messages` (mátrix) tábla alapján, hogy mely assetek (`uploaded_files` / `assets` táblák) vannak ténylegesen használva — message-enként van audience (→ product: SZK / SZA / HK / VAL …) és topic (→ topic_key). Ahol egy asset több message-ben szerepel, ott listázzuk az összes (product, topic_key) párt.
+
+Második lépésben: nevezzük át (vagy duplikáljuk át új névvel) az asset fileokat úgy, hogy a fájlnévhez **előre** hozzáfűzzük a használati kontextust — `{product}_{topic_key}_<eredeti_filename>` mintában. Több (product, topic_key) eset → vagy egy közös prefixált név `MULTI_<...>` jelöléssel, vagy minden használathoz külön kópia. (Döntsd el a feladat indításakor a használati arányok alapján.)
+
+Kimenet: a `_inbox-assets/` folder fileai átnevezve, és a DB `assets.fileName` mező + uploaded_files canonical path frissítve. Audit: melyik nevet honnan kapta. Cél: az asset könyvtárban szabad szemmel látni, hogy melyik file melyik termékhez/topikhoz tartozik, és így az új asset scan-script már parseolható filenevet kap.

@@ -324,6 +324,7 @@ export const creatives = sqliteTable(
     fileFormat: text("file_format"),
     fileSize: text("file_size"),
     fileDimensions: text("file_dimensions"),
+    familyKey: text("family_key"),
     comment: text("comment"),
     version: integer("version").notNull().default(1),
     createdAt: text("created_at")
@@ -339,6 +340,7 @@ export const creatives = sqliteTable(
     index("creatives_client_product_idx").on(t.clientId, t.product),
     index("creatives_client_file_idx").on(t.clientId, t.fileId),
     index("creatives_client_mc_idx").on(t.clientId, t.mcNumber, t.mcVariant),
+    index("creatives_client_family_idx").on(t.clientId, t.familyKey),
   ],
 );
 

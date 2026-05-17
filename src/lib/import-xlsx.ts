@@ -67,7 +67,7 @@ function findCol(
   return -1;
 }
 
-function emptyCounts(): ImportCounts {
+export function emptyCounts(): ImportCounts {
   return {
     audiences: 0,
     topics: 0,
@@ -412,12 +412,13 @@ function importMessages(
   }
 }
 
-function importCreatives(
+export function importCreatives(
   sheet: Row[] | undefined,
   clientId: number,
   inserted: ImportCounts,
   skipped: ImportCounts,
   errors: string[],
+  opts: { typeFilter?: string } = {},
 ): void {
   if (!sheet) {
     errors.push("creatives sheet missing");
@@ -445,12 +446,17 @@ function importCreatives(
       skipped.creatives++;
       continue;
     }
+    const type = s(r[idx.type]);
+    if (opts.typeFilter && type !== opts.typeFilter) {
+      skipped.creatives++;
+      continue;
+    }
     db.insert(creatives)
       .values({
         clientId,
         brand: s(r[idx.brand]),
         product: s(r[idx.product]),
-        type: s(r[idx.type]),
+        type,
         visualKeyword: s(r[idx.visualKeyword]),
         copyKeyword: s(r[idx.copyKeyword]),
         mcNumber: n(r[idx.mcNumber]),
@@ -467,7 +473,7 @@ function importCreatives(
   }
 }
 
-function importAssets(
+export function importAssets(
   sheet: Row[] | undefined,
   clientId: number,
   inserted: ImportCounts,

@@ -129,6 +129,8 @@ async function linkRows(
 
     try {
       const buffer = await fs.readFile(abs);
+      const stat = await fs.stat(abs);
+      const mtimeIso = stat.mtime.toISOString();
       const uploaded = await uploadFile(clientId, {
         buffer,
         originalFilename: fname,
@@ -138,7 +140,7 @@ async function linkRows(
         dimensions: row.fileDimensions ?? undefined,
       });
       db.update(table)
-        .set({ fileId: uploaded.id })
+        .set({ fileId: uploaded.id, createdAt: mtimeIso, updatedAt: mtimeIso })
         .where(and(eq(table.clientId, clientId), eq(table.id, row.id)))
         .run();
       stats.matched++;

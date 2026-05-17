@@ -2,11 +2,12 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LayoutList, List, Grip, Table2, ListFilter } from "lucide-react";
+import { LayoutList, List, Grip, Table2, ListFilter, Pencil } from "lucide-react";
 import clsx from "clsx";
 import GridView from "./GridView";
 import FeedView from "./FeedView";
 import FeedExportPanel from "./FeedExportPanel";
+import EditModePanel from "./EditModePanel";
 import MatrixToolbar from "./MatrixToolbar";
 import MessageEditor from "./MessageEditor";
 import HeaderDetailDialog from "./HeaderDetailDialog";
@@ -487,8 +488,6 @@ export default function MatrixWorkspace() {
             visibleAudiences: filtered.auds.length,
             visibleTopics: filtered.tops.length,
           }}
-          editApi={editApi}
-          topicNameByKey={topicById}
         />
 
         <div className="relative flex-1 overflow-hidden">
@@ -547,6 +546,22 @@ export default function MatrixWorkspace() {
                   onChange={setDensity}
                 />
               ) : null}
+              {view === "grid" ? (
+                <button
+                  type="button"
+                  onClick={() => editApi.setEditMode(!editApi.editMode)}
+                  title={editApi.editMode ? "Exit edit mode" : "Enter edit mode"}
+                  aria-label="Edit mode"
+                  className={clsx(
+                    "edit-mode-toggle inline-flex size-8 items-center justify-center rounded",
+                    editApi.editMode
+                      ? "edit-mode-toggle--active bg-slate-900 text-white hover:bg-slate-800"
+                      : "text-slate-700 hover:bg-slate-100",
+                  )}
+                >
+                  <Pencil className="size-4" />
+                </button>
+              ) : null}
             </>
           ) : (
             <div className="flex flex-col gap-3">
@@ -556,6 +571,12 @@ export default function MatrixWorkspace() {
                 density={density}
                 setDensity={setDensity}
               />
+              {view === "grid" ? (
+                <EditModePanel
+                  editApi={editApi}
+                  topicNameByKey={topicById}
+                />
+              ) : null}
               {view === "feed" ? (
                 <FeedExportPanel
                   filters={filters}

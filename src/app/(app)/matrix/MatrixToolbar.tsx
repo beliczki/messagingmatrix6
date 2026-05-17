@@ -1,19 +1,7 @@
 "use client";
 
-import {
-  X,
-  Filter as FilterIcon,
-  Users,
-  ListTree,
-  Pencil,
-  Copy,
-  ArrowRightLeft,
-  Trash2,
-  Check,
-} from "lucide-react";
-import clsx from "clsx";
-import { type Filters, type Topic } from "./types";
-import { type EditApi } from "./MatrixGrid";
+import { X, Filter as FilterIcon, Users, ListTree } from "lucide-react";
+import { type Filters } from "./types";
 import MultiPill from "../_components/MultiPill";
 
 type Props = {
@@ -29,24 +17,11 @@ type Props = {
     visibleAudiences: number;
     visibleTopics: number;
   };
-  editApi: EditApi;
-  topicNameByKey: Map<string, Topic>;
 };
 
 export default function MatrixToolbar(p: Props) {
   const activeFilters =
     p.filters.products.size + p.filters.statuses.size + (p.filters.search ? 1 : 0);
-  const { editApi } = p;
-  const selectedCount = editApi.selection.mcIds.size;
-  const showSelectionActions = editApi.editMode && selectedCount > 0;
-  const pending = editApi.pendingAction;
-  const moveTargetReady =
-    pending?.kind === "move" && pending.targetAudienceKeys.size === 1;
-  const copyTargetReady =
-    pending?.kind === "copy" && pending.targetAudienceKeys.size > 0;
-  const applyReady = moveTargetReady || copyTargetReady;
-  const selectedTopic =
-    editApi.selection.topic && p.topicNameByKey.get(editApi.selection.topic);
 
   return (
     <div className="toolbar matrix-toolbar sticky top-0 z-40 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
@@ -95,100 +70,6 @@ export default function MatrixToolbar(p: Props) {
           <X className="size-3" />
           Clear
         </button>
-      ) : null}
-
-      <button
-        type="button"
-        onClick={() => editApi.setEditMode(!editApi.editMode)}
-        title={editApi.editMode ? "Exit edit mode" : "Enter edit mode"}
-        className={clsx(
-          "toolbar-btn toolbar-btn--toggle inline-flex items-center gap-1 rounded px-2 py-1 text-xs",
-          editApi.editMode
-            ? "toolbar-btn--toggle--active bg-slate-900 text-white hover:bg-slate-800"
-            : "text-slate-700 hover:bg-slate-100",
-        )}
-      >
-        <Pencil className="size-3" />
-        Edit
-      </button>
-
-      {showSelectionActions ? (
-        <div className="selection-actions selection-actions--inline ml-1 flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs">
-          <span className="selection-actions__count font-semibold text-slate-700">
-            {selectedCount} selected
-            {selectedTopic ? (
-              <span className="ml-1 text-slate-500">
-                · topic {selectedTopic.name}
-              </span>
-            ) : null}
-          </span>
-          {!pending ? (
-            <>
-              <button
-                type="button"
-                onClick={() => editApi.beginPending("copy")}
-                className="selection-actions__btn selection-actions__btn--copy inline-flex items-center gap-1 rounded bg-slate-900 px-2 py-1 text-white hover:bg-slate-800"
-              >
-                <Copy className="size-3" />
-                Copy
-              </button>
-              <button
-                type="button"
-                onClick={() => editApi.beginPending("move")}
-                className="selection-actions__btn selection-actions__btn--move inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-slate-700 hover:bg-slate-100"
-              >
-                <ArrowRightLeft className="size-3" />
-                Move
-              </button>
-              <button
-                type="button"
-                disabled
-                title="Bulk delete — coming in v2"
-                className="selection-actions__btn selection-actions__btn--delete inline-flex cursor-not-allowed items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-slate-400"
-              >
-                <Trash2 className="size-3" />
-                Delete
-              </button>
-              <button
-                type="button"
-                onClick={editApi.clearSelection}
-                className="selection-actions__btn selection-actions__btn--cancel inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-slate-700 hover:bg-slate-100"
-              >
-                <X className="size-3" />
-                Cancel
-              </button>
-            </>
-          ) : (
-            <>
-              <span className="selection-actions__pending text-slate-500">
-                {pending.kind === "copy" ? "Copy" : "Move"} → pick{" "}
-                {pending.kind === "move" ? "1 audience" : "audience columns"}
-              </span>
-              <button
-                type="button"
-                onClick={editApi.applyPending}
-                disabled={!applyReady || editApi.bulkBusy}
-                className={clsx(
-                  "selection-actions__btn selection-actions__btn--apply inline-flex items-center gap-1 rounded px-2 py-1 text-white",
-                  applyReady && !editApi.bulkBusy
-                    ? "bg-emerald-600 hover:bg-emerald-700"
-                    : "cursor-not-allowed bg-slate-300",
-                )}
-              >
-                <Check className="size-3" />
-                Apply ({pending.targetAudienceKeys.size})
-              </button>
-              <button
-                type="button"
-                onClick={editApi.cancelPending}
-                className="selection-actions__btn selection-actions__btn--cancel inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-slate-700 hover:bg-slate-100"
-              >
-                <X className="size-3" />
-                Cancel
-              </button>
-            </>
-          )}
-        </div>
       ) : null}
 
       <div

@@ -563,3 +563,26 @@ Ezeket NEM most refaktoráljuk, de jelölöm hogy ne felejtsük el:
 - `useLongPress` (`_components/useLongPress.ts`) — same hook CreativeLibrary uses for selector-mode entry.
 - `selection-actions` block reused horizontally rather than introducing a new `selection-toolbar`.
 - `@dnd-kit/core` added as a new dependency (no `sortable`/`utilities` — this UX has no list reordering).
+
+---
+
+## Változások 2026-05-17 (later) — Edit-mode UI moved to side toolbar
+
+The Edit toggle and the entire selection-actions block moved out of the top `matrix-toolbar` into the right side toolbar, mirroring the visual chrome of `FeedExportPanel`. Top toolbar is back to just search + multi-pills + counts.
+
+**Új BEM block-ok:**
+- `edit-mode-panel` — the box itself (`rounded-md border border-slate-200 bg-white p-3`), positioned in the right toolbar's expanded body below `ViewControls` when `view === "grid"`. Visual twin of `feed-export-panel`.
+- `edit-mode-panel__title` — uppercase label ("Edit mode"), same `text-[10px] font-medium uppercase tracking-wider text-slate-500` as `feed-export-panel__title`.
+- `edit-mode-panel__toggle`, `edit-mode-panel__toggle--active` — full-width Enter/Exit edit mode button inside the panel.
+- `edit-mode-panel__selection` — selection sub-section (only when `editMode && selection.mcIds.size > 0`); separated from the toggle by a top border + `pt-3`.
+- `edit-mode-panel__count` — "N selected · topic Foo" header.
+- `edit-mode-panel__actions` — 2×2 grid of Copy / Move / Delete / Cancel.
+- `edit-mode-panel__pending` — stacked Apply (N) / Cancel shown while a target picker is open.
+- `edit-mode-toggle`, `edit-mode-toggle--active` — collapsed-mode icon-only Edit button, rendered in the right toolbar's narrow column below the density CycleIconButton.
+
+**Reuse:**
+- `selection-actions__btn--copy`, `--move`, `--delete`, `--cancel`, `--apply`, `selection-actions__pending` — kept verbatim inside the new panel (same buttons, new container).
+
+**Removed from the inventory in practice (still defined but no longer rendered):**
+- `selection-actions--inline` — was the horizontal modifier on the top-toolbar version. Now unused; can be deleted in a future cleanup.
+- `toolbar-btn--toggle`, `toolbar-btn--toggle--active` — were the top-toolbar Edit button styles. Now unused (the new toggle lives inside `edit-mode-panel__toggle` instead).

@@ -35,7 +35,10 @@ import {
 import {
   MessageError,
   archiveMessage,
+  copyMessages,
   createMessage,
+  getMessageByPmmid,
+  moveMessages,
   pickWritable as pickMessageWritable,
   restoreMessage,
   updateMessage,
@@ -449,17 +452,12 @@ function findTopicByKey(clientId: number, key: string): Topic | null {
   );
 }
 
+// Thin alias kept so existing call-sites in this file don't churn.
 function findMessageByPmmid(
   clientId: number,
   pmmid: string,
 ): Message | null {
-  return (
-    db
-      .select()
-      .from(messages)
-      .where(and(eq(messages.clientId, clientId), eq(messages.pmmid, pmmid)))
-      .get() ?? null
-  );
+  return getMessageByPmmid(clientId, pmmid);
 }
 
 const fieldsArg = z.record(z.string(), z.unknown()).optional();
@@ -1085,6 +1083,98 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
           after: { count: updated.length, ids: updated.map((r) => r.id) },
         });
         return jsonResult({ updated });
+      } catch (e) {
+        if (e instanceof BatchError) {
+          return errorResult(e.message, {
+            mc_label: e.mcLabel,
+            current: e.current,
+          });
+        }
+        throw e;
+      }
+    },
+  );
+
+  server.registerTool(
+    "mc_copy_batch",
+    {
+      description:
+        "Copy each source message into each target audience (under the source's topic). Required: source_mc_labels (PMMIDs), target_audience_keys. Optional field_overrides merged on top of cloned fields. All-or-nothing — any unknown source rolls back the whole batch. New PMMIDs are generated against the target audience.",
+      inputSchema: {
+        source_mc_labels: z.array(z.string()),
+        target_audience_keys: z.array(z.string()),
+        field_overrides: fieldsArg,
+      },
+    },
+    async ({ source_mc_labels, target_audience_keys, field_overrides }) => {
+      const limited = requireRate(ctx);
+      if (limited) return limited;
+      try {
+        const result = db.transaction(() =>
+          copyMessages(ctx.clientId, source_mc_labels, target_audience_keys, {
+            fieldOverrides: pickMessageWritable(field_overrides ?? {}),
+          }),
+        );
+        writeAudit({
+          clientId: ctx.clientId,
+          userId: mcpUserId(ctx),
+          entityType: "messages",
+          entityId: `bulk:${ctx.clientId}`,
+          action: "bulk_copy",
+          after: {
+            count: result.created.length,
+            ids: result.created.map((r) => r.id),
+          },
+        });
+        return jsonResult({ created: result.created });
+      } catch (e) {
+        if (e instanceof MessageError) return errorResult(e.message);
+        throw e;
+      }
+    },
+  );
+
+  server.registerTool(
+    "mc_move_batch",
+    {
+      description:
+        "Move messages into a single target audience (same topic only). Required: moves (array of { mc_label, version }), target_audience_key. PMMID is preserved; UTM columns are regenerated against the new audience. Variant auto-bumps on collision. All-or-nothing — any version_conflict / not_found / cross_topic / unknown audience rolls the batch back.",
+      inputSchema: {
+        moves: z.array(
+          z.object({ mc_label: z.string(), version: z.number().int() }),
+        ),
+        target_audience_key: z.string(),
+      },
+    },
+    async ({ moves, target_audience_key }) => {
+      const limited = requireRate(ctx);
+      if (limited) return limited;
+      try {
+        const result = db.transaction(() =>
+          moveMessages(
+            ctx.clientId,
+            moves.map((m) => ({
+              mcLabel: m.mc_label,
+              expectedVersion: m.version,
+            })),
+            target_audience_key,
+          ),
+        );
+        if (!result.ok) {
+          throw new BatchError(result.reason, result.mcLabel, result.current);
+        }
+        writeAudit({
+          clientId: ctx.clientId,
+          userId: mcpUserId(ctx),
+          entityType: "messages",
+          entityId: `bulk:${ctx.clientId}`,
+          action: "bulk_move",
+          after: {
+            count: result.updated.length,
+            ids: result.updated.map((r) => r.id),
+          },
+        });
+        return jsonResult({ updated: result.updated });
       } catch (e) {
         if (e instanceof BatchError) {
           return errorResult(e.message, {

@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { LayoutList, List, Grip, Table2, ListFilter } from "lucide-react";
 import clsx from "clsx";
 import GridView from "./GridView";
@@ -28,6 +28,40 @@ async function fetchJSON<T>(url: string): Promise<T> {
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
   return r.json();
 }
+
+async function postJSON<T>(url: string, body: unknown): Promise<T> {
+  const r = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    const text = await r.text().catch(() => r.statusText);
+    throw new Error(`${r.status}: ${text}`);
+  }
+  return r.json();
+}
+
+export type Selection = { topic: string | null; mcIds: Set<number> };
+export type PendingAction = {
+  kind: "copy" | "move";
+  targetAudienceKeys: Set<string>;
+} | null;
+
+export type EditApi = {
+  editMode: boolean;
+  setEditMode: (v: boolean) => void;
+  selection: Selection;
+  toggleSelect: (msg: Message) => void;
+  clearSelection: () => void;
+  beginPending: (kind: "copy" | "move") => void;
+  cancelPending: () => void;
+  toggleTargetAudience: (audienceKey: string) => void;
+  pendingAction: PendingAction;
+  applyPending: () => void;
+  bulkBusy: boolean;
+};
 
 const STORAGE_KEY = "mm6_matrix_state_v1";
 
@@ -59,6 +93,16 @@ export default function MatrixWorkspace() {
     { kind: "audience" | "topic"; key: string } | null
   >(null);
   const [hydrated, setHydrated] = useState(false);
+
+  // Edit-mode state — NOT persisted to localStorage. Mirrors the longpress +
+  // selection pattern from CreativeLibrary.tsx:148-193.
+  const [editMode, setEditMode] = useState(false);
+  const [selection, setSelection] = useState<Selection>({
+    topic: null,
+    mcIds: new Set(),
+  });
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const p = loadPersisted();
@@ -97,6 +141,109 @@ export default function MatrixWorkspace() {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
   }, [hydrated, view, density, transposed, filters]);
 
+  const messagesById = useMemo(() => new Map<number, Message>(), []);
+
+  const toggleSelect = useCallback(
+    (msg: Message) => {
+      setSelection((prev) => {
+        if (prev.mcIds.has(msg.id)) {
+          const next = new Set(prev.mcIds);
+          next.delete(msg.id);
+          return next.size === 0
+            ? { topic: null, mcIds: next }
+            : { topic: prev.topic, mcIds: next };
+        }
+        if (prev.topic && prev.topic !== msg.topic) {
+          // Cross-topic add → reject (first selection pins the topic).
+          return prev;
+        }
+        const next = new Set(prev.mcIds);
+        next.add(msg.id);
+        return { topic: prev.topic ?? msg.topic, mcIds: next };
+      });
+    },
+    [],
+  );
+
+  const clearSelection = useCallback(() => {
+    setSelection({ topic: null, mcIds: new Set() });
+    setPendingAction(null);
+  }, []);
+
+  const beginPending = useCallback((kind: "copy" | "move") => {
+    setPendingAction({ kind, targetAudienceKeys: new Set() });
+  }, []);
+
+  const cancelPending = useCallback(() => setPendingAction(null), []);
+
+  const toggleTargetAudience = useCallback((audienceKey: string) => {
+    setPendingAction((prev) => {
+      if (!prev) return prev;
+      const next = new Set(prev.targetAudienceKeys);
+      if (next.has(audienceKey)) next.delete(audienceKey);
+      else if (prev.kind === "move") {
+        // Move: single-target. Replace any prior selection.
+        next.clear();
+        next.add(audienceKey);
+      } else {
+        next.add(audienceKey);
+      }
+      return { ...prev, targetAudienceKeys: next };
+    });
+  }, []);
+
+  // Esc cancels pending action first, then selection. Mirrors CL keyboard UX.
+  useEffect(() => {
+    if (!editMode) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return;
+      if (pendingAction) setPendingAction(null);
+      else clearSelection();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editMode, pendingAction, clearSelection]);
+
+  // Toggling off the last selected MC clears any pending action — its UI is
+  // anchored on having a non-empty selection.
+  useEffect(() => {
+    if (selection.mcIds.size === 0 && pendingAction) setPendingAction(null);
+  }, [selection.mcIds.size, pendingAction]);
+
+  // Leaving edit mode resets everything.
+  useEffect(() => {
+    if (!editMode) {
+      setSelection({ topic: null, mcIds: new Set() });
+      setPendingAction(null);
+    }
+  }, [editMode]);
+
+  const copyMutation = useMutation({
+    mutationFn: (vars: {
+      source_mc_labels: string[];
+      target_audience_keys: string[];
+    }) => postJSON("/api/messages/bulk-copy", vars),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["messages"] });
+      clearSelection();
+      setEditMode(false);
+    },
+  });
+
+  const moveMutation = useMutation({
+    mutationFn: (vars: {
+      moves: { mc_label: string; version: number }[];
+      target_audience_key: string;
+    }) => postJSON("/api/messages/bulk-move", vars),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["messages"] });
+      clearSelection();
+      setEditMode(false);
+    },
+  });
+
   const audiencesQ = useQuery({
     queryKey: ["audiences"],
     queryFn: () => fetchJSON<{ audiences: Audience[] }>("/api/audiences"),
@@ -121,6 +268,109 @@ export default function MatrixWorkspace() {
   const topics = topicsQ.data?.topics ?? [];
   const messages = messagesQ.data?.messages ?? [];
   const templates = templatesQ.data?.templates ?? [];
+
+  // Keep the lookup map in sync with the latest messages — referenced inline by
+  // bulk handlers below (id → PMMID / version).
+  messagesById.clear();
+  for (const m of messages) messagesById.set(m.id, m);
+
+  const applyPending = useCallback(() => {
+    if (!pendingAction || selection.mcIds.size === 0) return;
+    const sources = [...selection.mcIds]
+      .map((id) => messagesById.get(id))
+      .filter((m): m is Message => !!m);
+    const sourcePmmids = sources
+      .map((m) => m.pmmid)
+      .filter((p): p is string => !!p);
+    if (sourcePmmids.length === 0) return;
+    const targets = [...pendingAction.targetAudienceKeys];
+    if (targets.length === 0) return;
+
+    if (pendingAction.kind === "copy") {
+      copyMutation.mutate({
+        source_mc_labels: sourcePmmids,
+        target_audience_keys: targets,
+      });
+    } else {
+      if (targets.length !== 1) return; // Apply gate enforces this in UI.
+      moveMutation.mutate({
+        moves: sources
+          .filter((m) => m.pmmid)
+          .map((m) => ({ mc_label: m.pmmid!, version: m.version })),
+        target_audience_key: targets[0],
+      });
+    }
+  }, [pendingAction, selection, messagesById, copyMutation, moveMutation]);
+
+  const editApi: EditApi = useMemo(
+    () => ({
+      editMode,
+      setEditMode,
+      selection,
+      toggleSelect,
+      clearSelection,
+      beginPending,
+      cancelPending,
+      toggleTargetAudience,
+      pendingAction,
+      applyPending,
+      bulkBusy: copyMutation.isPending || moveMutation.isPending,
+    }),
+    [
+      editMode,
+      selection,
+      pendingAction,
+      toggleSelect,
+      clearSelection,
+      beginPending,
+      cancelPending,
+      toggleTargetAudience,
+      applyPending,
+      copyMutation.isPending,
+      moveMutation.isPending,
+    ],
+  );
+
+  // DnD callback — chooses copy vs move from Ctrl/Meta on the activator event,
+  // POSTs to the bulk endpoints. Source set = selection if the dragged MC is in
+  // selection, otherwise just the dragged MC.
+  const handleDndDrop = useCallback(
+    (args: {
+      draggedId: number;
+      targetAudience: string;
+      targetTopic: string;
+      copy: boolean;
+    }) => {
+      const dragged = messagesById.get(args.draggedId);
+      if (!dragged) return;
+      if (selection.topic && args.targetTopic !== selection.topic) return;
+
+      const isSelected = selection.mcIds.has(args.draggedId);
+      const sourceIds = isSelected
+        ? [...selection.mcIds]
+        : [args.draggedId];
+      const sources = sourceIds
+        .map((id) => messagesById.get(id))
+        .filter((m): m is Message => !!m && !!m.pmmid);
+      if (sources.length === 0) return;
+
+      if (args.copy) {
+        copyMutation.mutate({
+          source_mc_labels: sources.map((m) => m.pmmid!),
+          target_audience_keys: [args.targetAudience],
+        });
+      } else {
+        moveMutation.mutate({
+          moves: sources.map((m) => ({
+            mc_label: m.pmmid!,
+            version: m.version,
+          })),
+          target_audience_key: args.targetAudience,
+        });
+      }
+    },
+    [messagesById, selection, copyMutation, moveMutation],
+  );
 
   const productOptions = useMemo(() => {
     const s = new Set<string>();
@@ -237,6 +487,8 @@ export default function MatrixWorkspace() {
             visibleAudiences: filtered.auds.length,
             visibleTopics: filtered.tops.length,
           }}
+          editApi={editApi}
+          topicNameByKey={topicById}
         />
 
         <div className="relative flex-1 overflow-hidden">
@@ -250,6 +502,16 @@ export default function MatrixWorkspace() {
               setTransposed={setTransposed}
               onOpenMessage={(id) => setOpenMessageId(id)}
               onOpenHeader={(kind, key) => setHeaderDialog({ kind, key })}
+              editApi={editApi}
+              onDndDrop={handleDndDrop}
+              onCreateInCell={async (audience, topic) => {
+                const { message } = await postJSON<{ message: Message }>(
+                  "/api/messages",
+                  { audience, topic },
+                );
+                await queryClient.invalidateQueries({ queryKey: ["messages"] });
+                setOpenMessageId(message.id);
+              }}
             />
           ) : (
             <FeedView

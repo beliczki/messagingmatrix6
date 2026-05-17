@@ -161,6 +161,19 @@ export function getMessage(clientId: number, id: number): Message | null {
   );
 }
 
+export function getMessageByPmmid(
+  clientId: number,
+  pmmid: string,
+): Message | null {
+  return (
+    db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.clientId, clientId), eq(messages.pmmid, pmmid)))
+      .get() ?? null
+  );
+}
+
 export function createMessage(
   clientId: number,
   input: MessageInput,
@@ -212,6 +225,7 @@ export function createMessage(
   return db
     .insert(messages)
     .values({
+      ...input,
       clientId,
       number: slot.number,
       variant: slot.variant,
@@ -219,28 +233,6 @@ export function createMessage(
       topic: input.topic,
       versionNo: slot.version,
       pmmid,
-      status: input.status,
-      startDate: input.startDate,
-      endDate: input.endDate,
-      template: input.template,
-      templateVariantClasses: input.templateVariantClasses,
-      name: input.name,
-      headline: input.headline,
-      copy1: input.copy1,
-      copy2: input.copy2,
-      image1: input.image1,
-      image2: input.image2,
-      image3: input.image3,
-      image4: input.image4,
-      image5: input.image5,
-      image6: input.image6,
-      video1: input.video1,
-      flash: input.flash,
-      flashStyle: input.flashStyle,
-      cta: input.cta,
-      landingUrl: input.landingUrl,
-      comment: input.comment,
-      brief: input.brief,
       utmCampaign: traffic.utm_campaign,
       utmSource: traffic.utm_source,
       utmMedium: traffic.utm_medium,
@@ -348,4 +340,197 @@ export function restoreMessage(
     .returning()
     .get();
   return { ok: true, row: updated };
+}
+
+export type CopyOpts = { fieldOverrides?: MessageInput };
+
+// Copy each source MC into each target audience (under the source's topic).
+// Returns `created` in the same order as iterated: outer = source, inner =
+// target audience. Each new MC gets a fresh (number, variant, versionNo) via
+// nextMcSlot and a fresh PMMID generated against the target audience.
+export function copyMessages(
+  clientId: number,
+  sourceMcLabels: string[],
+  targetAudienceKeys: string[],
+  opts: CopyOpts = {},
+): { created: Message[] } {
+  const created: Message[] = [];
+  for (const label of sourceMcLabels) {
+    const source = getMessageByPmmid(clientId, label);
+    if (!source) {
+      throw new MessageError(`message '${label}' not found`);
+    }
+    const cloneable: MessageInput = pickWritable(source);
+    for (const targetAud of targetAudienceKeys) {
+      const row = createMessage(clientId, {
+        ...cloneable,
+        ...(opts.fieldOverrides ?? {}),
+        audience: targetAud,
+        topic: source.topic,
+      });
+      created.push(row);
+    }
+  }
+  return { created };
+}
+
+export type MoveItem = { mcLabel: string; expectedVersion: number };
+export type MoveResult =
+  | { ok: true; updated: Message[] }
+  | {
+      ok: false;
+      reason:
+        | "version_conflict"
+        | "not_found"
+        | "cross_topic_move_not_supported"
+        | "target_audience_not_found";
+      mcLabel: string;
+      current?: Message;
+    };
+
+// Move messages into a single target audience. Same-topic only; PMMID and
+// versionNo are frozen. UTM columns are regenerated against the new audience.
+// On (number, variant) collision in the target cell, variant auto-bumps to the
+// next free char so moves always succeed without renumbering existing rows.
+export function moveMessages(
+  clientId: number,
+  moves: MoveItem[],
+  targetAudienceKey: string,
+): MoveResult {
+  const targetAudience = findAudienceByKey(clientId, targetAudienceKey);
+  if (!targetAudience) {
+    return {
+      ok: false,
+      reason: "target_audience_not_found",
+      mcLabel: moves[0]?.mcLabel ?? "",
+    };
+  }
+
+  const patterns = readClientPatterns(clientId);
+
+  // Pre-pass: resolve all sources + validate same-topic + optimistic version.
+  type Resolved = {
+    item: MoveItem;
+    source: Message;
+    topicRow: Topic | null;
+  };
+  const resolved: Resolved[] = [];
+  for (const m of moves) {
+    const source = getMessageByPmmid(clientId, m.mcLabel);
+    if (!source) {
+      return { ok: false, reason: "not_found", mcLabel: m.mcLabel };
+    }
+    if (source.version !== m.expectedVersion) {
+      return {
+        ok: false,
+        reason: "version_conflict",
+        mcLabel: m.mcLabel,
+        current: source,
+      };
+    }
+    const topicRow = findTopicByKey(clientId, source.topic);
+    resolved.push({ item: m, source, topicRow });
+  }
+
+  // All resolved sources must share their topic with the planning group's
+  // existing target cell occupants (single-topic invariant).
+  const distinctTopics = new Set(resolved.map((r) => r.source.topic));
+  if (distinctTopics.size > 1) {
+    return {
+      ok: false,
+      reason: "cross_topic_move_not_supported",
+      mcLabel: resolved[0]?.item.mcLabel ?? "",
+    };
+  }
+
+  // Per-row (number, variant) plan against the live snapshot of the target
+  // cell. We start from the live messages and append our own plan as we go,
+  // so a batch moving multiple MCs into the same cell doesn't collide with
+  // itself.
+  const liveAll = listLiveMessages(clientId);
+  type Plan = Resolved & { number: number; variant: string };
+  const plan: Plan[] = [];
+
+  for (const r of resolved) {
+    const topic = r.source.topic;
+    const moverIds = new Set(plan.map((p) => p.source.id));
+    moverIds.add(r.source.id); // ignore the source row itself for collision
+    const cellOccupants: ExistingMessage[] = [
+      ...liveAll.filter(
+        (m) =>
+          m.topic === topic &&
+          m.audience === targetAudienceKey &&
+          !moverIds.has((m as Message).id),
+      ),
+      ...plan
+        .filter((p) => p.source.topic === topic)
+        .map((p) => ({
+          number: p.number,
+          variant: p.variant,
+          topic,
+          audience: targetAudienceKey,
+          status: null,
+          archivedAt: null,
+        })),
+    ];
+
+    // Is (source.number, source.variant) free in the target cell?
+    const taken = cellOccupants.some(
+      (m) =>
+        m.number === r.source.number && (m.variant ?? "") === r.source.variant,
+    );
+
+    let number: number;
+    let variant: string;
+    if (!taken) {
+      number = r.source.number;
+      variant = r.source.variant;
+    } else {
+      // Bump variant. nextMcSlot for an occupied cell returns same number +
+      // next variant char.
+      const slot = nextMcSlot(cellOccupants, topic, targetAudienceKey);
+      number = slot.number;
+      variant = slot.variant;
+    }
+
+    plan.push({ ...r, number, variant });
+  }
+
+  // Apply updates.
+  const updated: Message[] = [];
+  for (const p of plan) {
+    const traffic = generateTrafficking(
+      {
+        number: p.number,
+        variant: p.variant,
+        audienceKey: targetAudienceKey,
+        topicKey: p.source.topic,
+        audience: targetAudience,
+        topic: p.topicRow ?? undefined,
+      },
+      patterns.trafficking,
+    );
+    const row = db
+      .update(messages)
+      .set({
+        audience: targetAudienceKey,
+        number: p.number,
+        variant: p.variant,
+        utmCampaign: traffic.utm_campaign,
+        utmSource: traffic.utm_source,
+        utmMedium: traffic.utm_medium,
+        utmContent: traffic.utm_content,
+        utmTerm: traffic.utm_term,
+        utmCd26: traffic.utm_cd26,
+        version: sql`${messages.version} + 1`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(
+        and(eq(messages.clientId, clientId), eq(messages.id, p.source.id)),
+      )
+      .returning()
+      .get();
+    updated.push(row);
+  }
+  return { ok: true, updated };
 }

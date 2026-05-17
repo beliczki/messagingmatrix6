@@ -1586,3 +1586,39 @@ Both `Creative Library` (`/creative-library`) and `Assets` (`/assets`) gained a 
 **Manual verification needed (user-side, dev server already on :6001):** click each of the 6 headers on both pages, confirm direction toggle + arrow indicator + full-list ordering (scroll past row 200 in Creative Library), confirm Grid/Masonry inherit the order silently, confirm reload persists, confirm matrix-synthesized rows in Creative Library align column-perfectly with uploaded rows.
 
 **Not bumped** — `6.0.0-pre`; per CLAUDE.md, pre-launch bumps are deferred to the `6.0.0` graduation event.
+
+---
+
+## Session checkpoint — 2026-05-17 — Matrix edit-mode v1
+
+Shipped on `feat/matrix-edit-mode-v1`:
+
+**Entity layer (`src/lib/entities/messages.ts`)**
+- Fixed latent bug in `createMessage`: insert payload now spreads the validated input on top of computed `(clientId, slot, pmmid, utm_*)`, so `disclaimer`, `headlineStyle`, `copy1Style`, `copy2Style`, `disclaimerStyle`, `ctaStyle`, `customCss` actually persist on create.
+- Added `getMessageByPmmid(clientId, pmmid)` (extracted from `lib/mcp.ts` so both MCP + HTTP share one lookup).
+- Added `copyMessages(clientId, sourceMcLabels, targetAudienceKeys, opts?)` — clones each source MC into each target audience under the source's topic, fresh PMMID per copy, `fieldOverrides` merge on top.
+- Added `moveMessages(clientId, moves, targetAudienceKey)` — same-topic only; PMMID + versionNo frozen; UTM columns regenerated against the new audience; auto-bumps variant on `(number, variant)` collision in the target cell.
+
+**MCP (`src/lib/mcp.ts`)**
+- New tools registered in `registerBatchTools`: `mc_copy_batch`, `mc_move_batch`. Both wrap the entity functions in `db.transaction()` and write a single audit row per batch (`bulk_copy` / `bulk_move`, both already valid `AuditAction`s).
+
+**HTTP**
+- `POST /api/messages/bulk-copy` — thin wrapper, denyDemo + zod, 400 on bad shape, 201 on success.
+- `POST /api/messages/bulk-move` — thin wrapper, 409 on `version_conflict`, 404 on `not_found`, 400 on `cross_topic_move_not_supported` / `target_audience_not_found`.
+
+**UI**
+- `MatrixWorkspace` holds `editMode` + `selection` (`{ topic, mcIds }`) + `pendingAction` (`{ kind: 'copy'|'move', targetAudienceKeys }`). Esc cancels pending action first, then clears selection. None of this is persisted to localStorage.
+- `MatrixToolbar` got an `Edit` toggle (Lucide `Pencil`) and an inline `selection-actions--inline` block when `editMode && selectedCount > 0`. `Apply (N)` button while a target picker is open.
+- `McChip` is now selectable + draggable (`useLongPress` 500ms entry; `@dnd-kit/core` `useDraggable`). Cells are `useDroppable` and reject cross-topic drops visually. `onDragEnd` chooses copy vs move from Ctrl/Cmd on the activator.
+- Column headers double as the target picker while `pendingAction` is set (audiences-as-columns orientation only). Ghost preview chips render in target cells for the upcoming write.
+- `+ new` button (`cell-add-btn`) renders in every cell during edit mode → POSTs `/api/messages` with `audience`/`topic` prefilled → opens `MessageEditor` for the new row.
+
+**Tests**
+- `tests/integration/api/copy-move-messages.test.ts` — 13 tests covering copy semantics (incl. disclaimer/Style/customCss regression), move semantics, frozen PMMID/versionNo, regenerated UTMs, variant auto-bump, in-batch collision, version_conflict rollback, cross-topic rejection, tenant isolation.
+- `tests/integration/api/mcp-copy-move.test.ts` — 4 tests driving both new MCP tools via `buildMcpServer()._registeredTools`, asserting audit row count + tenant isolation.
+
+**Deferred to v2** (still): cross-topic move, undo/redo, bulk delete (stubbed disabled), keyboard-only edit mode, mobile gestures beyond longpress, PMMID regeneration on move.
+
+**Status:** still `6.0.0-pre`. No version bump per project `CLAUDE.md`.
+
+**Known limitations:** target-picker column-header click only works when audiences are columns (`transposed=true`, the default). In `transposed=false` mode the columns are topics and the picker becomes inert — DnD still works in both orientations.

@@ -542,3 +542,24 @@ Ezeket NEM most refaktoráljuk, de jelölöm hogy ne felejtsük el:
 **Új BEM block-ok:** `matrix-iframe-tile`, `matrix-iframe-card`, `matrix-iframe-row`, `matrix-iframe-preview` (`__frame`, `__placeholder`, `__error`), `matrix-detail-dialog` (`__header`, `__stage`).
 
 **Reuse:** a card / list variánsok a meglévő `creative-card` / `creative-row` chrome-ot hordják (közös meta-blokk + tag-chip-ek), így a vizuális rítmus megegyezik az uploaded creative tile-okkal.
+
+---
+
+## Változások 2026-05-17 — Matrix edit-mode v1
+
+**Új BEM class-ok:**
+- `selection-actions--inline` — horizontal modifier on the shared `selection-actions` block (top-toolbar use vs the existing vertical sidebar use in CL / Feeds / Shares).
+- `selection-actions__btn--apply` — green commit button shown while a copy/move target picker is open.
+- `mc-chip--selectable` — edit-mode cursor + outline hint on every chip.
+- `mc-chip--selected` — visible ring when the chip is in the current selection.
+- `mc-chip--ghost` — preview chip rendered in target cells during the toolbar Copy/Move picker (dashed border, no DB write).
+- `mc-chip--ghost-source` — dimmed source-cell chip during a pending move.
+- `cell-add-btn` — `+ new` quick-create button rendered in every cell while edit mode is on.
+- `toolbar-btn--toggle`, `toolbar-btn--toggle--active` — generic on/off toolbar button (used by the matrix `Edit` toggle; pattern can be reused elsewhere).
+- `matrix-grid__col-header--target`, `matrix-grid__col-header--target-disabled` — column-header states while a Copy/Move target picker is open.
+- `matrix-grid__cell--drop-target`, `matrix-grid__cell--drop-rejected` — drop-zone affordances during DnD.
+
+**Reuse:**
+- `useLongPress` (`_components/useLongPress.ts`) — same hook CreativeLibrary uses for selector-mode entry.
+- `selection-actions` block reused horizontally rather than introducing a new `selection-toolbar`.
+- `@dnd-kit/core` added as a new dependency (no `sortable`/`utilities` — this UX has no list reordering).

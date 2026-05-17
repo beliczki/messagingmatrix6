@@ -238,8 +238,8 @@ export default function AssetsLibrary() {
 
       <div
         className={clsx(
-          "assets-library__scroll relative flex-1 overflow-auto px-4 pb-4 pt-4 transition",
-          view === "list" && "pt-0",
+          "assets-library__scroll relative flex-1 overflow-auto transition",
+          view === "list" ? "p-0" : "p-4",
           drop.over && "bg-slate-100 ring-2 ring-inset ring-slate-900",
         )}
         {...drop.handlers}
@@ -305,7 +305,7 @@ export default function AssetsLibrary() {
             ))}
           </div>
         ) : (
-          <div className="assets-library__view assets-library__view--list flex flex-col gap-1.5">
+          <div className="assets-library__view assets-library__view--list flex flex-col">
             <ListSortHeader sort={sort} onChange={setSort} />
             {sorted.map((a) => (
               <ListRow
@@ -542,12 +542,12 @@ function ListRow({
       type="button"
       onClick={onOpen}
       className={clsx(
-        "asset-row group grid w-full items-center gap-3 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs transition hover:border-slate-400 hover:shadow-sm [content-visibility:auto] [contain-intrinsic-size:auto_56px]",
+        "asset-row group grid w-full items-center border-b border-slate-100 bg-white text-left text-xs transition hover:bg-slate-50 [content-visibility:auto] [contain-intrinsic-size:auto_52px]",
         archived && "row--archived",
       )}
       style={{ gridTemplateColumns: LIST_GRID_TEMPLATE }}
     >
-      <div className="asset-row__thumb thumb-checker size-12 shrink-0 overflow-hidden rounded">
+      <div className="asset-row__thumb thumb-checker my-1 ml-2 mr-0 size-10 shrink-0 overflow-hidden rounded border border-slate-200">
         {isImage && asset.fileId ? (
           <img
             src={`/api/files/${asset.fileId}/thumbnail?w=96`}
@@ -570,7 +570,7 @@ function ListRow({
           </div>
         )}
       </div>
-      <div className="asset-row__name min-w-0">
+      <div className="asset-row__name min-w-0 border-r border-slate-100 px-3 py-2">
         <span
           className="asset-row__filename row--archived__filename block truncate text-slate-700"
           title={asset.fileName ?? ""}
@@ -578,19 +578,28 @@ function ListRow({
           {asset.fileName ?? "(no file)"}
         </span>
       </div>
-      <div className="asset-row__product truncate text-slate-600" title={asset.product ?? ""}>
+      <div
+        className="asset-row__product truncate border-r border-slate-100 px-3 py-2 text-slate-600"
+        title={asset.product ?? ""}
+      >
         {asset.product ?? "—"}
       </div>
-      <div className="asset-row__type truncate text-slate-600">
+      <div className="asset-row__type truncate border-r border-slate-100 px-3 py-2 text-slate-600">
         {asset.type ?? "—"}
       </div>
-      <div className="asset-row__size truncate font-mono text-[11px] text-slate-600">
+      <div className="asset-row__size truncate border-r border-slate-100 px-3 py-2 font-mono text-[11px] text-slate-600">
         {asset.fileDimensions ?? "—"}
       </div>
-      <div className="asset-row__created truncate text-slate-500" title={createdTitle}>
+      <div
+        className="asset-row__created truncate border-r border-slate-100 px-3 py-2 text-slate-500"
+        title={createdTitle}
+      >
         {formatListDate(asset.createdAt)}
       </div>
-      <div className="asset-row__updated truncate text-slate-500" title={updatedTitle}>
+      <div
+        className="asset-row__updated truncate px-3 py-2 text-slate-500"
+        title={updatedTitle}
+      >
         {formatListDate(asset.updatedAt)}
       </div>
     </button>

@@ -284,10 +284,10 @@ export function MatrixIframeListRow({
     <button
       type="button"
       onClick={onOpen}
-      className="creative-row matrix-iframe-row group grid w-full items-center gap-3 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs transition hover:border-slate-400 hover:shadow-sm [content-visibility:auto] [contain-intrinsic-size:auto_56px]"
+      className="creative-row matrix-iframe-row group grid w-full items-center border-b border-slate-100 bg-white text-left text-xs transition hover:bg-slate-50 [content-visibility:auto] [contain-intrinsic-size:auto_52px]"
       style={{ gridTemplateColumns: LIST_GRID_TEMPLATE }}
     >
-      <div className="creative-row__thumb size-12 shrink-0 overflow-hidden rounded">
+      <div className="creative-row__thumb my-1 ml-2 mr-0 size-10 shrink-0 overflow-hidden rounded border border-slate-200">
         <MatrixIframePreview
           message={message}
           templateName={templateName}
@@ -295,7 +295,7 @@ export function MatrixIframeListRow({
           mode="fit-rect"
         />
       </div>
-      <div className="creative-row__name flex min-w-0 items-baseline gap-2">
+      <div className="creative-row__name flex min-w-0 items-baseline gap-2 border-r border-slate-100 px-3 py-2">
         <span className="creative-row__mc font-mono font-semibold text-slate-900">
           {mcLabel}
         </span>
@@ -303,17 +303,28 @@ export function MatrixIframeListRow({
           {headline}
         </span>
       </div>
-      <div className="creative-row__product truncate text-slate-600" title={product ?? ""}>
+      <div
+        className="creative-row__product truncate border-r border-slate-100 px-3 py-2 text-slate-600"
+        title={product ?? ""}
+      >
         {product ?? "—"}
       </div>
-      <div className="creative-row__type truncate text-slate-600">html</div>
-      <div className="creative-row__size truncate font-mono text-[11px] text-slate-600">
+      <div className="creative-row__type truncate border-r border-slate-100 px-3 py-2 text-slate-600">
+        html
+      </div>
+      <div className="creative-row__size truncate border-r border-slate-100 px-3 py-2 font-mono text-[11px] text-slate-600">
         {size}
       </div>
-      <div className="creative-row__created truncate text-slate-500" title={createdTitle}>
+      <div
+        className="creative-row__created truncate border-r border-slate-100 px-3 py-2 text-slate-500"
+        title={createdTitle}
+      >
         {formatListDate(createdAt)}
       </div>
-      <div className="creative-row__updated truncate text-slate-500" title={updatedTitle}>
+      <div
+        className="creative-row__updated truncate px-3 py-2 text-slate-500"
+        title={updatedTitle}
+      >
         {formatListDate(updatedAt)}
       </div>
     </button>

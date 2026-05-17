@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp } from "lucide-react";
 import clsx from "clsx";
 import type { Codec } from "./usePersistent";
 
-export const LIST_GRID_TEMPLATE = "48px minmax(0,1fr) 96px 80px 96px 88px 88px";
+export const LIST_GRID_TEMPLATE = "48px minmax(0,1fr) 120px 80px 100px 88px 88px";
 
 export type ListSortKey =
   | "name"
@@ -63,12 +63,13 @@ export function ListSortHeader({
 }) {
   return (
     <div
-      className="list-sort-header sticky top-0 z-[5] -mt-1 mb-1.5 grid items-center gap-3 border-b border-slate-200 bg-white/95 px-2 py-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-500 backdrop-blur"
+      className="list-sort-header sticky top-0 z-[5] grid h-8 items-center border-b border-slate-200 bg-slate-50 text-[11px] font-medium uppercase tracking-wider text-slate-600"
       style={{ gridTemplateColumns: LIST_GRID_TEMPLATE }}
     >
-      <div aria-hidden />
-      {HEADER_COLS.map((c) => {
+      <div aria-hidden className="border-r border-slate-200" />
+      {HEADER_COLS.map((c, i) => {
         const active = sort.key === c.key;
+        const isLast = i === HEADER_COLS.length - 1;
         return (
           <button
             key={c.key}
@@ -76,7 +77,8 @@ export function ListSortHeader({
             onClick={() => onChange(toggleSort(sort, c.key))}
             title={`Sort by ${c.label}`}
             className={clsx(
-              "list-sort-header__cell flex min-w-0 items-center gap-1 text-left hover:text-slate-900",
+              "list-sort-header__cell flex h-full min-w-0 items-center gap-1 px-3 text-left hover:bg-slate-100",
+              !isLast && "border-r border-slate-200",
               active && "list-sort-header__cell--active text-slate-900",
             )}
           >

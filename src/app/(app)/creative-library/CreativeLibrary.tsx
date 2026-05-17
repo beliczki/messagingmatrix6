@@ -508,8 +508,8 @@ export default function CreativeLibrary() {
         <div
           ref={scrollRef}
           className={clsx(
-            "creative-library__scroll relative flex-1 overflow-auto px-4 pb-4 pt-4 transition",
-            view === "list" && "pt-0",
+            "creative-library__scroll relative flex-1 overflow-auto transition",
+            view === "list" ? "p-0" : "p-4",
             drop.over && "bg-slate-100 ring-2 ring-inset ring-slate-900",
           )}
           {...drop.handlers}
@@ -591,7 +591,7 @@ export default function CreativeLibrary() {
                   ))}
                 </div>
               ) : (
-                <div className="creative-library__view creative-library__view--list flex flex-col gap-1.5">
+                <div className="creative-library__view creative-library__view--list flex flex-col">
                   <ListSortHeader sort={sort} onChange={setSort} />
                   {visible.map((c) => (
                     <SelectableItem
@@ -940,12 +940,12 @@ function ListRow({
       type="button"
       onClick={onOpen}
       className={clsx(
-        "creative-row group grid w-full items-center gap-3 rounded-md border border-slate-200 bg-white px-2 py-1.5 text-left text-xs transition hover:border-slate-400 hover:shadow-sm [content-visibility:auto] [contain-intrinsic-size:auto_56px]",
+        "creative-row group grid w-full items-center border-b border-slate-100 bg-white text-left text-xs transition hover:bg-slate-50 [content-visibility:auto] [contain-intrinsic-size:auto_52px]",
         archived && "row--archived",
       )}
       style={{ gridTemplateColumns: LIST_GRID_TEMPLATE }}
     >
-      <div className="creative-row__thumb thumb-checker size-12 shrink-0 overflow-hidden rounded">
+      <div className="creative-row__thumb thumb-checker my-1 ml-2 mr-0 size-10 shrink-0 overflow-hidden rounded border border-slate-200">
         {isImage && creative.fileId ? (
           <img
             src={`/api/files/${creative.fileId}/thumbnail?w=96`}
@@ -968,7 +968,7 @@ function ListRow({
           </div>
         )}
       </div>
-      <div className="creative-row__name flex min-w-0 items-baseline gap-2">
+      <div className="creative-row__name flex min-w-0 items-baseline gap-2 border-r border-slate-100 px-3 py-2">
         {mcLabel ? (
           <span className="creative-row__mc font-mono font-semibold text-slate-900">
             {mcLabel}
@@ -981,19 +981,28 @@ function ListRow({
           {creative.fileName ?? "(no file)"}
         </span>
       </div>
-      <div className="creative-row__product truncate text-slate-600" title={creative.product ?? ""}>
+      <div
+        className="creative-row__product truncate border-r border-slate-100 px-3 py-2 text-slate-600"
+        title={creative.product ?? ""}
+      >
         {creative.product ?? "—"}
       </div>
-      <div className="creative-row__type truncate text-slate-600">
+      <div className="creative-row__type truncate border-r border-slate-100 px-3 py-2 text-slate-600">
         {creative.type ?? "—"}
       </div>
-      <div className="creative-row__size truncate font-mono text-[11px] text-slate-600">
+      <div className="creative-row__size truncate border-r border-slate-100 px-3 py-2 font-mono text-[11px] text-slate-600">
         {creative.fileDimensions ?? "—"}
       </div>
-      <div className="creative-row__created truncate text-slate-500" title={createdTitle}>
+      <div
+        className="creative-row__created truncate border-r border-slate-100 px-3 py-2 text-slate-500"
+        title={createdTitle}
+      >
         {formatListDate(creative.createdAt)}
       </div>
-      <div className="creative-row__updated truncate text-slate-500" title={updatedTitle}>
+      <div
+        className="creative-row__updated truncate px-3 py-2 text-slate-500"
+        title={updatedTitle}
+      >
         {formatListDate(creative.updatedAt)}
       </div>
     </button>

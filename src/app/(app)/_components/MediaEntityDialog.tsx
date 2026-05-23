@@ -24,6 +24,7 @@ import {
 import clsx from "clsx";
 import ScaledMediaPreview, { parseDimensions } from "./ScaledMediaPreview";
 import { usePersistent, type Codec } from "./usePersistent";
+import ModalBackdrop from "./ModalBackdrop";
 
 type SaveState =
   | { kind: "idle" }
@@ -303,16 +304,12 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
 
   const archived = entity.archivedAt !== null;
   return (
-    <div
-      className="modal-backdrop fixed inset-0 z-50 flex items-stretch bg-slate-900/40 backdrop-blur-sm"
-      onClick={onClose}
-    >
+    <ModalBackdrop onClose={onClose} className="z-50 items-stretch">
       <div
         className={clsx(
           "media-entity-dialog modal m-auto flex h-[90vh] w-[90vw] max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl",
           wide && "media-entity-dialog--landscape",
         )}
-        onClick={(e) => e.stopPropagation()}
       >
         <header className="media-entity-dialog__header modal__header flex shrink-0 items-center gap-3 border-b border-slate-100 px-4 py-3">
           <button
@@ -516,7 +513,7 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
           </section>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 

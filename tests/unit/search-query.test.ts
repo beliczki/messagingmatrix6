@@ -142,20 +142,17 @@ describe("hasNarrowingPrefix", () => {
     expect(hasNarrowingPrefix('"happy moments"')).toBe(false);
   });
 
-  it("returns true for a:/t:/s:/p: prefixes", () => {
+  it("returns true for a:/t:/s:/p:/mc: prefixes", () => {
     expect(hasNarrowingPrefix("a:retail")).toBe(true);
     expect(hasNarrowingPrefix("t:cf")).toBe(true);
     expect(hasNarrowingPrefix("s:performance")).toBe(true);
     expect(hasNarrowingPrefix("p:dv360")).toBe(true);
-  });
-
-  it("mc: alone is NOT a narrowing prefix", () => {
-    expect(hasNarrowingPrefix("mc:174")).toBe(false);
+    expect(hasNarrowingPrefix("mc:174")).toBe(true);
   });
 
   it("returns true if any token in a multi-term query is narrowing", () => {
     expect(hasNarrowingPrefix("free a:retail mc:42")).toBe(true);
-    expect(hasNarrowingPrefix("free mc:42")).toBe(false);
+    expect(hasNarrowingPrefix("free mc:42")).toBe(true);
   });
 
   it("ignores empty prefix values", () => {

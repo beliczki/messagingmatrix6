@@ -147,6 +147,43 @@ function evalSingleVar(expr: string, ctx: PatternContext): string {
 // {{var}}=value?then:else
 const COND_RE = /^\s*\{\{([^}]+)\}\}=([^?]*)\?([^:]*):(.*)$/;
 
+// join({{a}}, {{b|lower}}, ...) — top-level function form. Each argument is
+// evaluated as a sub-pattern; empty AND literal "NA" values are dropped;
+// remaining values are joined with "_". Lets the user assemble a clean key
+// from product + tags without empty separators piling up (e.g. "SZA___wip").
+const JOIN_RE = /^\s*join\(([\s\S]*)\)\s*$/;
+
+// Split join() arguments by commas that are NOT inside `{{...}}` blocks.
+function splitJoinArgs(s: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let buf = "";
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    const next = s[i + 1];
+    if (c === "{" && next === "{") {
+      depth++;
+      buf += c + next;
+      i++;
+      continue;
+    }
+    if (c === "}" && next === "}") {
+      depth--;
+      buf += c + next;
+      i++;
+      continue;
+    }
+    if (c === "," && depth === 0) {
+      out.push(buf);
+      buf = "";
+      continue;
+    }
+    buf += c;
+  }
+  if (buf.trim().length > 0 || out.length > 0) out.push(buf);
+  return out;
+}
+
 export function evaluatePattern(
   pattern: string | null | undefined,
   ctx: PatternContext = {},
@@ -159,6 +196,18 @@ export function evaluatePattern(
     const [, varExpr, expected, thenBranch, elseBranch] = cond;
     const value = evalSingleVar(varExpr.trim(), ctx);
     return value === expected ? thenBranch : elseBranch;
+  }
+
+  // Top-level join(...) — drop empty + literal "NA" arguments (case-
+  // insensitive, since `{{x|lower}}` may have already lowercased the value),
+  // join the rest with "_".
+  const joinMatch = pattern.match(JOIN_RE);
+  if (joinMatch) {
+    const args = splitJoinArgs(joinMatch[1]);
+    const values = args.map((a) => evaluatePattern(a.trim(), ctx));
+    return values
+      .filter((v) => v !== "" && v.toUpperCase() !== "NA")
+      .join("_");
   }
 
   // {{...}} substitution

@@ -111,6 +111,9 @@ export default function AudiencesEditor() {
       isArchived={(r) => r.archivedAt !== null}
       visibilityStorageKey="mm6_audiences_grid_cols"
       rightToolbarStorageKey="mm6_audiences_right_toolbar_open"
+      storageKeyPrefix="mm6_audiences"
+      historyEntity="audiences"
+      getHistoryLabel={(r) => r.name ?? r.key}
     />
   );
 }

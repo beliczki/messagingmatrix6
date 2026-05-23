@@ -90,6 +90,7 @@ export default function TextsEditor() {
       isArchived={(r) => r.archivedAt !== null}
       visibilityStorageKey="mm6_texts_grid_cols"
       rightToolbarStorageKey="mm6_texts_right_toolbar_open"
+      storageKeyPrefix="mm6_texts"
     />
   );
 }

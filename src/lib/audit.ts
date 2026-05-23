@@ -1,3 +1,4 @@
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { auditLog } from "@/db/schema";
 import { broadcast } from "@/lib/events";
@@ -45,4 +46,29 @@ export function writeAudit(input: AuditInput): void {
     action: input.action,
     byUser: input.userId,
   });
+}
+
+export type AuditRow = typeof auditLog.$inferSelect;
+
+/** Revision history for a single entity — newest first, capped at 100.
+ *  Reads the `before`/`after` snapshots `writeAudit` already records on
+ *  every change; no separate history store. */
+export function readEntityHistory(
+  clientId: number,
+  entityType: string,
+  entityId: string | number,
+): AuditRow[] {
+  return db
+    .select()
+    .from(auditLog)
+    .where(
+      and(
+        eq(auditLog.clientId, clientId),
+        eq(auditLog.entityType, entityType),
+        eq(auditLog.entityId, String(entityId)),
+      ),
+    )
+    .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
+    .limit(100)
+    .all();
 }

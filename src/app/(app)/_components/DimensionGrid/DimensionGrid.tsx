@@ -15,14 +15,25 @@ import {
   Check,
   CircleAlert,
   AlertTriangle,
+  History,
+  Lock,
 } from "lucide-react";
 import clsx from "clsx";
 import { type Column } from "./columns";
 import { useRowAutosave, type Versioned, type RowSaveState } from "./useRowAutosave";
-import BulkEditPanel from "./BulkEditPanel";
+import DimensionEditPanel from "./DimensionEditPanel";
 import ArchiveToggle from "../ArchiveToggle";
 import MultiPill from "../MultiPill";
 import RightToolbar from "../RightToolbar";
+import EntityHistoryDrawer, {
+  type HistoryEntity,
+} from "../EntityHistoryDrawer";
+import {
+  usePersistent,
+  STRING_CODEC,
+  SET_CODEC,
+  type Codec,
+} from "../usePersistent";
 import { parseSearchQuery, type SearchFields } from "@/lib/search-query";
 
 type Props<T extends Versioned> = {
@@ -44,9 +55,37 @@ type Props<T extends Versioned> = {
   visibilityStorageKey: string;
   /** Persisted RightToolbar open/closed key. */
   rightToolbarStorageKey: string;
+  /** Prefix used to derive per-filter localStorage keys (search, products, statuses, sort). */
+  storageKeyPrefix: string;
+  /** When set, a single-row selection shows a "History" action in the right
+   *  toolbar opening the audit-log revision drawer. Omit for grids whose
+   *  entity has no history endpoint (e.g. texts). */
+  historyEntity?: HistoryEntity;
+  /** Human label for the history drawer header — falls back to `#<id>`. */
+  getHistoryLabel?: (row: T) => string;
 };
 
 type SortState = { key: string; dir: "asc" | "desc" } | null;
+
+const SORT_CODEC: Codec<SortState> = {
+  parse: (s) => {
+    try {
+      const v = JSON.parse(s);
+      if (v === null) return null;
+      if (
+        v &&
+        typeof v.key === "string" &&
+        (v.dir === "asc" || v.dir === "desc")
+      ) {
+        return { key: v.key, dir: v.dir };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  },
+  stringify: (v) => JSON.stringify(v),
+};
 
 const ROW_HEIGHT = 32;
 
@@ -67,12 +106,32 @@ export default function DimensionGrid<T extends Versioned>({
   isArchived,
   visibilityStorageKey,
   rightToolbarStorageKey,
+  storageKeyPrefix,
+  historyEntity,
+  getHistoryLabel,
 }: Props<T>) {
-  const [search, setSearch] = useState("");
-  const [products, setProducts] = useState<Set<string>>(new Set());
-  const [statuses, setStatuses] = useState<Set<string>>(new Set());
-  const [sort, setSort] = useState<SortState>({ key: "orderIndex", dir: "asc" });
+  const [search, setSearch] = usePersistent(
+    `${storageKeyPrefix}_filter_search`,
+    "",
+    STRING_CODEC,
+  );
+  const [products, setProducts] = usePersistent<Set<string>>(
+    `${storageKeyPrefix}_filter_products`,
+    new Set(),
+    SET_CODEC,
+  );
+  const [statuses, setStatuses] = usePersistent<Set<string>>(
+    `${storageKeyPrefix}_filter_statuses`,
+    new Set(),
+    SET_CODEC,
+  );
+  const [sort, setSort] = usePersistent<SortState>(
+    `${storageKeyPrefix}_sort`,
+    { key: "orderIndex", dir: "asc" },
+    SORT_CODEC,
+  );
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [historyOpenId, setHistoryOpenId] = useState<number | null>(null);
   const [lastClickedId, setLastClickedId] = useState<number | null>(null);
   const [editing, setEditing] = useState<{ id: number; key: string } | null>(null);
 
@@ -137,6 +196,11 @@ export default function DimensionGrid<T extends Versioned>({
     () => rows.filter((r) => selected.has(r.id)),
     [rows, selected],
   );
+
+  const historyRow =
+    historyOpenId !== null
+      ? rows.find((r) => r.id === historyOpenId)
+      : undefined;
 
   const totalWidth =
     40 + visibleColumns.reduce((sum, c) => sum + c.width, 0) + 28;
@@ -377,14 +441,6 @@ export default function DimensionGrid<T extends Versioned>({
         </div>
       </div>
 
-      <BulkEditPanel
-        selected={selectedRows}
-        columns={columns}
-        productOptions={productOptions}
-        baseUrl={baseUrl}
-        queryKey={queryKey}
-        onClearSelection={() => setSelected(new Set())}
-      />
       </div>
 
       <RightToolbar storageKey={rightToolbarStorageKey}>
@@ -395,22 +451,56 @@ export default function DimensionGrid<T extends Versioned>({
               collapsed ? "flex flex-col items-center gap-2" : "flex flex-col gap-3",
             )}
           >
+            <DimensionEditPanel
+              selected={selectedRows}
+              columns={columns}
+              productOptions={productOptions}
+              baseUrl={baseUrl}
+              queryKey={queryKey}
+              onClearSelection={() => setSelected(new Set())}
+              collapsed={collapsed}
+            />
+            {historyEntity && selectedRows.length === 1 ? (
+              <button
+                type="button"
+                onClick={() => setHistoryOpenId(selectedRows[0]!.id)}
+                title="View revision history"
+                className={clsx(
+                  "dimension-grid__history-btn toolbar-btn flex items-center gap-1.5 rounded border border-slate-300 bg-white text-xs text-slate-700 hover:bg-slate-50",
+                  collapsed ? "size-8 justify-center p-0" : "px-2.5 py-1.5",
+                )}
+              >
+                <History className="size-3.5" />
+                {!collapsed ? "History" : null}
+              </button>
+            ) : null}
             <ArchiveToggle
               showArchived={showArchived}
               onChange={onShowArchivedChange}
               archivedCount={archivedCount}
               collapsed={collapsed}
             />
-            {!collapsed ? (
+            {!collapsed && selected.size === 0 ? (
               <div className="dimension-grid__right-toolbar-hint text-[11px] text-slate-500">
-                {selected.size > 0
-                  ? `${selected.size} selected`
-                  : `${filtered.length} of ${rows.length}`}
+                {filtered.length} of {rows.length}
               </div>
             ) : null}
           </div>
         )}
       </RightToolbar>
+
+      {historyOpenId !== null && historyEntity ? (
+        <EntityHistoryDrawer
+          entity={historyEntity}
+          entityId={historyOpenId}
+          label={
+            historyRow && getHistoryLabel
+              ? getHistoryLabel(historyRow)
+              : `#${historyOpenId}`
+          }
+          onClose={() => setHistoryOpenId(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -454,6 +544,13 @@ function Cell<T extends Versioned>({
     );
   }
 
+  const isKeyCol = col.key === "key";
+  const mcCount = row.mcCount ?? 0;
+  const keyFrozen = isKeyCol && mcCount > 0;
+  const cellTitle = keyFrozen
+    ? `Auto-key frozen — ${mcCount} ${mcCount === 1 ? "MC references" : "MCs reference"} this`
+    : display;
+
   return (
     <div
       onClick={onEdit}
@@ -462,11 +559,15 @@ function Cell<T extends Versioned>({
         readOnly
           ? "dimension-grid__cell--readonly cursor-default text-slate-500"
           : "cursor-text text-slate-900 hover:bg-white",
-        col.key === "key" && "font-mono text-[11px]",
+        isKeyCol && "font-mono text-[11px]",
+        keyFrozen && "dimension-grid__cell--frozen gap-1",
       )}
       style={{ width: col.width }}
-      title={display}
+      title={cellTitle}
     >
+      {keyFrozen ? (
+        <Lock className="dimension-grid__cell-lock size-3 shrink-0 text-slate-400" />
+      ) : null}
       <span className="truncate">{display}</span>
     </div>
   );

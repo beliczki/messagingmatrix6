@@ -17,10 +17,28 @@ import {
   Type,
   Trash2,
   ChevronDown,
+  History,
 } from "lucide-react";
 import clsx from "clsx";
 import { type Audience, type Message, type Topic, STATUS_COLOR } from "./types";
 import PreviewPane, { type PreviewBg } from "../_components/PreviewPane";
+import ModalBackdrop from "../_components/ModalBackdrop";
+import EntityHistoryDrawer from "../_components/EntityHistoryDrawer";
+
+type AssetRow = {
+  id: number;
+  brand: string | null;
+  product: string | null;
+  type: string | null;
+  visualKeyword: string | null;
+  fileId: string | null;
+  fileName: string | null;
+  fileFormat: string | null;
+};
+
+const IMAGE_FORMATS = new Set(["jpg", "jpeg", "png", "svg", "gif", "webp"]);
+const VIDEO_FORMATS = new Set(["mp4", "webm", "mov", "m4v"]);
+const ASSET_AUTOCOMPLETE_MIN = 2;
 
 type Tab = "naming" | "template" | "content" | "styles" | "trafficking";
 
@@ -141,7 +159,11 @@ type SaveState =
   | { kind: "saving" }
   | { kind: "saved" }
   | { kind: "error"; message: string }
-  | { kind: "conflict" };
+  // Conflict is terminal + blocking: autosave is paused and the only way out
+  // is an explicit reload to `serverRow`. We never rebase silently — doing so
+  // would let the stale draft re-save with the fresh version and clobber the
+  // other editor's work.
+  | { kind: "conflict"; serverRow: Message };
 
 export default function MessageEditor({
   open,
@@ -159,6 +181,7 @@ export default function MessageEditor({
     null,
   );
   const [autoSave, setAutoSave] = useState<boolean>(true);
+  const [historyOpen, setHistoryOpen] = useState<boolean>(false);
   const [splitPercent, setSplitPercent] = useState<number>(50);
   const [previewSize, setPreviewSize] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -273,9 +296,9 @@ export default function MessageEditor({
     },
     onError: (e) => {
       if (e instanceof VersionMismatchError) {
-        setSaveState({ kind: "conflict" });
-        setCommittedSnapshot(e.current);
-        qc.invalidateQueries({ queryKey: ["messages"] });
+        // Hold the server row but do NOT rebase `committedSnapshot` — the user
+        // must explicitly reload (reload-only conflict resolution).
+        setSaveState({ kind: "conflict", serverRow: e.current });
       } else {
         setSaveState({ kind: "error", message: (e as Error).message });
       }
@@ -285,6 +308,11 @@ export default function MessageEditor({
   // Auto-save on draft changes — 400ms debounce. Disabled when autoSave=false.
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    // Conflict is blocking — no save fires until the user reloads.
+    if (saveState.kind === "conflict") {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      return;
+    }
     if (!autoSave) {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       return;
@@ -298,7 +326,7 @@ export default function MessageEditor({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [draft, committedSnapshot, autoSave]);
+  }, [draft, committedSnapshot, autoSave, saveState.kind]);
 
   const isDirty = useMemo(() => {
     if (!draft || !committedSnapshot) return false;
@@ -306,8 +334,27 @@ export default function MessageEditor({
     return Object.keys(payload).length > 0;
   }, [draft, committedSnapshot]);
 
+  // Phase B — stale-tab detection. A live SSE refresh (peer write) advances
+  // the `message` prop's version. If it moved past our open snapshot, this tab
+  // was stale: surface a conflict when there are unsaved edits, or silently
+  // adopt the fresh row when there are none. Only acts while idle so it can't
+  // race our own just-completed save.
+  useEffect(() => {
+    if (!open || !message || !committedSnapshot) return;
+    if (message.id !== committedSnapshot.id) return;
+    if (saveState.kind !== "idle") return;
+    if (message.version === committedSnapshot.version) return;
+    if (isDirty) {
+      setSaveState({ kind: "conflict", serverRow: message });
+    } else {
+      setDraft(toEditable(message));
+      setCommittedSnapshot(message);
+    }
+  }, [open, message, committedSnapshot, isDirty, saveState.kind]);
+
   function manualSave() {
     if (!draft || !committedSnapshot || !isDirty) return;
+    if (saveState.kind === "conflict") return;
     const payload = diffPayload(toEditable(committedSnapshot), draft);
     setSaveState({ kind: "saving" });
     save.mutate(payload);
@@ -317,6 +364,17 @@ export default function MessageEditor({
     if (!committedSnapshot) return;
     setDraft(toEditable(committedSnapshot));
     setSaveState({ kind: "idle" });
+  }
+
+  // Reload-only conflict resolution: discard the stale draft and adopt the
+  // server's current row. The only exit from a conflict state.
+  function reloadFromConflict() {
+    if (saveState.kind !== "conflict") return;
+    const server = saveState.serverRow;
+    setDraft(toEditable(server));
+    setCommittedSnapshot(server);
+    setSaveState({ kind: "idle" });
+    qc.invalidateQueries({ queryKey: ["messages"] });
   }
 
   function startDrag(e: React.MouseEvent) {
@@ -357,16 +415,13 @@ export default function MessageEditor({
   const mcLabel = `MC${message.number}${message.variant}`;
 
   return (
-    <div
-      className="modal-backdrop fixed inset-0 z-50 flex items-stretch bg-slate-900/40 backdrop-blur-sm"
-      onClick={onClose}
-    >
+    <>
+    <ModalBackdrop onClose={onClose} className="z-50 items-stretch">
       <div
         className={clsx(
           "message-editor modal m-auto flex h-[90vh] w-[90vw] max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl",
           wide && "message-editor--landscape",
         )}
-        onClick={(e) => e.stopPropagation()}
       >
         <header className="message-editor__header modal__header flex shrink-0 items-center gap-3 border-b border-slate-100 px-4 py-3">
           <button
@@ -411,6 +466,14 @@ export default function MessageEditor({
 
           <div className="message-editor__header-actions ml-auto flex items-center gap-2">
             <button
+              onClick={() => setHistoryOpen(true)}
+              title="View revision history"
+              className="message-editor__history-btn toolbar-btn flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
+            >
+              <History className="size-3.5" />
+              History
+            </button>
+            <button
               onClick={() => setAutoSave((v) => !v)}
               className={clsx(
                 "message-editor__autosave-toggle flex items-center gap-1 rounded border px-2 py-1 text-xs",
@@ -439,7 +502,11 @@ export default function MessageEditor({
               <>
                 <button
                   onClick={manualSave}
-                  disabled={!isDirty || saveState.kind === "saving"}
+                  disabled={
+                    !isDirty ||
+                    saveState.kind === "saving" ||
+                    saveState.kind === "conflict"
+                  }
                   className="toolbar-btn--primary rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Save
@@ -462,6 +529,23 @@ export default function MessageEditor({
             </button>
           </div>
         </header>
+
+        {saveState.kind === "conflict" ? (
+          <div className="conflict-bar flex shrink-0 items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+            <CircleAlert className="conflict-bar__icon size-4 shrink-0" />
+            <span className="conflict-bar__msg flex-1">
+              Someone else saved changes to this MC while you had it open. Your
+              unsaved edits can&apos;t be applied on top — reload to get the
+              latest version. Your changes here will be discarded.
+            </span>
+            <button
+              onClick={reloadFromConflict}
+              className="conflict-bar__btn toolbar-btn--primary rounded bg-amber-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-700"
+            >
+              Reload
+            </button>
+          </div>
+        ) : null}
 
         <div
           ref={containerRef}
@@ -498,7 +582,7 @@ export default function MessageEditor({
               </TabBtn>
             </nav>
 
-            <div className="message-editor__tab-content flex-1 overflow-y-auto px-5 py-4">
+            <div className="message-editor__tab-content flex-1 overflow-y-auto px-5 pb-80 pt-4">
               {tab === "naming" ? (
                 <NamingTab message={message} aud={aud} top={top} draft={draft} setDraft={setDraft} />
               ) : null}
@@ -562,7 +646,16 @@ export default function MessageEditor({
           </section>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
+    {historyOpen && committedSnapshot ? (
+      <EntityHistoryDrawer
+        entity="messages"
+        entityId={committedSnapshot.id}
+        label={mcLabel}
+        onClose={() => setHistoryOpen(false)}
+      />
+    ) : null}
+    </>
   );
 }
 
@@ -606,7 +699,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
     return (
       <span className="save-indicator save-indicator--conflict inline-flex items-center gap-1 text-xs text-amber-700">
         <CircleAlert className="size-3" />
-        Refreshed (someone else edited this)
+        Conflict — reload needed
       </span>
     );
   }
@@ -1332,19 +1425,91 @@ function MediaField({
   onChange: (v: string) => void;
   kind: "image" | "video";
 }) {
-  const src = value ? `/api/drive/proxy/${encodeURIComponent(value)}` : null;
+  // v5 AssetAutocomplete pattern: the field input IS the search box. Typing
+  // ≥2 chars opens a dropdown of asset matches anchored below; click an option
+  // to fill the field. No separate search input.
+  const [text, setText] = useState(value);
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setText(value);
+  }, [value]);
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (!containerRef.current) return;
+      if (containerRef.current.contains(e.target as Node)) return;
+      setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, []);
+
+  const assetsQ = useQuery({
+    queryKey: ["assets"],
+    queryFn: async () => {
+      const r = await fetch("/api/assets", { credentials: "include" });
+      if (!r.ok) throw new Error("assets");
+      return (await r.json()) as { assets: AssetRow[] };
+    },
+  });
+
+  const formats = kind === "image" ? IMAGE_FORMATS : VIDEO_FORMATS;
+  const matches = useMemo(() => {
+    const term = text.trim().toLowerCase();
+    if (term.length < ASSET_AUTOCOMPLETE_MIN) return [];
+    const all = assetsQ.data?.assets ?? [];
+    return all
+      .filter((a) => {
+        if (!a.fileId || !a.fileName) return false;
+        const declared = (a.fileFormat ?? "").toLowerCase();
+        const fromName = a.fileName.split(".").pop()?.toLowerCase() ?? "";
+        const ext = declared || fromName;
+        if (!formats.has(ext)) return false;
+        return [a.fileName, a.visualKeyword, a.product, a.brand].some((v) =>
+          (v ?? "").toLowerCase().includes(term),
+        );
+      })
+      .slice(0, 20);
+  }, [text, assetsQ.data, formats]);
+
+  function handleChange(v: string) {
+    setText(v);
+    onChange(v);
+    setOpen(v.trim().length >= ASSET_AUTOCOMPLETE_MIN);
+  }
+
+  function pick(a: AssetRow) {
+    const fn = a.fileName ?? "";
+    setText(fn);
+    onChange(fn);
+    setOpen(false);
+  }
+
+  const thumbSrc = value ? `/api/drive/proxy/${encodeURIComponent(value)}` : null;
+  const showEmpty =
+    open && text.trim().length >= ASSET_AUTOCOMPLETE_MIN && matches.length === 0;
+
   return (
-    <label className="form-field block">
+    <div className="form-field media-field block" ref={containerRef}>
       <div className="form-field__label mb-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
         {label}
       </div>
-      <div className="media-field flex items-center gap-2">
+      <div className="media-field__control flex items-center gap-2">
         <div className="media-field__thumb thumb-checker size-9 shrink-0 overflow-hidden rounded border border-slate-200">
-          {src && kind === "image" ? (
-            <img src={src} alt={value} className="size-full object-contain" loading="lazy" />
-          ) : src && kind === "video" ? (
+          {thumbSrc && kind === "image" ? (
+            <img src={thumbSrc} alt={value} className="size-full object-contain" loading="lazy" />
+          ) : thumbSrc && kind === "video" ? (
             <video
-              src={`${src}#t=0.1`}
+              src={`${thumbSrc}#t=0.1`}
               className="size-full object-contain"
               preload="metadata"
               muted
@@ -1352,15 +1517,75 @@ function MediaField({
             />
           ) : null}
         </div>
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={kind === "image" ? "filename.jpg" : "filename.mp4"}
-          className="w-full min-w-0 rounded-md border border-slate-300 px-2 py-1 font-mono text-xs focus:border-slate-500 focus:outline-none"
-        />
+        <div className="media-field__input-wrap relative min-w-0 flex-1">
+          <input
+            type="text"
+            value={text}
+            onChange={(e) => handleChange(e.target.value)}
+            onFocus={() => {
+              if (text.trim().length >= ASSET_AUTOCOMPLETE_MIN) setOpen(true);
+            }}
+            placeholder={kind === "image" ? "filename.jpg" : "filename.mp4"}
+            autoComplete="off"
+            className="w-full rounded-md border border-slate-300 px-2 py-1 pr-6 font-mono text-xs focus:border-slate-500 focus:outline-none"
+          />
+          {text ? (
+            <button
+              type="button"
+              onClick={() => {
+                setText("");
+                onChange("");
+                setOpen(false);
+              }}
+              title={`Clear ${label}`}
+              aria-label={`Clear ${label}`}
+              className="media-field__clear absolute inset-y-0 right-1 my-auto flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            >
+              <X className="size-3" />
+            </button>
+          ) : null}
+          {open && matches.length > 0 ? (
+            <div className="asset-autocomplete absolute left-0 right-0 top-full z-50 mt-1 max-h-64 overflow-y-auto rounded-md border border-slate-200 bg-white shadow-lg">
+              {matches.map((a) => (
+                <button
+                  key={a.id}
+                  type="button"
+                  onClick={() => pick(a)}
+                  title={a.fileName ?? ""}
+                  className="asset-autocomplete__item flex w-full items-center gap-2 border-b border-slate-100 px-2 py-1 text-left last:border-b-0 hover:bg-slate-50"
+                >
+                  <div className="asset-autocomplete__thumb thumb-checker size-7 shrink-0 overflow-hidden rounded">
+                    {kind === "image" ? (
+                      <img
+                        src={`/api/files/${a.fileId}/thumbnail?w=120`}
+                        alt={a.fileName ?? ""}
+                        className="size-full object-contain"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <video
+                        src={`/api/files/${a.fileId}#t=0.1`}
+                        className="size-full object-contain"
+                        preload="metadata"
+                        muted
+                        playsInline
+                      />
+                    )}
+                  </div>
+                  <span className="asset-autocomplete__name truncate font-mono text-xs text-slate-700">
+                    {a.fileName}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : showEmpty ? (
+            <div className="asset-autocomplete asset-autocomplete--empty absolute left-0 right-0 top-full z-50 mt-1 rounded-md border border-slate-200 bg-white px-2 py-2 text-center text-xs text-slate-400 shadow-lg">
+              No matching assets
+            </div>
+          ) : null}
+        </div>
       </div>
-    </label>
+    </div>
   );
 }
 

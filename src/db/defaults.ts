@@ -32,7 +32,10 @@ export const DEFAULT_LOOK_AND_FEEL = {
 export const DEFAULT_PATTERNS = {
   pmmid:
     "a_{{audience}}-t_{{topic}}-m_{{number}}-v_{{variant}}-n_{{version_no}}",
-  topicKey: "{{product|lower}}_{{tag1|lower}}",
+  audienceKey:
+    "join({{product|lower}}, {{strategy|lower}}, {{device|lower}})",
+  topicKey:
+    "join({{product|lower}}, {{tag1|lower}}, {{tag2|lower}}, {{tag3|lower}}, {{tag4|lower}})",
   trafficking: {
     utm_campaign: "{{product|lower}}",
     utm_source: "{{strategy|lower}}",

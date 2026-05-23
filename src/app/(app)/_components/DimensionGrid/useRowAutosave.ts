@@ -10,7 +10,13 @@ export type RowSaveState =
   | { kind: "conflict" }
   | { kind: "error"; message: string };
 
-export type Versioned = { id: number; version: number };
+export type Versioned = {
+  id: number;
+  version: number;
+  /** Optional runtime field for entities whose `key` regen is gated by
+   *  whether any message references it. Computed at list-time, not stored. */
+  mcCount?: number;
+};
 
 type Args = {
   baseUrl: string;

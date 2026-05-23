@@ -19,6 +19,7 @@ import AnnotationLayer, {
   type AnnotationMode,
   type CommentAnnotation,
 } from "./AnnotationLayer";
+import ModalBackdrop from "@/app/(app)/_components/ModalBackdrop";
 
 type PreviewBg = DialogPreviewBg;
 
@@ -228,14 +229,8 @@ export default function ShareDetailDialog({
   }
 
   return (
-    <div
-      className="modal-backdrop fixed inset-0 z-50 flex items-stretch bg-slate-900/40 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="share-detail-dialog modal m-auto flex h-[92vh] w-[92vw] max-w-7xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalBackdrop onClose={onClose} className="z-50 items-stretch">
+      <div className="share-detail-dialog modal m-auto flex h-[92vh] w-[92vw] max-w-7xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
         <header className="share-detail-dialog__header modal__header flex shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3 py-2">
           <button
             onClick={navigatePrev}
@@ -335,7 +330,7 @@ export default function ShareDetailDialog({
           </aside>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 

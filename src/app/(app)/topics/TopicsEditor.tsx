@@ -103,6 +103,9 @@ export default function TopicsEditor() {
       isArchived={(r) => r.archivedAt !== null}
       visibilityStorageKey="mm6_topics_grid_cols"
       rightToolbarStorageKey="mm6_topics_right_toolbar_open"
+      storageKeyPrefix="mm6_topics"
+      historyEntity="topics"
+      getHistoryLabel={(r) => r.name ?? r.key}
     />
   );
 }

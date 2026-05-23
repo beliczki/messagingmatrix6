@@ -27,6 +27,7 @@ import {
   STATUS_OPTIONS,
 } from "./types";
 import PreviewPane, { type PreviewBg } from "../_components/PreviewPane";
+import ModalBackdrop from "../_components/ModalBackdrop";
 import { usePersistent, type Codec } from "../_components/usePersistent";
 
 type TemplateInfo = {
@@ -473,16 +474,12 @@ export default function HeaderDetailDialog({
   const HeadingIcon = kind === "audience" ? Users : ListTree;
 
   return (
-    <div
-      className="modal-backdrop fixed inset-0 z-50 flex items-stretch bg-slate-900/40 backdrop-blur-sm"
-      onClick={onClose}
-    >
+    <ModalBackdrop onClose={onClose} className="z-50 items-stretch">
       <div
         className={clsx(
           "matrix-header-dialog modal m-auto flex h-[90vh] w-[90vw] max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl",
           wide && "matrix-header-dialog--landscape",
         )}
-        onClick={(e) => e.stopPropagation()}
       >
         <header className="matrix-header-dialog__header modal__header flex shrink-0 items-center gap-3 border-b border-slate-100 px-4 py-3">
           <HeadingIcon className="size-4 text-slate-500" />
@@ -645,7 +642,7 @@ export default function HeaderDetailDialog({
           </section>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 

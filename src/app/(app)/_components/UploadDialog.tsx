@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { X, Upload as UploadIcon, Loader2 } from "lucide-react";
+import ModalBackdrop from "./ModalBackdrop";
 
 export type UploadResult = {
   fileId: string;
@@ -109,13 +110,12 @@ export default function UploadDialog({
   }
 
   return (
-    <div
-      className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-6 backdrop-blur-sm"
-      onClick={onClose}
+    <ModalBackdrop
+      onClose={onClose}
+      className="z-50 items-center justify-center p-6"
     >
       <div
         className={`upload-dialog modal upload-dialog--${phase} w-full max-w-md overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl`}
-        onClick={(e) => e.stopPropagation()}
       >
         <header className="modal__header flex items-center justify-between border-b border-slate-100 px-4 py-3">
           <h2 className="upload-dialog__title text-base font-semibold text-slate-900">
@@ -187,6 +187,6 @@ export default function UploadDialog({
           ) : null}
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

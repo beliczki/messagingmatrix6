@@ -86,6 +86,31 @@ describe("topic key generation", () => {
     if (r.ok) expect(r.row.key).toBe("manual-key");
   });
 
+  it("does NOT regenerate when an MC references the current key (frozen)", async () => {
+    setPattern(erste.id, "{{product|lower}}_{{tag1|lower}}");
+    const t = createTopic(erste.id, {
+      name: "T",
+      product: "Loans",
+      tag1: "A",
+    });
+    expect(t.key).toBe("loans_a");
+    // Seed audience + message that references this topic.
+    const { audiences } = await import("@/db/schema");
+    db.insert(audiences)
+      .values({ clientId: erste.id, key: "aud1", name: "AUD1", orderIndex: 0 })
+      .run();
+    const { createMessage } = await import("@/lib/entities/messages");
+    createMessage(erste.id, { audience: "aud1", topic: t.key });
+
+    const r = updateTopic(erste.id, t.id, 1, { tag1: "B" });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      // Key kept; tag1 still updated.
+      expect(r.row.key).toBe("loans_a");
+      expect(r.row.tag1).toBe("B");
+    }
+  });
+
   it("generateTopicKey() returns the fallback when the pattern evaluates empty", () => {
     setPattern(erste.id, "{{nope}}");
     expect(

@@ -19,6 +19,9 @@ export type Audience = {
   version: number;
   updatedAt: string;
   archivedAt: string | null;
+  /** Count of messages (archived OR live) referencing this audience.key.
+   *  Computed at list-time, not stored. > 0 means the auto-key is frozen. */
+  mcCount?: number;
 };
 
 export type TextFormattingRule = {
@@ -50,6 +53,9 @@ export type Topic = {
   version: number;
   updatedAt: string;
   archivedAt: string | null;
+  /** Count of messages (archived OR live) referencing this topic.key.
+   *  Computed at list-time, not stored. > 0 means the auto-key is frozen. */
+  mcCount?: number;
 };
 
 export type Message = {

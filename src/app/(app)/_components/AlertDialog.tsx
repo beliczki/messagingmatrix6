@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import clsx from "clsx";
+import ModalBackdrop from "./ModalBackdrop";
 
 export type AlertVariant = "info" | "success" | "warning" | "danger";
 
@@ -179,14 +180,13 @@ function AlertDialog({
   const cancelLabel = dialog.cancelLabel ?? "Cancel";
 
   return (
-    <div
-      className="modal-backdrop alert-dialog__backdrop fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm"
-      onClick={onCancel}
+    <ModalBackdrop
+      onClose={onCancel}
+      className="alert-dialog__backdrop z-[100] items-center justify-center p-4"
       role="presentation"
     >
       <div
         className="modal alert-dialog relative flex w-full max-w-md flex-col gap-4 rounded-xl border border-slate-200 bg-white p-5 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="alert-dialog-title"
@@ -248,6 +248,6 @@ function AlertDialog({
           </button>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

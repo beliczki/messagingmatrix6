@@ -42,6 +42,23 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `right-toolbar__body` | Scrollable belső region (title + content) | RightToolbar.tsx 67 | – |
 | `right-toolbar__section-title` | Opcionális prop-driven szekció címke | RightToolbar.tsx 69–71 | – |
 | `right-toolbar__content` | Children-render slot (collapsed-aware layout) | RightToolbar.tsx 73–80 | – |
+| `dimension-edit-panel` | Right-toolbar edit panel az audiences/topics/texts gridhez (action selector: bulk-set / duplicate / delete) | `_components/DimensionGrid/DimensionEditPanel.tsx` | a régi floating `bulk-edit-panel`-t váltja le |
+| `dimension-edit-panel__title` / `__count` | Felső caps cím + "N selected" | DimensionEditPanel.tsx | – |
+| `dimension-edit-panel__actions` | Action tab row (3 gomb) | DimensionEditPanel.tsx | – |
+| `dimension-edit-panel__action-btn` | Egy action tab | – | – |
+| `dimension-edit-panel__action-btn--bulk-set` / `--duplicate` / `--delete` | Variánsok | – | – |
+| `dimension-edit-panel__action-btn--active` | Aktív tab (sötét bg) | – | – |
+| `dimension-edit-panel__form` | Aktív action belső formja (field+value / hint+button) | – | – |
+| `dimension-edit-panel__label` | Caps mini label (`Field`, `Value`) | – | – |
+| `dimension-edit-panel__hint` | Magyarázó text (regex pattern, hard delete refusal) | – | – |
+| `dimension-edit-panel__apply` | Apply / Duplicate / Delete CTA | – | duplicate=primary, delete=`--danger` (rose) |
+| `dimension-edit-panel__apply--danger` | Delete variáns | – | – |
+| `dimension-edit-panel__results` / `__results-list` | Bulk run eredmény (`N ok, M failed` + per-row hibalista) | – | – |
+| `dimension-edit-panel__clear` | "Clear selection" lábgomb | – | – |
+| `dimension-edit-panel__collapsed-icon` / `__collapsed-badge` | Collapsed right-toolbar állapotban: csak pencil ikon + N badge | – | – |
+| `structure-tab__section--key-patterns` | Settings → Structure → Key patterns szekció (audienceKey + topicKey text input + `join(...)` info) | `_structure/StructureTab.tsx` | a `structure-tab__section--feed-patterns` előtt él |
+| `dimension-grid__cell--frozen` | Key cella amikor `row.mcCount > 0` (auto-key fagyasztva mert MC referenciázza) | `DimensionGrid.tsx` Cell | lock ikont rendel mellé |
+| `dimension-grid__cell-lock` | Lock-ikon a frozen key-cellában | DimensionGrid.tsx | – |
 | `toolbar` | Sticky top bar (search + filterek + akció gombok) | MatrixToolbar, CL toolbar, Assets toolbar | 3 helyen ismétlődő pattern |
 | `toolbar__title` | Cím a toolbar bal oldalán | CL, Assets | – |
 | `toolbar__filters` | Filter pill-ek konténere | mindenhol | – |
@@ -126,6 +143,8 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `creative-row__name` / `__product` / `__type` / `__size` / `__created` / `__updated` (és `asset-row__*`) | Egy-egy oszlop cella a list-row gridben | CL/Assets `ListRow`, `MatrixIframeListRow` | – |
 | `list-sort-header` | Sticky sortable column header a list-view tetején; 6 kattintható oszlop (Name/Product/Type/Size/Created/Updated) ArrowUp/ArrowDown indikátorral | `_components/ListSortHeader.tsx`, CL + Assets list view | grid template egyezik a row-okkal |
 | `list-sort-header__cell` / `--active` | Egy header gomb; `--active` az aktuálisan rendezett oszlop | ListSortHeader | – |
+| `media-field` | MC-editor Content-tab image/video mező (thumbnail + autocomplete input + clear gomb) | MessageEditor `MediaField`, 7× (image1-6 + video1) | `__control` / `__thumb` / `__input-wrap` / `__clear` |
+| `asset-autocomplete` | Asset-Library typeahead dropdown a `media-field` input alatt (≥2 karakter után nyílik) | MessageEditor `MediaField` | `__item` / `__thumb` / `__name`, `--empty` no-match állapot |
 | `thumb-checker` | 16px conic-gradient kockás minta áttetsző PNG/SVG mögé | mind a 6 thumb wrapperben + dialog viewport | global, `app/globals.css` |
 | `status-dot` | Színes pötty (státusz / state) | FeedView, MessageEditor, TemplateEditor MC stepper | szín később (Phase 7) |
 | `status-badge` | Pötty + szöveg pill | MessageEditor SaveIndicator 546–581, FeedView | szín később (Phase 7) |
@@ -134,7 +153,7 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `empty-state__title` | Cím | – | – |
 | `empty-state__hint` | Másodlagos szöveg | – | – |
 | `modal` | Generic fixed overlay modal | MessageEditor (slide-in), UploadDialog | – |
-| `modal-backdrop` | Sötétített háttér overlay | MessageEditor, UploadDialog | – |
+| `modal-backdrop` | Sötétített háttér overlay — most a `ModalBackdrop` komponens rendereli (`_components/ModalBackdrop.tsx`). Csak akkor zár, ha a kattintás a backdrop-on **kezdődik ÉS végződik** (input-ból kihúzott szövegkijelölés nem zárja a dialógust). 9 click-to-close dialógus használja. | `_components/ModalBackdrop.tsx` (shared) | ClientsTab / UsersView nem ezt használja (azoknak nincs click-to-close) |
 | `modal__header` | Sticky header sáv | MessageEditor 347–440, UploadDialog | – |
 | `modal__body` | Scrollable belső | – | – |
 | `modal__close` | X gomb | – | – |
@@ -149,6 +168,8 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `tag-chip` | Kis színes pill (brand/product/template/size jelzők card-on) | CL `Card` meta footer | új globalis |
 | `loading-spinner` | Forgó betöltő ikon | SaveIndicator, UploadDialog, render hooks | – |
 | `error-alert` | Piros figyelmeztető doboz | login error, MessageEditor conflict, TemplateEditor save error | – |
+| `conflict-bar` | Borostyán sáv a header alatt, ha egy másik szerkesztő felülírta a sort — egyetlen "Reload" akció (reload-only conflict resolution) | MessageEditor (header alatt) | új blokk, `__icon` / `__msg` / `__btn` elemekkel |
+| `entity-history` | Jobb oldali revíziós drawer (`modal` overlay) az audit-log `before`/`after` snapshotokból; soronként diff + "Restore this version" | `_components/EntityHistoryDrawer.tsx` (shared) — topics/audiences grid + MessageEditor | `__header` / `__body` / `__list` / `__entry` / `__entry--current` / `__diff` / `__restore` / `__error` |
 
 ---
 

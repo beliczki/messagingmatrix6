@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { Copy, ExternalLink, Loader2, Share2, X } from "lucide-react";
+import ModalBackdrop from "../_components/ModalBackdrop";
 
 type Props = {
   open: boolean;
@@ -109,14 +110,11 @@ export default function ShareCreateDialog({
   }
 
   return (
-    <div
-      className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm"
-      onClick={onClose}
+    <ModalBackdrop
+      onClose={onClose}
+      className="z-50 items-center justify-center"
     >
-      <div
-        className="share-create-dialog modal m-auto flex w-full max-w-md flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="share-create-dialog modal m-auto flex w-full max-w-md flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
         <header className="modal__header flex shrink-0 items-center gap-2 border-b border-slate-100 px-5 py-3">
           <Share2 className="size-4 text-slate-700" />
           <h2 className="modal__title text-sm font-semibold text-slate-900">
@@ -227,6 +225,6 @@ export default function ShareCreateDialog({
           </footer>
         ) : null}
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect, type ReactNode } from "react";
 import { X } from "lucide-react";
+import ModalBackdrop from "./ModalBackdrop";
 
 type Props = {
   open: boolean;
@@ -24,14 +25,8 @@ export default function AppDialog({ open, onClose, ariaLabel, children }: Props)
   if (!open) return null;
 
   return (
-    <div
-      className="modal-backdrop fixed inset-0 z-50 flex items-stretch bg-slate-900/40 backdrop-blur-sm"
-      onClick={onClose}
-    >
-      <div
-        className="app-dialog modal relative m-auto flex h-[90vh] w-[90vw] max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalBackdrop onClose={onClose} className="z-50 items-stretch">
+      <div className="app-dialog modal relative m-auto flex h-[90vh] w-[90vw] max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
         <button
           type="button"
           onClick={onClose}
@@ -42,6 +37,6 @@ export default function AppDialog({ open, onClose, ariaLabel, children }: Props)
         </button>
         {children}
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }

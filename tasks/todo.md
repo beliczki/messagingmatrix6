@@ -1632,3 +1632,300 @@ Gyűjtsük ki a `messages` (mátrix) tábla alapján, hogy mely assetek (`upload
 Második lépésben: nevezzük át (vagy duplikáljuk át új névvel) az asset fileokat úgy, hogy a fájlnévhez **előre** hozzáfűzzük a használati kontextust — `{product}_{topic_key}_<eredeti_filename>` mintában. Több (product, topic_key) eset → vagy egy közös prefixált név `MULTI_<...>` jelöléssel, vagy minden használathoz külön kópia. (Döntsd el a feladat indításakor a használati arányok alapján.)
 
 Kimenet: a `_inbox-assets/` folder fileai átnevezve, és a DB `assets.fileName` mező + uploaded_files canonical path frissítve. Audit: melyik nevet honnan kapta. Cél: az asset könyvtárban szabad szemmel látni, hogy melyik file melyik termékhez/topikhoz tartozik, és így az új asset scan-script már parseolható filenevet kap.
+
+
+---
+
+## Session checkpoint — 2026-05-20 — Audiences/Topics edit-panel parity
+
+Branch `feat/matrix-edit-mode-v1` (extending). User asks for `audiences` + `topics` editor pages to gain the matrix edit-mode pattern: edit panel on the **right** (RightToolbar) instead of the bottom-floating bulk bar, with a 3-way action selector (`Bulk set` / `Duplicate` / `Delete`).
+
+### Confirmed decisions
+- **Delete is HARD delete** (DROP from DB), not archive. The existing DELETE → cascade-archive flow on `/api/audiences/[id]` and `/api/topics/[id]` stays unchanged (matrix UI uses it). Hard delete is a separate new route.
+- **Guard:** hard delete refuses if any `messages` row references the audience/topic by key — archived OR live, since hard-deleting the row would orphan an archived MC if later restored. Response shape `{ error: "in_use", referencedBy: number[] }`.
+- **Duplicate name regex:** `/^(.+) \((\d+)\)$/` → `${base} (${n+1})`; else `${name} (1)`. Tested live.
+- **Duplicate key regex:** `/^(.+)_(\d+)$/` → `${base}_${n+1}`; else `${key}_1`. Tested live.
+- **Filter persistence** (already shipped this session): `DimensionGrid` now persists `search`, `products`, `statuses`, `sort` to localStorage via `usePersistent`. Keys: `mm6_<audiences|topics|texts>_filter_search` / `_filter_products` / `_filter_statuses` / `_sort`.
+
+### Plan
+
+- [x] **1. Entity layer — duplicate.** `duplicateAudience` + `duplicateTopic` shipped. Max-suffix scan with regex-escaped base. Sparse state (e.g. `_1, _3` → next `_4`) tested.
+- [x] **2. Entity layer — hard delete.** `deleteAudience` / `deleteTopic` shipped. Guard checks `messages` archived OR live — refuses with `{ reason: "in_use", referencedBy }`.
+- [x] **3. HTTP routes.** Four new POST routes: `/api/{audiences,topics}/[id]/{duplicate,hard-delete}`. Audit `create` for duplicate, `delete` for hard delete.
+- [x] **4. UI — move edit panel into RightToolbar.** Floating `BulkEditPanel` removed (file deleted). New `DimensionEditPanel` renders inside `RightToolbar` render-prop, above `ArchiveToggle`. Toolbar-hint hidden when selection > 0.
+- [x] **5. UI — action selector.** 3-tab row (bulk-set / duplicate / delete), each with its own sub-form. Per-row failure list under `dimension-edit-panel__results`. Delete CTA is `--danger` (rose).
+- [x] **6. Component inventory.** `dimension-edit-panel` block + 15 sub-classes appended.
+- [x] **7. Tests.** 14 audiences + 12 topics tests, all green. Full suite 238/238.
+- [ ] **8. Smoke test (user).** `npm run dev:erste` → /audiences + /topics → select rows, switch action; verify bulk-set still works, duplicate produces correct suffix, delete refuses when MCs reference, succeeds when orphan.
+
+### Out of scope
+- Touching the matrix edit-mode UI (it stays as-is).
+- Adding hard delete to the matrix-side flow (MC hard delete is a separate ask).
+- Restoring or undoing hard delete (no audit-row-restore path).
+
+---
+
+## Session checkpoint — 2026-05-20 (cont.) — Key patterns: `join(...)` + audience-key support
+
+User reported that auto-generated topic keys looked ugly (`SZA___wip`, `SZA_NA_gyorsasag_NA_par-per`). Cause: the configured `topicKey` pattern (`{{product}}_{{tag1}}_{{tag2}}_{{tag3}}_{{tag4}}_{{name|lower}}` or similar in Erste's `config.patterns` row) interpolates empty strings as `""` → consecutive `_` runs. Also: audience entity had no key-pattern support at all.
+
+### Decisions
+- **`join(...)` is a new top-level pattern form.** Mutually exclusive with template substitution and conditional. Arguments are sub-patterns (each evaluated recursively, so `|lower` etc. work).
+- **Empty AND "NA" (case-insensitive) are dropped.** User's "NA" tag values often act as placeholders; treat them as missing.
+- **Separator is `_` (hardcoded for v1).** No `sep=` arg until someone asks.
+- **Existing keys NOT auto-regenerated.** Only new entities + duplicates use the new pattern. Topic update-regen logic already existed (`shouldRegenerateKey`) so editing a relevant field on a stale-keyed topic will refresh its key.
+- **Audience update-regen NOT added in this pass** (only `createAudience` uses `generateAudienceKey`). Reason: lower risk for v1; the user can duplicate-then-delete to fix a single bad row.
+
+### Shipped
+- [x] `evaluatePattern` extended with `JOIN_RE` + `splitJoinArgs` (commas inside `{{}}` ignored). `src/lib/patterns.ts`.
+- [x] `generateAudienceKey` + `readAudienceKeyPattern` in `src/lib/entities/audiences.ts`. Pattern context: product / strategy / buyingPlatform / device / tag. Fallback: `aud{N+1}`.
+- [x] `createAudience` now calls `generateAudienceKey` when `input.key` is undefined.
+- [x] `DEFAULT_PATTERNS` in `db/defaults.ts`:
+  - `audienceKey: "join({{product|lower}}, {{strategy|lower}}, {{device|lower}})"`
+  - `topicKey: "join({{product|lower}}, {{tag1|lower}}, {{tag2|lower}}, {{tag3|lower}}, {{tag4|lower}})"`
+  - Affects **fresh installs only** — existing Erste config is untouched. User can adopt via the new Settings UI.
+- [x] `StructureTab.tsx` — new section "Key patterns" before "Feed patterns", with audienceKey + topicKey text inputs + info block explaining `join(...)` and modifiers.
+- [x] Tests:
+  - `tests/unit/pattern-join.test.ts` — 12 cases (incl. case-insensitive NA drop, missing keys, plain-text args).
+  - `tests/integration/api/audiences-key-pattern.test.ts` — 7 cases (fallback, join with pattern, empty+NA drop, explicit-key override).
+  - All 257 tests pass.
+- [x] `component-inventory.md` — `structure-tab__section--key-patterns` entry added.
+
+### Smoke test (user)
+- [ ] `npm run dev:erste` → Settings → Structure → Key patterns. Set `topicKey` to `join({{product|lower}}, {{tag1|lower}}, {{tag2|lower}}, {{tag3|lower}}, {{tag4|lower}})`. Save.
+- [ ] Go to `/topics`, duplicate an existing row → confirm the new row's key is clean (no `___`, no `NA`).
+- [ ] Edit `tag1` of an existing topic → confirm key regenerates per the new pattern.
+- [ ] `/audiences` → create a new audience → confirm key is `join`-produced.
+
+---
+
+## Session checkpoint — 2026-05-20 (cont.) — Auto-key regen with MC-guard + frozen UI
+
+User asked: "for audiences with no MC, auto-regenerate should run; for those with MCs, the key cell should be disabled with a tooltip saying 'X MCs registered to it'".
+
+Applied same logic to **topics**, since `updateTopic` was already regenerating WITHOUT an MC guard — a latent bug that could orphan messages by silently renaming their referenced topic.
+
+### Shipped
+- [x] **`updateAudience`** — added `shouldRegenerateAudienceKey` (mirrors topic's logic) + MC-guard via `countMessagesByAudience`. Triggers on product/strategy/buyingPlatform/device/tag change when no explicit `input.key`.
+- [x] **`updateTopic`** — existing regen path gained the MC-guard via `countMessagesByTopic`.
+- [x] **`listAudiences` / `listTopics`** — now return `mcCount` per row, computed via `mcCountsByAudience` / `mcCountsByTopic` (one `GROUP BY` query per list call). `Audience` / `Topic` types in `matrix/types.ts` got optional `mcCount?: number`.
+- [x] **`Versioned` type** (DimensionGrid) — gained optional `mcCount?: number` so the generic Cell renderer can read it.
+- [x] **DimensionGrid Cell** — when `col.key === "key"` and `row.mcCount > 0` → renders `Lock` icon (lucide), tooltip "Auto-key frozen — N MC(s) reference this", semantic `dimension-grid__cell--frozen` modifier.
+- [x] Tests:
+  - `audiences-key-pattern.test.ts` bővült 4 új teszttel (regen happy path, MC-guard, archived MC still freezes, regen returns after MC delete) + `listAudiences mcCount` teszt.
+  - `topics.test.ts` bővült: "frozen by MC reference".
+  - Full suite 263/263 zöld.
+- [x] `component-inventory.md` — `dimension-grid__cell--frozen` + `__cell-lock` token-ek hozzáadva.
+
+### Smoke test (user)
+- [ ] `npm run dev:erste` → /audiences page. Egy MC-mentes sor `product` mezőjének módosítása → key regenerálódik. Egy MC-vel rendelkező sor `product` mezőjének módosítása → key NEM változik, a key cellán lock ikon + tooltip látható.
+- [ ] /topics page ugyanaz: MC-vel terhelt topic `tag1` módosítása → key fagy.
+
+---
+
+## Session checkpoint — 2026-05-20 (cont.) — Fix accidental MC314 + duplicate MC296→Q2
+
+Manual data fix on local `db/matrix.db` (client 8 / Erste). NOTE: the
+`ERSTE_MessagingMatrix` MCP is stale (missing MC312/313/314 + the 26Q2 topics),
+so work is done directly against the local DB, not via MCP.
+
+### Plan
+- [x] Back up `db/matrix.db` (`.backup`) before any write.
+- [x] Hard-delete the accidental MC314 a/b/c — message ids 32753/32754/32755
+      (topic `...nemaradjle_120e`, audience `SZA_afinpdall` = Private Deal - Indamedia).
+      No FK refs, no creatives → clean delete.
+- [x] Duplicate MC296 a/b/c → 3 new MCs in topic `Ne maradj le 26Q2`
+      (`SZA_promocio_Online_behavNeMaradjLe_150ejovairasok26q2`), audience
+      `SZA_INCOMING`, template `html`. Cell is empty + max live number drops to
+      313 after the delete → auto-numbering yields MC314 a/b/c.
+- [x] Execute via a throwaway `tsx` script using the app's `createMessage`
+      (correct pmmid/trafficking/numbering) + drizzle delete, one transaction;
+      delete the script afterwards.
+- [x] Verify: MC314 a/b/c now in 26Q2 cell, template html; old afinpdall rows gone.
+
+---
+
+## Session checkpoint — 2026-05-20 (cont.) — `mc:` filter narrows matrix rows/cols
+
+User: "when filtering on mc: in matrix only show the rows and columns where the mc is, hide the others".
+
+Before: `mc:` was in `PREFIX_MAP` (so the search engine matched MCs by number/PMMID) but explicitly excluded from `NARROWING_PREFIXES` — so the matrix kept showing every audience/topic axis with empty cells. Only `a:` / `t:` / `s:` / `p:` triggered the row/column collapse path in `MatrixGrid.filtered`.
+
+### Shipped
+- [x] `src/lib/search-query.ts:24` — `NARROWING_PREFIXES` gained `"mc"`. One-line behavior flip — the existing `if (narrowing) { … }` block in `MatrixGrid.tsx` already does the right thing once `hasNarrowingPrefix` returns true.
+- [x] `src/app/(app)/matrix/MatrixToolbar.tsx:37` — title tooltip updated: "All prefixes also hide non-matching rows/columns" (was: "a:/t:/s:/p: also hide…").
+- [x] `tests/unit/search-query.test.ts` — flipped the prior assertion ("mc: alone is NOT a narrowing prefix" → now grouped with the other narrowing prefixes). Multi-term "free mc:42" also expected `true` now.
+- [x] Suite 262/262 zöld (one test dissolved into the merged case, no net coverage loss).
+
+### Smoke test (user)
+- [ ] /matrix → type `mc:174` (or any MC# present in your data). Only the audience row(s) and topic column(s) holding MC#174 should remain visible; the rest collapse.
+
+- [x] Follow-up: hard-deleted MC313 a–f (ids 32747–32752, 2026Q1 × Private Deal - Adaptive) — 6 accidental blank rows, no creatives/refs.
+
+---
+
+## Session checkpoint — 2026-05-20 (cont.) — Asset picker for MC image/video fields
+
+User: add an asset selector with preview to the image1–6 / video1 fields in the
+MC editor. Decisions: source = **Asset Library** (`/api/assets`); UI = **inline
+popover** anchored to the field; **picker-only** (no free-text input).
+
+### Context
+- `MessageEditor.tsx` → `ContentTab` → `MediaField` (7×: image1-6 + video1).
+  Today: free-text filename input + 36px thumbnail (`/api/drive/proxy/{name}`).
+- Stored value is a plain filename resolved by `/api/drive/proxy` →
+  `getFileByFilename`. Feed export uses `{{image1|noext}}`. Value stays a
+  filename string → picking writes `asset.fileName`, nothing downstream changes.
+- Assets: `/api/assets`, each has `fileId` (→ uploaded_files), `fileName`,
+  `fileFormat`. Thumbnails: `/api/files/{fileId}/thumbnail?w=200`.
+
+### Plan
+- [ ] New `_components/AssetPickerPopover.tsx` — inline popover. Props:
+      `kind: "image"|"video"`, `onPick(fileName)`, `onClose`. Fetches
+      `/api/assets` (react-query `["assets"]`); filters by format (image:
+      jpg/jpeg/png/svg/gif/webp; video: mp4/webm/mov); client-side search box
+      (fileName / visualKeyword / product / brand). Thumbnail grid; click →
+      `onPick`. Click-outside + Esc close (MultiPill `mousedown` pattern).
+- [ ] Rework `MediaField` in `MessageEditor.tsx` to picker-only: thumbnail +
+      button (filename or "Choose image…/video…" placeholder) + clear (×) btn;
+      button toggles the popover. Drop the free-text `<input>`. `onChange`
+      still emits the filename string — save/preview/feed unaffected. Legacy
+      free-text values still display + preview; user can Clear.
+- [ ] Semantic classes: new block `asset-picker` (`__search`, `__grid`,
+      `__option`, `__thumb`, `__empty`); rework `media-field`
+      (`__btn`, `__clear`, `__placeholder`). Popover styling matches
+      `multi-pill__menu` (border, shadow-lg, rounded-md, z-50). Reuse
+      `thumb-checker`.
+- [ ] Update `tasks/component-inventory.md` with the `asset-picker` block.
+- [ ] `npm run typecheck` + smoke test in `dev:erste`.
+
+### Review — landed (2026-05-21)
+Final design diverged from the plan above: instead of a portaled picker-only
+popover, `MediaField` keeps its free-text input and gains an inline
+**autocomplete** (v5 AssetAutocomplete pattern) — typing ≥2 chars opens a
+dropdown of Asset-Library matches (thumbnails via `/api/files/{id}/thumbnail`),
+click to fill; clear (×) button; "No matching assets" empty state.
+- [x] `MediaField` reworked in `MessageEditor.tsx` (autocomplete, not popover).
+- [x] Orphaned `AssetPickerPopover.tsx` (popover prototype) removed.
+- [x] `component-inventory.md` — `media-field` + `asset-autocomplete` blocks logged.
+- [x] `tsc --noEmit` clean for app code (pre-existing `mcCount` test errors unrelated).
+
+---
+
+## Session checkpoint — 2026-05-22 — Shared ModalBackdrop (fix drag-select close)
+
+Bug: dragging a text selection out of an input onto the backdrop closes the
+dialog — `click` fires on the LCA of mousedown+mouseup = the backdrop, so its
+`onClick={onClose}` runs. Pattern is copy-pasted across ~11 dialogs.
+
+Fix (#2): one shared `<ModalBackdrop>` with a press-started-on-self guard;
+migrate every click-to-close dialog to it.
+
+### Plan
+- [x] New `_components/ModalBackdrop.tsx` — `onMouseDown` records whether the
+      press landed on the bare backdrop; `onClick` closes only if press AND
+      release are both on the backdrop (`e.target === e.currentTarget`).
+      Invariant base classes; `className` prop carries per-dialog z/layout.
+- [x] Migrate 9 click-to-close dialogs (swap backdrop div → `<ModalBackdrop>`,
+      drop now-redundant panel `stopPropagation`), one at a time:
+      AppDialog, AlertDialog, MediaEntityDialog, MessageEditor,
+      HeaderDetailDialog, UploadDialog, MatrixDetailDialog, ShareCreateDialog,
+      ShareDetailDialog.
+- [x] Leave ClientsTab (×2) + UsersView untouched — their backdrops have no
+      click-to-close today; migrating would change behavior.
+- [x] Update `component-inventory.md` (`modal-backdrop` is now a component).
+- [x] `tsc --noEmit` clean for app code.
+
+---
+
+## Session checkpoint — 2026-05-22 — Concurrent-edit safety: fix lost-update + entity history
+
+Incident: matrix editor open in two windows; the stale window saved empty
+content over the live data. Root cause is NOT a missing feature — optimistic
+concurrency (`version` + `If-Match` → 409 `versionMismatch`) and a full
+`before`/`after` audit log already exist. The bug is in **conflict recovery**:
+
+- `MessageEditor.save.onError` (VersionMismatchError) calls
+  `setCommittedSnapshot(e.current)` — rebasing the snapshot retriggers the
+  autosave `useEffect` (`[draft, committedSnapshot, autoSave]`), which diffs
+  the *fresh server row* against the *stale draft* and re-`save.mutate`s the
+  stale content with the now-valid version → second attempt wins. OCC only
+  blocks the FIRST stale save; autosave immediately re-arms and clobbers.
+- `useRowAutosave` 409 path has the same shape: `invalidateQueries` → grid
+  refetches fresh rows → next autosave fires with the new version.
+
+Scope (user-approved A+B+E; C optional). "MC" = `messages`. No new storage
+layer — reuse `version` OCC and the existing `auditLog` table.
+
+### Phase A — Make conflict a terminal, blocking state (root-cause fix)
+Decision: conflict is **reload-only** — no "Keep mine". The stale window
+always discards its draft on reload.
+- [x] `MessageEditor`: on `VersionMismatchError`, do NOT rebase
+      `committedSnapshot`. Stay in `saveState: "conflict"`, pause the autosave
+      effect while in conflict, and render a `conflict-bar` with one action:
+      "Reload" → draft+snapshot ← `serverRow`, back to `idle`. No save fires
+      until the user reloads.
+- [x] `useRowAutosave` — INVESTIGATED, no change. Not vulnerable: field-scoped
+      patches, no persistent draft, no retry loop. A 409 drops the patch and
+      refetches in place; it cannot silently clobber. The lost-update bug was
+      MessageEditor-specific (full-row draft + auto-resave).
+
+### Phase B — Live cross-tab refresh (stale-tab detection)
+The SSE infra already exists end-to-end — server `broadcast`s on every write,
+`usePresenceConnection` holds an open `/api/events` connection — but the client
+discards the events. Finish the intended wiring instead of focus-polling.
+- [x] Consume SSE `message` events → `queryClient.invalidateQueries` for the
+      affected entity key(s). Live refresh: a peer write updates this tab's
+      matrix/grid immediately. (`usePresenceConnection` now also drives sync.)
+- [x] `MessageEditor`: react to the refreshed `message` prop — if its
+      `version` moved past `committedSnapshot.version`, enter the Phase-A
+      conflict state when dirty, or silently adopt the fresh row when clean.
+      Guarded to `idle` so it can't race the editor's own just-saved write.
+
+### Phase E — Entity history from the existing audit log
+- [x] `readEntityHistory(clientId, entityType, entityId)` in `lib/audit.ts` —
+      newest-first, capped 100, off the existing `audit_client_entity_idx`.
+- [x] Three `withSession` history routes: `/api/{topics,audiences,messages}/
+      [id]/history` (mirrors the `[id]/restore` / `[id]/duplicate` idiom).
+      Left the admin-wide `withAdmin` `/api/audit-log` viewer untouched.
+- [x] Shared `EntityHistoryDrawer` — right-side `modal` drawer; revisions
+      newest-first with a field-level before→after diff. Query key
+      `[entity,"history",id]` so SSE live-sync (Phase B) refreshes it too.
+- [x] "Restore this version" = a normal versioned PATCH of the snapshot's
+      `after` (server `pickWritable` filters; `If-Match` = current version
+      from `history[0].after`). Reuses OCC → a concurrent edit 409s into the
+      standard conflict path. No new restore endpoint, no new table.
+- [x] Wired: History button in MessageEditor header; History action in the
+      topics/audiences grid right toolbar (single-row selection). Texts grid
+      opts out (`historyEntity` omitted — no `/api/texts` history endpoint).
+- [x] `component-inventory.md` — logged `entity-history` + `conflict-bar`.
+- [x] Integration test `tests/integration/api/entity-history.test.ts`
+      (ordering, entity filter, tenant isolation).
+
+### Phase C — (OPTIONAL, deferred) presence banner
+User reports 2–4 people often on the same matrix, so this is worth doing —
+but kept out of the approved scope. Advisory only: a "<name> is editing this"
+banner pushed over the existing SSE `broadcast` channel. No locking.
+
+### Verify
+- [x] `tsc --noEmit` clean for app code (pre-existing `mcCount` errors in
+      `audiences-key-pattern.test.ts` unrelated); `npm test` 265/265 pass.
+- [x] Two-window manual test (Playwright, 2026-05-22): conflict bar appears on
+      a stale dirty window + Reload adopts the peer value; clean window adopts
+      live; history drawer + restore work.
+- [x] Follow-up from verify: `usePresenceConnection` now refetches all queries
+      on SSE re-open (`wasClosed` ref) — a backgrounded tab closed its SSE and
+      missed events; on refocus it catches up instead of staying stale.
+      Verified: hidden tab stayed stale through a peer save, then adopted the
+      peer value within ~400ms of going visible.
+
+### Review — A+B+E landed (2026-05-22)
+Root cause of the incident: `MessageEditor` conflict recovery rebased the
+version after a 409, which re-armed the debounced autosave and let the stale
+draft win the second attempt. Fixed by making conflict a terminal, blocking,
+reload-only state. Phase B finished the long-intended SSE→`invalidateQueries`
+wiring (the connection was open but events were discarded) for live cross-tab
+refresh. Phase E surfaces the audit log — which already stored full
+`before`/`after` per change — as a per-entity history drawer with restore; no
+new storage. `useRowAutosave` was investigated and left as-is (not vulnerable:
+field-scoped patches, no persistent draft). Phase C (presence) deferred.

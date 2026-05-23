@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { usePersistent, type Codec } from "../_components/usePersistent";
+import ModalBackdrop from "../_components/ModalBackdrop";
 import type { Message } from "../matrix/types";
 
 type PreviewBg = "light" | "dark" | "checker";
@@ -169,16 +170,12 @@ export default function MatrixDetailDialog({
   const subtitle = m.headline ?? m.name ?? null;
 
   return (
-    <div
-      className="modal-backdrop fixed inset-0 z-50 flex items-stretch bg-slate-900/40 backdrop-blur-sm"
-      onClick={onClose}
-    >
+    <ModalBackdrop onClose={onClose} className="z-50 items-stretch">
       <div
         className={clsx(
           "media-entity-dialog matrix-detail-dialog modal m-auto flex h-[90vh] w-[90vw] max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl",
           wide && "media-entity-dialog--landscape",
         )}
-        onClick={(e) => e.stopPropagation()}
       >
         <header className="media-entity-dialog__header modal__header flex shrink-0 items-center gap-3 border-b border-slate-100 px-4 py-3">
           <button
@@ -306,7 +303,7 @@ export default function MatrixDetailDialog({
           </section>
         </div>
       </div>
-    </div>
+    </ModalBackdrop>
   );
 }
 

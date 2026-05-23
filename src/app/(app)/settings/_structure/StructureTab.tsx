@@ -25,6 +25,7 @@ const STRUCTURE_KEYS = [
 
 type Patterns = {
   pmmid?: string;
+  audienceKey?: string;
   topicKey?: string;
   trafficking?: Record<string, string>;
   feed?: Record<string, string>;
@@ -284,6 +285,67 @@ export function StructureTab() {
             </span>
           )}
         </label>
+      </section>
+
+      <section className="structure-tab__section structure-tab__section--key-patterns mb-6 rounded-lg border border-slate-200 bg-white p-4">
+        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-700">
+          Key patterns
+        </h3>
+        <p className="form-field__hint mb-4 text-xs text-slate-500">
+          Auto-generated <code className="font-mono">key</code> for new
+          audiences / topics. Supports{" "}
+          <code className="font-mono">{`{{field}}`}</code> placeholders, the{" "}
+          <code className="font-mono">|lower</code> modifier (and other
+          modifiers like <code className="font-mono">|upper</code>,{" "}
+          <code className="font-mono">|trim</code>), and a top-level{" "}
+          <code className="font-mono">join(...)</code> function that drops empty
+          and literal <code className="font-mono">NA</code> values, joining the
+          remaining ones with <code className="font-mono">_</code>. Leave empty
+          for fallback (<code className="font-mono">aud{`{N}`}</code> /{" "}
+          <code className="font-mono">top{`{N}`}</code>).
+        </p>
+        <div className="space-y-3">
+          <label className="form-field block">
+            <span className="form-field__label mb-1 block text-sm font-medium text-slate-700">
+              audienceKey
+            </span>
+            <input
+              type="text"
+              value={draft.patternsBlob.audienceKey ?? ""}
+              placeholder="join({{product|lower}}, {{strategy|lower}}, {{device|lower}})"
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  patternsBlob: {
+                    ...draft.patternsBlob,
+                    audienceKey: e.target.value,
+                  },
+                })
+              }
+              className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 font-mono text-xs focus:border-slate-500 focus:outline-none"
+            />
+          </label>
+          <label className="form-field block">
+            <span className="form-field__label mb-1 block text-sm font-medium text-slate-700">
+              topicKey
+            </span>
+            <input
+              type="text"
+              value={draft.patternsBlob.topicKey ?? ""}
+              placeholder="join({{product|lower}}, {{tag1|lower}}, {{tag2|lower}}, {{tag3|lower}}, {{tag4|lower}})"
+              onChange={(e) =>
+                setDraft({
+                  ...draft,
+                  patternsBlob: {
+                    ...draft.patternsBlob,
+                    topicKey: e.target.value,
+                  },
+                })
+              }
+              className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 font-mono text-xs focus:border-slate-500 focus:outline-none"
+            />
+          </label>
+        </div>
       </section>
 
       <section className="structure-tab__section structure-tab__section--feed-patterns mb-6 rounded-lg border border-slate-200 bg-white p-4">

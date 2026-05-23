@@ -21,7 +21,7 @@ const PREFIX_MAP: Record<string, keyof SearchFields> = {
   mc: "mc",
 };
 
-const NARROWING_PREFIXES = new Set(["a", "t", "s", "p"]);
+const NARROWING_PREFIXES = new Set(["a", "t", "s", "p", "mc"]);
 
 function tokenize(input: string): string[] {
   const out: string[] = [];

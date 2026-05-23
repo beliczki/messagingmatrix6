@@ -20,7 +20,10 @@ html {
   background-size: 210%;
   background-position: -776px -352px;
 }
-
+.fullSurfaceImage.campaignImage #imageWrapper div {
+  background-size: auto 130%;
+  background-position: -1080px -70px;
+}
 .preCompBg #imageWrapper div { 
   background-size: inherit;
   background-position: -1050px 0px;

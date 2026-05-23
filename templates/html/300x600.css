@@ -149,7 +149,10 @@ body .animated.fullSurfaceImage main { height: 100%; top:0; animation-name:none;
   background-size: 400%;
   background-position: -450px -2px;
 }
-
+.fullSurfaceImage.campaignImage #imageWrapper div {
+  background-size: auto 100%;
+  background-position: -780px 0px;
+}
 .preCompBg #imageWrapper div { 
   background-size: inherit;
   background-position: -1050px -370px;

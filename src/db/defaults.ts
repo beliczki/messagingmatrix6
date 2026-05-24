@@ -23,6 +23,7 @@ export const DEFAULT_LOOK_AND_FEEL = {
     APPROVED: "#10b981",
     ACTIVE: "#22c55e",
     INACTIVE: "#6b7280",
+    ARCHIVED: "#4b5563",
     ERROR: "#ef4444",
     DEAD: "#000000",
     MEMORY: "#ec4899",

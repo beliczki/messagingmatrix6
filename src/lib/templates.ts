@@ -7,6 +7,27 @@ import { config } from "@/db/schema";
 // Template filesystem scanner. Spec §3.12 + §17.12 — single global folder
 // shared across clients; per-client visibility flags decide what each client
 // sees in dropdowns.
+//
+// manifest.json schema (extended 2026-05-23 for D1 template typing):
+//   {
+//     "version": "1.0",
+//     "title": "human-readable name",
+//     "description": "free-form text shown in editor + preview",
+//     "kind": "html" | "adobe" | "figma" | "after_effects"   // optional, default "html"
+//     "figma_url": "https://www.figma.com/file/…"            // optional, only for kind=figma
+//     "preview": "preview.png"                               // optional, filename inside the
+//                                                            // template folder. When unset and
+//                                                            // kind != html, auto-discover
+//                                                            // preview.{png,jpg,jpeg,webp,gif}.
+//     // ── HTML-only keys (ignored for non-html kinds) ──
+//     "width": …, "height": …, "events": …, "clicktags": …, "source": "index.html"
+//   }
+//
+// Non-html templates have NO sized variants, NO placeholders. They live in
+// `templates/<name>/` like HTML templates but only need manifest.json + a
+// preview image. They surface in the same dropdowns and the matrix cell
+// preview branches on `kind` to either iframe-render (html) or show the
+// preview image (adobe/figma/after_effects).
 
 export type TemplatePlaceholder = {
   name: string;
@@ -19,17 +40,38 @@ export type TemplatePlaceholder = {
   path?: string[];
 };
 
+export const TEMPLATE_KINDS = [
+  "html",
+  "adobe",
+  "figma",
+  "after_effects",
+] as const;
+export type TemplateKind = (typeof TEMPLATE_KINDS)[number];
+
 export type TemplateInfo = {
   name: string;
-  /** WIDTHxHEIGHT identifiers parsed from {w}x{h}.css filenames. */
+  /** Production type — drives matrix cell preview behavior. Defaults to "html"
+   *  when manifest.kind is absent or unknown (so every existing template stays
+   *  HTML-render-as-iframe with no migration). */
+  kind: TemplateKind;
+  /** WIDTHxHEIGHT identifiers parsed from {w}x{h}.css filenames. Always empty
+   *  for non-html kinds (they have no sized variants). */
   sizes: string[];
   defaultSize: string | null;
   placeholders: TemplatePlaceholder[];
   /** Convenience: union of all placeholders[type=tag].options. */
   tagOptions: string[];
+  /** Free-form description from manifest.description. */
+  description: string | null;
+  /** Filename of the preview image inside the template folder (e.g. "preview.png").
+   *  Only meaningful for non-html kinds; html templates render their own iframe. */
+  previewFile: string | null;
+  /** External URL — currently only Figma file links (manifest.figma_url). */
+  externalUrl: string | null;
 };
 
 const SIZE_RE = /^(\d+)x(\d+)\.css$/i;
+const PREVIEW_EXTS = ["png", "jpg", "jpeg", "webp", "gif"] as const;
 
 function templatesRoot(): string {
   return process.env.TEMPLATES_ROOT
@@ -59,10 +101,75 @@ function readTemplateJson(
   }
 }
 
+function readManifestJson(
+  templateName: string,
+): Record<string, unknown> | null {
+  const p = path.join(templatesRoot(), templateName, "manifest.json");
+  if (!fs.existsSync(p)) return null;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(p, "utf8"));
+    return typeof parsed === "object" && parsed !== null
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function isTemplateKind(v: unknown): v is TemplateKind {
+  return typeof v === "string" && (TEMPLATE_KINDS as readonly string[]).includes(v);
+}
+
+// Auto-discover preview.{png,jpg,jpeg,webp,gif} in the template dir. Used
+// when manifest.preview is unset. Returns the filename (not the absolute path).
+function discoverPreviewFile(dir: string): string | null {
+  if (!fs.existsSync(dir)) return null;
+  const entries = fs.readdirSync(dir);
+  for (const ext of PREVIEW_EXTS) {
+    const candidate = `preview.${ext}`;
+    if (entries.includes(candidate)) return candidate;
+  }
+  return null;
+}
+
 export function readTemplate(name: string): TemplateInfo | null {
   const root = templatesRoot();
   const dir = path.join(root, name);
   if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) return null;
+
+  const manifest = readManifestJson(name);
+  const kind: TemplateKind = isTemplateKind(manifest?.kind) ? manifest.kind : "html";
+  const description =
+    typeof manifest?.description === "string" && manifest.description.trim() !== ""
+      ? manifest.description
+      : null;
+  const externalUrl =
+    kind === "figma" && typeof manifest?.figma_url === "string"
+      ? manifest.figma_url
+      : null;
+  // Preview: manifest.preview wins; for non-html kinds, fall back to
+  // auto-discover. For html kind, leave null — the iframe is the preview.
+  let previewFile: string | null =
+    typeof manifest?.preview === "string" ? manifest.preview : null;
+  if (previewFile === null && kind !== "html") {
+    previewFile = discoverPreviewFile(dir);
+  }
+
+  // HTML-only reads. Non-html templates have no sized variants and no
+  // template.json placeholders.
+  if (kind !== "html") {
+    return {
+      name,
+      kind,
+      sizes: [],
+      defaultSize: null,
+      placeholders: [],
+      tagOptions: [],
+      description,
+      previewFile,
+      externalUrl,
+    };
+  }
 
   // Sizes: discover from {w}x{h}.css filenames.
   const sizes = fs
@@ -102,11 +209,15 @@ export function readTemplate(name: string): TemplateInfo | null {
 
   return {
     name,
+    kind,
     sizes,
     defaultSize:
       typeof tj?.default_size === "string" ? tj.default_size : (sizes[0] ?? null),
     placeholders,
     tagOptions: [...tagOptionsSet],
+    description,
+    previewFile,
+    externalUrl,
   };
 }
 

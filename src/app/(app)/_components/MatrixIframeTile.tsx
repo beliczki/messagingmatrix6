@@ -4,6 +4,46 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Code2 } from "lucide-react";
 import type { Message } from "../matrix/types";
 import { LIST_GRID_TEMPLATE, formatListDate } from "./ListSortHeader";
+import {
+  TemplatePreviewImage,
+  type TemplateImageKind,
+} from "./TemplatePreviewImage";
+
+// Subset of TemplateInfo needed to switch between iframe render (html) and
+// the static preview image (adobe/figma/after_effects). Optional everywhere
+// so legacy call sites that don't pass it continue to iframe-render — matches
+// the back-compat default in `readTemplate`.
+export type TemplatePreviewMeta = {
+  kind: "html" | TemplateImageKind;
+  previewFile: string | null;
+  externalUrl: string | null;
+};
+
+// Convenience: extract preview meta from a TemplateInfo-shape (where each
+// consumer maintains its own local TemplateInfo type with optional kind
+// fields). Returns undefined for missing input so the tile components fall
+// back to iframe rendering — preserves the legacy behavior for HTML templates
+// without forcing every call site to thread the same boilerplate.
+export function templateMetaFor(
+  t:
+    | { kind?: string; previewFile?: string | null; externalUrl?: string | null }
+    | undefined,
+): TemplatePreviewMeta | undefined {
+  if (!t || !t.kind) return undefined;
+  if (
+    t.kind !== "html" &&
+    t.kind !== "adobe" &&
+    t.kind !== "figma" &&
+    t.kind !== "after_effects"
+  ) {
+    return undefined;
+  }
+  return {
+    kind: t.kind,
+    previewFile: t.previewFile ?? null,
+    externalUrl: t.externalUrl ?? null,
+  };
+}
 
 // Module-level cache: many tiles share the same render result if shown twice
 // in the same session (e.g. after filter toggles). Keyed by message version
@@ -26,7 +66,47 @@ function parseSize(size: string): { w: number; h: number } {
 //     aspect-ratio for natural height; iframe scales to width.
 //   "fit-rect" (card thumb / list thumb): wrapper fills its fixed-size parent
 //     (size-full), iframe scales to fit both axes (letterboxed).
+// Kind-aware dispatch wrapper: short-circuits non-html templates to the
+// static preview image (no IntersectionObserver, no /api/render fetch). For
+// html / unknown templates, hands off to `MatrixIframeRender` which owns the
+// iframe machinery. Splitting the branch this way keeps the iframe hooks
+// (useRef/useState/useEffect ×3) from violating Rules of Hooks on the
+// non-html path.
 function MatrixIframePreview({
+  message,
+  templateName,
+  size,
+  mode,
+  templateMeta,
+}: {
+  message: Message;
+  templateName: string;
+  size: string;
+  mode: "fill-width" | "fit-rect";
+  templateMeta?: TemplatePreviewMeta;
+}) {
+  if (templateMeta && templateMeta.kind !== "html") {
+    return (
+      <TemplatePreviewImage
+        templateName={templateName}
+        previewFile={templateMeta.previewFile}
+        kind={templateMeta.kind}
+        externalUrl={templateMeta.externalUrl}
+        mode={mode}
+      />
+    );
+  }
+  return (
+    <MatrixIframeRender
+      message={message}
+      templateName={templateName}
+      size={size}
+      mode={mode}
+    />
+  );
+}
+
+function MatrixIframeRender({
   message,
   templateName,
   size,
@@ -186,11 +266,13 @@ export function MatrixIframeTile({
   message,
   templateName,
   size,
+  templateMeta,
   onOpen,
 }: {
   message: Message;
   templateName: string;
   size: string;
+  templateMeta?: TemplatePreviewMeta;
   onOpen: () => void;
 }) {
   return (
@@ -204,6 +286,7 @@ export function MatrixIframeTile({
         templateName={templateName}
         size={size}
         mode="fill-width"
+        templateMeta={templateMeta}
       />
     </button>
   );
@@ -215,12 +298,14 @@ export function MatrixIframeCard({
   templateName,
   size,
   product,
+  templateMeta,
   onOpen,
 }: {
   message: Message;
   templateName: string;
   size: string;
   product: string | null;
+  templateMeta?: TemplatePreviewMeta;
   onOpen: () => void;
 }) {
   const mcLabel = `MC${message.number}${message.variant ?? ""}`;
@@ -236,6 +321,7 @@ export function MatrixIframeCard({
           templateName={templateName}
           size={size}
           mode="fit-rect"
+          templateMeta={templateMeta}
         />
       </div>
       <div className="creative-card__meta p-2 text-xs">
@@ -266,6 +352,7 @@ export function MatrixIframeListRow({
   product,
   createdAt,
   updatedAt,
+  templateMeta,
   onOpen,
 }: {
   message: Message;
@@ -274,6 +361,7 @@ export function MatrixIframeListRow({
   product: string | null;
   createdAt: string;
   updatedAt: string;
+  templateMeta?: TemplatePreviewMeta;
   onOpen: () => void;
 }) {
   const mcLabel = `MC${message.number}${message.variant ?? ""}`;
@@ -293,6 +381,7 @@ export function MatrixIframeListRow({
           templateName={templateName}
           size={size}
           mode="fit-rect"
+          templateMeta={templateMeta}
         />
       </div>
       <div className="creative-row__mc truncate border-r border-slate-100 px-3 py-2 font-mono text-[11px] font-semibold text-slate-900">

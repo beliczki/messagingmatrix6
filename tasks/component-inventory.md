@@ -607,3 +607,98 @@ The Edit toggle and the entire selection-actions block moved out of the top `mat
 **Removed from the inventory in practice (still defined but no longer rendered):**
 - `selection-actions--inline` — was the horizontal modifier on the top-toolbar version. Now unused; can be deleted in a future cleanup.
 - `toolbar-btn--toggle`, `toolbar-btn--toggle--active` — were the top-toolbar Edit button styles. Now unused (the new toggle lives inside `edit-mode-panel__toggle` instead).
+
+---
+
+## Változások 2026-05-23 — Settings → Keywords tab + autocomplete cell
+
+`/audiences` and `/topics` 5 freeform-text + 1 `select` columns become `autocomplete` cells driven by a new `keywords` table (per-client). A new Settings → Keywords tab curates the lists; the matrix `HeaderDetailDialog` shares the same widget.
+
+**Új BEM block-ok:**
+- `autocomplete-field` — shared input + native `<datalist>` widget used by both DimensionGrid inline editors and HeaderDetailDialog forms. Single class on the `<input>`; the datalist itself has no class (it's invisible).
+- `keywords-tab` — Settings tab container (2-column flex: 240px sidebar + flex-1 pane).
+- `keywords-tab__sidebar` — left column listing the 12 `(form, field)` pairs.
+- `keywords-tab__section` — sidebar group per form (Audiences / Topics).
+- `keywords-tab__section-label` — `text-[10px] uppercase tracking-wider` form heading, matching the matrix-header-form `SectionHeader` pattern.
+- `keywords-tab__field-list`, `keywords-tab__field-btn`, `keywords-tab__field-btn--active`, `keywords-tab__field-count` — the per-field selector buttons with a small count chip on the right.
+- `keywords-tab__pane` — right column with header + add-row + value list.
+- `keywords-tab__pane-header`, `keywords-tab__pane-title`, `keywords-tab__archived-toggle` — pane top bar.
+- `keywords-tab__add-row`, `keywords-tab__add-input` — the "Add value…" inline form.
+- `keywords-tab__error` — rose-bg error banner under the add form.
+- `keywords-tab__empty` — slate-bg dashed-border empty-state for fields with no values yet.
+- `keywords-tab__list`, `keywords-tab__row`, `keywords-tab__row--archived` — the value rows themselves; archived rows get the `opacity-60` + `bg-slate-50` modifier.
+- `keywords-tab__row-reorder`, `keywords-tab__row-up`, `keywords-tab__row-down` — per-row up/down arrows.
+- `keywords-tab__row-value` — the read-mode value button (click → edit mode).
+- `keywords-tab__row-edit`, `keywords-tab__row-edit-input`, `keywords-tab__row-edit-cancel` — edit-mode input + X cancel button.
+- `keywords-tab__row-archive`, `keywords-tab__row-restore` — eye-off / archive-restore action icons (mutually exclusive per row).
+
+**Új DimensionGrid CellType:**
+- `kind: "autocomplete"` (alongside the existing `text | number | select | select-dynamic`). Source = `{ form, field }` lookup into the Settings → Keywords list. Inline cell renders the same `<input list=…>` + `<datalist>` pair as `autocomplete-field`, just without the shared class hook (the input already has `autocomplete-field` baseline styling implicitly).
+
+**Reuse:**
+- `toolbar-btn--primary` for the Add button.
+- `Field` / `SectionHeader` / `inputCls` in `HeaderDetailDialog` unchanged — only the inner `<input>`/`<select>` is swapped for `<AutocompleteField>`.
+- The Audiences/Topics editor pages stay structurally identical — only `keywordOptions={...}` was threaded into `<DimensionGrid>`.
+
+**Hooks:**
+- `useKeywordOptions` (`_components/useKeywordOptions.ts`) — single react-query call returning the grouped `{form: {field: values[]}}` shape. Shared by audiences/topics editors, the matrix HeaderDetailDialog, and any future consumer. Query key `["keywords"]` aligns with the SSE `entity: "keywords"` broadcast wired in `usePresenceConnection` (Phase B), so any Settings edit live-refreshes every open editor.
+
+---
+
+## Változások 2026-05-23 (cont.) — Template kind + matrix preview auto-switch
+
+`TemplateInfo` gains a production-type `kind` field (`html | adobe | figma | after_effects`). The matrix-side preview surfaces — `MatrixIframePreview` (used by Creative Library tile/card/list) and `PreviewPane` (used by MessageEditor + matrix HeaderDetailDialog) — branch on kind: HTML stays iframe-rendered; non-HTML shows the template folder's `preview.{png,jpg,…}` image with a small kind badge.
+
+**Új BEM block-ok:**
+- `template-preview-image` — wrapper for non-HTML template preview (matches the matrix-iframe-preview chrome — `thumb-checker` background, identical layout modes).
+- `template-preview-image__img` — the `<img>` itself; `object-contain` so banners letterbox cleanly.
+- `template-preview-image__empty` — empty-state when the template has no preview file (`ImageOff` icon, slate-300).
+- `template-preview-image__link` — wraps the image in an `<a target=_blank>` when `kind=figma` and `figma_url` is set (so click → opens in Figma).
+- `template-kind-badge`, `template-kind-badge--adobe`, `template-kind-badge--figma`, `template-kind-badge--after-effects` — bottom-right corner badge with the kind label + optional ExternalLink icon for figma. Reuses `status-badge`-style geometry (rounded, slate border, white/90 bg, `text-[10px] uppercase tracking-wider`).
+- `preview-pane__image-wrap` — new sibling to `preview-pane__iframe` inside the `preview-pane__viewport`; absolute-sized container for the `TemplatePreviewImage` so it sits where the iframe would.
+
+**Types:**
+- `TEMPLATE_KINDS` constant + `TemplateKind` type in `src/lib/templates.ts`.
+- `TemplatePreviewMeta` exported from `_components/MatrixIframeTile.tsx` — small subset of `TemplateInfo` (`kind`, `previewFile`, `externalUrl`) passed through tile/card/list/PreviewPane.
+- `templateMetaFor(t)` helper in the same file — converts any TemplateInfo-shape into the subset; returns `undefined` for missing input so call sites fall back to iframe rendering safely.
+
+**Reuse:**
+- `thumb-checker` (already in inventory) — same checker background under both iframe and image previews so cells line up visually.
+- `status-badge` token geometry — `template-kind-badge` mirrors it without claiming the same class to keep status- and kind-pill semantics separate.
+- `ImageOff` (lucide) — same icon family the rest of the app uses for "no media" states.
+- `ExternalLink` (lucide) — flags the figma click-through inline on the badge.
+
+**Manifest schema (filesystem, no DB):**
+- `templates/<name>/manifest.json` accepts new optional fields: `kind` (defaults to `"html"`), `figma_url` (only honored for `kind=figma`), `preview` (filename inside the folder; auto-discovers `preview.{png,jpg,jpeg,webp,gif}` for non-html when unset). HTML-template-only fields (`width`, `height`, `events`, `clicktags`, `source`) untouched.
+
+**Behaviour matrix:**
+- `kind=html` (or unset, or unknown) → existing iframe render path unchanged. **Zero regression on existing templates.**
+- `kind=adobe|after_effects` → preview image + kind badge, no link.
+- `kind=figma` → preview image + kind badge wrapped in an external link if `figma_url` is set.
+
+**Not in this round (explicit):**
+- `creative_id`-based override (D5 "linked creative beats template preview"). Until 3.x punch list lands, non-html cells always show the template's preview image.
+- Share Gallery non-HTML support — uses its own `PublicMatrixPreview` against `/api/render/public`; needs a public-safe templates endpoint. Public shares of non-HTML MCs would currently render-fail; treat that as the lower-priority follow-up.
+- Creative Library "matrix items" synthesizer filters out templates with `sizes.length === 0`, which now excludes non-html templates. Showing non-html MCs as creative-library cards needs the synthesizer to handle the "no size" case — separate slice.
+- Template Editor (`/templates`) UI for picking kind / uploading preview / entering figma_url. Admin edits `manifest.json` text in the existing CodeMirror editor for v1.
+
+---
+
+## Változások 2026-05-23 (cont.) — `ARCHIVED` workflow status
+
+Added an 11th workflow status `ARCHIVED`, sitting next to `INACTIVE` semantically (both lock the row against placement changes — see "PMMID regen on audience move" todo block). Distinct from the existing `archived_at` soft-delete column: that column is a system-level safety net; the status is user intent ("hide from default views, but remember it existed").
+
+**New CSS hook:**
+- `.status-dot--archived` in `globals.css` — sibling of the existing `.status-dot--{incoming,naming,…,memory}` classes. Reads `var(--status-archived)` (default `#4b5563`, slate-600-ish, one shade darker than `--status-inactive` so the two read as related-but-distinct in dropdowns).
+
+**Touched files (status enum is fanned out across UI + DB defaults; no central source yet — kept consistent by-hand for now):**
+- `src/app/(app)/matrix/types.ts` — `STATUS_OPTIONS` + `STATUS_COLOR` (Tailwind class map, `bg-slate-500`).
+- `src/app/(app)/matrix/MessageEditor.tsx` — local `STATUS_OPTIONS`.
+- `src/app/(app)/settings/_design/DesignTab.tsx` — `STATUS_KEYS` + `STATUS_VAR` (CSS variable map).
+- `src/db/defaults.ts` — `DEFAULT_LOOK_AND_FEEL.statusColors` (hex default).
+- `src/app/globals.css` — `--status-archived` declaration + `.status-dot--archived` class.
+
+**Not in this round (explicit):**
+- Filter UX for default-hiding ARCHIVED in matrix/library views. Current `EMPTY_FILTERS.statuses = new Set()` means "show all" — no notion of default-hidden statuses yet. Separate slice (see Open Question in the todo block).
+- Centralizing the status enum into a single source-of-truth module. Today it's hand-mirrored across 4 files; tolerable while we still have a small fixed set, but a `src/lib/mc-status.ts` central export would be the right move once we touch this area again.
+

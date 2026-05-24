@@ -22,6 +22,7 @@ import {
 import clsx from "clsx";
 import { type Audience, type Message, type Topic, STATUS_COLOR } from "./types";
 import PreviewPane, { type PreviewBg } from "../_components/PreviewPane";
+import { templateMetaFor } from "../_components/MatrixIframeTile";
 import ModalBackdrop from "../_components/ModalBackdrop";
 import EntityHistoryDrawer from "../_components/EntityHistoryDrawer";
 
@@ -50,6 +51,7 @@ const STATUS_OPTIONS = [
   "APPROVED",
   "ACTIVE",
   "INACTIVE",
+  "ARCHIVED",
   "ERROR",
   "DEAD",
   "MEMORY",
@@ -61,6 +63,11 @@ type TemplateInfo = {
   defaultSize: string | null;
   tagOptions: string[];
   placeholders: Array<{ name: string; type: string }>;
+  // D1: production type. Optional so existing call sites keep working; undefined
+  // is treated as "html" by the preview branch.
+  kind?: "html" | "adobe" | "figma" | "after_effects";
+  previewFile?: string | null;
+  externalUrl?: string | null;
 };
 
 type Props = {
@@ -1890,6 +1897,8 @@ function MessagePreview({
       skipAnim={skipAnim}
       onSkipAnimChange={setSkipAnim}
       onRefresh={refresh}
+      templateName={templateInfo?.name}
+      templateMeta={templateMetaFor(templateInfo)}
     />
   );
 }

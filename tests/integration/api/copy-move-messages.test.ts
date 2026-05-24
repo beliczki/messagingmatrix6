@@ -146,7 +146,7 @@ describe("copyMessages", () => {
 });
 
 describe("moveMessages", () => {
-  it("moves 2 MCs into one audience — PMMID + versionNo frozen, version+1, source removed from origin", () => {
+  it("moves 2 MCs into one audience — PMMID regenerated against new audience, versionNo frozen, version+1, source removed from origin", () => {
     seedAudience(erste.id, "aud1");
     seedAudience(erste.id, "aud2");
     seedTopic(erste.id, "top1");
@@ -168,11 +168,16 @@ describe("moveMessages", () => {
       expect(row.audience).toBe("aud2");
       expect(row.topic).toBe("top1");
       expect(row.version).toBe(2); // optimistic lock bumped once
+      expect(row.pmmid).toContain("aud2"); // new audience encoded in pmmid
+      expect(row.pmmid).not.toContain("aud1"); // old audience evicted
     }
-    const movedA = getMessageByPmmid(erste.id, a.pmmid!)!;
+    // Source's old pmmid is gone from the index (regenerated).
+    expect(getMessageByPmmid(erste.id, a.pmmid!)).toBeNull();
+    // The row still exists, accessible via the new pmmid.
+    const movedA = getMessage(erste.id, a.id)!;
     expect(movedA.audience).toBe("aud2");
-    expect(movedA.pmmid).toBe(a.pmmid); // frozen
-    expect(movedA.versionNo).toBe(a.versionNo); // MC v-counter frozen
+    expect(movedA.pmmid).not.toBe(a.pmmid); // regenerated
+    expect(movedA.versionNo).toBe(a.versionNo); // MC v-counter still frozen
 
     // Origin cell is empty for these PMMIDs.
     const inAud1 = listMessages(erste.id).filter((m) => m.audience === "aud1");
@@ -215,7 +220,9 @@ describe("moveMessages", () => {
     expect(moved.audience).toBe("aud2");
     expect(moved.number).toBe(1);
     expect(moved.variant).toBe("b"); // bumped
-    expect(moved.pmmid).toBe(inAud1.pmmid); // still frozen
+    expect(moved.pmmid).not.toBe(inAud1.pmmid); // regenerated
+    expect(moved.pmmid).toContain("aud2");
+    expect(moved.pmmid).toContain("v_b");
 
     // Existing chip in aud2 untouched.
     const untouched = getMessage(erste.id, existingInAud2.id)!;
@@ -285,6 +292,36 @@ describe("moveMessages", () => {
     if (result.ok) return;
     expect(result.reason).toBe("target_audience_not_found");
   });
+
+  it.each([["ACTIVE"], ["INACTIVE"], ["ARCHIVED"]])(
+    "rejects move when source status is %s — row untouched",
+    (lockedStatus) => {
+      seedAudience(erste.id, "aud1");
+      seedAudience(erste.id, "aud2");
+      seedTopic(erste.id, "top1");
+      const m = createMessage(erste.id, {
+        audience: "aud1",
+        topic: "top1",
+        status: lockedStatus,
+      });
+
+      const result = moveMessages(
+        erste.id,
+        [{ mcLabel: m.pmmid!, expectedVersion: m.version }],
+        "aud2",
+      );
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.reason).toBe("row_locked_by_status");
+      expect(result.status).toBe(lockedStatus);
+
+      // Source row untouched — same audience, same pmmid, same version.
+      const after = getMessage(erste.id, m.id)!;
+      expect(after.audience).toBe("aud1");
+      expect(after.pmmid).toBe(m.pmmid);
+      expect(after.version).toBe(m.version);
+    },
+  );
 
   it("regenerates UTM columns against the new audience's strategy/product", () => {
     seedAudience(erste.id, "aud1", { strategy: "Prospecting" });

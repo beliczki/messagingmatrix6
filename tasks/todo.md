@@ -1929,3 +1929,336 @@ refresh. Phase E surfaces the audit log — which already stored full
 `before`/`after` per change — as a per-entity history drawer with restore; no
 new storage. `useRowAutosave` was investigated and left as-is (not vulnerable:
 field-scoped patches, no persistent draft). Phase C (presence) deferred.
+
+---
+
+## Session checkpoint — 2026-05-23 — Settings → Keywords tab (audiences + topics dropdowns)
+
+User asks: the audience editor's `status, product, strategy, buying_platform, data_source, targeting_type, device` columns + the topic editor's `product, status, tag1, tag2, tag3` columns should be driven by a **Settings → Keywords** tab that holds the allowed-values list per field, instead of (today) freeform text on 5 of the 7 audience fields. The `channel` column proposal from earlier this turn was dropped as unnecessary.
+
+Source-of-truth for the seed data: the existing **Erste XLSX `keywords` sheet** (skipped during the 9b import — see `todo.md:443`). 18 rows in scope, `(form, field, comma-separated values)` shape. The same sheet is also the bootstrap for a future Phase covering messages/creatives/assets fields — out of scope here.
+
+### Confirmed decisions (this session)
+- **Input mode:** autocomplete + freeform-allowed. The dropdown shows the Settings-managed list; any other string is still accepted and saved. Backwards-compatible with existing freeform Erste rows.
+- **Scope:** 7 audience fields (`status, product, strategy, buyingPlatform, dataSource, targetingType, device`) + 5 topic fields (`status, product, tag1, tag2, tag3`). `tag4` excluded — the XLSX `keywords` sheet has no `Tag4` row and the field is rarely used in Erste.
+- **Storage:** per-client multi-tenant. Erste, Telekom, Proficio each have their own keyword lists; one shared list across deploys would force cross-client coupling we explicitly rejected in the multi-tenancy delta.
+- **Canonical field key:** the **v6 camelCase TS field name** (`buyingPlatform`, not `Buying_platform`). XLSX header is normalized on import via the same `findCol` aliases the audience importer already uses.
+- **Status migration:** today `STATUS_OPTIONS` (`src/app/(app)/matrix/types.ts`) is hardcoded `["ACTIVE","INACTIVE","PLANNED","INCOMING"]`. The Keywords tab seeds the same values; hardcoded fallback stays for fresh installs with no `keywords` rows yet.
+- **Out of scope (deferred to its own session):** D1–D5 template typing (`kind: html|adobe|figma|after_effects` + matrix cell preview auto-switch + creative→cell linking + `audiences.platform` enum). Decision points already drafted in this turn's transcript; promote to a sibling checkpoint when picked up.
+
+### Plan
+
+- [ ] **1. Schema — `keywords` table** (`src/db/schema.ts` + new migration `0011_keywords.sql`).
+  - Columns: `id` PK, `clientId` FK→clients (cascade), `form` text (`audiences`|`topics`), `field` text (camelCase: `status`, `product`, `buyingPlatform`, …), `value` text, `orderIndex` integer, `archivedAt` text nullable, `createdAt`, `updatedAt`.
+  - Indexes: `unique(clientId, form, field, value)` (no duplicate values within a list); `index(clientId, form, field, orderIndex)` (the read pattern is "give me all values for one field, in display order"). No `version` column — Keywords are admin-curated, low-contention; if two admins edit simultaneously the last write wins per row, which is fine.
+- [ ] **2. Entity layer — `src/lib/entities/keywords.ts`** (new file).
+  - `listKeywords(clientId, opts?: { form?, field?, includeArchived? })` → grouped `Record<form, Record<field, Keyword[]>>` OR a flat list; pick flat + group in the route (simpler caching).
+  - `createKeyword`, `updateKeyword` (rename value or change orderIndex), `archiveKeyword` (soft-delete; archived values stay queryable for audit but drop out of dropdowns), `restoreKeyword`. No hard delete on v1 — match the audience/topic archive convention.
+  - `reorderKeywords(clientId, form, field, valueIds: number[])` — single transaction, sets `orderIndex = position` for each.
+  - Tenant guard: every read/write scoped on `clientId`. Reuse `withClientScope` if it exists or inline the `where(eq(clientId, …))`.
+- [ ] **3. HTTP routes** (`src/app/api/keywords/...`).
+  - `GET /api/keywords?form=audiences` → list (withSession, tenant-scoped).
+  - `POST /api/keywords` → create (withAdmin — only admins curate the list).
+  - `PATCH /api/keywords/[id]` → update (withAdmin).
+  - `POST /api/keywords/[id]/archive` + `/restore` (withAdmin).
+  - `POST /api/keywords/reorder` body `{ form, field, ids: number[] }` (withAdmin).
+  - Every write: audit row (`entityType: 'keywords'`, action `create|update|archive|restore|reorder`). SSE broadcast already wired via `writeAudit`.
+- [ ] **4. XLSX importer — activate the `keywords` sheet** (`src/lib/import-xlsx.ts`).
+  - New `importKeywords(rows, clientId)` step. Parse `(form, field, values)` triplets, split `values` on `/,\s*/`, trim, drop empties. Normalize XLSX `field` → camelCase via a small map (`Buying_platform → buyingPlatform`, `Data_source → dataSource`, etc.). Skip unknown `form` (e.g. `tasks` — no v6 entity) silently with a per-row warning.
+  - **Reuse, don't rewrite** the wipe-then-insert pattern: `keywords` joins the existing wipe order (added at the end — no FK refs, safe last).
+  - Existing `scripts/import-erste.ts` automatically picks up the new step. Re-run on Erste backfills the 18 rows worth of values (~90 individual `keywords` rows after the comma-split).
+- [ ] **5. New `CellType: "autocomplete"`** in `src/app/(app)/_components/DimensionGrid/columns.ts`.
+  - `{ kind: "autocomplete"; source: { form: "audiences"|"topics"; field: string } }`.
+  - The grid cell renderer: input + dropdown panel of matching keywords (case-insensitive prefix match), but **value can be anything** — pressing Enter or blur with a non-list string still commits the freeform value. Matches the "autocomplete + freeform" decision.
+  - Keep `kind: "select-dynamic"; source: "product"` working — it predates this and `/audiences` `product` column uses it (pulling from a client-config list, not keywords). Migrate `product` to `autocomplete` only if its config-list source is itself migrated to keywords — defer that to keep this PR small.
+- [ ] **6. `columns.ts` updates** — switch the in-scope cells:
+  - `AUDIENCE_COLUMNS`: `status` from `select(STATUS_OPTIONS)` → `autocomplete(audiences, status)`; `strategy, buyingPlatform, dataSource, targetingType, device` from `text` → `autocomplete(audiences, <field>)`. `product` stays `select-dynamic` for now (see above note).
+  - `TOPIC_COLUMNS`: `status` → `autocomplete(topics, status)`; `tag1, tag2, tag3` from `text` → `autocomplete(topics, tagN)`. `product` and `tag4` unchanged.
+  - `STATUS_OPTIONS` hardcoded constant **stays in `types.ts`** as a fallback for fresh installs (empty `keywords` table) — the autocomplete cell falls through to it when the query returns no rows for `(form=*, field=status)`.
+- [ ] **7. Matrix header dialog parity** (`src/app/(app)/matrix/HeaderDetailDialog.tsx`).
+  - The audience/topic dialog opened from the matrix row/column header (see `todo.md:1089-1094`) edits the same fields — its `<Field>` rows for `status/product/strategy/device` need the same autocomplete treatment, otherwise the matrix-side editor diverges from the `/audiences` grid. **Same component should be reusable** — extract the input as `<AutocompleteField source={...}>` once and use it in both places.
+- [ ] **8. Settings → Keywords tab UI** (`src/app/(app)/settings/_keywords/KeywordsTab.tsx`, new).
+  - Tab inserted in `SettingsView.tsx` between `_structure` and `_storage` (alphabetical-ish: Clients / Design / MCP / Snapshots / Changelog / Structure / **Keywords** / Storage / About) — or after Structure since both are admin-curated taxonomy. Final placement decided at build time.
+  - Layout: left sidebar = `(form, field)` pairs as collapsible sections (12 sections: 7 audiences + 5 topics); right pane = current list for the selected pair with `Add value` input + per-row `↑↓` reorder + `archive` (eye-off) icon + inline rename.
+  - Reuse: the existing `DimensionGrid` row patterns are too heavy for this — keywords are a flat single-column list, just use a simple `<ul>` with the same toolbar-btn / archive-toggle styling.
+  - Empty state per section: "No values yet. The audience/topic editor will fall back to freeform input." (matches the autocomplete semantics — empty list = freeform-only).
+- [ ] **9. Component inventory + tests.**
+  - `tasks/component-inventory.md` — log `keywords-tab`, `keywords-tab__section`, `keywords-tab__row`, `autocomplete-field`, `autocomplete-field__menu`, `autocomplete-field__option`.
+  - Tests:
+    - `tests/integration/api/keywords.test.ts` — list / create / update / archive / restore / reorder / tenant isolation. ~8 cases.
+    - `tests/integration/import-keywords.test.ts` — feed the real XLSX through `importErsteXlsx`, assert 18 (form,field) groups created with the right value counts.
+    - `tests/unit/keywords-field-normalize.test.ts` — small unit on the XLSX-header→camelCase mapping (catches typos like `Buying_platform`→`buyingPlatform` regression).
+- [ ] **10. Smoke test (user).** `npm run dev:erste` → run `npx tsx scripts/import-erste.ts` to seed Erste's keywords → open `/audiences` and pick any `buyingPlatform` cell → dropdown shows `adform, dv360, meta, …`; type `xyz` → accepted as freeform. Open Settings → Keywords → add a new `Strategy` value → reopen audience editor → new value appears in dropdown without page refresh (SSE invalidation already wired in Phase B of the previous session). Smoke same flow on `/topics` for `tag1`.
+
+### Out of scope (explicit, do not let scope creep)
+- Template typing / matrix preview auto-switch / Adobe / Figma / After Effects template kinds (D1–D5 — separate session).
+- `audiences.platform` enum (`adform|meta|dv360|direct_display|dooh`) — separate session, ties into 1.x punch list.
+- Messages.status / messages.template / creatives.format / creatives.templates / assets.format / assets.type keywords coverage — separate session (different UI surfaces).
+- Migrating `product` from `select-dynamic` (client-config) to `autocomplete` (keywords) — leave the existing source-of-truth alone for v1.
+- Hard delete of keywords; bulk import in the Settings UI; CSV import.
+- Strict-only dropdown mode (`select-dynamic`-style); the autocomplete already does this minus the "Add new" inline create — that one is a small follow-up if requested.
+
+### Open questions to resolve before starting (if any surface)
+- Tab placement order in `SettingsView` — Structure-adjacent (between Structure and Storage) feels right because both are taxonomy. Confirm at build time, not blocker now.
+- Per-field validation rules (e.g. `status` values must be uppercase letters only)? Default: no validation, accept any non-empty trimmed string. Add per-field validators only if the user reports garbage values getting in.
+
+### Version bump suggestion (at end of work)
+Per project `CLAUDE.md`: still `6.0.0-pre`, no bump until the pre-active-use punch list is fully cleared. This work does **not** clear any punch list item; no bump.
+
+### Review — landed (2026-05-23)
+
+Branch `feat/keywords-tab`. All 10 plan steps shipped. `npm test` 283/283 green (was 265 → +18 new tests). `npx tsc --noEmit` clean for app code (only pre-existing `mcCount` test errors in `audiences-key-pattern.test.ts` from 2026-05-20 work, unrelated).
+
+**Schema (1):** `keywords(id, clientId FK→clients cascade, form, field, value, orderIndex, archivedAt, createdAt, updatedAt)` with unique `(clientId, form, field, value)` + order index. No `version` column — admin-curated, last-write-wins. Migration `0016_loose_bill_hollister.sql`.
+
+**Entity (1):** `src/lib/entities/keywords.ts` — `listKeywords/getKeyword/createKeyword/updateKeyword/archiveKeyword/restoreKeyword/reorderKeywords/bulkInsertKeywords/deleteAllKeywordsForClient/hardDeleteKeywords`. `KEYWORD_FORMS` + `KEYWORD_FIELDS` allowlist drives the v1 scope (7 audience + 5 topic fields, tag4 excluded). UNIQUE-violation translated to a typed `KeywordError`.
+
+**HTTP routes (4):** `/api/keywords` GET (withSession) + POST (withAdmin), `/api/keywords/[id]` PATCH + DELETE, `/api/keywords/[id]/restore` POST, `/api/keywords/reorder` POST. Every write calls `writeAudit({ entityType: "keywords", action: … })` so the existing SSE `broadcast` fires → `usePresenceConnection` (Phase B) invalidates `["keywords"]` → all open editors live-refresh.
+
+**XLSX importer (1):** `import-xlsx.ts` gained `keywords: number` in `ImportCounts`, wipes the table at the same point as the other tenant tables, and runs the new `importKeywords` helper. The helper parses the `(form, field, values)` triplet, normalizes XLSX field names via the new exported `normalizeXlsxFieldName(s)` (lower-first + `_X → uppercase`), filters to in-scope `(form, field)` pairs, comma-splits values, and inserts with per-cohort orderIndex preserved. Out-of-scope rows (messages/creatives/assets/tasks + unknown fields) are silently skipped — no errors. Duplicate values within a single XLSX cell or across re-runs UNIQUE-skip cleanly. `scripts/import-erste.ts` doc-comment refreshed (7 sheets → 8). Real-XLSX dry run: 123 keywords inserted, 8 expected skips (4 out-of-scope rows + 2 tasks + 1 empty + 1 dup), 0 errors.
+
+**UI (5):**
+- `CellType` gained `{ kind: "autocomplete"; source: { form, field } }`. Native `<datalist>` renderer in `DimensionGrid.tsx` — gives autocomplete + freeform input for free; accessible, no popover plumbing.
+- `AUDIENCE_COLUMNS` 6 cells switched: `status` (was `select`) and `strategy / device / buyingPlatform / dataSource / targetingType` (were `text`). `product` stays `select-dynamic` (sourced from client-config, not keywords — out-of-scope per plan).
+- `TOPIC_COLUMNS` 4 cells switched: `status` (was `select`) and `tag1 / tag2 / tag3` (were `text`). `tag4` stays `text` (XLSX keywords sheet has no `Tag4` row, deliberate).
+- `STATUS_OPTIONS` import dropped from `columns.ts` (no more hardcoded enum reference). The constant still lives in `matrix/types.ts` because `HeaderDetailDialog`'s status-badge color map still keys off it.
+- New shared `AutocompleteField` component (`_components/AutocompleteField.tsx`) reused 10× in `HeaderDetailDialog` (6 audience + 4 topic fields). Killed the two hand-rolled `<select>` status dropdowns there.
+- `useKeywordOptions` hook centralizes the `/api/keywords` query; same query key across all consumers means one network call serves audiences/topics editors + matrix dialog + any future consumer.
+
+**Settings → Keywords tab (1):** new `_keywords/KeywordsTab.tsx`. Two-column layout (240px sidebar of 12 `(form, field)` buttons with per-section live count chips; pane with header + "Add value…" + reorderable + archive/restore list). Inline rename on click. `EyeOff` archive + `ArchiveRestore` restore. Show-archived toggle. `KeywordsTab` slotted into `SettingsView` between Structure and Snapshots; new `TabKey` `keywords` and route order = Clients / Design / Storage / Structure / **Keywords** / Snapshots / Changelog / MCP / About.
+
+**Tests (+18):** `tests/integration/api/keywords.test.ts` (10 cases — list/create/orderIndex auto-increment/UNIQUE rejection/required-fields/update-rename/update-collision/tenant-isolation/archive-restore/reorder-tenant-scoped/filter-by-form-field), `tests/integration/import-keywords-xlsx.test.ts` (3 cases — in-scope seeding with XLSX-field normalization + duplicate-skip + out-of-scope filter; dryRun rollback; wipe-then-reimport idempotent), `tests/unit/keywords-field-normalize.test.ts` (5 cases on the normalizer). All green; full suite 283/283.
+
+**Component inventory:** appended "Változások 2026-05-23 — Settings → Keywords tab + autocomplete cell" block — `autocomplete-field` + 16 `keywords-tab__*` BEM tokens + the new `autocomplete` CellType doc. `useKeywordOptions` hook documented.
+
+**Branch:** `feat/keywords-tab`. Not committed yet (per `CLAUDE.md` policy: user requests commits explicitly).
+
+**Follow-up fix (same session): client-bundle "Can't resolve 'fs'".** First browser load failed with `Module not found: Can't resolve 'fs'` in `better-sqlite3` — `KeywordsTab.tsx` ("use client") imported `KEYWORD_FIELDS` / `KEYWORD_FORMS` from `@/lib/entities/keywords`, which transitively pulls in `@/db` (server-only). Next.js client bundler followed the edge and choked on the Node `fs` requirement. Fix: extracted the pure constants + `KeywordForm` type into `src/lib/keywords-shared.ts`. The entity layer now re-exports them (so server-side import sites in 4 routes + importer + tests are unchanged); `KeywordsTab.tsx` imports directly from the shared file. Mirror of the existing `text-formatting-scope.ts` split pattern. Typecheck + 18 keyword tests still green.
+
+### Smoke checklist (user, ~5 minutes)
+
+DB note: the Erste production data is **not yet seeded**. Run the importer to seed the 123 keyword rows before testing, OR start with the empty list and add a few values by hand in Settings to test the same path.
+
+To seed from XLSX (wipes Erste's data first — **make sure no concurrent edits are happening**):
+```bash
+ACTIVE_CLIENT_KEY=erste npx tsx scripts/import-erste.ts
+```
+
+Then in a browser (already running on `:6001`):
+
+1. `/audiences` → click a `Buying platform` cell on any row. Dropdown should show `adform, dv360, meta, pinterest, gdn, youtube, search, xandr, facebook, instagram, xaxis`. Typing also filters (native `<datalist>` behavior).
+2. In the same cell, type `xyz` (not in the list) → press Enter → commits as freeform value (saves to DB).
+3. `/topics` → click a `Tag 1` cell → dropdown shows `NA, brand, elethelyzet, …`.
+4. `/settings` → open the new **Keywords** tab → left sidebar shows 12 `(form, field)` buttons with live count chips. Click `Audiences · Strategy`.
+5. Add new value `xyz123` via "Add value…" form → appears in the list.
+6. **Without page refresh**, switch back to `/audiences` → click a `Strategy` cell → dropdown now includes `xyz123` (SSE invalidation working).
+7. Back in Settings → Keywords → click the `↑` arrow on a row → reorder persists. Click the eye-off (archive) → row dimmed; toggle "Show archived" → still visible with restore icon.
+8. Open the Matrix → click any **row header** (audience) → the side dialog's `Status / Strategy / Device / Buying platform / Data source / Targeting type` fields should all show the same dropdown. Same for **column headers** (topics) on `Status / Tag 1-3`.
+
+If any of those misbehave, capture the screen + console error and we triage.
+
+---
+
+## Session checkpoint — 2026-05-23 (cont.) — Template kind + matrix preview auto-switch (D1+D2+D3)
+
+Resuming the "bigger plan" laid out earlier this session. Decisions D1–D5 were drafted in chat; D6 (Keywords) shipped above. This session ships D1+D2+D3 — the **template typing core** — and explicitly defers D4 (`audiences.platform` enum) and D5 (creative→cell linking, 3.x punch list) to follow-up sessions.
+
+### Confirmed decisions (from earlier in this turn's transcript)
+- **D1.** Template gains `kind: "html" | "adobe" | "figma" | "after_effects"`. Storage: extend the existing `templates/<name>/manifest.json` (no new file, no DB migration). Default `kind: "html"` when absent — every existing template stays render-as-HTML.
+- **D2.** MC ↔ template stays **1:1** for v1 (no join table). `messages.template` column unchanged.
+- **D3.** Matrix cell preview switches on `kind`:
+  - `html` → current `MatrixIframePreview` (POST `/api/render` → iframe), unchanged
+  - `adobe`/`figma`/`after_effects` → new `<TemplatePreviewImage>` showing the template folder's `preview.{png,jpg,jpeg,webp,gif}` file with a small kind badge; for `figma` kind, the image becomes a link that opens `figma_url` in a new tab
+  - kind unknown OR template missing → existing `Code2` placeholder
+  - **D5 override (linked creative > template preview) is NOT in this session.** Lands when 3.x punch list is built. Until then, non-HTML cells always show the template preview image, even if a future linked creative would override it.
+- **D4 + D5 stay separate sessions.** D4 (platform enum + per-platform feed export) is a meaty schema-migration job; D5 (creative→cell linking UI) gates the override behavior in D3. Neither blocks getting D1+D2+D3 in front of the user.
+- **Template Editor (`/templates`) UI for setting `kind` + uploading `preview.png` + entering `figma_url` is OUT OF SCOPE** for v1. The admin can edit `manifest.json` directly in the existing CodeMirror text editor and drop preview files via the existing per-file editor. A dedicated "kind picker" UI lands in the follow-up that touches the Template Editor anyway (with the form-builder polish).
+- **No DB migration.** Filesystem `manifest.json` is the single source of truth. If we later promote templates to DB rows, the kind field travels with them.
+
+### Plan
+
+- [ ] **1. Extend `manifest.json` schema (docs + types).**
+  - Document the new optional fields in `src/lib/templates.ts` block comment: `kind` (enum, default `"html"`), `figma_url` (string, only for `kind=figma`), `preview` (string, defaults to auto-discover `preview.{png,jpg,jpeg,webp,gif}` if present).
+  - Add the same comment to `templates/html/manifest.json` and `templates/Telekom-DooH/manifest.json`. Existing keys untouched; no behavior change for HTML templates.
+- [ ] **2. `TemplateInfo` + `readTemplate` extension** (`src/lib/templates.ts`).
+  - Add to `TemplateInfo`: `kind: "html" | "adobe" | "figma" | "after_effects"`, `description: string | null`, `previewFile: string | null`, `externalUrl: string | null`.
+  - `readTemplate(name)`: read `manifest.json` (already read indirectly via `readTemplateJson`; need to actually expose the manifest reader OR add a parallel one — separate the two reads cleanly). Parse `kind` from manifest with validator (`["html","adobe","figma","after_effects"]`, fallback `"html"` on unknown). `description` from `manifest.description` if string. `externalUrl` from `manifest.figma_url` if string. `previewFile`: if `manifest.preview` is set use it; else auto-discover the first existing `preview.{png,jpg,jpeg,webp,gif}` in the template directory.
+  - Keep `placeholders` / `tagOptions` / `sizes` reads gated on `kind === "html"` — non-HTML templates have no sized variants, no placeholders. Return `sizes: []` and `placeholders: []` for them.
+- [ ] **3. `/api/templates/folders` + `/api/templates` response shape.**
+  - Already returns `{ templates: TemplateInfo[] }`. The new fields ride along automatically once `TemplateInfo` grows. **No route changes** — purely a payload extension. Verify nothing on the consumer side breaks on the bigger response (it's additive, so it shouldn't).
+- [ ] **4. New `<TemplatePreviewImage>` component** (`src/app/(app)/_components/TemplatePreviewImage.tsx`).
+  - Props: `templateName: string`, `previewFile: string | null`, `kind: TemplateInfo["kind"]`, `externalUrl: string | null`, `mode: "fill-width" | "fit-rect"`.
+  - Renders an `<img src="/api/templates/{templateName}/{previewFile}" />` (the per-file route already serves binary files). Empty state when `previewFile === null`: small icon + "No preview" text.
+  - Kind badge bottom-right (`template-kind-badge` block, reuses `status-badge` styling). Labels: `Adobe`, `Figma`, `AfterEffects`. (`html` kind doesn't render this component, so no `HTML` badge.)
+  - If `kind === "figma"` AND `externalUrl` is set: wrap the image in an `<a target="_blank" rel="noopener">` so clicking opens the Figma file. Otherwise the image is just inert.
+  - Reuses `thumb-checker` background so it visually matches HTML cell previews.
+- [ ] **5. Branch `MatrixIframePreview` on kind.**
+  - Today the call site (`MatrixIframeTile.tsx` x3 — `MatrixIframeTile` / `MatrixIframeCard` / `MatrixIframeListRow`) passes only `templateName: string`.
+  - Need the kind for that template at the matrix layer. `MatrixGrid` already fetches `/api/templates/folders` once (saw at `MatrixGrid.tsx:265`). Build a `Map<name, TemplateInfo>` there, pass `templateInfo: TemplateInfo | null` down through each tile component (or just the 3-4 fields the branching needs — `kind`, `previewFile`, `externalUrl` — to keep prop surfaces small).
+  - In `MatrixIframePreview` (rename TBD — maybe `MatrixCellPreview` since it's no longer iframe-only): if `kind === "html"` (or `templateInfo` is null = unknown/missing template, treat as html for back-compat), use the current iframe render path; otherwise render `<TemplatePreviewImage>`.
+- [ ] **6. MessageEditor preview pane parity** (`src/app/(app)/matrix/MessageEditor.tsx`).
+  - The editor's preview pane uses `PreviewPane` which today is HTML-render-only. For non-HTML kind templates, swap to `<TemplatePreviewImage>` (same component as the matrix cell).
+  - **Quick survey before implementing:** what does the editor actually fetch / pass to PreviewPane today? If it's a complex multi-size selector, branching at PreviewPane level may be the cleanest split. Decide at build time.
+- [ ] **7. Sample non-HTML template** (`templates/figma-sample/`).
+  - `manifest.json` with `kind: "figma"`, `figma_url`, `description`. Plus a `preview.png` (1×1 placeholder image is fine for end-to-end smoke — user can replace with a real Figma export later).
+  - Not committed to git as production data — just a fixture for smoke testing. Visible in Erste's template list because the visibility config defaults to "show all" when unset.
+- [ ] **8. Tests.**
+  - `tests/unit/template-kind.test.ts` — `readTemplate` on a fixture template folder with various `manifest.json` shapes: default html, explicit html, figma + figma_url, adobe + preview, missing manifest, unknown kind string falls back to html. ~6 cases.
+  - No DOM tests for the matrix branching — that's plumbing wiring and the kind field round-tripping is covered by the unit test + the smoke checklist below.
+- [ ] **9. Component inventory + todo Review.**
+  - Append `template-preview-image`, `template-preview-image__img`, `template-preview-image__empty`, `template-kind-badge` (+ `--adobe / --figma / --after-effects` modifiers).
+- [ ] **10. Smoke checklist (user-side, ~5 minutes).**
+  - Create or use the sample Figma template → verify it appears in the template dropdown
+  - Create a new MC in the matrix using the Figma template → cell renders the preview image + Figma badge
+  - Click the cell → Figma URL opens in a new tab
+  - Edit the same MC → editor preview pane shows the same image (not iframe placeholder)
+  - Existing HTML-template MCs still render iframe — no regression
+
+### Out of scope (explicit, do not let scope creep)
+- D4 — `audiences.platform` enum + per-platform feed export shape (Meta/DV360/Direct/AdForm). Separate session.
+- D5 — Creative Library → matrix cell `(mcNumber, mcVariant)` linking UI. Required for the "linked creative beats template preview" override in D3. Separate session.
+- Template Editor (`/templates`) UI for setting kind / uploading preview image / entering figma_url via dedicated form. Admins edit `manifest.json` text in the existing CodeMirror editor for v1.
+- Bulk-migrating existing HTML templates to be explicit about `kind: "html"`. Default fallback handles it.
+- Promoting templates to a DB table. Filesystem stays the source of truth.
+- Per-size preview images (only one preview per template — even though HTML templates have multiple sizes). Non-HTML templates are sizeless in this model.
+- Embedding Figma live (iframe with `figma.com/embed`). v1 just opens the URL in a new tab.
+
+### Version bump suggestion (at end of work)
+Still `6.0.0-pre`. Same rule as the Keywords session — no bump until the pre-active-use punch list clears.
+
+### Review — landed (2026-05-23, same day as Keywords)
+
+Branch `feat/template-kind` (built on top of the still-uncommitted `feat/keywords-tab` working tree — both sets of changes coexist in the working copy; user decides commit/PR split at merge time). All 10 plan steps shipped. `npm test` 283 → **291 (+8 new)**. `npx tsc --noEmit` clean for app code (only pre-existing `mcCount` test errors unrelated, same as previous sessions).
+
+**Manifest schema (1):** `templates/<name>/manifest.json` accepts three new optional fields: `kind` (enum `html|adobe|figma|after_effects`, default `html`), `figma_url` (string, honored only when `kind=figma`), `preview` (filename inside the folder). Block-comment docs added to `src/lib/templates.ts`. Existing `templates/html/manifest.json` and `templates/Telekom-DooH/manifest.json` untouched — defaults make them stay HTML.
+
+**`TemplateInfo` + `readTemplate` (1):** added `kind`, `description`, `previewFile`, `externalUrl` fields. Manifest read separated from template.json read (new private `readManifestJson`). `kind` validated against `TEMPLATE_KINDS` allowlist — unknown strings silently fall back to `"html"` for forward-compat. Non-html kind shortcuts the `sizes` + `placeholders` reads (returns empty arrays). `previewFile` auto-discovers `preview.{png,jpg,jpeg,webp,gif}` for non-html when `manifest.preview` unset; for html kind, stays null (iframe is the preview).
+
+**Consumer audit (no breaks):** `TemplateInfo` is duplicated as local types in 5 consumers (CreativeLibrary, TemplateEditor, MessageEditor, FeedView, HeaderDetailDialog). Only the 3 used in the matrix-preview surfaces (CreativeLibrary, MessageEditor, HeaderDetailDialog) had to be extended with the new optional fields. The other two stay narrow.
+
+**Components (2):**
+- `_components/TemplatePreviewImage.tsx` — new client component. `<img>` from `/api/templates/{name}/{file}` (existing per-file route, no new endpoint), thumb-checker chrome, kind badge bottom-right, `<a target="_blank">` wrap for `kind=figma + externalUrl`, `ImageOff` empty-state when previewFile is null.
+- `_components/MatrixIframeTile.tsx` — exported `TemplatePreviewMeta` type + `templateMetaFor(t)` helper. `MatrixIframePreview` split into a dispatch wrapper + `MatrixIframeRender` (kept the iframe machinery; split avoids violating Rules of Hooks on the non-html branch). Tile/Card/ListRow each gained an optional `templateMeta?` prop forwarded down. Back-compat: any call site that doesn't pass `templateMeta` keeps the iframe path (existing behavior).
+
+**Call sites (3):**
+- `CreativeLibrary.tsx` — local `TemplateInfo` extended with optional `kind/previewFile/externalUrl`. All 3 tile/card/list renders pass `templateMeta={templateMetaFor(templateMap.get(c.liveTemplateName))}`.
+- `MessageEditor.tsx` — local `TemplateInfo` extended. The `<PreviewPane>` call passes `templateName + templateMeta`.
+- `HeaderDetailDialog.tsx` — same shape.
+
+**`PreviewPane` (1):** gained optional `templateMeta?` + `templateName?` props. New `showImage` branch in the viewport: when set and non-html, renders `<TemplatePreviewImage>` instead of `<PreviewIframe>`. Toolbar (size selector, skip-anim, bg buttons, refresh) stays — size selector auto-disables when `sizes.length === 0` (already existing behavior); skip-anim becomes a no-op for non-html (harmless). All existing call sites pass `undefined` by default → no regression.
+
+**Sample template (1):** `templates/figma-sample/` — `manifest.json` (kind=figma, figma_url, description) + `preview.png` (copied from `templates/html/empty.png`, 955 bytes placeholder). Visible in Erste's template list immediately because the visibility config defaults to "show all" when unset; user can swap the preview for a real Figma export at any time.
+
+**Tests (+8):** `tests/unit/template-kind.test.ts` — 8 cases on `readTemplate`: default html, explicit html (preview not auto-discovered for html), figma+figma_url+auto-discover, adobe+manifest.preview override+figma_url-ignored, after_effects+webp auto-discover, unknown kind→html, missing manifest→html, missing template→null. Each test builds a fresh tmp dir via `_setTemplatesRootForTests`. **Full suite 291/291 green** (283 → +8).
+
+**Component inventory:** appended "Változások 2026-05-23 (cont.) — Template kind + matrix preview auto-switch" block — 4 BEM blocks (`template-preview-image{,__img,__empty,__link}`) + 4 badge variants (`template-kind-badge{,--adobe,--figma,--after-effects}`) + the new `preview-pane__image-wrap` sibling + the type/helper exports + the manifest schema delta. Behavior matrix and explicit non-scope items documented.
+
+**Out of scope (explicit, all deferred to follow-ups):**
+- **D5** — Creative Library `(mcNumber, mcVariant)` → matrix cell linking; required for the "linked creative > template preview" override in D3. Until landed, non-html cells always show the template's preview image.
+- **D4** — `audiences.platform` enum + per-platform feed export (Meta/DV360/Direct/AdForm split).
+- **Share Gallery non-HTML support** — uses `PublicMatrixPreview` against `/api/render/public`; needs a public-safe templates endpoint. Public shares of non-HTML MCs currently 500 on render. Lower priority.
+- **Creative Library non-HTML matrix items** — synthesizer filters out templates with `sizes.length === 0`; non-html templates have no sizes so they don't show up as creative cards yet. Needs the synthesizer to handle the "no size" case (1 item per MC instead of N per (MC, size)).
+- **Template Editor UI** for kind picker / preview upload / figma_url input. Admins use the existing CodeMirror manifest.json editor for v1.
+
+**Branch state at end of session:** `feat/template-kind` checked out, working tree carries both Keywords + Template changes uncommitted. No commits made (per global CLAUDE.md). User to decide PR strategy — one big PR vs. split per branch.
+
+### Smoke checklist (user, ~5 minutes)
+
+1. `/matrix` should still load and render existing HTML-template MCs normally (no regression).
+2. In the MC editor, pick the `figma-sample` template (it should appear in the template dropdown). Save.
+3. Reopen the MC — preview pane should show the placeholder `preview.png` with a `Figma` badge bottom-right and an external-link icon next to it.
+4. Click the preview image → `https://www.figma.com/file/example/sample` opens in a new tab.
+5. Same MC, open it via clicking the matrix row/column header instead → `HeaderDetailDialog`'s preview pane also shows the same image + badge.
+6. Edit `templates/figma-sample/manifest.json` → change `kind` to `adobe` → save → reload the editor → badge label becomes `Adobe` and the click-through link disappears (only figma kind links).
+7. Replace `templates/figma-sample/preview.png` with a real PNG/JPG of your own → reload editor → new image shows (lazy-loaded `<img>`).
+8. Set `kind: "html"` (or remove the kind line) → save → reload → editor falls back to the iframe render path (placeholder/empty since the template has no `index.html`/sizes — that's expected for the sample folder, not a regression on real HTML templates).
+
+## PMMID regen on audience move + ARCHIVED status + move-guard (2026-05-23)
+
+**Context.** Discovered during MCP-coworker emulation: MC315a was created in one audience then moved to another via matrix edit mode, but its PMMID still encodes the original (now-stale) audience key. Audit trail: `moveMessages` in `src/lib/entities/messages.ts:501-534` regenerates UTM trafficking columns on move but skips `pmmid`. The existing test `tests/integration/api/copy-move-messages.test.ts:149` explicitly asserts `pmmid` is frozen — that assertion encodes outdated intent and must flip.
+
+**Design contract (locked with user, this session).**
+- **PMMID is a measurement key**, not an opaque row ID. It must encode the row's current audience/topic/number/variant/versionNo. UTM-content + reporting labels read from it.
+- **Measurement runs during `ACTIVE`.** Pre-ACTIVE the row is work-in-progress; pmmid is derived/mutable.
+- **Move blocked** for statuses where movement would corrupt measurement or its post-hoc reading: `ACTIVE`, `INACTIVE`, `ARCHIVED`. Everything else (INCOMING, NAMING, CONTENT, PREVIEW, APPROVED, ERROR, DEAD, MEMORY) → move allowed, pmmid regenerates.
+- **`ARCHIVED` is a new workflow status**, distinct from the existing `archivedAt` soft-delete column. Soft-delete = "don't break references" (system-level safety). `ARCHIVED` status = "we remember this MC existed but the user doesn't want to see it in normal views" (user intent). No automatic coupling between the two.
+- **`versionNo` stays frozen on move** (creative-revision counter, separate concept from placement). Pmmid embeds it as `n_N`.
+
+### Plan
+
+- [x] **1. Add `ARCHIVED` to status enum.**
+  - `src/app/(app)/matrix/types.ts:107` — append `"ARCHIVED"` to `STATUS_OPTIONS`.
+  - `src/app/(app)/matrix/types.ts:120` — append `ARCHIVED: "bg-slate-500"` to `STATUS_COLOR` (between `INACTIVE` and `ERROR`; one shade darker than INACTIVE's `slate-400`).
+  - `src/db/defaults.ts:18` — append `ARCHIVED: "#4b5563"` to `DEFAULT_LOOK_AND_FEEL.statusColors` (matches the slate-500 hex).
+  - `src/app/(app)/settings/_design/DesignTab.tsx` + `src/app/(app)/matrix/MessageEditor.tsx` — append `"ARCHIVED"` to the local status-list arrays (lines 11/47 referenced earlier).
+
+- [x] **2. Move-guard in `moveMessages` (pre-pass).**
+  - In the resolve loop at `src/lib/entities/messages.ts:418-433`, after the version_conflict check, add: `if (BLOCKED_MOVE_STATUSES.has(source.status ?? "")) return { ok: false, reason: "row_locked_by_status", mcLabel: m.mcLabel, status: source.status };`.
+  - Define `const BLOCKED_MOVE_STATUSES = new Set(["ACTIVE", "INACTIVE", "ARCHIVED"]);` at module top.
+  - Extend the `MoveResult` discriminated union to include `{ ok: false, reason: "row_locked_by_status", mcLabel: string, status: string }`.
+
+- [x] **3. Pmmid regen in the update loop.**
+  - In `src/lib/entities/messages.ts:501-534`, alongside `generateTrafficking`, call `generatePmmid({ audience: targetAudienceKey, topic: p.source.topic, number: p.number, variant: p.variant, versionNo: p.source.versionNo }, [], [], patterns.pmmid)`.
+  - Add `pmmid: newPmmid` to the `.set({...})` payload.
+
+- [x] **4. Update existing move tests.**
+  - `tests/integration/api/copy-move-messages.test.ts:149` — rename to `"moves 2 MCs into one audience — PMMID regenerated, versionNo frozen, version+1, source removed"`. Flip `expect(movedA.pmmid).toBe(a.pmmid)` → `expect(movedA.pmmid).not.toBe(a.pmmid)` + assert the new pmmid contains `aud2`. Keep `expect(movedA.versionNo).toBe(a.versionNo)` (still frozen).
+  - Collision test at line 182 — same flip on the pmmid assertion (line 218).
+
+- [x] **5. New test for ACTIVE-guard.**
+  - `tests/integration/api/copy-move-messages.test.ts` — add `it("rejects move of ACTIVE/INACTIVE/ARCHIVED MC", () => {...})`. Seed three MCs (one per blocked status), attempt move on each, expect `ok: false, reason: "row_locked_by_status", status: <X>`. Source row should be untouched (no audience change, no version bump).
+
+- [x] **6. Doc updates.**
+  - Top-of-function comment on `moveMessages`: replace the "frozen" wording with the new contract (regenerated pmmid, blocked statuses).
+  - `src/lib/pmmid.ts:1-9` — update the "Spec §14" pointer comment to note the move-regen behavior.
+  - `docs/REBUILD_SPEC.md` §14 (pmmid section) — if it documents pmmid as frozen-after-create, flip to the new contract. (Read before editing — may not need a change.)
+  - `tasks/component-inventory.md` — append `status-badge--archived` modifier if other status-badge modifiers exist (check first).
+
+- [x] **7. Fix MC315a in the dev DB (one-shot).**
+  - After the code change lands and tests pass, run `mc_update` (MCP) on `a_SZA_afatpdall-t_SZA_app_George_Features_-m_315-v_a-n_1` with a no-op change that triggers pmmid regen (e.g., set `audience_key` to itself), OR direct SQLite `UPDATE` regenerating the pmmid manually. Verify via `mc_get` that the new pmmid uses the full `SZA_afrtsegallvisitors` audience key.
+
+### Out of scope (separate roadmap items — append-only, no work this session)
+
+- **PMMID pattern field in Settings → Structure tab.** Storage already exists (`DEFAULT_PATTERNS.pmmid` in `src/db/defaults.ts`, `patterns.pmmid` flows through `readClientPatterns`). Only the UI input is missing. ~1 component, 1 form-field. Parallels the existing AudienceKey / TopicKey pattern inputs.
+- **ARCHIVED default-hidden in matrix/library filters.** Current `EMPTY_FILTERS.statuses = new Set()` means "show all" — there's no notion of default-hidden statuses. Adding this requires a small design decision: either flip filter semantics ("checked = visible, unchecked = hidden, ARCHIVED unchecked by default") or layer a separate `hideArchivedStatus` boolean on top. Decide before implementing.
+- **HTML creative auto-generated preview image link.** Roadmap item. Use cases to scope first: matrix-grid preview tile, share-link OG image, AdForm template-feed accompanying image, MCP-coworker screenshot input. Implementation choice (puppeteer snapshot vs. canvas render vs. external service) depends on which uses cases we commit to.
+
+### Open question (filter-default for ARCHIVED)
+
+User said "filterekben többnyire az biztos ki lesz kapcsolva". Two options for v1:
+- **(A)** Defer entirely — ARCHIVED behaves like any other status (visible by default) until we design the filter mechanism. ARCHIVED becomes visually distinct via color but not auto-hidden.
+- **(B)** Implement a minimal default-hide pass alongside step 1: e.g., `DEFAULT_HIDDEN_STATUSES = new Set(["ARCHIVED"])`, and the matrix toolbar initializes `filters.statuses` to the complement of that set when the user has not interacted with status filters.
+
+Lean (A) — keeps this session tight, ARCHIVED filter UX gets its own slice once we're past pmmid-regen.
+
+### Version bump suggestion (at end of work)
+Still `6.0.0-pre`. No bump (per the project rule). The fix lands as part of the pre-active-use punch-list run-up.
+
+### Review — landed (2026-05-23)
+
+Branch `feat/keywords-tab` (working tree carrying multiple parallel slices — Keywords + Template-kind + now PMMID/ARCHIVED). All 7 plan steps shipped. `npm test` 291 → **294 (+3 new via `it.each` on ACTIVE/INACTIVE/ARCHIVED guard)**. `npx tsc --noEmit` clean for app code (only pre-existing `mcCount` errors in `audiences-key-pattern.test.ts:248-249` remain — same as previous sessions, unrelated).
+
+**`ARCHIVED` status (1):** added as the 11th workflow value between INACTIVE and ERROR. Five touchpoints — no central source-of-truth module yet, so hand-mirrored across `STATUS_OPTIONS` (matrix/types.ts + MessageEditor.tsx), `STATUS_KEYS` + `STATUS_VAR` (DesignTab.tsx), `DEFAULT_LOOK_AND_FEEL.statusColors` (db/defaults.ts), and `--status-archived` + `.status-dot--archived` (globals.css). Default hex `#4b5563` (slate-600-ish, one shade darker than INACTIVE's `#6b7280` so the two read related-but-distinct in dropdowns). Distinct from `archivedAt` soft-delete column — that stays as the system-level safety net; status is user intent.
+
+**Move-guard (1):** `BLOCKED_MOVE_STATUSES = new Set(["ACTIVE", "INACTIVE", "ARCHIVED"])` constant + pre-pass check in `moveMessages` returning `{ ok: false, reason: "row_locked_by_status", mcLabel, status, current }`. New reason added to the `MoveResult` discriminated union; `src/app/api/messages/bulk-move/route.ts` switch extended with a 409-response case (mirrors the version-conflict 409 shape so the matrix-edit client treats both as concurrency-class errors).
+
+**PMMID regen on move (1):** `generatePmmid({audience: targetAudienceKey, topic, number, variant, versionNo: source.versionNo}, [], [], patterns.pmmid)` called alongside the existing `generateTrafficking` in the update loop; `pmmid: newPmmid` added to the `.set({...})` payload. `versionNo` stays frozen (creative-revision counter — move is a placement change, not a revision). Function-header comment block rewritten with the new contract.
+
+**Tests (+3, all green):** in `tests/integration/api/copy-move-messages.test.ts`:
+- Renamed and rewired `"moves 2 MCs into one audience — PMMID regenerated against new audience, versionNo frozen, version+1, source removed from origin"` (was "PMMID + versionNo frozen"). Asserts new pmmid contains target audience key, source's old pmmid no longer resolves via `getMessageByPmmid`, row still resolvable by `id`.
+- Collision test (`"auto-bumps variant on collision in target cell"`) — flipped `pmmid.toBe(frozen)` → `.not.toBe(frozen) + contains aud2 + contains v_b`.
+- New `it.each(["ACTIVE","INACTIVE","ARCHIVED"])` covering the guard: each variant expects `row_locked_by_status` reason, the right `status` echoed back, and the source row to stay untouched (audience, pmmid, version all unchanged).
+
+**Docs (3):** `docs/REBUILD_SPEC.md` status enum row updated with ARCHIVED + explanation of the move-lock semantics + the status-vs-archivedAt distinction. `src/lib/pmmid.ts` header block expanded with the measurement-key + move-regen contract. `tasks/component-inventory.md` got a new "Változások 2026-05-23 (cont.) — ARCHIVED workflow status" block listing the 5 touched files and noting the open "ARCHIVED default-hide in filters" follow-up.
+
+**MC315a backfill (1):** the stale dev row whose pmmid encoded the legacy `SZA_afatpdall` audience (from a v5 import / pre-fix move) was rewritten to the correct `a_SZA_afrtsegallvisitors-t_SZA_app_George_Features_-m_315-v_a-n_1`. Direct SQLite UPDATE + `version+1`. Verified via MCP `mc_get` round-trip — row resolves under the new pmmid, name/audience/everything else intact.
+
+**Discovered during work (not in plan):** the `bulk-move` route's `switch (result.reason)` was non-exhaustive only by accident (TS happened to allow it because the post-switch code already assumed `ok: true`). Adding a new reason surfaced the gap as a compile error — which is the right outcome. The case statement is now exhaustive.
+
+**Out of scope (carried over from plan — separate roadmap items):**
+- PMMID pattern field in Settings → Structure tab (storage + generator already done; UI input missing).
+- ARCHIVED default-hide in matrix/library filters (needs filter-semantic design choice first).
+- HTML creative auto-generated preview image link (use cases to scope first).
+- Centralizing `STATUS_OPTIONS` to a single `src/lib/mc-status.ts` source-of-truth module (tolerable hand-mirroring for now; revisit when next touching status logic).
+
+

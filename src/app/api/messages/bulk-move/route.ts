@@ -63,6 +63,15 @@ export const POST = withSession(async ({ req, claims }) => {
           { error: result.reason, mc_label: result.mcLabel },
           { status: 400 },
         );
+      case "row_locked_by_status":
+        return NextResponse.json(
+          {
+            error: "row_locked_by_status",
+            mc_label: result.mcLabel,
+            status: result.status,
+          },
+          { status: 409 },
+        );
     }
   }
 

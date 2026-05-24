@@ -36,6 +36,11 @@ import {
 } from "../usePersistent";
 import { parseSearchQuery, type SearchFields } from "@/lib/search-query";
 
+// Settings → Keywords lookup: form → field → allowed values, in display order.
+// Empty object (default) ⇒ no autocomplete suggestions; the cell still accepts
+// freeform input — matches the "freeform-allowed" decision.
+export type KeywordOptions = Record<string, Record<string, string[]>>;
+
 type Props<T extends Versioned> = {
   title: string;
   rows: T[];
@@ -45,6 +50,8 @@ type Props<T extends Versioned> = {
   toSearchFields: (row: T) => SearchFields;
   productOptions: string[];
   statusOptions: string[];
+  /** Optional: Settings → Keywords seeded suggestions for `autocomplete` cells. */
+  keywordOptions?: KeywordOptions;
   getProduct: (row: T) => string | null;
   getStatus: (row: T) => string | null;
   showArchived: boolean;
@@ -98,6 +105,7 @@ export default function DimensionGrid<T extends Versioned>({
   toSearchFields,
   productOptions,
   statusOptions,
+  keywordOptions,
   getProduct,
   getStatus,
   showArchived,
@@ -110,6 +118,7 @@ export default function DimensionGrid<T extends Versioned>({
   historyEntity,
   getHistoryLabel,
 }: Props<T>) {
+  const kwOpts: KeywordOptions = keywordOptions ?? {};
   const [search, setSearch] = usePersistent(
     `${storageKeyPrefix}_filter_search`,
     "",
@@ -425,6 +434,7 @@ export default function DimensionGrid<T extends Versioned>({
                       onCommit={(raw) => handleCellCommit(row, c, raw)}
                       onCancel={() => setEditing(null)}
                       productOptions={productOptions}
+                      keywordOptions={kwOpts}
                     />
                   ))}
                   <div
@@ -513,6 +523,7 @@ function Cell<T extends Versioned>({
   onCommit,
   onCancel,
   productOptions,
+  keywordOptions,
 }: {
   row: T;
   col: Column<T>;
@@ -521,6 +532,7 @@ function Cell<T extends Versioned>({
   onCommit: (raw: string) => void;
   onCancel: () => void;
   productOptions: string[];
+  keywordOptions: KeywordOptions;
 }) {
   const raw = row[col.key];
   const display =
@@ -539,6 +551,7 @@ function Cell<T extends Versioned>({
           onCommit={onCommit}
           onCancel={onCancel}
           productOptions={productOptions}
+          keywordOptions={keywordOptions}
         />
       </div>
     );
@@ -579,12 +592,14 @@ function CellEditor<T extends Versioned>({
   onCommit,
   onCancel,
   productOptions,
+  keywordOptions,
 }: {
   col: Column<T>;
   initial: string;
   onCommit: (raw: string) => void;
   onCancel: () => void;
   productOptions: string[];
+  keywordOptions: KeywordOptions;
 }) {
   const [value, setValue] = useState(initial);
   const ref = useRef<HTMLInputElement | HTMLSelectElement>(null);
@@ -641,6 +656,34 @@ function CellEditor<T extends Versioned>({
           </option>
         ))}
       </select>
+    );
+  }
+  if (col.type.kind === "autocomplete") {
+    // Native <datalist>: gives suggestion dropdown + arrow-key navigation +
+    // freeform input (any string commits on Enter/blur) for free. If the
+    // current `value` isn't in the list, the cell still saves it — matches
+    // "autocomplete + freeform-allowed" decision.
+    const opts =
+      keywordOptions[col.type.source.form]?.[col.type.source.field] ?? [];
+    const listId = `kw-${col.type.source.form}-${col.type.source.field}`;
+    return (
+      <>
+        <input
+          ref={ref as React.RefObject<HTMLInputElement>}
+          type="text"
+          list={listId}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={() => onCommit(value)}
+          onKeyDown={onKey}
+          className="autocomplete-field h-full w-full border-0 bg-white px-2 text-xs focus:outline-none"
+        />
+        <datalist id={listId}>
+          {opts.map((opt) => (
+            <option key={opt} value={opt} />
+          ))}
+        </datalist>
+      </>
     );
   }
   return (

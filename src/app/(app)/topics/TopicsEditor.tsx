@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import DimensionGrid from "../_components/DimensionGrid/DimensionGrid";
 import { TOPIC_COLUMNS } from "../_components/DimensionGrid/columns";
+import { useKeywordOptions } from "../_components/useKeywordOptions";
 import { type Topic } from "../matrix/types";
 import { emptySearchFields, type SearchFields } from "@/lib/search-query";
 
@@ -37,6 +38,7 @@ function topicToSearchFields(t: Topic): SearchFields {
 
 export default function TopicsEditor() {
   const [showArchived, setShowArchived] = useState(false);
+  const { options: keywordOptions } = useKeywordOptions();
 
   const liveQ = useQuery({
     queryKey: ["topics"],
@@ -95,6 +97,7 @@ export default function TopicsEditor() {
       toSearchFields={topicToSearchFields}
       productOptions={productOptions}
       statusOptions={statusOptions}
+      keywordOptions={keywordOptions}
       getProduct={(r) => r.product}
       getStatus={(r) => r.status}
       showArchived={showArchived}

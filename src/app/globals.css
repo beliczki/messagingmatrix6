@@ -19,6 +19,7 @@
   --status-approved: #10b981;
   --status-active: #22c55e;
   --status-inactive: #6b7280;
+  --status-archived: #4b5563;
   --status-error: #ef4444;
   --status-dead: #000000;
   --status-memory: #ec4899;
@@ -146,6 +147,7 @@ html.dark {
   .status-dot--approved { background-color: var(--status-approved); }
   .status-dot--active { background-color: var(--status-active); }
   .status-dot--inactive { background-color: var(--status-inactive); }
+  .status-dot--archived { background-color: var(--status-archived); }
   .status-dot--error { background-color: var(--status-error); }
   .status-dot--dead { background-color: var(--status-dead); }
   .status-dot--memory { background-color: var(--status-memory); }

@@ -5,11 +5,13 @@ import {
   audiences,
   assets,
   creatives,
+  keywords,
   messages,
   reporting,
   textFormatting,
   topics,
 } from "@/db/schema";
+import { KEYWORD_FIELDS, type KeywordForm } from "@/lib/entities/keywords";
 
 type Row = unknown[];
 type Sheet = { name: string; data: Row[] };
@@ -22,6 +24,7 @@ export type ImportCounts = {
   assets: number;
   text_formatting: number;
   reporting: number;
+  keywords: number;
 };
 
 export type ImportResult = {
@@ -76,6 +79,7 @@ export function emptyCounts(): ImportCounts {
     assets: 0,
     text_formatting: 0,
     reporting: 0,
+    keywords: 0,
   };
 }
 
@@ -94,7 +98,9 @@ export function importErsteXlsx(
   const work = () => {
     if (wipeFirst) {
       // Wipe order: children first (messages reference audience/topic keys),
-      // then siblings, finally parents.
+      // then siblings, finally parents. Keywords has no FK to other entities
+      // (only to clients) so it can wipe at any point — grouped with the
+      // other tenant-scoped wipes for consistency.
       db.delete(reporting).where(eq(reporting.clientId, clientId)).run();
       db.delete(textFormatting).where(eq(textFormatting.clientId, clientId)).run();
       db.delete(assets).where(eq(assets.clientId, clientId)).run();
@@ -102,6 +108,7 @@ export function importErsteXlsx(
       db.delete(messages).where(eq(messages.clientId, clientId)).run();
       db.delete(topics).where(eq(topics.clientId, clientId)).run();
       db.delete(audiences).where(eq(audiences.clientId, clientId)).run();
+      db.delete(keywords).where(eq(keywords.clientId, clientId)).run();
     }
 
     importAudiences(byName.get("audiences"), clientId, inserted, skipped, errors);
@@ -118,6 +125,7 @@ export function importErsteXlsx(
     importAssets(byName.get("assets"), clientId, inserted, skipped, errors);
     importTextFormatting(byName.get("textformats"), clientId, inserted, skipped, errors);
     importReporting(byName.get("Reporting"), clientId, inserted, skipped, errors);
+    importKeywords(byName.get("keywords"), clientId, inserted, skipped, errors);
   };
 
   if (dryRun) {
@@ -610,5 +618,85 @@ function importReporting(
       })
       .run();
     inserted.reporting++;
+  }
+}
+
+// XLSX `keywords` sheet has columns: form, field, values (comma-separated).
+// XLSX field names follow the source naming style (Pascal + snake_case, e.g.
+// "Buying_platform", "Data_source", "Targeting_type"). v6 stores the
+// camelCase TS column name (`buyingPlatform`, `dataSource`, `targetingType`)
+// so we normalize on import: lower-first + snake_case → camelCase.
+//
+// Exported so the unit test can lock the mapping.
+export function normalizeXlsxFieldName(name: string): string {
+  const trimmed = name.trim();
+  if (!trimmed) return "";
+  const lowerFirst = trimmed[0].toLowerCase() + trimmed.slice(1);
+  return lowerFirst.replace(/_(.)/g, (_, c: string) => c.toUpperCase());
+}
+
+export function importKeywords(
+  sheet: Row[] | undefined,
+  clientId: number,
+  inserted: ImportCounts,
+  skipped: ImportCounts,
+  errors: string[],
+): void {
+  if (!sheet) {
+    // Optional sheet — older XLSX exports may not have it. Silent.
+    return;
+  }
+  // Per-(form, field) running orderIndex so the value display order matches
+  // the comma order in the XLSX.
+  const counters = new Map<string, number>();
+  for (let i = 1; i < sheet.length; i++) {
+    const r = sheet[i] as Row;
+    if (!r || r.length === 0) continue;
+    const form = s(r[0]);
+    const rawField = s(r[1]);
+    const valuesCell = s(r[2]);
+    if (!form || !rawField) {
+      skipped.keywords++;
+      continue;
+    }
+    // Form must be one we cover in v1 (audiences | topics). Drop tasks,
+    // messages, creatives, assets silently for now — they're seeded but
+    // out-of-scope until a future phase wires the matching UI.
+    if (form !== "audiences" && form !== "topics") {
+      skipped.keywords++;
+      continue;
+    }
+    const field = normalizeXlsxFieldName(rawField);
+    // Field must be in the allowlist for that form.
+    if (!(KEYWORD_FIELDS[form as KeywordForm] as readonly string[]).includes(field)) {
+      skipped.keywords++;
+      continue;
+    }
+    if (!valuesCell) {
+      // Field declared but no values — no error, just nothing to seed.
+      continue;
+    }
+    const cohortKey = `${form}|${field}`;
+    let next = counters.get(cohortKey) ?? 0;
+    for (const raw of valuesCell.split(",")) {
+      const value = raw.trim();
+      if (!value) continue;
+      try {
+        db.insert(keywords)
+          .values({ clientId, form, field, value, orderIndex: next })
+          .run();
+        inserted.keywords++;
+        next++;
+      } catch (e) {
+        if (e instanceof Error && /UNIQUE/i.test(e.message)) {
+          // Duplicate within the cell or across cells — skip silently;
+          // re-imports stay idempotent on top of a wipe-fresh client.
+          skipped.keywords++;
+          continue;
+        }
+        errors.push(`keywords[${form}.${field}] "${value}": ${(e as Error).message}`);
+      }
+    }
+    counters.set(cohortKey, next);
   }
 }

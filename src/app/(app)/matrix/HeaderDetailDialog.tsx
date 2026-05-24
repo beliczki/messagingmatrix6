@@ -24,16 +24,20 @@ import {
   type Message,
   type Topic,
   STATUS_COLOR,
-  STATUS_OPTIONS,
 } from "./types";
 import PreviewPane, { type PreviewBg } from "../_components/PreviewPane";
 import ModalBackdrop from "../_components/ModalBackdrop";
 import { usePersistent, type Codec } from "../_components/usePersistent";
+import { AutocompleteField } from "../_components/AutocompleteField";
+import { templateMetaFor } from "../_components/MatrixIframeTile";
 
 type TemplateInfo = {
   name: string;
   sizes: string[];
   defaultSize: string | null;
+  kind?: "html" | "adobe" | "figma" | "after_effects";
+  previewFile?: string | null;
+  externalUrl?: string | null;
 };
 
 type EntityKind = "audience" | "topic";
@@ -637,6 +641,8 @@ export default function HeaderDetailDialog({
                 skipAnim={skipAnim}
                 onSkipAnimChange={setSkipAnim}
                 onRefresh={refreshPreview}
+                templateName={currentTemplate?.name}
+                templateMeta={templateMetaFor(currentTemplate)}
               />
             )}
           </section>
@@ -742,18 +748,13 @@ function AudienceForm({
         </Field>
       </div>
       <Field label="Status">
-        <select
+        <AutocompleteField
+          form="audiences"
+          field="status"
           value={draft.status ?? ""}
-          onChange={(e) => set("status", e.target.value || null)}
-          className="custom-dropdown w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
-        >
-          <option value="">— none —</option>
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => set("status", v || null)}
+          className={inputCls}
+        />
       </Field>
       <Field label="Product">
         <input
@@ -775,37 +776,47 @@ function AudienceForm({
 
       <SectionHeader>Targeting</SectionHeader>
       <Field label="Strategy">
-        <input
+        <AutocompleteField
+          form="audiences"
+          field="strategy"
           value={draft.strategy ?? ""}
-          onChange={(e) => set("strategy", e.target.value || null)}
+          onChange={(v) => set("strategy", v || null)}
           className={inputCls}
         />
       </Field>
       <Field label="Device">
-        <input
+        <AutocompleteField
+          form="audiences"
+          field="device"
           value={draft.device ?? ""}
-          onChange={(e) => set("device", e.target.value || null)}
+          onChange={(v) => set("device", v || null)}
           className={inputCls}
         />
       </Field>
       <Field label="Buying platform">
-        <input
+        <AutocompleteField
+          form="audiences"
+          field="buyingPlatform"
           value={draft.buyingPlatform ?? ""}
-          onChange={(e) => set("buyingPlatform", e.target.value || null)}
+          onChange={(v) => set("buyingPlatform", v || null)}
           className={inputCls}
         />
       </Field>
       <Field label="Data source">
-        <input
+        <AutocompleteField
+          form="audiences"
+          field="dataSource"
           value={draft.dataSource ?? ""}
-          onChange={(e) => set("dataSource", e.target.value || null)}
+          onChange={(v) => set("dataSource", v || null)}
           className={inputCls}
         />
       </Field>
       <Field label="Targeting type">
-        <input
+        <AutocompleteField
+          form="audiences"
+          field="targetingType"
           value={draft.targetingType ?? ""}
-          onChange={(e) => set("targetingType", e.target.value || null)}
+          onChange={(v) => set("targetingType", v || null)}
           className={inputCls}
         />
       </Field>
@@ -901,18 +912,13 @@ function TopicForm({
         </Field>
       </div>
       <Field label="Status">
-        <select
+        <AutocompleteField
+          form="topics"
+          field="status"
           value={draft.status ?? ""}
-          onChange={(e) => set("status", e.target.value || null)}
-          className="custom-dropdown w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
-        >
-          <option value="">— none —</option>
-          {STATUS_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => set("status", v || null)}
+          className={inputCls}
+        />
       </Field>
       <Field label="Product">
         <input
@@ -949,23 +955,29 @@ function TopicForm({
         />
       </Field>
       <Field label="Tag 1">
-        <input
+        <AutocompleteField
+          form="topics"
+          field="tag1"
           value={draft.tag1 ?? ""}
-          onChange={(e) => set("tag1", e.target.value || null)}
+          onChange={(v) => set("tag1", v || null)}
           className={inputCls}
         />
       </Field>
       <Field label="Tag 2">
-        <input
+        <AutocompleteField
+          form="topics"
+          field="tag2"
           value={draft.tag2 ?? ""}
-          onChange={(e) => set("tag2", e.target.value || null)}
+          onChange={(v) => set("tag2", v || null)}
           className={inputCls}
         />
       </Field>
       <Field label="Tag 3">
-        <input
+        <AutocompleteField
+          form="topics"
+          field="tag3"
           value={draft.tag3 ?? ""}
-          onChange={(e) => set("tag3", e.target.value || null)}
+          onChange={(v) => set("tag3", v || null)}
           className={inputCls}
         />
       </Field>

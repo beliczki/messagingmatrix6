@@ -1,5 +1,12 @@
 // PMMID generator. v5-locked behavior. Spec §14.
 // Cases are golden in tests/fixtures/v5/pmmid/cases.json.
+//
+// PMMID is a measurement key: it encodes audience/topic/number/variant/versionNo
+// and flows into UTM content + reporting labels. It is regenerated whenever any
+// of those inputs change — including on audience move (see `moveMessages` in
+// `src/lib/entities/messages.ts`). Movement is blocked once the row enters a
+// measurement-locked status (ACTIVE / INACTIVE / ARCHIVED), at which point the
+// pmmid is effectively frozen because the row itself can no longer move.
 
 import { evaluatePattern } from "@/lib/patterns";
 

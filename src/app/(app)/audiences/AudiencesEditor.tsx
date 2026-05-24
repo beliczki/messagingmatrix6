@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import DimensionGrid from "../_components/DimensionGrid/DimensionGrid";
 import { AUDIENCE_COLUMNS } from "../_components/DimensionGrid/columns";
+import { useKeywordOptions } from "../_components/useKeywordOptions";
 import { type Audience } from "../matrix/types";
 import { emptySearchFields, type SearchFields } from "@/lib/search-query";
 
@@ -43,6 +44,7 @@ function audienceToSearchFields(a: Audience): SearchFields {
 
 export default function AudiencesEditor() {
   const [showArchived, setShowArchived] = useState(false);
+  const { options: keywordOptions } = useKeywordOptions();
 
   const liveQ = useQuery({
     queryKey: ["audiences"],
@@ -103,6 +105,7 @@ export default function AudiencesEditor() {
       toSearchFields={audienceToSearchFields}
       productOptions={productOptions}
       statusOptions={statusOptions}
+      keywordOptions={keywordOptions}
       getProduct={(r) => r.product}
       getStatus={(r) => r.status}
       showArchived={showArchived}

@@ -9,6 +9,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 import clsx from "clsx";
+import { TemplatePreviewImage } from "./TemplatePreviewImage";
+import type { TemplatePreviewMeta } from "./MatrixIframeTile";
 
 export type PreviewBg = "light" | "dark" | "checker";
 
@@ -23,6 +25,12 @@ type Props = {
   onSkipAnimChange: (v: boolean) => void;
   onRefresh?: () => void;
   rightExtras?: React.ReactNode;
+  /** When the template kind is non-html, the viewport renders the template
+   *  folder's preview image instead of the HTML iframe. `templateName` is
+   *  required so the image URL can be constructed. Optional — undefined or
+   *  kind="html" keeps the current iframe behavior. */
+  templateMeta?: TemplatePreviewMeta;
+  templateName?: string;
 };
 
 export default function PreviewPane({
@@ -36,7 +44,13 @@ export default function PreviewPane({
   onSkipAnimChange,
   onRefresh,
   rightExtras,
+  templateMeta,
+  templateName,
 }: Props) {
+  const showImage =
+    templateMeta &&
+    templateMeta.kind !== "html" &&
+    typeof templateName === "string";
   const boxRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [reloadKey, setReloadKey] = useState(0);
@@ -128,7 +142,21 @@ export default function PreviewPane({
           bg === "checker" && "preview-viewport--checker",
         )}
       >
-        <PreviewIframe key={reloadKey} html={html} size={size} box={box} />
+        {showImage ? (
+          <div className="preview-pane__image-wrap relative size-full max-h-full max-w-full">
+            <TemplatePreviewImage
+              templateName={templateName!}
+              previewFile={templateMeta!.previewFile}
+              kind={
+                templateMeta!.kind as Exclude<TemplatePreviewMeta["kind"], "html">
+              }
+              externalUrl={templateMeta!.externalUrl}
+              mode="fit-rect"
+            />
+          </div>
+        ) : (
+          <PreviewIframe key={reloadKey} html={html} size={size} box={box} />
+        )}
       </div>
     </div>
   );

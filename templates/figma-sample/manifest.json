@@ -1,0 +1,8 @@
+{
+  "version": "1.0",
+  "title": "Figma sample (smoke test)",
+  "description": "Sample non-html template used to smoke-test the matrix preview auto-switch (D3). Real Figma templates point figma_url at the actual file in Figma; replace preview.png with the real export when in use.",
+  "kind": "figma",
+  "figma_url": "https://www.figma.com/file/example/sample",
+  "preview": "preview.png"
+}

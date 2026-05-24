@@ -383,13 +383,28 @@ export type MoveResult =
         | "version_conflict"
         | "not_found"
         | "cross_topic_move_not_supported"
-        | "target_audience_not_found";
+        | "target_audience_not_found"
+        | "row_locked_by_status";
       mcLabel: string;
       current?: Message;
+      status?: string;
     };
 
-// Move messages into a single target audience. Same-topic only; PMMID and
-// versionNo are frozen. UTM columns are regenerated against the new audience.
+// Statuses that lock a row against placement changes. ACTIVE = measurement is
+// running and the PMMID is the live measurement key (utm_content + reporting
+// labels). INACTIVE / ARCHIVED = the row has been measured at some point and
+// its PMMID still anchors historical reporting joins. Pre-ACTIVE statuses
+// (INCOMING/NAMING/CONTENT/PREVIEW/APPROVED) and post-failure / archive-only
+// statuses (ERROR/DEAD/MEMORY) stay movable: no measurement attached, PMMID
+// regenerates freely.
+const BLOCKED_MOVE_STATUSES = new Set(["ACTIVE", "INACTIVE", "ARCHIVED"]);
+
+// Move messages into a single target audience. Same-topic only. PMMID is
+// regenerated against the new audience (it encodes audience/topic/number/
+// variant/versionNo — moving without regen would make the key lie about the
+// row's content). versionNo (the creative-revision counter) stays frozen — a
+// move is a placement change, not a creative revision. UTM columns are also
+// regenerated. Rows in BLOCKED_MOVE_STATUSES are rejected up front.
 // On (number, variant) collision in the target cell, variant auto-bumps to the
 // next free char so moves always succeed without renumbering existing rows.
 export function moveMessages(
@@ -425,6 +440,15 @@ export function moveMessages(
         ok: false,
         reason: "version_conflict",
         mcLabel: m.mcLabel,
+        current: source,
+      };
+    }
+    if (BLOCKED_MOVE_STATUSES.has(source.status ?? "")) {
+      return {
+        ok: false,
+        reason: "row_locked_by_status",
+        mcLabel: m.mcLabel,
+        status: source.status ?? "",
         current: source,
       };
     }
@@ -510,12 +534,25 @@ export function moveMessages(
       },
       patterns.trafficking,
     );
+    const newPmmid = generatePmmid(
+      {
+        audience: targetAudienceKey,
+        topic: p.source.topic,
+        number: p.number,
+        variant: p.variant,
+        versionNo: p.source.versionNo,
+      },
+      [],
+      [],
+      patterns.pmmid,
+    );
     const row = db
       .update(messages)
       .set({
         audience: targetAudienceKey,
         number: p.number,
         variant: p.variant,
+        pmmid: newPmmid,
         utmCampaign: traffic.utm_campaign,
         utmSource: traffic.utm_source,
         utmMedium: traffic.utm_medium,

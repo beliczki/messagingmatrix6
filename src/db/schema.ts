@@ -565,6 +565,51 @@ export const feedExports = sqliteTable(
 export type FeedExport = typeof feedExports.$inferSelect;
 export type NewFeedExport = typeof feedExports.$inferInsert;
 
+// Settings → Keywords tab. Per-client allowed-values lists for dimension-grid
+// dropdowns (audience/topic editors). v1 scope: 7 audience fields + 5 topic
+// fields (see tasks/todo.md "Settings → Keywords tab" checkpoint).
+// `form` = entity name ("audiences" | "topics"); `field` = camelCase v6 column
+// name (e.g. "buyingPlatform", not the XLSX "Buying_platform"). `value` is the
+// allowed string. Editor dropdowns autocomplete from this list but accept
+// freeform input — empty list ⇒ pure freeform.
+export const keywords = sqliteTable(
+  "keywords",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    clientId: integer("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    form: text("form").notNull(),
+    field: text("field").notNull(),
+    value: text("value").notNull(),
+    orderIndex: integer("order_index").notNull().default(0),
+    createdAt: text("created_at")
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+    archivedAt: text("archived_at"),
+  },
+  (t) => [
+    uniqueIndex("keywords_client_form_field_value_unique").on(
+      t.clientId,
+      t.form,
+      t.field,
+      t.value,
+    ),
+    index("keywords_client_form_field_order_idx").on(
+      t.clientId,
+      t.form,
+      t.field,
+      t.orderIndex,
+    ),
+  ],
+);
+
+export type Keyword = typeof keywords.$inferSelect;
+export type NewKeyword = typeof keywords.$inferInsert;
+
 export type ConfigRow = typeof config.$inferSelect;
 export type NewConfigRow = typeof config.$inferInsert;
 export type Client = typeof clients.$inferSelect;

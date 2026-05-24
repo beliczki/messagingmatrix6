@@ -37,6 +37,7 @@ import {
   MatrixIframeTile,
   MatrixIframeCard,
   MatrixIframeListRow,
+  templateMetaFor,
 } from "../_components/MatrixIframeTile";
 import {
   LibraryViewSwitcher,
@@ -65,6 +66,11 @@ type TemplateInfo = {
   name: string;
   sizes: string[];
   defaultSize: string | null;
+  // D1: production type. "html" or undefined → iframe-render path; other
+  // kinds use the static preview image from the template folder.
+  kind?: "html" | "adobe" | "figma" | "after_effects";
+  previewFile?: string | null;
+  externalUrl?: string | null;
 };
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
@@ -548,6 +554,7 @@ export default function CreativeLibrary() {
                             message={c.message}
                             templateName={c.liveTemplateName}
                             size={c.liveSize}
+                            templateMeta={templateMetaFor(templateMap.get(c.liveTemplateName))}
                             onOpen={() => setDetailId(c.id)}
                           />
                         ) : (
@@ -578,6 +585,7 @@ export default function CreativeLibrary() {
                           templateName={c.liveTemplateName}
                           size={c.liveSize}
                           product={c.product}
+                          templateMeta={templateMetaFor(templateMap.get(c.liveTemplateName))}
                           onOpen={() => setDetailId(c.id)}
                         />
                       ) : (
@@ -610,6 +618,7 @@ export default function CreativeLibrary() {
                           product={c.product}
                           createdAt={c.createdAt}
                           updatedAt={c.updatedAt}
+                          templateMeta={templateMetaFor(templateMap.get(c.liveTemplateName))}
                           onOpen={() => setDetailId(c.id)}
                         />
                       ) : (

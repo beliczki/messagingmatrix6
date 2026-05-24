@@ -6,9 +6,9 @@
 //   ACTIVE_CLIENT_KEY=erste npx tsx scripts/import-erste.ts --no-wipe
 //   ACTIVE_CLIENT_KEY=erste npx tsx scripts/import-erste.ts --dry-run
 //
-// Wipes existing rows for the active client, then imports 7 sheets from the
+// Wipes existing rows for the active client, then imports 8 sheets from the
 // xlsx (audiences, topics, messages + AI messages, creatives, assets,
-// textformats, Reporting). Skips feed/filtered_feed/keywords/messages_archive.
+// textformats, Reporting, keywords). Skips feed/filtered_feed/messages_archive.
 
 import { config as loadEnv } from "dotenv";
 loadEnv({ path: ".env.local" });

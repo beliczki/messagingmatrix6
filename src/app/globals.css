@@ -295,4 +295,23 @@ html.dark {
   .tree-view__node--leaf:hover .tree-view__node-label {
     text-decoration: underline;
   }
+  .tree-view__chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    color: #64748b;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .tree-view__chevron:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+  }
+  html.dark .tree-view__chevron:hover {
+    background: #334155;
+    color: #e2e8f0;
+  }
 }

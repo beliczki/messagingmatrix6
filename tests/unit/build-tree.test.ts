@@ -133,6 +133,10 @@ describe("buildTree", () => {
     expect(audNode.label).toBe("A");
     expect(audNode.count).toBe(2);
     expect(audNode.entityKey).toBe("audA");
+    expect(audNode.parentId).toBe(null);
+    // leaf nodes carry the audience as their parentId
+    const leaves = nodes.filter((n) => n.level === 1);
+    expect(leaves.every((l) => l.parentId === audNode.id)).toBe(true);
     // both leaf edges point at the audience node
     expect(edges).toHaveLength(2);
     expect(edges.every((e) => e.source === audNode.id)).toBe(true);

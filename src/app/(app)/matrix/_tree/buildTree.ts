@@ -14,6 +14,10 @@ export type TreeNode = {
   level: number;
   label: string;
   count: number;
+  // null for level-0 roots, otherwise the id of the parent node. Used by the
+  // hierarchical y-layout in TreeView so children cluster under their parent
+  // instead of being interleaved alphabetically across the whole column.
+  parentId: string | null;
   // Only set on leaf (Messages) nodes.
   messageId?: number;
   // For headline node rendering (audience, topic): the originating entity key,
@@ -76,6 +80,7 @@ export function buildTree(
     level: number;
     label: string;
     rows: Set<number>; // message ids that pass through this node
+    parentId: string | null;
     messageId?: number;
     entityKey?: string;
   };
@@ -103,6 +108,7 @@ export function buildTree(
           level: i,
           label: gv.label,
           rows: new Set(),
+          parentId,
         };
         if (level.kind === "messages") agg.messageId = row.message.id;
         if (level.kind === "audience") agg.entityKey = row.audience.key;
@@ -127,6 +133,7 @@ export function buildTree(
         level: n.level,
         label: n.label,
         count: n.rows.size,
+        parentId: n.parentId,
       };
       if (n.messageId !== undefined) out.messageId = n.messageId;
       if (n.entityKey !== undefined) out.entityKey = n.entityKey;

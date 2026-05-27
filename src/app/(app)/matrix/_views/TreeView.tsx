@@ -35,6 +35,22 @@ const COLUMN_WIDTH = 240;
 const ROW_HEIGHT = 44;
 const EXPANDED_STORAGE_KEY = "mm6_tree_expanded_v2";
 
+// Per-level swatch used by the MiniMap so the columnar structure of the tree
+// is legible in the thumbnail. Cycles past 6 in case of an unusually deep
+// custom tree-structure string.
+const LEVEL_COLORS = [
+  "#3b82f6", // L0 blue
+  "#8b5cf6", // L1 violet
+  "#10b981", // L2 emerald
+  "#f59e0b", // L3 amber
+  "#f43f5e", // L4 rose
+  "#0ea5e9", // L5 sky (rare)
+] as const;
+function colorForNode(nodeId: string): string {
+  const idx = Number.parseInt(nodeId.split(":")[0] ?? "0", 10);
+  return LEVEL_COLORS[idx % LEVEL_COLORS.length];
+}
+
 // Hierarchical y-layout (tidy-tree, simple variant).
 //
 // Leaves get sequential y indices in DFS-discovery order; non-leaves get the
@@ -359,7 +375,16 @@ function TreeViewInner({
       >
         <Background gap={16} size={1} />
         <Controls showInteractive={false} />
-        <MiniMap pannable zoomable />
+        <MiniMap
+          pannable
+          zoomable
+          className="tree-view__minimap"
+          nodeColor={(node) => colorForNode(node.id)}
+          nodeStrokeColor={(node) => colorForNode(node.id)}
+          nodeStrokeWidth={2}
+          nodeBorderRadius={2}
+          maskColor="rgba(15, 23, 42, 0.12)"
+        />
       </ReactFlow>
     </div>
   );

@@ -31,18 +31,18 @@ async function fetchTreeStructure(): Promise<string> {
 
 const COLUMN_WIDTH = 240;
 const ROW_HEIGHT = 44;
-const COLLAPSED_STORAGE_KEY = "mm6_tree_collapsed_v1";
+const EXPANDED_STORAGE_KEY = "mm6_tree_expanded_v2";
 
 // Hierarchical y-layout (tidy-tree, simple variant).
 //
 // Leaves get sequential y indices in DFS-discovery order; non-leaves get the
 // midpoint of their visible children's y. That clusters every subtree
 // vertically under its root and avoids the alphabetic-across-the-whole-column
-// interleaving the v1 layout produced. Hidden subtrees (collapsed parents)
+// interleaving the v1 layout produced. Subtrees of non-expanded parents
 // contribute zero rows to the cursor, so collapsing shrinks the canvas.
 function computeLayout(
   nodes: TreeNode[],
-  collapsed: Set<string>,
+  expanded: Set<string>,
 ): { positions: Map<string, { x: number; y: number }>; visibleIds: Set<string> } {
   const childrenOf = new Map<string, string[]>();
   for (const n of nodes) {
@@ -61,8 +61,8 @@ function computeLayout(
   function place(id: string): number {
     visibleIds.add(id);
     const node = byId.get(id)!;
-    const isCollapsed = collapsed.has(id);
-    const kids = isCollapsed ? [] : (childrenOf.get(id) ?? []);
+    const isExpanded = expanded.has(id);
+    const kids = isExpanded ? (childrenOf.get(id) ?? []) : [];
 
     let yRow: number;
     if (kids.length === 0) {
@@ -85,16 +85,23 @@ function computeLayout(
   return { positions, visibleIds };
 }
 
-function loadCollapsed(): Set<string> {
-  if (typeof window === "undefined") return new Set();
+function loadExpanded(): Set<string> | null {
+  if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(COLLAPSED_STORAGE_KEY);
-    if (!raw) return new Set();
+    const raw = window.localStorage.getItem(EXPANDED_STORAGE_KEY);
+    if (!raw) return null;
     const arr = JSON.parse(raw);
     return new Set(Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : []);
   } catch {
-    return new Set();
+    return null;
   }
+}
+
+// Default expanded set: only the root (level-0) nodes are expanded, so the
+// canvas starts showing Product → Strategy and everything past Strategy is
+// collapsed until the user clicks a chevron.
+function defaultExpanded(nodes: TreeNode[]): Set<string> {
+  return new Set(nodes.filter((n) => n.level === 0).map((n) => n.id));
 }
 
 export default function TreeView({
@@ -113,24 +120,9 @@ export default function TreeView({
     queryFn: fetchTreeStructure,
   });
 
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => loadCollapsed());
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(
-      COLLAPSED_STORAGE_KEY,
-      JSON.stringify([...collapsed]),
-    );
-  }, [collapsed]);
-
-  const toggleCollapsed = useCallback((id: string) => {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
+  // null means "no user preference yet → fall back to defaultExpanded()".
+  // Once the user toggles anything we materialise it into a concrete Set.
+  const [expanded, setExpanded] = useState<Set<string> | null>(() => loadExpanded());
 
   const parsed = useMemo(() => {
     const raw = treeStructureQ.data ?? "";
@@ -150,6 +142,36 @@ export default function TreeView({
     [audiences, topics, messages, parsed.levels],
   );
 
+  const effectiveExpanded = useMemo(
+    () => expanded ?? defaultExpanded(tree.nodes),
+    [expanded, tree.nodes],
+  );
+
+  // Persist whenever the user actually has an explicit preference; never
+  // persist the synthesised default (otherwise navigating away and back would
+  // freeze the default snapshot into localStorage and stop adapting as new
+  // products appear in the data).
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (expanded === null) return;
+    window.localStorage.setItem(
+      EXPANDED_STORAGE_KEY,
+      JSON.stringify([...expanded]),
+    );
+  }, [expanded]);
+
+  const toggleExpanded = useCallback(
+    (id: string) => {
+      setExpanded((prev) => {
+        const base = prev !== null ? new Set(prev) : defaultExpanded(tree.nodes);
+        if (base.has(id)) base.delete(id);
+        else base.add(id);
+        return base;
+      });
+    },
+    [tree.nodes],
+  );
+
   const childrenOf = useMemo(() => {
     const m = new Map<string, number>();
     for (const n of tree.nodes) {
@@ -159,8 +181,8 @@ export default function TreeView({
   }, [tree.nodes]);
 
   const { positions, visibleIds } = useMemo(
-    () => computeLayout(tree.nodes, collapsed),
-    [tree.nodes, collapsed],
+    () => computeLayout(tree.nodes, effectiveExpanded),
+    [tree.nodes, effectiveExpanded],
   );
 
   const flowNodes = useMemo<Node[]>(
@@ -171,7 +193,7 @@ export default function TreeView({
           const pos = positions.get(n.id)!;
           const isLeaf = n.messageId !== undefined;
           const hasChildren = (childrenOf.get(n.id) ?? 0) > 0;
-          const isCollapsed = collapsed.has(n.id);
+          const isExpanded = effectiveExpanded.has(n.id);
           return {
             id: n.id,
             position: pos,
@@ -205,16 +227,16 @@ export default function TreeView({
                     <button
                       type="button"
                       className="tree-view__chevron"
-                      aria-label={isCollapsed ? "Expand" : "Collapse"}
+                      aria-label={isExpanded ? "Collapse" : "Expand"}
                       onClick={(e) => {
                         e.stopPropagation();
-                        toggleCollapsed(n.id);
+                        toggleExpanded(n.id);
                       }}
                     >
-                      {isCollapsed ? (
-                        <ChevronRight className="size-3" />
-                      ) : (
+                      {isExpanded ? (
                         <ChevronDown className="size-3" />
+                      ) : (
+                        <ChevronRight className="size-3" />
                       )}
                     </button>
                   ) : null}
@@ -230,7 +252,7 @@ export default function TreeView({
             style: isLeaf ? { cursor: "pointer" } : undefined,
           };
         }),
-    [tree.nodes, positions, visibleIds, collapsed, childrenOf, onOpenMessage, toggleCollapsed],
+    [tree.nodes, positions, visibleIds, effectiveExpanded, childrenOf, onOpenMessage, toggleExpanded],
   );
 
   const flowEdges = useMemo<Edge[]>(

@@ -150,8 +150,8 @@ body .animated.fullSurfaceImage main { height: 100%; top:0; animation-name:none;
   background-position: -450px -2px;
 }
 .fullSurfaceImage.campaignImage #imageWrapper div {
-  background-size: auto 100%;
-  background-position: -780px 0px;
+  background-size: auto 120%;
+  background-position: -1030px -120px;
 }
 .preCompBg #imageWrapper div { 
   background-size: inherit;

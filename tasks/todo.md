@@ -2261,4 +2261,114 @@ Branch `feat/keywords-tab` (working tree carrying multiple parallel slices — K
 - HTML creative auto-generated preview image link (use cases to scope first).
 - Centralizing `STATUS_OPTIONS` to a single `src/lib/mc-status.ts` source-of-truth module (tolerable hand-mirroring for now; revisit when next touching status logic).
 
+## `list_assets` MCP tool (2026-05-25) — landed
+
+**Context.** Continuation of the MC315 emulation session. After landing MC315b end-to-end on 2026-05-23, the user wanted c/d/e too — and observed the obvious gap: the Claude coworker on the MCP side has no way to look up the right `SZA_george_*` background image by name or keyword. Solution: a new `list_assets` MCP tool parallel to the existing `list_audiences` / `list_topics` / `list_mc` pattern.
+
+**Implementation (`src/lib/mcp.ts`).** Inserted a new `list_assets` register block right after `list_mc` (around line 268). Filters:
+- `file_name_contains` and `visual_keyword_contains` — case-insensitive `LOWER(col) LIKE LOWER(?)` substring matches (the search-y filters; both fields are free-text user-edited).
+- `brand`, `product`, `type` — exact-match against the indexed columns (`assets_client_{brand,product,type}_idx`).
+- `include_archived` — defaults to `false`; matches the established `list_X` convention.
+- `limit` — defaults to 100, max 1000 (mirrors `list_mc`).
+
+Returns the full asset row sorted by `file_name` ascending. Scoped to `ctx.clientId` (tenant-isolated).
+
+**Tests (`tests/integration/api/mcp-list-assets.test.ts`, +5).** Case-insensitive substring match on `file_name_contains` and `visual_keyword_contains`, AND-combined exact filters (brand+product+type), archive include/exclude default, tenant isolation. Full suite **294 → 299**, all green.
+
+**End-to-end emulation result.** Used the new tool live against `localhost:6001/mcp` to fetch all 5 `SZA_george_*` assets, then `mc_create_batch` created MC315c/d/e with the right `image1` per variant:
+
+```
+c | George FitZone         | SZA_george_c_sports_fitzone.jpg
+d | George Kiemelt csempék | SZA_george_d_bills_koltsegek.jpg
+e | George Kerekítő        | SZA_george_e_terminal_kerekito.jpg
+```
+
+Final cell state matches the screenshot annotations exactly — a/b/c/d/e all populated with the right name + flash + copy1 + image1.
+
+**Process miss to flag.** During the curl-based emulation I accidentally created 4 duplicate rows (`f`, `g`, `h`, `i`) because my Python output-parser kept tripping on f-string-with-backslash syntax errors — the curl POST itself succeeded each time, the parser failure made me retry the whole pipeline. Cleanup: 4× `mc_remove` via MCP (soft-archived via `archived_at`, not hard-deleted), `list_mc` default cell view now shows only a-e. Lesson for future MCP-driven emulation runs: build the JSON payload as a string first, POST it, *then* parse the response in a separate step so a parser bug doesn't re-fire the side effect.
+
+**Out of scope (deferred):**
+- A more advanced search shape (fuzzy/typo-tolerant, e.g. ranking by trigram similarity on `visual_keyword`). Current LIKE-substring is enough for the keyword-driven workflow the user demonstrated; revisit if asset count grows past a few hundred and exact-substring stops finding obvious near-matches (one of the test assets had "befeketetes" with a typo — `visual_keyword_contains="befektetes"` wouldn't find it; the user can fix the typo in the asset record for now).
+- An asset-write tool (`asset_create` / `asset_update`). The coworker pipeline still requires the user to upload assets via the UI before they're discoverable via `list_assets`.
+
+### Version bump suggestion (at end of work)
+Still `6.0.0-pre`. No bump (per the project rule). New MCP tool lands as part of the pre-active-use punch-list run-up. Once we graduate to `6.0.0`, the `list_assets` tool would individually have warranted a minor bump under the post-`6.0.0` heuristic.
+
+
+## 2026-05-25 — Fix copy-MC bug: number kept, not incremented
+
+**Symptom reported by user.** Copied MC 314 a/b/c from `SZA_afadpdall` to 9 other audiences in topic `SZA_promocio_Online_behavNeMaradjLe_150ejovairasok26q2`. Expected: 314 a/b/c repeats in each new audience cell. Actual: each new audience cell received a fresh global number — 316, 317, …, 324 — producing 27 garbage rows (IDs 32770–32796).
+
+**Root cause.** `src/lib/entities/messages.ts:351-375` `copyMessages` calls `createMessage` for each (source, target audience) pair. `createMessage` calls `nextMcSlot(listLiveMessages, topic, audience)`, which for an *empty* target cell returns `MAX(global number) + 1`. So every target audience starts at a fresh global slot instead of inheriting the source's number. `moveMessages` already does the right thing at `messages.ts:478-521`: it pre-passes through resolved sources, builds an in-memory cell-occupant list, and only bumps the variant via `nextMcSlot` when `(source.number, source.variant)` is taken.
+
+**Plan.**
+- [ ] Refactor `copyMessages` to mirror `moveMessages` plan-pass: for each (source × target-audience), if `(source.number, source.variant)` is free in `(source.topic, target-audience)` cell, use it as-is; otherwise bump variant via `nextMcSlot`. Insert with regenerated PMMID + UTM (PMMID encodes audience+topic+number+variant+versionNo; can't be copied verbatim).
+- [ ] Within a single copy batch, planned rows already pushed must count as occupants too (matches the move pre-pass — otherwise copying X a/b/c into the same empty cell would all collide on X a).
+- [ ] Add vitest integration covering: (i) copy MC into empty audiences keeps number+variant; (ii) copy into an occupied cell bumps variant; (iii) batch self-collision (multiple sources → one target) lays them out without overlap.
+- [ ] Hard-delete the 27 bad rows (IDs 32770–32796) — DB backup at `db/matrix.db.before-copy-fix` already taken before the destructive op. ID 32760/32761 (number=316 in `SZK_INCOMING / SZK____wip`) are pre-existing unrelated rows and are NOT touched.
+- [ ] `npm test` clean.
+- [ ] Commit.
+
+**Cleanup-scope check.** Audit log and snapshots may reference the deleted IDs; both are append-only logs of past state — leaving orphan references is fine (the rows are gone; the log says "row 32770 was created" still, which is historically true). No FK from `creatives`, `feed_exports`, etc. to `messages.id` (creatives have their own loose `mc_number/mc_variant`), so hard delete is safe.
+
+**Out of scope.**
+- The pre-existing duplicate of number=316 across topics (32760 in SZK vs. the bad 32770 in SZA) is a separate symptom of `nextMcSlot`'s "global max + 1 across all topics" — within-topic numbering is currently NOT enforced as globally unique across topics, only within-cell. Not touching that here; the user only flagged the copy bug.
+
+
+## 2026-05-27 — Decision Tree view (xyflow) + Settings tree-structure string
+
+**User request (HU).** „Olvasd ki az MM5-ből hogy hol volt a tree structure állítva a settingsben, legyen MM6 settingsben is tree structure string, majd építs a Matrix editor view selectorába egy új nézetet 'decision tree' néven, használd a `@xyflow/react` modult, és építs vele egy decision tree-t a matrix adatokból, alkalmazva a header filtert. Külön git worktreen dolgozz, véletlenül se használd újra a régi tree kódot mert az rossz, bonyi-butus.”
+
+### MM5 reverse-engineering (already done in research pass)
+- **Settings UI:** `messagingmatrix/src/components/Settings.jsx:1050-1069` — single textarea labelled "Tree Structure".
+- **Storage:** SQLite `config` table, key=`treeStructure`, category=`ui`. (Identical schema exists in MM6 → no migration needed, just a new row.)
+- **Format:** arrow-separated levels, e.g.
+  - `Product → Strategy → Targeting Type → Audience → Topic → Messages`
+  - Optional `Source.Field` notation (e.g. `Audiences.Product`) when the field-name alone is ambiguous.
+- **Parser logic (MM5, NOT reused):** `messagingmatrix/src/utils/treeBuilder.js` — split on `→`, then on `.` for source.field. We will **re-implement** in MM6 using the same string contract but a cleaner builder + xyflow renderer. The old renderer is explicitly out-of-bounds.
+
+### MM6 facts
+- View enum: `src/app/(app)/matrix/types.ts:135` → `export type View = "grid" | "feed";` — adds `"tree"` (or `"decisionTree"`).
+- View switcher: `src/app/(app)/matrix/MatrixGrid.tsx:631-640` — two `toolbar-btn` buttons; add a third.
+- Filtered data: `MatrixGrid.tsx:398-432` produces `filtered = { auds, tops, msgs }` after applying `Filters = { products, statuses, search }`. The new view consumes the same `filtered.*` props — **the header filter is automatically respected**, no extra wiring.
+- Settings page: `src/app/(app)/settings/SettingsView.tsx` (tabbed: Keywords, Structure (PMMID), …). Tree-structure string belongs in the Structure tab next to the PMMID pattern field.
+- `config` table schema: `src/db/schema.ts:95-113` — `(clientId, key, value, category)` composite-PK, tenant-scoped. New row: `(cid, 'treeStructure', '<arrow string>', 'ui')`.
+- `@xyflow/react`: **not yet a dependency** — needs `npm install @xyflow/react`.
+
+### Plan (small, reversible slices)
+
+- [ ] **Worktree.** Enter a fresh worktree `decision-tree-view` off main. All work below lands inside the worktree; merge to `feat/template-kind` (current branch) at the end via PR or fast-forward, per user preference.
+- [ ] **Slice 1 — Settings persistence + UI field.**
+  - [ ] `src/lib/entities/config.ts` (or wherever the existing config read/write helper lives — `grep getConfig setConfig` first) → add a typed `getTreeStructure(cid) / setTreeStructure(cid, value)` pair.
+  - [ ] `src/app/api/settings/tree-structure/route.ts` (or extend the existing settings route) — GET + PUT for the string. Tenant-scoped via JWT `cid`.
+  - [ ] `SettingsView.tsx` Structure tab: add a labelled `<textarea>` ("Tree structure" / placeholder showing the default arrow string). Reuse existing `form-field` semantic class + tab markup; no new design tokens.
+  - [ ] Default value seeded on first read if row missing: `Product → Strategy → Audience → Topic → Messages` (matches MM5 default minus the rarely-used "Targeting Type" level — confirm with user).
+- [ ] **Slice 2 — Parser (clean, ~30 LOC).**
+  - [ ] `src/app/(app)/matrix/_tree/parseTreeStructure.ts` — pure function, no React, no deps. Input: arrow-string. Output: `TreeLevel[] = { source: 'audience'|'topic'|'message', field: string, label: string }[]`. Validates: each level resolves to a known field on a known source.
+  - [ ] Inline unit test alongside it (`parseTreeStructure.test.ts`, ~5 cases: happy path, `Source.Field` form, empty string, unknown source, trailing whitespace).
+- [ ] **Slice 3 — Tree builder (data → xyflow nodes/edges).**
+  - [ ] `src/app/(app)/matrix/_tree/buildTree.ts` — pure function. Input: `{ auds, tops, msgs }` + `TreeLevel[]`. Output: `{ nodes: Node[], edges: Edge[] }` in xyflow shape. Groups by level field-value, dedupes, generates stable IDs (`<levelIdx>:<value>`). Layouts in a horizontal hierarchy (level 0 = leftmost column, level N = rightmost). Uses a simple deterministic Y-stack within each column; no external layout engine for v1.
+  - [ ] Inline unit test (~3 cases: single level, multi-level grouping, empty data).
+- [ ] **Slice 4 — Decision Tree view component.**
+  - [ ] `npm install @xyflow/react`.
+  - [ ] `src/app/(app)/matrix/_views/TreeView.tsx` — semantic class `tree-view`. Receives `{ auds, tops, msgs, treeStructure }` props from `MatrixGrid`. Renders `<ReactFlow>` with built nodes/edges, pan/zoom enabled, no edit affordances for v1 (read-only). Empty-state: matches existing `empty-state` class used in Feed view.
+  - [ ] CSS: import `@xyflow/react/dist/style.css` once at the view; project-specific overrides (node padding, fonts to match `text-xs` etc.) live in a co-located `tree-view.css` keyed by `.tree-view` block.
+- [ ] **Slice 5 — Wire into view selector.**
+  - [ ] Extend `View` type in `types.ts:135` to `"grid" | "feed" | "tree"`.
+  - [ ] Add third `toolbar-btn` in `MatrixGrid.tsx:631-640` with a tree-ish lucide icon (`GitFork` or `Network`). Persistence key for selected view (if one exists already) gets the new value automatically.
+  - [ ] `MatrixGrid` fetches the `treeStructure` string from settings via react-query (separate query, cache-scoped to `cid`), passes it into `<TreeView>` along with `filtered.*`.
+- [ ] **Slice 6 — Validation.**
+  - [ ] `npm test` clean (incl. the two new pure-function tests).
+  - [ ] Manual: open `npm run dev:erste`, switch to Tree view, verify the tree reflects the current header filter (e.g. select one product → tree shrinks). Verify Settings → Structure → edit string → tree shape changes on next view switch.
+  - [ ] No regression in Grid / Feed views (still default, still render).
+- [ ] **Slice 7 — Wrap.**
+  - [ ] Add new files to `tasks/component-inventory.md` (`tree-view`, `tree-view__node`, …).
+  - [ ] Bump suggestion at end (still `6.0.0-pre`, so no bump — note for post-6.0.0).
+  - [ ] Commit + PR back to `feat/template-kind`.
+
+### Decisions (user confirmed 2026-05-27)
+1. **Default arrow string:** `Product → Strategy → Audience → Topic → Messages` (5 levels).
+2. **Settings tab placement:** Structure tab, next to PMMID pattern field. No new tab.
+3. **Leaf-node click:** opens the existing message editor (same side-panel / modal that Grid view uses). Slice 4 grows to wire this up.
+4. **Worktree merge target:** standalone PR to `main` (not back into `feat/template-kind`).
 

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/db";
 import {
+  assets,
   audiences,
   clients,
   config as configTable,
@@ -261,6 +262,49 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
         .from(messages)
         .where(and(...conds))
         .orderBy(messages.number, messages.variant)
+        .limit(limit)
+        .all();
+      return jsonResult(rows);
+    },
+  );
+
+  server.registerTool(
+    "list_assets",
+    {
+      description:
+        "List media assets (images, videos, logos, etc.) for the active client. Use this to look up the right `file_name` to drop into an MC's `image1..6` / `video1` field. Filters are AND-combined: file_name_contains and visual_keyword_contains are case-insensitive LIKE matches (use them for keyword search, e.g. visual_keyword_contains='fitzone' to find the sport-themed George banner); brand/product/type are exact matches against the indexed columns. Default excludes soft-archived rows; pass include_archived=true to see them. Default limit 100, max 1000.",
+      inputSchema: {
+        file_name_contains: z.string().optional(),
+        visual_keyword_contains: z.string().optional(),
+        brand: z.string().optional(),
+        product: z.string().optional(),
+        type: z.string().optional(),
+        include_archived: z.boolean().optional(),
+        limit: z.number().int().positive().max(1000).optional(),
+      },
+    },
+    async (args) => {
+      const conds = [eq(assets.clientId, ctx.clientId)];
+      if (!args.include_archived) conds.push(isNull(assets.archivedAt));
+      if (args.file_name_contains) {
+        conds.push(
+          sql`LOWER(${assets.fileName}) LIKE ${"%" + args.file_name_contains.toLowerCase() + "%"}`,
+        );
+      }
+      if (args.visual_keyword_contains) {
+        conds.push(
+          sql`LOWER(${assets.visualKeyword}) LIKE ${"%" + args.visual_keyword_contains.toLowerCase() + "%"}`,
+        );
+      }
+      if (args.brand) conds.push(eq(assets.brand, args.brand));
+      if (args.product) conds.push(eq(assets.product, args.product));
+      if (args.type) conds.push(eq(assets.type, args.type));
+      const limit = args.limit ?? 100;
+      const rows = db
+        .select()
+        .from(assets)
+        .where(and(...conds))
+        .orderBy(assets.fileName)
         .limit(limit)
         .all();
       return jsonResult(rows);

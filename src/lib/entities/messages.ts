@@ -345,31 +345,154 @@ export function restoreMessage(
 export type CopyOpts = { fieldOverrides?: MessageInput };
 
 // Copy each source MC into each target audience (under the source's topic).
-// Returns `created` in the same order as iterated: outer = source, inner =
-// target audience. Each new MC gets a fresh (number, variant, versionNo) via
-// nextMcSlot and a fresh PMMID generated against the target audience.
+// Returns `created` in the same order iterated: outer = source, inner = target
+// audience. Mirrors moveMessages placement rules so copy and move agree:
+// preserve the source's (number, variant) in the target cell when free; bump
+// variant via nextMcSlot only on collision. PMMID + UTM are regenerated per
+// target audience (PMMID encodes audience+topic+number+variant+versionNo, so
+// it can't be cloned verbatim). versionNo resets to 1 — a copy is a new MC,
+// not a creative revision of the source.
 export function copyMessages(
   clientId: number,
   sourceMcLabels: string[],
   targetAudienceKeys: string[],
   opts: CopyOpts = {},
 ): { created: Message[] } {
-  const created: Message[] = [];
+  // Resolve all sources up front so a bad label fails before any insert.
+  const sources: Message[] = [];
   for (const label of sourceMcLabels) {
     const source = getMessageByPmmid(clientId, label);
     if (!source) {
       throw new MessageError(`message '${label}' not found`);
     }
-    const cloneable: MessageInput = pickWritable(source);
-    for (const targetAud of targetAudienceKeys) {
-      const row = createMessage(clientId, {
-        ...cloneable,
-        ...(opts.fieldOverrides ?? {}),
-        audience: targetAud,
-        topic: source.topic,
-      });
-      created.push(row);
+    sources.push(source);
+  }
+
+  // Resolve every target audience once.
+  const targetAudienceRows = new Map<string, Audience>();
+  for (const key of targetAudienceKeys) {
+    const row = findAudienceByKey(clientId, key);
+    if (!row) {
+      throw new MessageError(`audience '${key}' not found`);
     }
+    targetAudienceRows.set(key, row);
+  }
+
+  // Topic rows cached by key — every target inherits source.topic.
+  const topicRows = new Map<string, Topic | null>();
+  const topicFor = (key: string): Topic => {
+    if (!topicRows.has(key)) {
+      const row = findTopicByKey(clientId, key);
+      if (!row) throw new MessageError(`topic '${key}' not found`);
+      topicRows.set(key, row);
+    }
+    return topicRows.get(key) as Topic;
+  };
+
+  const patterns = readClientPatterns(clientId);
+  const liveAll = listLiveMessages(clientId);
+
+  // Plan-pass: build the placement for every (source × target audience) pair.
+  // Planned rows count as occupants of their target cell so a batch copying
+  // X a/b/c into one empty cell lays them out as X a/b/c (without it, all
+  // three would collide on X a).
+  type Plan = {
+    source: Message;
+    targetAud: string;
+    number: number;
+    variant: string;
+  };
+  const plan: Plan[] = [];
+  for (const source of sources) {
+    for (const targetAud of targetAudienceKeys) {
+      const topic = source.topic;
+      const cellOccupants: ExistingMessage[] = [
+        ...liveAll.filter(
+          (m) => m.topic === topic && m.audience === targetAud,
+        ),
+        ...plan
+          .filter((p) => p.source.topic === topic && p.targetAud === targetAud)
+          .map((p) => ({
+            number: p.number,
+            variant: p.variant,
+            topic,
+            audience: targetAud,
+            status: null,
+            archivedAt: null,
+          })),
+      ];
+      const taken = cellOccupants.some(
+        (m) =>
+          m.number === source.number && (m.variant ?? "") === source.variant,
+      );
+      let number: number;
+      let variant: string;
+      if (!taken) {
+        number = source.number;
+        variant = source.variant;
+      } else {
+        const slot = nextMcSlot(cellOccupants, topic, targetAud);
+        number = slot.number;
+        variant = slot.variant;
+      }
+      plan.push({ source, targetAud, number, variant });
+    }
+  }
+
+  // Apply inserts in plan order.
+  const created: Message[] = [];
+  for (const p of plan) {
+    const cloneable: MessageInput = pickWritable(p.source);
+    const overrides: MessageInput = opts.fieldOverrides ?? {};
+    const audienceRow = targetAudienceRows.get(p.targetAud) as Audience;
+    const topicRow = topicFor(p.source.topic);
+
+    const pmmid = generatePmmid(
+      {
+        audience: p.targetAud,
+        topic: p.source.topic,
+        number: p.number,
+        variant: p.variant,
+        versionNo: 1,
+      },
+      [],
+      [],
+      patterns.pmmid,
+    );
+    const traffic = generateTrafficking(
+      {
+        number: p.number,
+        variant: p.variant,
+        audienceKey: p.targetAud,
+        topicKey: p.source.topic,
+        audience: audienceRow,
+        topic: topicRow,
+      },
+      patterns.trafficking,
+    );
+
+    const row = db
+      .insert(messages)
+      .values({
+        ...cloneable,
+        ...overrides,
+        clientId,
+        audience: p.targetAud,
+        topic: p.source.topic,
+        number: p.number,
+        variant: p.variant,
+        versionNo: 1,
+        pmmid,
+        utmCampaign: traffic.utm_campaign,
+        utmSource: traffic.utm_source,
+        utmMedium: traffic.utm_medium,
+        utmContent: traffic.utm_content,
+        utmTerm: traffic.utm_term,
+        utmCd26: traffic.utm_cd26,
+      })
+      .returning()
+      .get();
+    created.push(row);
   }
   return { created };
 }

@@ -111,7 +111,10 @@ body #adContainer.animated.imageAndColor2 #backgroundContainer {
 background-size: 193%;
   background-position: -241px -128px;
 }
-
+.fullSurfaceImage.campaignImage #imageWrapper div {
+  background-size: auto 160%;
+  background-position: -560px -125px;
+}
 .preCompBg #imageWrapper div { 
   background-size: inherit;
   background-position: -330px -370px;

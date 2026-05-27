@@ -143,6 +143,94 @@ describe("copyMessages", () => {
     seedTopic(erste.id, "top1");
     expect(() => copyMessages(erste.id, ["does-not-exist"], ["aud1"])).toThrow();
   });
+
+  it("preserves source (number, variant) when target cells are empty", () => {
+    // Regression: copy used to call createMessage → nextMcSlot on an empty
+    // target cell returns MAX(global)+1, so every target audience got a fresh
+    // global number. After fix, the source's (number, variant) is reused as-is
+    // when the target cell is free.
+    seedAudience(erste.id, "aud1");
+    seedAudience(erste.id, "aud2");
+    seedAudience(erste.id, "aud3");
+    seedTopic(erste.id, "top1");
+
+    const a = createMessage(erste.id, { audience: "aud1", topic: "top1" });
+    const b = createMessage(erste.id, { audience: "aud1", topic: "top1" });
+    const c = createMessage(erste.id, { audience: "aud1", topic: "top1" });
+    expect([a.number, b.number, c.number]).toEqual([1, 1, 1]);
+    expect([a.variant, b.variant, c.variant]).toEqual(["a", "b", "c"]);
+
+    const { created } = copyMessages(
+      erste.id,
+      [a.pmmid!, b.pmmid!, c.pmmid!],
+      ["aud2", "aud3"],
+    );
+
+    expect(created).toHaveLength(6);
+    // Every copy is number=1 in its target audience, variant matching source.
+    for (const row of created) {
+      expect(row.number).toBe(1);
+      expect(row.topic).toBe("top1");
+      expect(["aud2", "aud3"]).toContain(row.audience);
+    }
+    // (number, variant, audience) tuples cover all 6 source×target pairs.
+    const tuples = created
+      .map((r) => `${r.audience}|${r.number}${r.variant}`)
+      .sort();
+    expect(tuples).toEqual([
+      "aud2|1a",
+      "aud2|1b",
+      "aud2|1c",
+      "aud3|1a",
+      "aud3|1b",
+      "aud3|1c",
+    ]);
+  });
+
+  it("bumps variant on collision in target cell", () => {
+    seedAudience(erste.id, "aud1");
+    seedAudience(erste.id, "aud2");
+    seedTopic(erste.id, "top1");
+    const src = createMessage(erste.id, { audience: "aud1", topic: "top1" });
+    expect([src.number, src.variant]).toEqual([1, "a"]);
+    // Pre-seed aud2 with a colliding MC1a.
+    db.insert(messages)
+      .values({
+        clientId: erste.id,
+        number: 1,
+        variant: "a",
+        audience: "aud2",
+        topic: "top1",
+        versionNo: 1,
+        pmmid: "seed-aud2-1a",
+      })
+      .run();
+
+    const { created } = copyMessages(erste.id, [src.pmmid!], ["aud2"]);
+    expect(created).toHaveLength(1);
+    expect(created[0].audience).toBe("aud2");
+    expect(created[0].number).toBe(1); // same number
+    expect(created[0].variant).toBe("b"); // bumped from collision
+  });
+
+  it("batch copy into the same empty cell stacks variants without colliding with itself", () => {
+    seedAudience(erste.id, "aud1");
+    seedAudience(erste.id, "aud2");
+    seedTopic(erste.id, "top1");
+    // Two sources in aud1 with same number, different variants.
+    const a = createMessage(erste.id, { audience: "aud1", topic: "top1" });
+    const b = createMessage(erste.id, { audience: "aud1", topic: "top1" });
+    expect([a.number, a.variant, b.number, b.variant]).toEqual([1, "a", 1, "b"]);
+
+    // Empty aud2 cell — first copy lands at 1a, second sees planned 1a and
+    // its own 1b is free, lands at 1b.
+    const { created } = copyMessages(erste.id, [a.pmmid!, b.pmmid!], ["aud2"]);
+    expect(created).toHaveLength(2);
+    expect(created.map((r) => `${r.number}${r.variant}`).sort()).toEqual([
+      "1a",
+      "1b",
+    ]);
+  });
 });
 
 describe("moveMessages", () => {

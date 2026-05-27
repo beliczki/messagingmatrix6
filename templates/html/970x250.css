@@ -346,7 +346,10 @@ body .fullSurfaceImage {
 background-size: 193%;
   background-position: -241px -128px;
 }
-
+.fullSurfaceImage.campaignImage #imageWrapper div {
+  background-size: 110%;
+  background-position: -50px -110px;
+}
 .preCompBg #imageWrapper div { 
   background-size: inherit;
   background-position: 0px 0px;

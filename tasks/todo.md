@@ -2399,3 +2399,81 @@ Still `6.0.0-pre`. No bump (per the project rule). New MCP tool lands as part of
 - Sankey alt-graph (MM5 had `sankeyStructure`; not ported — wait for demand).
 
 **Version bump.** Still `6.0.0-pre` → no bump (per project rule). Post-`6.0.0` this would be a **minor** bump (new view + new dependency + new settings field).
+
+### Iterative polish — same-day (2026-05-27)
+
+After the initial feat commit landed on main (`cb96aca`), the user walked
+the new view live against the Erste dataset and we tightened 9 things back
+to back. Every fix shipped as its own small commit + local-main FF, so the
+history reads as a clean progression rather than one mega-rewrite:
+
+1. **`151162f` — Default-expand only L0.** Initial render had every level
+   visible; columns 2+ became a wall of nodes. Switched the state model
+   from `collapsed: Set` to `expanded: Set | null` (null = synthesise the
+   default per render, default = every L0 node id). Localstorage key
+   bumped v1 → v2 so the old "fully expanded" state didn't override.
+2. **`353e045` — Cursor-anchor on toggle.** Tidy-tree's parent-y =
+   midpoint-of-children meant expanding a node always moved it. Now
+   `toggleExpanded` re-runs layout off the next expanded set, diffs the
+   toggled node's old vs new y, and counter-pans the xyflow viewport so
+   the node stays under the cursor. Required wrapping TreeView in a
+   `ReactFlowProvider` + splitting into outer/inner so the inner could
+   call `useReactFlow()`.
+3. **`187f572` + `db028ec` — Per-level colour stripe.** Each node gets a
+   CSS class `tree-view__node-wrap--lvl-N` (N derived from the buildTree
+   id prefix), styled in `globals.css` with a 4px coloured left border
+   (L0 blue / L1 violet / L2 emerald / L3 amber / L4 rose). Same swatch
+   originally fed the MiniMap too — later swapped to uniform black per
+   user preference.
+4. **`a88eb6a` — Layout + alignment fixes.** `.tree-view__node` got
+   `height: 100%` so the inner flex container fills the wrapper (chevron
+   + label + count were drifting to the top of the box). Labels switched
+   from `space-between` to `flex-start` + `margin-left: auto` on the
+   count badge for hard left-alignment. COLUMN_WIDTH bumped 240 → 280
+   to give smoothstep edges enough room to route cleanly (40px gap was
+   squashing fans into a single visual blur).
+5. **`ffa2037` — MiniMap + Controls relocated.** Both pinned to the
+   top-right corner via CSS overrides with `!important` (xyflow's
+   default panel position classes set top/right via the same props).
+   Controls sit at `top: minimapSize.height + 20`. MiniMap nodes
+   dropped the per-level colour function and render uniform black
+   (`#0f172a`) — level colours stay on canvas nodes only.
+6. **`2820ea3` — Size container to content aspect.** The fixed
+   220×220 minimap let the SVG letterbox content inside. Now the
+   container width/height come from the visible-content bounding box
+   aspect ratio (capped 180px on the longer axis, min 90px on the
+   shorter). With matching aspect the default
+   `preserveAspectRatio="xMidYMid meet"` reaches all four edges
+   naturally — earlier attempt to force `"none"` via a DOM hack didn't
+   stick because xyflow re-renders the SVG.
+7. **`a2bd269` — Smaller minimap + visible viewport indicator.**
+   Cap dropped 260 → 180, mask opacity 8% → 18% so the "white box" was
+   actually visible; 1.5px slate stroke around the indicator so it
+   reads as a clear draggable affordance.
+8. **`719ae9c` — Clip minimap to rounded border.** Zooming the main
+   canvas in made the mask path extend past the rounded corners.
+   `overflow: hidden` on the container.
+9. **`b2989aa` — Inverted mask: 50% white veil.** User wanted the
+   minimap to read as solid white with outside-viewport dots faded.
+   maskColor flipped from `rgba(15,23,42,0.18)` (dim veil over outside)
+   to `rgba(255,255,255,0.5)` (50% white over outside, fading those
+   dots while inside-viewport dots stay full black). Stroke colour
+   changed to `#cbd5e1` for a soft 1px viewport outline.
+
+### Status: DONE 2026-05-27
+
+All slices shipped. The Decision Tree view is the third matrix view
+alongside Grid and Feed; behind it sits the user-configurable
+`treeStructure` string in Settings → Structure. Spec written up in
+`docs/REBUILD_SPEC.md §18` (local) and roadmap Phase 4 marked accordingly
+in `~/.claude/plans/you-ll-see-docs-and-snappy-charm.md` (local).
+Component-inventory entry already added in the initial commit.
+
+Remaining open from this slice:
+- Sankey alt-graph (MM5 had `sankeyStructure` too; **not** ported — wait
+  for actual demand before building).
+- The `audiences-key-pattern.test.ts:248-249` `mcCount` tsc errors are
+  pre-existing main noise from commit `d3ef4b8`, unrelated to this slice;
+  runtime tests pass (314/314 → 314+12 = 326/326 with the parser/builder
+  units this slice added; vitest count may show different number
+  depending on which integration tests ran).

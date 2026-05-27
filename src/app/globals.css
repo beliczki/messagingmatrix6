@@ -249,4 +249,50 @@ html.dark {
     transform-box: fill-box;
     animation: annotation-pulse 1.5s ease-in-out infinite;
   }
+
+  /* Decision Tree view (xyflow-backed). Nodes use the default react-flow box
+     chrome; we only restyle the inner label and tweak leaf affordance. */
+  .tree-view {
+    background: var(--surface, #f8fafc);
+  }
+  .tree-view__node {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 160px;
+    font-size: 12px;
+    line-height: 1.2;
+  }
+  .tree-view__node-label {
+    font-weight: 500;
+    color: var(--text-primary, #0f172a);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .tree-view__node-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 9999px;
+    background: #e2e8f0;
+    color: #334155;
+    font-size: 10px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+  html.dark .tree-view__node-count {
+    background: #334155;
+    color: #cbd5e1;
+  }
+  .tree-view__node--leaf {
+    color: #1d4ed8;
+  }
+  .tree-view__node--leaf:hover .tree-view__node-label {
+    text-decoration: underline;
+  }
 }

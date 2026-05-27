@@ -132,7 +132,7 @@ export const STATUS_COLOR: Record<string, string> = {
   MEMORY: "bg-pink-500",
 };
 
-export type View = "grid" | "feed";
+export type View = "grid" | "feed" | "tree";
 export type Density = "detailed" | "compact" | "dense";
 
 export type Filters = {

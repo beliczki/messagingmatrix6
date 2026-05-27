@@ -38,6 +38,7 @@ type Draft = {
   messagesStructure: string;
   creativeStructure: string;
   feedStructure: string;
+  treeStructure: string;
   creativeParsingRules: string;
   feedPatterns: Record<string, string>;
   // Full patterns object preserved so we round-trip non-feed fields untouched.
@@ -55,6 +56,7 @@ function defaultDraft(): Draft {
     messagesStructure: DEFAULT_STRUCTURES.messagesStructure,
     creativeStructure: DEFAULT_STRUCTURES.creativeStructure,
     feedStructure: DEFAULT_STRUCTURES.feedStructure,
+    treeStructure: DEFAULT_STRUCTURES.treeStructure,
     creativeParsingRules: JSON.stringify(
       DEFAULT_CREATIVE_PARSING_RULES,
       null,
@@ -140,6 +142,7 @@ export function StructureTab() {
         { key: "messagesStructure", value: d.messagesStructure, category: "structure" },
         { key: "creativeStructure", value: d.creativeStructure, category: "structure" },
         { key: "feedStructure", value: d.feedStructure, category: "structure" },
+        { key: "treeStructure", value: d.treeStructure, category: "structure" },
         { key: "creativeParsingRules", value: parsedRules, category: "structure" },
         {
           key: "patterns",
@@ -257,6 +260,32 @@ export function StructureTab() {
             </label>
           ))}
         </div>
+      </section>
+
+      <section className="structure-tab__section structure-tab__section--tree mb-6 rounded-lg border border-slate-200 bg-white p-4">
+        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-700">
+          Decision tree structure
+        </h3>
+        <p className="form-field__hint mb-3 text-xs text-slate-500">
+          Hierarchy used by the matrix <strong>Decision Tree</strong> view.
+          Levels are separated by <code className="font-mono">→</code>{" "}
+          (U+2192). Each level is either a special token{" "}
+          (<code className="font-mono">Audience</code>,{" "}
+          <code className="font-mono">Topic</code>,{" "}
+          <code className="font-mono">Messages</code>) or an audience/topic
+          field name (e.g. <code className="font-mono">Product</code>,{" "}
+          <code className="font-mono">Strategy</code>). Disambiguate with{" "}
+          <code className="font-mono">Source.Field</code> when needed (e.g.{" "}
+          <code className="font-mono">Topics.Tag1</code>).
+        </p>
+        <label className="form-field block">
+          <input
+            type="text"
+            value={draft.treeStructure}
+            onChange={(e) => setField("treeStructure", e.target.value)}
+            className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 font-mono text-xs focus:border-slate-500 focus:outline-none"
+          />
+        </label>
       </section>
 
       <section className="structure-tab__section mb-6 rounded-lg border border-slate-200 bg-white p-4">

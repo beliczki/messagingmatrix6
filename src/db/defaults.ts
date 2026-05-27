@@ -58,6 +58,7 @@ export const DEFAULT_STRUCTURES = {
   creativeStructure:
     "brand,product,type,template,banner_version,mc_number,mc_variant,visual_keyword,copy_keyword,file_name,comment",
   feedStructure: "Text:pmmid",
+  treeStructure: "Product → Strategy → Audience → Topic → Messages",
 };
 
 export const DEFAULT_CREATIVE_PARSING_RULES = {
@@ -100,6 +101,11 @@ export function defaultConfigSeed(): ConfigSeed {
       key: "feedStructure",
       category: "structure",
       value: DEFAULT_STRUCTURES.feedStructure,
+    },
+    {
+      key: "treeStructure",
+      category: "structure",
+      value: DEFAULT_STRUCTURES.treeStructure,
     },
     {
       key: "creativeParsingRules",

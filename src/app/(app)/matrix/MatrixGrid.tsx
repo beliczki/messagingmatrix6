@@ -2,10 +2,11 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LayoutList, List, Grip, Table2, ListFilter, Pencil } from "lucide-react";
+import { LayoutList, List, Grip, Table2, ListFilter, Pencil, GitFork } from "lucide-react";
 import clsx from "clsx";
 import GridView from "./GridView";
 import FeedView from "./FeedView";
+import TreeView from "./_views/TreeView";
 import FeedExportPanel from "./FeedExportPanel";
 import EditModePanel from "./EditModePanel";
 import MatrixToolbar from "./MatrixToolbar";
@@ -107,7 +108,7 @@ export default function MatrixWorkspace() {
 
   useEffect(() => {
     const p = loadPersisted();
-    if (p.view === "grid" || p.view === "feed") setView(p.view);
+    if (p.view === "grid" || p.view === "feed" || p.view === "tree") setView(p.view);
     const persistedDensity = p.density as string | undefined;
     if (persistedDensity === "detailed" || persistedDensity === "compact" || persistedDensity === "dense") {
       setDensity(persistedDensity);
@@ -512,6 +513,13 @@ export default function MatrixWorkspace() {
                 setOpenMessageId(message.id);
               }}
             />
+          ) : view === "tree" ? (
+            <TreeView
+              audiences={filtered.auds}
+              topics={filtered.tops}
+              messages={filtered.msgs}
+              onOpenMessage={(id) => setOpenMessageId(id)}
+            />
           ) : (
             <FeedView
               messages={filtered.msgs}
@@ -531,6 +539,7 @@ export default function MatrixWorkspace() {
                 options={[
                   { value: "grid", icon: <Table2 className="size-4" />, label: "Grid view" },
                   { value: "feed", icon: <ListFilter className="size-4" />, label: "Feed view" },
+                  { value: "tree", icon: <GitFork className="size-4" />, label: "Decision tree view" },
                 ]}
                 value={view}
                 onChange={setView}
@@ -636,6 +645,10 @@ function ViewControls({
           <ToggleBtn active={view === "feed"} onClick={() => setView("feed")}>
             <ListFilter className="size-3.5" />
             Feed
+          </ToggleBtn>
+          <ToggleBtn active={view === "tree"} onClick={() => setView("tree")}>
+            <GitFork className="size-3.5" />
+            Tree
           </ToggleBtn>
         </div>
       </div>

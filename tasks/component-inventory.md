@@ -702,3 +702,20 @@ Added an 11th workflow status `ARCHIVED`, sitting next to `INACTIVE` semanticall
 - Filter UX for default-hiding ARCHIVED in matrix/library views. Current `EMPTY_FILTERS.statuses = new Set()` means "show all" — no notion of default-hidden statuses yet. Separate slice (see Open Question in the todo block).
 - Centralizing the status enum into a single source-of-truth module. Today it's hand-mirrored across 4 files; tolerable while we still have a small fixed set, but a `src/lib/mc-status.ts` central export would be the right move once we touch this area again.
 
+---
+
+## Változások 2026-05-27 — Decision Tree view (xyflow)
+
+**Új komponens:** `_views/TreeView.tsx` (`(app)/matrix/_views/`) — xyflow-alapú decision-tree nézet a Matrix editor view-selectorjában a Grid / Feed mellé. Read-only, leaf-en (Messages) kattintásra megnyitja a meglévő `MessageEditor` side-panelt (`onOpenMessage` prop).
+
+**Új tiszta segéd modulok:** `_tree/parseTreeStructure.ts` (arrow-string → `TreeLevel[]`), `_tree/buildTree.ts` (`{auds, tops, msgs}` × `TreeLevel[]` → xyflow `{nodes, edges}`). Mindkettő pure-fn, unit-tesztelt (`tests/unit/parse-tree-structure.test.ts`, `tests/unit/build-tree.test.ts` — 12 új teszt).
+
+**Új semantic class-ok:** `tree-view`, `tree-view--loading`, `tree-view--error`, `tree-view--empty`, `tree-view__node`, `tree-view__node--leaf`, `tree-view__node-label`, `tree-view__node-count` (`app/globals.css` `@layer components`).
+
+**Settings bővítés:** Settings → Structure tab új section "Decision tree structure" (`_structure/StructureTab.tsx`). Új semantic class `structure-tab__section--tree`. Persistence a meglévő `config` táblába key=`treeStructure`, category=`structure` (semmi új API route, a generikus `/api/config` GET/PUT-on megy). Default seed (`db/defaults.ts`): `"Product → Strategy → Audience → Topic → Messages"`.
+
+**View enum bővítés:** `View = "grid" | "feed" | "tree"` (`matrix/types.ts`). MatrixGrid CycleIconButton + ViewControls toggle group új `tree` opciót kapott (`GitFork` lucide icon). `mm6_matrix_state_v1` localStorage rehydration is felismeri.
+
+**Új dependency:** `@xyflow/react@^12.10.2`.
+
+**Reuse:** semmi MM5-ös tree kód nem lett áthozva (külön döntés). Az UI a meglévő tokenekre épül (`empty-state`, `form-field`, `input-box`, `toggle-btn`, `structure-tab__section`).

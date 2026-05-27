@@ -2372,3 +2372,30 @@ Still `6.0.0-pre`. No bump (per the project rule). New MCP tool lands as part of
 3. **Leaf-node click:** opens the existing message editor (same side-panel / modal that Grid view uses). Slice 4 grows to wire this up.
 4. **Worktree merge target:** standalone PR to `main` (not back into `feat/template-kind`).
 
+### Slices (worktree decision-tree-view, branched from main)
+- [x] Slice 1 — Settings persistence (`treeStructure` DEFAULT_STRUCTURES + seed + Structure-tab section).
+- [x] Slice 2 — `_tree/parseTreeStructure.ts` pure fn + 7 unit teszt.
+- [x] Slice 3 — `_tree/buildTree.ts` pure fn + 5 unit teszt.
+- [x] Slice 4 — `_views/TreeView.tsx` xyflow render + leaf click → MessageEditor.
+- [x] Slice 5 — `View` enum + view selector (CycleIconButton + ViewControls + localStorage rehydration).
+- [x] Slice 6 — `npm test` 207/207 zöld, `npx tsc --noEmit` clean. Manual smoke a user dolga (dev:erste a main checkout-on fut).
+- [x] Slice 7 — `tasks/component-inventory.md` frissítve, commit, PR a main-re.
+
+### Review
+
+**Shipped.** All 7 slices landed.
+
+- **Persistence (Slice 1).** `treeStructure` joined the existing `config` table — no migration, no new route, the generic `/api/config` GET/PUT carries it. Default in `DEFAULT_STRUCTURES.treeStructure` + `defaultConfigSeed()` (`src/db/defaults.ts`). Structure tab got a dedicated section "Decision tree structure" with a single-line textarea — kept separate from the "CSV column order" section because arrow-separated levels are conceptually different from CSV column lists.
+- **Parser (Slice 2).** `src/app/(app)/matrix/_tree/parseTreeStructure.ts`, 7 tests. Bare tokens + `Source.Field` form. Case- and whitespace-tolerant. Throws on unknown levels → TreeView surfaces as a clean error empty-state.
+- **Builder (Slice 3).** `src/app/(app)/matrix/_tree/buildTree.ts`, 5 tests. Pure fn `{auds, tops, msgs} × TreeLevel[] → {nodes, edges}`. Stable IDs (`<levelIdx>:<groupPath>`), deterministic vertical order. `(none)` bucket for empty group values so missing fields don't silently disappear.
+- **TreeView (Slice 4).** `src/app/(app)/matrix/_views/TreeView.tsx`. Read-only xyflow graph (pan/zoom/minimap/controls). Leaf Messages-node onClick → `onOpenMessage(id)` — same prop Grid/Feed use, so the same `MessageEditor` side-panel opens. Loading/Error/Empty states. CSS in `globals.css @layer components` keyed by `.tree-view*` blocks (no inline style; only computed xyflow `position`).
+- **Wiring (Slice 5).** `View` extended to `"grid" | "feed" | "tree"`. MatrixGrid renders `<TreeView>` when `view === "tree"`, passes `filtered.{auds, tops, msgs}` → header filter automatically respected. Toggle group + CycleIconButton got `tree` option (`GitFork` lucide icon). localStorage rehydration accepts `"tree"`.
+- **Validation (Slice 6).** `npm test` → **207 passed** (+12 new unit tests vs. baseline). `npx tsc --noEmit` clean. Manual smoke pending — dev:erste was already running on the main checkout. User needs to switch the dev server into the worktree or boot a parallel deploy on a free port to click through.
+- **Inventory (Slice 7).** `tasks/component-inventory.md` got a "Változások 2026-05-27" block.
+
+**Out of scope.**
+- Auto-layout (currently top-down stack within each column; dagre/elkjs not needed at current data scale).
+- In-view tree editing (drag-reorder levels) — Settings textarea is the only edit surface.
+- Sankey alt-graph (MM5 had `sankeyStructure`; not ported — wait for demand).
+
+**Version bump.** Still `6.0.0-pre` → no bump (per project rule). Post-`6.0.0` this would be a **minor** bump (new view + new dependency + new settings field).

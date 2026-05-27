@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   Controls,
   MiniMap,
   Position,
+  useReactFlow,
   type Node,
   type Edge,
 } from "@xyflow/react";
@@ -104,17 +106,31 @@ function defaultExpanded(nodes: TreeNode[]): Set<string> {
   return new Set(nodes.filter((n) => n.level === 0).map((n) => n.id));
 }
 
-export default function TreeView({
-  audiences,
-  topics,
-  messages,
-  onOpenMessage,
-}: {
+type TreeViewProps = {
   audiences: Audience[];
   topics: Topic[];
   messages: Message[];
   onOpenMessage: (id: number) => void;
-}) {
+};
+
+export default function TreeView(props: TreeViewProps) {
+  // ReactFlowProvider lets the inner component reach into the xyflow store
+  // via useReactFlow() — needed for the "keep the clicked node anchored
+  // under the cursor" viewport pan when expanding/collapsing.
+  return (
+    <ReactFlowProvider>
+      <TreeViewInner {...props} />
+    </ReactFlowProvider>
+  );
+}
+
+function TreeViewInner({
+  audiences,
+  topics,
+  messages,
+  onOpenMessage,
+}: TreeViewProps) {
+  const rf = useReactFlow();
   const treeStructureQ = useQuery({
     queryKey: ["config", "treeStructure"],
     queryFn: fetchTreeStructure,
@@ -160,18 +176,6 @@ export default function TreeView({
     );
   }, [expanded]);
 
-  const toggleExpanded = useCallback(
-    (id: string) => {
-      setExpanded((prev) => {
-        const base = prev !== null ? new Set(prev) : defaultExpanded(tree.nodes);
-        if (base.has(id)) base.delete(id);
-        else base.add(id);
-        return base;
-      });
-    },
-    [tree.nodes],
-  );
-
   const childrenOf = useMemo(() => {
     const m = new Map<string, number>();
     for (const n of tree.nodes) {
@@ -183,6 +187,35 @@ export default function TreeView({
   const { positions, visibleIds } = useMemo(
     () => computeLayout(tree.nodes, effectiveExpanded),
     [tree.nodes, effectiveExpanded],
+  );
+
+  // Toggling an expand state re-runs the tidy-tree layout, which usually
+  // moves the clicked node — its new y is the midpoint of the children that
+  // just appeared (or of nothing, if it just collapsed). Counter-pan the
+  // viewport by the same delta so the node stays under the cursor.
+  const toggleExpanded = useCallback(
+    (id: string) => {
+      const base =
+        expanded !== null ? new Set(expanded) : defaultExpanded(tree.nodes);
+      if (base.has(id)) base.delete(id);
+      else base.add(id);
+
+      const oldY = positions.get(id)?.y;
+      const { positions: nextPositions } = computeLayout(tree.nodes, base);
+      const newY = nextPositions.get(id)?.y;
+
+      if (
+        oldY !== undefined &&
+        newY !== undefined &&
+        Math.abs(newY - oldY) > 0.001
+      ) {
+        const vp = rf.getViewport();
+        rf.setViewport({ ...vp, y: vp.y - (newY - oldY) * vp.zoom });
+      }
+
+      setExpanded(base);
+    },
+    [expanded, positions, tree.nodes, rf],
   );
 
   const flowNodes = useMemo<Node[]>(

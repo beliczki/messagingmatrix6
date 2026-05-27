@@ -312,8 +312,8 @@ function TreeViewInner({
   // letterbox of empty space. Capped at MINIMAP_MAX on the longer axis;
   // the shorter axis scales proportionally.
   const minimapSize = useMemo(() => {
-    const MINIMAP_MAX = 260;
-    const MINIMAP_MIN = 120;
+    const MINIMAP_MAX = 180;
+    const MINIMAP_MIN = 90;
     let minX = Infinity;
     let minY = Infinity;
     let maxX = -Infinity;
@@ -328,7 +328,7 @@ function TreeViewInner({
     const w = maxX - minX;
     const h = maxY - minY;
     if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
-      return { width: 220, height: 160 };
+      return { width: 160, height: 120 };
     }
     const aspect = w / h;
     if (aspect >= 1) {
@@ -421,7 +421,9 @@ function TreeViewInner({
           nodeStrokeColor="#0f172a"
           nodeStrokeWidth={2}
           nodeBorderRadius={1}
-          maskColor="rgba(15, 23, 42, 0.08)"
+          maskColor="rgba(15, 23, 42, 0.18)"
+          maskStrokeColor="#0f172a"
+          maskStrokeWidth={1.5}
         />
         <Controls
           position="top-right"

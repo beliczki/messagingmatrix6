@@ -366,6 +366,10 @@ html.dark {
     border: 1px solid #e2e8f0;
     border-radius: 6px;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    /* Without this, the SVG mask <path> (the dim "outside-viewport" area)
+       paints past the rounded corners of the container as the user zooms
+       the main canvas in/out. Clip everything to the border box. */
+    overflow: hidden;
   }
   html.dark .tree-view__minimap.react-flow__minimap {
     background: #1a1a1a;

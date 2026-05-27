@@ -421,9 +421,9 @@ function TreeViewInner({
           nodeStrokeColor="#0f172a"
           nodeStrokeWidth={2}
           nodeBorderRadius={1}
-          maskColor="rgba(15, 23, 42, 0.18)"
-          maskStrokeColor="#0f172a"
-          maskStrokeWidth={1.5}
+          maskColor="rgba(255, 255, 255, 0.5)"
+          maskStrokeColor="#cbd5e1"
+          maskStrokeWidth={1}
         />
         <Controls
           position="top-right"

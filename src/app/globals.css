@@ -291,18 +291,22 @@ html.dark {
   .tree-view__node {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    min-width: 160px;
+    justify-content: flex-start;
+    gap: 6px;
+    height: 100%;
     font-size: 12px;
     line-height: 1.2;
+    text-align: left;
   }
   .tree-view__node-label {
+    flex: 1 1 auto;
+    min-width: 0;
     font-weight: 500;
     color: var(--text-primary, #0f172a);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    text-align: left;
   }
   .tree-view__node-count {
     display: inline-flex;
@@ -317,6 +321,7 @@ html.dark {
     font-size: 10px;
     font-weight: 600;
     flex-shrink: 0;
+    margin-left: auto;
   }
   html.dark .tree-view__node-count {
     background: #334155;

@@ -31,7 +31,7 @@ async function fetchTreeStructure(): Promise<string> {
   return typeof v === "string" ? v : "";
 }
 
-const COLUMN_WIDTH = 240;
+const COLUMN_WIDTH = 280;
 const ROW_HEIGHT = 44;
 const EXPANDED_STORAGE_KEY = "mm6_tree_expanded_v2";
 

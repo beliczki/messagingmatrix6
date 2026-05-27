@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -35,26 +35,14 @@ const COLUMN_WIDTH = 280;
 const ROW_HEIGHT = 44;
 const EXPANDED_STORAGE_KEY = "mm6_tree_expanded_v2";
 
-// Per-level swatch used by the MiniMap and the left-stripe on each node, so
-// the columnar structure of the tree is legible both in the thumbnail and at
-// a glance in the canvas. MUST stay in sync with .tree-view__node-wrap--lvl-N
-// rules in globals.css. Cycles past 6 in case of an unusually deep custom
-// tree-structure string.
-const LEVEL_COLORS = [
-  "#3b82f6", // L0 blue
-  "#8b5cf6", // L1 violet
-  "#10b981", // L2 emerald
-  "#f59e0b", // L3 amber
-  "#f43f5e", // L4 rose
-  "#0ea5e9", // L5 sky (rare)
-] as const;
 const NODE_WIDTH = 200;
 const NODE_HEIGHT = 32;
+// Number of distinct level-colour classes defined in globals.css
+// (.tree-view__node-wrap--lvl-0 .. lvl-5). Deeper custom trees cycle past
+// this count.
+const LEVEL_COLOR_CYCLE = 6;
 function levelOf(nodeId: string): number {
   return Number.parseInt(nodeId.split(":")[0] ?? "0", 10);
-}
-function colorForNode(nodeId: string): string {
-  return LEVEL_COLORS[levelOf(nodeId) % LEVEL_COLORS.length];
 }
 
 // Hierarchical y-layout (tidy-tree, simple variant).
@@ -153,6 +141,7 @@ function TreeViewInner({
   onOpenMessage,
 }: TreeViewProps) {
   const rf = useReactFlow();
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const treeStructureQ = useQuery({
     queryKey: ["config", "treeStructure"],
     queryFn: fetchTreeStructure,
@@ -249,7 +238,7 @@ function TreeViewInner({
           const isLeaf = n.messageId !== undefined;
           const hasChildren = (childrenOf.get(n.id) ?? 0) > 0;
           const isExpanded = effectiveExpanded.has(n.id);
-          const lvl = levelOf(n.id) % LEVEL_COLORS.length;
+          const lvl = levelOf(n.id) % LEVEL_COLOR_CYCLE;
           return {
             id: n.id,
             position: pos,
@@ -318,6 +307,17 @@ function TreeViewInner({
     [tree.nodes, positions, visibleIds, effectiveExpanded, childrenOf, onOpenMessage, toggleExpanded],
   );
 
+  // xyflow's MiniMap hardcodes `preserveAspectRatio="xMidYMid meet"` on its
+  // SVG, which is why the minimap content gets letterboxed inside the
+  // container instead of filling it. Reach into the DOM after render and
+  // flip it to "none" so the tree always reaches all four edges of the box.
+  useEffect(() => {
+    const svg = containerRef.current?.querySelector(
+      ".tree-view__minimap svg",
+    );
+    if (svg) svg.setAttribute("preserveAspectRatio", "none");
+  });
+
   const flowEdges = useMemo<Edge[]>(
     () =>
       tree.edges
@@ -375,7 +375,7 @@ function TreeViewInner({
   }
 
   return (
-    <div className="tree-view h-full w-full">
+    <div className="tree-view h-full w-full" ref={containerRef}>
       <ReactFlow
         nodes={flowNodes}
         edges={flowEdges}
@@ -388,16 +388,21 @@ function TreeViewInner({
         proOptions={{ hideAttribution: true }}
       >
         <Background gap={16} size={1} />
-        <Controls showInteractive={false} />
         <MiniMap
+          position="top-right"
           pannable
           zoomable
           className="tree-view__minimap"
-          nodeColor={(node) => colorForNode(node.id)}
-          nodeStrokeColor={(node) => colorForNode(node.id)}
+          nodeColor="#0f172a"
+          nodeStrokeColor="#0f172a"
           nodeStrokeWidth={2}
-          nodeBorderRadius={2}
-          maskColor="rgba(15, 23, 42, 0.12)"
+          nodeBorderRadius={1}
+          maskColor="rgba(15, 23, 42, 0.08)"
+        />
+        <Controls
+          position="top-right"
+          showInteractive={false}
+          className="tree-view__controls"
         />
       </ReactFlow>
     </div>

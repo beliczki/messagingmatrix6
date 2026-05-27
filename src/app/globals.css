@@ -250,10 +250,43 @@ html.dark {
     animation: annotation-pulse 1.5s ease-in-out infinite;
   }
 
-  /* Decision Tree view (xyflow-backed). Nodes use the default react-flow box
-     chrome; we only restyle the inner label and tweak leaf affordance. */
+  /* Decision Tree view (xyflow-backed). Nodes are themed via .tree-view__node-wrap
+     (xyflow's outer wrapper, via the Node.className prop). The inner content
+     div uses .tree-view__node and hosts the chevron/label/count layout.
+     Level colours MUST stay in sync with the LEVEL_COLORS array in TreeView.tsx
+     — the MiniMap reads them from there, the canvas reads them from here. */
   .tree-view {
     background: var(--surface, #f8fafc);
+  }
+  .tree-view__node-wrap {
+    padding: 6px 10px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    font-size: 12px;
+    box-sizing: border-box;
+  }
+  html.dark .tree-view__node-wrap {
+    background: #1a1a1a;
+    border-color: #334155;
+  }
+  /* Level-coloured left stripe — overrides the generic 1px border-left so the
+     stripe is the same width across themes. */
+  .tree-view__node-wrap--lvl-0 { border-left: 4px solid #3b82f6; }
+  .tree-view__node-wrap--lvl-1 { border-left: 4px solid #8b5cf6; }
+  .tree-view__node-wrap--lvl-2 { border-left: 4px solid #10b981; }
+  .tree-view__node-wrap--lvl-3 { border-left: 4px solid #f59e0b; }
+  .tree-view__node-wrap--lvl-4 { border-left: 4px solid #f43f5e; }
+  .tree-view__node-wrap--lvl-5 { border-left: 4px solid #0ea5e9; }
+  .tree-view__node-wrap--leaf {
+    cursor: pointer;
+  }
+  .tree-view__node-wrap--leaf:hover {
+    border-color: #cbd5e1;
+    background: #f8fafc;
+  }
+  html.dark .tree-view__node-wrap--leaf:hover {
+    background: #252525;
   }
   .tree-view__node {
     display: flex;

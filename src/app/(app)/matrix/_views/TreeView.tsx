@@ -35,9 +35,11 @@ const COLUMN_WIDTH = 240;
 const ROW_HEIGHT = 44;
 const EXPANDED_STORAGE_KEY = "mm6_tree_expanded_v2";
 
-// Per-level swatch used by the MiniMap so the columnar structure of the tree
-// is legible in the thumbnail. Cycles past 6 in case of an unusually deep
-// custom tree-structure string.
+// Per-level swatch used by the MiniMap and the left-stripe on each node, so
+// the columnar structure of the tree is legible both in the thumbnail and at
+// a glance in the canvas. MUST stay in sync with .tree-view__node-wrap--lvl-N
+// rules in globals.css. Cycles past 6 in case of an unusually deep custom
+// tree-structure string.
 const LEVEL_COLORS = [
   "#3b82f6", // L0 blue
   "#8b5cf6", // L1 violet
@@ -46,9 +48,13 @@ const LEVEL_COLORS = [
   "#f43f5e", // L4 rose
   "#0ea5e9", // L5 sky (rare)
 ] as const;
+const NODE_WIDTH = 200;
+const NODE_HEIGHT = 32;
+function levelOf(nodeId: string): number {
+  return Number.parseInt(nodeId.split(":")[0] ?? "0", 10);
+}
 function colorForNode(nodeId: string): string {
-  const idx = Number.parseInt(nodeId.split(":")[0] ?? "0", 10);
-  return LEVEL_COLORS[idx % LEVEL_COLORS.length];
+  return LEVEL_COLORS[levelOf(nodeId) % LEVEL_COLORS.length];
 }
 
 // Hierarchical y-layout (tidy-tree, simple variant).
@@ -243,9 +249,18 @@ function TreeViewInner({
           const isLeaf = n.messageId !== undefined;
           const hasChildren = (childrenOf.get(n.id) ?? 0) > 0;
           const isExpanded = effectiveExpanded.has(n.id);
+          const lvl = levelOf(n.id) % LEVEL_COLORS.length;
           return {
             id: n.id,
             position: pos,
+            // Explicit width/height so the MiniMap has dimensions on the very
+            // first render (without these it has to wait for ResizeObserver to
+            // measure the DOM, and the thumbnail starts empty).
+            width: NODE_WIDTH,
+            height: NODE_HEIGHT,
+            className: `tree-view__node-wrap tree-view__node-wrap--lvl-${lvl}${
+              isLeaf ? " tree-view__node-wrap--leaf" : ""
+            }`,
             data: {
               label: (
                 <div
@@ -298,7 +313,6 @@ function TreeViewInner({
             },
             sourcePosition: Position.Right,
             targetPosition: Position.Left,
-            style: isLeaf ? { cursor: "pointer" } : undefined,
           };
         }),
     [tree.nodes, positions, visibleIds, effectiveExpanded, childrenOf, onOpenMessage, toggleExpanded],

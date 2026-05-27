@@ -352,19 +352,16 @@ html.dark {
     background: #334155;
     color: #e2e8f0;
   }
-  /* Pinned to the top-right corner so the user can keep one hand on the
-     navigator while panning the main canvas. Square-ish so a typical decision
-     tree (taller than wide once a couple of subtrees expand) fills the box;
-     the SVG's preserveAspectRatio is overridden to "none" in TreeView.tsx so
-     content always reaches all four edges instead of being letterboxed. */
+  /* Pinned to the top-right corner. Width and height come from the inline
+     style prop in TreeView.tsx — they're computed from the visible-content
+     aspect ratio so the rounded box wraps the dots tightly instead of
+     letterboxing them. */
   .tree-view__minimap.react-flow__minimap {
     top: 12px !important;
     right: 12px !important;
     left: auto !important;
     bottom: auto !important;
     margin: 0 !important;
-    width: 220px;
-    height: 220px;
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
@@ -374,10 +371,10 @@ html.dark {
     background: #1a1a1a;
     border-color: #334155;
   }
-  /* Stack the zoom/fit controls directly below the minimap. 12 (top gap) +
-     220 (minimap height) + 8 (interpanel gap) = 240. */
+  /* Zoom/fit controls sit directly below the minimap. The `top` value comes
+     from the inline style prop (minimap height + small gap), so the bar
+     follows the minimap as its aspect ratio re-computes. */
   .tree-view__controls.react-flow__controls {
-    top: 240px !important;
     right: 12px !important;
     left: auto !important;
     bottom: auto !important;

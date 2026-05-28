@@ -51,19 +51,18 @@ export function KeywordsTab() {
   const [showArchived, setShowArchived] = useState(false);
   const [newValue, setNewValue] = useState("");
 
-  const q = useQuery({
+  const q = useQuery<KeywordsResponse>({
     queryKey: ["keywords"],
-    queryFn: async (): Promise<Keyword[]> => {
+    queryFn: async (): Promise<KeywordsResponse> => {
       const r = await fetch("/api/keywords?includeArchived=1", {
         credentials: "include",
       });
       if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-      const data = (await r.json()) as KeywordsResponse;
-      return data.keywords;
+      return (await r.json()) as KeywordsResponse;
     },
   });
 
-  const allRows = q.data ?? [];
+  const allRows = q.data?.keywords ?? [];
 
   const rows = useMemo(() => {
     return allRows

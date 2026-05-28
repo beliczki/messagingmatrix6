@@ -25,7 +25,7 @@ export function useKeywordOptions(): {
 } {
   const q = useQuery<KeywordsResponse>({
     queryKey: ["keywords"],
-    queryFn: () => fetchJSON<KeywordsResponse>("/api/keywords"),
+    queryFn: () => fetchJSON<KeywordsResponse>("/api/keywords?includeArchived=1"),
     staleTime: 60_000,
   });
   const options = useMemo<KeywordOptions>(() => {

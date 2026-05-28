@@ -602,6 +602,7 @@ function CellEditor<T extends Versioned>({
   keywordOptions: KeywordOptions;
 }) {
   const [value, setValue] = useState(initial);
+  const [dirty, setDirty] = useState(false);
   const ref = useRef<HTMLInputElement | HTMLSelectElement>(null);
 
   useEffect(() => {
@@ -659,23 +660,37 @@ function CellEditor<T extends Versioned>({
     );
   }
   if (col.type.kind === "autocomplete") {
-    // Native <datalist>: gives suggestion dropdown + arrow-key navigation +
-    // freeform input (any string commits on Enter/blur) for free. If the
-    // current `value` isn't in the list, the cell still saves it — matches
-    // "autocomplete + freeform-allowed" decision.
+    // Open with empty input + current value as placeholder so the native
+    // <datalist> shows the full options list — Chrome filters suggestions by
+    // the input's current value, so pre-filling with the cell value would
+    // collapse the list to just the current match. Blur/Enter without typing
+    // commits the original (no-op via handleCellCommit's equality guard).
     const opts =
       keywordOptions[col.type.source.form]?.[col.type.source.field] ?? [];
     const listId = `kw-${col.type.source.form}-${col.type.source.field}`;
+    const commitValue = dirty ? value : initial;
     return (
       <>
         <input
           ref={ref as React.RefObject<HTMLInputElement>}
           type="text"
           list={listId}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onBlur={() => onCommit(value)}
-          onKeyDown={onKey}
+          value={dirty ? value : ""}
+          placeholder={initial}
+          onChange={(e) => {
+            setValue(e.target.value);
+            setDirty(true);
+          }}
+          onBlur={() => onCommit(commitValue)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              onCommit(commitValue);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              onCancel();
+            }
+          }}
           className="autocomplete-field h-full w-full border-0 bg-white px-2 text-xs focus:outline-none"
         />
         <datalist id={listId}>

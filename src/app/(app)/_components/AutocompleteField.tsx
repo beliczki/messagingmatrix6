@@ -1,6 +1,6 @@
 "use client";
 
-import { useId } from "react";
+import { useId, useState } from "react";
 import { useKeywordOptions } from "./useKeywordOptions";
 
 // Free-form text input backed by a Settings → Keywords list for the given
@@ -8,6 +8,12 @@ import { useKeywordOptions } from "./useKeywordOptions";
 // Any string commits — empty list ⇒ pure freeform. Used by both DimensionGrid
 // (inline cell editor) and HeaderDetailDialog (matrix audience/topic forms)
 // so the editors stay in sync.
+//
+// On focus the input is shown empty (current value moves to the placeholder)
+// so the native datalist shows the full options list — Chrome filters
+// suggestions by the input's current value, so pre-filling collapses the
+// dropdown to just the current match. Blur without typing leaves the parent
+// value untouched.
 export function AutocompleteField({
   form,
   field,
@@ -28,15 +34,31 @@ export function AutocompleteField({
   // useId → stable per-instance datalist id; lets multiple fields with the
   // same (form, field) coexist without clashing.
   const listId = useId();
+  const [focused, setFocused] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const displayValue = focused && !dirty ? "" : value;
+  const displayPlaceholder =
+    focused && !dirty && value ? value : placeholder;
   return (
     <>
       <input
         type="text"
         list={listId}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
+        value={displayValue}
+        onChange={(e) => {
+          setDirty(true);
+          onChange(e.target.value);
+        }}
+        onFocus={() => {
+          setFocused(true);
+          setDirty(false);
+        }}
+        onBlur={() => {
+          setFocused(false);
+          setDirty(false);
+        }}
         className={className}
-        placeholder={placeholder}
+        placeholder={displayPlaceholder}
       />
       <datalist id={listId}>
         {list.map((opt) => (

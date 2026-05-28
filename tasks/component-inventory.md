@@ -719,3 +719,15 @@ Added an 11th workflow status `ARCHIVED`, sitting next to `INACTIVE` semanticall
 **Új dependency:** `@xyflow/react@^12.10.2`.
 
 **Reuse:** semmi MM5-ös tree kód nem lett áthozva (külön döntés). Az UI a meglévő tokenekre épül (`empty-state`, `form-field`, `input-box`, `toggle-btn`, `structure-tab__section`).
+
+---
+
+## Változások 2026-05-28 — Tree view NAVIGATOR a RightToolbar-ban
+
+**Új komponens:** `_views/TreeViewNavigator.tsx` (`(app)/matrix/_views/`) — a tree view MiniMap + zoom Controls párosa, kiemelve a canvas top-right sarkából a globális `RightToolbar` "NAVIGATOR" section-jébe. Csak akkor renderelődik, ha `view === "tree"`.
+
+**Új tiszta hook:** `_views/useIsDarkMode.ts` — eddig TreeView-on belüli, most megosztva a Navigator-rel is.
+
+**Új semantic class-ok:** `tree-view-navigator`, `tree-view-navigator__label`, `tree-view-navigator__minimap-wrap`, `tree-view-navigator__controls-wrap`, `tree-view__minimap--docked`, `tree-view__controls--docked` (`app/globals.css` `@layer components`). A `--docked` variánsok kinullázzák a Panel absolute-positioning rétegét, hogy a MiniMap/Controls a toolbar dobozán belül álljon.
+
+**Architektúra delta:** a `ReactFlowProvider` átkerült `TreeView.tsx`-ből `MatrixGrid.tsx`-be, hogy a toolbar és a canvas ugyanazt az xyflow store-t lássa. Provider mindig fent van; üres store ha nincs `<ReactFlow>` mountolva, ami olcsó.

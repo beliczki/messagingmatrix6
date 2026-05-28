@@ -3,10 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
-  ReactFlowProvider,
   Background,
-  Controls,
-  MiniMap,
   Position,
   useReactFlow,
   type Node,
@@ -18,6 +15,7 @@ import { ChevronRight, ChevronDown } from "lucide-react";
 import { parseTreeStructure } from "../_tree/parseTreeStructure";
 import { buildTree, type TreeNode } from "../_tree/buildTree";
 import type { Audience, Message, Topic } from "../types";
+import { useIsDarkMode } from "./useIsDarkMode";
 
 type ConfigRow = { key: string; value: unknown };
 
@@ -123,24 +121,17 @@ type TreeViewProps = {
   onOpenMessage: (id: number) => void;
 };
 
-export default function TreeView(props: TreeViewProps) {
-  // ReactFlowProvider lets the inner component reach into the xyflow store
-  // via useReactFlow() — needed for the "keep the clicked node anchored
-  // under the cursor" viewport pan when expanding/collapsing.
-  return (
-    <ReactFlowProvider>
-      <TreeViewInner {...props} />
-    </ReactFlowProvider>
-  );
-}
-
-function TreeViewInner({
+// ReactFlowProvider lives in MatrixGrid so the RightToolbar's NAVIGATOR
+// section (MiniMap + Controls) can share the same xyflow store with the
+// canvas rendered here.
+export default function TreeView({
   audiences,
   topics,
   messages,
   onOpenMessage,
 }: TreeViewProps) {
   const rf = useReactFlow();
+  const isDark = useIsDarkMode();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const treeStructureQ = useQuery({
     queryKey: ["config", "treeStructure"],
@@ -307,40 +298,6 @@ function TreeViewInner({
     [tree.nodes, positions, visibleIds, effectiveExpanded, childrenOf, onOpenMessage, toggleExpanded],
   );
 
-  // Match the minimap container's aspect ratio to the visible content so the
-  // rounded-border box wraps the dots tightly instead of leaving a wide
-  // letterbox of empty space. Capped at MINIMAP_MAX on the longer axis;
-  // the shorter axis scales proportionally.
-  const minimapSize = useMemo(() => {
-    const MINIMAP_MAX = 180;
-    const MINIMAP_MIN = 90;
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const [id, pos] of positions) {
-      if (!visibleIds.has(id)) continue;
-      minX = Math.min(minX, pos.x);
-      minY = Math.min(minY, pos.y);
-      maxX = Math.max(maxX, pos.x + NODE_WIDTH);
-      maxY = Math.max(maxY, pos.y + NODE_HEIGHT);
-    }
-    const w = maxX - minX;
-    const h = maxY - minY;
-    if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
-      return { width: 160, height: 120 };
-    }
-    const aspect = w / h;
-    if (aspect >= 1) {
-      const width = MINIMAP_MAX;
-      const height = Math.max(MINIMAP_MIN, Math.round(width / aspect));
-      return { width, height };
-    }
-    const height = MINIMAP_MAX;
-    const width = Math.max(MINIMAP_MIN, Math.round(height * aspect));
-    return { width, height };
-  }, [positions, visibleIds]);
-
   const flowEdges = useMemo<Edge[]>(
     () =>
       tree.edges
@@ -409,28 +366,9 @@ function TreeViewInner({
         minZoom={0.1}
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
+        colorMode={isDark ? "dark" : "light"}
       >
         <Background gap={16} size={1} />
-        <MiniMap
-          position="top-right"
-          pannable
-          zoomable
-          className="tree-view__minimap"
-          style={{ width: minimapSize.width, height: minimapSize.height }}
-          nodeColor="#0f172a"
-          nodeStrokeColor="#0f172a"
-          nodeStrokeWidth={2}
-          nodeBorderRadius={1}
-          maskColor="rgba(255, 255, 255, 0.5)"
-          maskStrokeColor="#cbd5e1"
-          maskStrokeWidth={1}
-        />
-        <Controls
-          position="top-right"
-          showInteractive={false}
-          className="tree-view__controls"
-          style={{ top: minimapSize.height + 20 }}
-        />
       </ReactFlow>
     </div>
   );

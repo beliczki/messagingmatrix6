@@ -352,16 +352,18 @@ html.dark {
     background: #334155;
     color: #e2e8f0;
   }
-  /* Pinned to the top-right corner. Width and height come from the inline
-     style prop in TreeView.tsx — they're computed from the visible-content
-     aspect ratio so the rounded box wraps the dots tightly instead of
-     letterboxing them. */
-  .tree-view__minimap.react-flow__minimap {
-    top: 12px !important;
-    right: 12px !important;
+  /* Docked variant: minimap lives in the RightToolbar NAVIGATOR section,
+     not on top of the canvas. Strip the Panel's absolute positioning and let
+     it fill its parent's box. */
+  .tree-view__minimap--docked.react-flow__minimap {
+    position: static !important;
+    top: auto !important;
+    right: auto !important;
     left: auto !important;
     bottom: auto !important;
     margin: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
     background: #ffffff;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
@@ -371,18 +373,8 @@ html.dark {
        the main canvas in/out. Clip everything to the border box. */
     overflow: hidden;
   }
-  html.dark .tree-view__minimap.react-flow__minimap {
+  html.dark .tree-view__minimap--docked.react-flow__minimap {
     background: #1a1a1a;
     border-color: #334155;
-  }
-  /* Zoom/fit controls sit directly below the minimap. The `top` value comes
-     from the inline style prop (minimap height + small gap), so the bar
-     follows the minimap as its aspect ratio re-computes. */
-  .tree-view__controls.react-flow__controls {
-    right: 12px !important;
-    left: auto !important;
-    bottom: auto !important;
-    margin: 0 !important;
-    flex-direction: row;
   }
 }

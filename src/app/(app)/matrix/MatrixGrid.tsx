@@ -4,9 +4,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LayoutList, List, Grip, Table2, ListFilter, Pencil, GitFork } from "lucide-react";
 import clsx from "clsx";
+import { ReactFlowProvider } from "@xyflow/react";
 import GridView from "./GridView";
 import FeedView from "./FeedView";
 import TreeView from "./_views/TreeView";
+import TreeViewNavigator, {
+  TreeViewNavigatorControls,
+} from "./_views/TreeViewNavigator";
 import FeedExportPanel from "./FeedExportPanel";
 import EditModePanel from "./EditModePanel";
 import MatrixToolbar from "./MatrixToolbar";
@@ -474,6 +478,10 @@ export default function MatrixWorkspace() {
   if (audiences.length === 0 && topics.length === 0) return <EmptyState />;
 
   return (
+    // ReactFlowProvider wraps the whole matrix so the RightToolbar's
+    // NAVIGATOR section can share the xyflow store with the TreeView canvas
+    // (MiniMap + zoom Controls rendered outside <ReactFlow>).
+    <ReactFlowProvider>
     <div className="matrix flex h-full">
       <div className="matrix__content flex flex-1 flex-col overflow-hidden">
         <MatrixToolbar
@@ -571,6 +579,9 @@ export default function MatrixWorkspace() {
                   <Pencil className="size-4" />
                 </button>
               ) : null}
+              {view === "tree" ? (
+                <TreeViewNavigatorControls orientation="vertical" />
+              ) : null}
             </>
           ) : (
             <div className="flex flex-col gap-3">
@@ -592,6 +603,7 @@ export default function MatrixWorkspace() {
                   filteredMessages={filtered.msgs}
                 />
               ) : null}
+              {view === "tree" ? <TreeViewNavigator /> : null}
             </div>
           )
         }
@@ -617,6 +629,7 @@ export default function MatrixWorkspace() {
         />
       ) : null}
     </div>
+    </ReactFlowProvider>
   );
 }
 

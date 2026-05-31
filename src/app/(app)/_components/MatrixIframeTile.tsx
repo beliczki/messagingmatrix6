@@ -72,7 +72,7 @@ function parseSize(size: string): { w: number; h: number } {
 // iframe machinery. Splitting the branch this way keeps the iframe hooks
 // (useRef/useState/useEffect ×3) from violating Rules of Hooks on the
 // non-html path.
-function MatrixIframePreview({
+export function MatrixIframePreview({
   message,
   templateName,
   size,

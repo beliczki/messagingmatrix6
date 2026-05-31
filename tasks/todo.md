@@ -2477,3 +2477,149 @@ Remaining open from this slice:
   runtime tests pass (314/314 → 314+12 = 326/326 with the parser/builder
   units this slice added; vitest count may show different number
   depending on which integration tests ran).
+
+---
+
+## 2026-05-28 — Merged priority list (punch list + brain Q2 2026 backlog)
+
+**Status: agreed, NOT started.** Synthesized from two sources: (a) the pre-active-use punch list above (items 1–10, anchored 2026-05-03), (b) brain thought `44378666-3a21-4210-b21f-55327055d7d6` "Messaging matrix — Fejlesztési feladatok Q2 2026" logged 2026-05-28 against the running Erste deploy. The four brain tasks are largely orthogonal to the punch list — this list interleaves them where the work surface overlaps (smoke-test friction, creative-ID join column, design-token cleanup).
+
+User has agreed to this ordering. Each wave is independently shippable. **Do not start any wave** without an explicit user green-light naming the wave.
+
+### Wave 0 — Foundational cheap win
+- [ ] **W0.1 Status colors single source of truth** (brain Task 1). Matrix grid status dots today are hardcoded; must read from the `lookAndFeel` CSS-var tokens the Design tab writes (INCOMING #ecdc74, NAMING #f5e10a, CONTENT #f7963b, PREVIEW #a855f7, APPROVED #0f8a61, ACTIVE #22c55e, INACTIVE #6b7280, ERROR #ef4444, DEAD #000000, MEMORY #0d5dfd). Remove hardcoded status→colour mapping in the Matrix render path. Editing in Design → Save reflects in Matrix dots after reload.
+- [ ] **W0.2 Status filter dropdown swatches** (brain Task 1 secondary, only if trivial). Add a colour swatch per status to the Status filter dropdown — currently text-only.
+- **Open Q before starting:** the reference hex palette in the brain note — write it into `defaultConfigSeed()` as the new defaults for all clients, or only patch the existing Erste row in `config`? (One updates new clients going forward; the other only fixes Erste.)
+
+### Wave 1 — Smoke tests + edit-mode adds (paired)
+Pairs punch list 7+8+9 with brain Task 2 because the smoke run is the validation for Task 2's friction-removal.
+- [ ] **W1.1 Manual UI smoke** (punch list 7). Add new audience + topic + MC end-to-end on `dev:erste`. Verify dimension grid, audit log, matrix grid, iframe preview, AdForm feed-export dry-run. Capture friction inline.
+- [ ] **W1.2 Dense-view New MC button** (brain Task 2a). Available today only at lower densities; bring to dense/compact, match existing-density pattern.
+- [ ] **W1.3 Add audience / Add topic actions** (brain Task 2b). Edit mode only. Trailing `+` cell/row near axis headers; create with default name/key, rename via normal flow.
+- [ ] **W1.4 Hover Duplicate on audience/topic headers** (brain Task 2c). Edit mode only. Append numeric suffix to BOTH name and key, auto-increment to avoid collisions.
+- [ ] **W1.5 MCP smoke** (punch list 8). Provision token, drive `audience_create` / `topic_create` / `mc_create`, verify rate-limit + active-client guards.
+- [ ] **W1.6 Agent-from-prodlist smoke** (punch list 9). Real Erste prodlist → agent proposes diff → `mc_create_batch`. Capture MCP tool ergonomics gaps.
+- **Open Qs before starting W1.4 (Duplicate):**
+  - (a) Does duplicating a header copy its MCs/cells too, or just the empty header? Default suggestion: **header-only first**.
+  - (b) Key suffix format — name gets `" (1)"`, but keys probably can't contain spaces. Default suggestion: **`_1`** for keys.
+
+### Wave 2 — Creative-ID join consolidation
+Punch list 3+4 share the same `creatives.(mcNumber, mcVariant)` join surface as brain Task 3's comments-keyed-by-creative-ID. Doing them as one wave means one focused pass over the `creatives` table.
+- [ ] **W2.1 Inspect current upload path** (punch list 3.1). Survey-only: does the upload flow set `mcNumber`/`mcVariant` from filename today? Document the regex if yes.
+- [ ] **W2.2 Manual match UI on CreativeDetailDialog** (punch list 3.2). Two dropdowns (audience+topic) + MC number/variant picker filtered to that intersection. Save → `PATCH /api/creatives/[id]`. "Unlink" sets both to `null`.
+- [ ] **W2.3 Filename auto-match heuristic** (punch list 3.3). Extract `mc(\d+)([a-z])` on `POST /api/creatives`. Show as "Suggested match — click confirm", do not commit silently.
+- [ ] **W2.4 Bulk-match dialog** (punch list 3.4). Toolbar action over all uploaded-kind items where `mcNumber IS NULL`. Confirm-table → batch `PATCH`. Reuses `FeedExportDialog` diff-stats pattern.
+- [ ] **W2.5 Soft-link vs join-table decision** (punch list 3.5). Default: keep soft `(mcNumber, mcVariant)` link, revisit only if a real workflow demands many-to-many.
+- [ ] **W2.6 Unmatrixed filter pill** (punch list 4.1). `All | Matrixed | Unmatrixed` on Creative Library toolbar. Filter logic: `kind === 'uploaded' && (mcNumber == null || mcVariant == null)`.
+- [ ] **W2.7 Unmatrixed corner badge** (punch list 4.2). `status-badge--unmatrixed` visible even when "All" filter is selected.
+- [ ] **W2.8 Persist filter + counts** (punch list 4.3, 4.4). localStorage key `mm6_creative_library_match_filter`; `(N)` next to each filter pill.
+- [ ] **W2.9 Extract shared comments component** (brain Task 3b). Today's public-share comments UI → standalone reusable component. **Re-key thread storage to creative ID** (not share, not MC) so it survives share deletion. Keep commenter identity visible (internal user vs external share viewer).
+- [ ] **W2.10 Creative Library preview → Details + Comments tabs** (brain Task 3a). Move current preview content into Details tab; mount shared comments component in Comments tab.
+- [ ] **W2.11 MC editor → Comments tab** (brain Task 3c). Same shared component.
+- **Open Q before starting W2.11:** an MC can map to multiple creatives — does the Comments tab in the MC editor show **one thread per linked creative (selectable)** or **scope to the focused creative**? Default suggestion: **one thread per focused creative**, with a creative selector inside the tab when N > 1.
+
+### Wave 3 — Monitoring ingest + match
+- [ ] **W3.1 `reporting.platform` schema field** (punch list 5.1). Add `platform TEXT NOT NULL DEFAULT 'adform'`. Backfill. Add `external_id` + `external_name` as platform-agnostic identifiers; keep `mcLabel` AdForm-only.
+- [ ] **W3.2 Shared importer route** (punch list 5.2). `POST /api/reporting/import`, multipart with `file` + `platform`. Returns `{ imported, skipped, diff }`.
+- [ ] **W3.3 AdForm parser** (punch list 5.3). Reads AdForm reporting XLSX shape. Maps `mcLabel` + impressions/clicks/CTR. Test fixture from real export.
+- [ ] **W3.4 Meta parser** (punch list 5.4). Reads Meta Ads Manager XLSX/CSV. Maps `meta_ad_id` + `meta_ad_name` + impressions/clicks/CTR/spend. **Blocked until user provides a sample Meta export file** — column names vary by report template.
+- [ ] **W3.5 Monitoring page UI** (punch list 5.5). Replace placeholder with `DimensionGrid`-style list. Filters: platform, date range, product, MC number. Copy `/texts` page structure (design-reuse).
+- [ ] **W3.6 Monitoring upload widget** (punch list 5.6). Top-of-page drag-drop, auto-detect platform from column header signature, user override.
+- [ ] **W3.7 `reporting.message_id` FK** (punch list 6.1). Nullable FK to `messages.id`. Not a hard constraint.
+- [ ] **W3.8 AdForm PMMID resolver** (punch list 6.2). PMMID → `message_id`. Reuse `extractDefaultMc` + audience/topic/variant regex. Atomic backfill.
+- [ ] **W3.9 Meta resolver** (punch list 6.3). Two strategies: (a) MC label in `meta_ad_name` (regex), (b) fallback: "Needs match" table with manual-link UI.
+- [ ] **W3.10 Matrix cell stat badge** (punch list 6.4). Once message has linked reporting rows, MatrixGrid cell shows impressions/CTR badge. Defer styling to follow-up.
+- [ ] **W3.11 Unmatched reporting view** (punch list 6.5). Mirror of W2.6 but for reporting rows where `message_id IS NULL`.
+
+### Wave 4 — Platform expansion (push back FIRST)
+Before any code: confirm with user whether they are **driving Meta campaigns out of MM6**, or only **tracking** what's running on Meta. If tracking-only, skip 1.1–1.6 and do only the audience-level platform tag — items 5/6 are enough.
+- [ ] **W4.1 Push-back conversation** (punch list 1 prelude). Lock the (a) full-lifecycle vs (b) tracking-only choice.
+- [ ] **W4.2 `audiences.platform` enum** (punch list 1.1). `adform | meta | dv360 | direct_display`. Migration + per-row backfill.
+- [ ] **W4.3 Audiences UI: platform pill + filter** (punch list 1.2).
+- [ ] **W4.4 Per-platform feedStructure + feedPatterns** (punch list 1.3). Settings → Patterns gets a platform tab.
+- [ ] **W4.5 Feed export route platform-aware** (punch list 1.4). **Blocked until user locks the Meta export shape** (Custom Audience CSV vs bulk Ads Manager XLSX).
+- [ ] **W4.6 Feeds UI: platform discriminator** (punch list 1.5).
+- [ ] **W4.7 Direct Display platform tag** (punch list 2.1). Probably just `platform='direct_display'` + existing `buyingPlatform` for vendor name.
+- [ ] **W4.8 Direct Display vendor fields decision** (punch list 2.2). Default: nothing more needed — vendor fits in `buyingPlatform`.
+
+### Wave 5 — Share → Google Drive (push back FIRST)
+Brain Task 4. Largest unknown, deliberately under-specified.
+- [ ] **W5.1 Push-back conversation.** Is the cheapest 80% just "download the share view as PDF, manual Drive drop"? If yes, **kill the build**. Only proceed if a concrete client/agency workflow demands native export.
+- [ ] **W5.2 Lock open questions (only if W5.1 says build):**
+  - Target folder (per-client default in Settings / ad-hoc picker / both)
+  - Export format (PDF snapshot of share view / structured CSV-JSON / rendered assets + manifest / combination)
+  - Naming convention (`{client}_{share-name}_{timestamp}` or editable)
+  - Auth (per-user Google account vs existing MM service account)
+  - Snapshot vs sync (one-time / re-export with overwrite / versioned)
+  - Lifecycle (if share deleted in MM, what happens to the Drive copy)
+- [ ] **W5.3 Ship destination toggle + unchanged MM path first.** Option 1 = current behaviour (default), Option 2 = Drive (placeholder).
+- [ ] **W5.4 Land Option 2 narrowest-viable-first** after W5.2 answered.
+
+### Parallel polish (runs anytime, piecemeal)
+- [ ] **WP.1–WP.8 Dark-mode component sweep** (punch list 10.1–10.8). Sidebar → modals → grids → matrix chrome → forms → status pills → iframe chrome → visual QA. Never search-and-replace; one cluster at a time, verify visually. Foundation already landed 2026-05-07 (shadcn-style tokens in `globals.css` + tailwind config).
+
+### Stays pinned / deferred (no change)
+- File-system ingest pipeline (Forklift/Drive → `_inbox/`) + MCP error-triage tools — Phase 11, post-launch.
+- Sankey alt-graph for the Tree view — wait for actual demand.
+- HTML creative auto-generated preview image link — scope use cases first (matrix-grid tile / share-link OG / AdForm template-feed image / MCP screenshot input).
+
+### Version bump
+Still `6.0.0-pre`. None of the waves individually graduates to `6.0.0`. The graduation event is "**all of Wave 1 + at least one wave of real-data validation passed**" (i.e. the system actually survives a day of use, not just a test). User decides the bump.
+
+---
+
+## 2026-05-31 — Wave 3 (Monitoring ingest) — PLAN, awaiting green-light on schema-home
+
+**Status: planned, NOT started.** User green-lit Wave 3, starting with the monitoring upload. Only AdForm data available (Meta blocked → W3.4/W3.9 deferred). Plan grounded in the REAL export shape, not the todo's earlier assumptions.
+
+### Real-data findings (from `docs/Creative rep_04_2026.xlsx`)
+- Sheet `Sheet`: row 2 = header `[_, Date, Campaign, Line Item, Banner Ad Message, Banner/Adgroups, Dynamic Ad Version, Click Details, Cost, Clicks, CTR (%), Conversions]`; col A always empty; data from row 3. ~85,503 rows / month (April). `Front Page` sheet carries Reporting Period From/To.
+- Granularity is keyword/banner-level. **847 distinct message keys** (`audience|number|variant`); **22,634** day-keys. PMMID extractable on **85,502 / 85,503** rows.
+- PMMID lives in **Banner/Adgroups**, two formats: (a) display/Adform → 3rd ` - `-delimited segment `p_adform-s_pro-a_<aud>-m_<num>-t_<topic>-v_<var>-n_<ver>_<lineitemid>`; (b) search/richmedia → `…!pmmid=<PMMID>!v11`.
+- PMMID **scope prefix encodes platform/vendor** (17 seen): p_adform 60k, p_dv360 20k, googleads 3k, meta 600+, tiktok, telex, infinety, flex, … → `platform` is DERIVED from the scope, not hardcoded `'adform'`.
+- Metrics in this export: **Cost, Clicks, CTR (%), Conversions** — no Impressions.
+
+### Decisions locked (this session)
+- **D1 Aggregation:** message/period — one row per `(audience, number, topic, variant)` per report period; sum impressions/clicks/cost/conversions, recompute CTR. ~847 rows/mo/client. Daily trend dropped for now.
+- **D2 Impressions:** user adds Impressions metric in the AdForm report builder and re-exports 04/05. Parser must map columns **by header name** (order-independent) so adding the column doesn't break it.
+- **D3 Platform:** derive normalized `platform` + keep raw `scope` from the PMMID scope prefix.
+
+### OPEN — schema-home fork (needs user pick before coding)
+The existing `reporting` table is LIVE: 4,380 rows (Erste), banner/label grain, `mcLabel`-keyed, populated by the **full-workbook XLSX import** (`import-xlsx.ts:603`), which **deletes ALL reporting rows for the client on every re-import** (`import-xlsx.ts:104`). Two grains, two sources, one delete-all → collision.
+- **Option A — new `monitoring` table (RECOMMENDED).** Separate table for the standalone AdForm-report performance ingest. No collision with workbook import; clean message-level grain; multi-platform; FK to messages. `reporting` stays the workbook-sourced banner snapshot.
+- **Option B — extend `reporting` + add `source` column.** Reuses one table but requires making `import-xlsx.ts` delete only `source='workbook'` rows and reconciling two grains. More invasive, touches a working path.
+
+Proposed `monitoring` columns (Option A): `id, clientId(FK,cascade), platform TEXT NOT NULL, scope TEXT, pmmid TEXT, messageId INTEGER FK messages.id NULL, audienceKey, topicKey, mcNumber INTEGER, mcVariant TEXT, impressions INT d0, clicks INT d0, cost REAL d0, conversions INT d0, ctr REAL, periodFrom, periodTo, importedAt, sourceFilename`. Idempotency: re-upload of same `(clientId, platform, periodFrom, periodTo)` deletes+reinserts that slice. Indexes: `(clientId, messageId)`, `(clientId, platform)`, `(clientId, mcNumber, mcVariant)`.
+
+### Slices — first shippable = ingest (the upload the user asked to start with)
+**DECISION: Option A chosen. Old `reporting` table to be retired (user: it was throwaway) but LAST — after MCP repointed — not entangled with this ingest. Impressions = "Rendered Impressions" (user re-exported 04/05 with it added + a "Tracked Ads" column).**
+- [x] **W3.a Schema + migration** — new `monitoring` table, migration `0017_cool_the_hood.sql` generated + applied. Integration test `tests/integration/monitoring-table.test.ts` (insert, unique key, FK set-null, client cascade). ✅
+- [x] **W3.b AdForm Creative-report parser** (`src/lib/adform-report.ts`). Header-name column map (order-independent → impressions-add safe); PMMID extraction both formats; position-based marker parse (hyphen-safe audience/topic); platform normalized from scope; message/period aggregation; period from `Front Page`. Unit test `tests/unit/adform-report.test.ts` (8 cases). Validated vs real 04/05: ~884 msg rows, 10M impr, totals sane. ✅
+- [x] **W3.c Importer route** `POST /api/monitoring/import` — multipart `file`; parses, resolves `messageId` by exact `(number,variant,audience,topic)`, idempotent delete+insert per period. Returns `{ imported, matched, unmatched, skipped, totalDataRows, periodFrom, periodTo, platforms }`. Mirrors `/api/adform-snapshots`. ✅
+- [x] **W3.d Upload widget on Monitoring page** — placeholder replaced with `MonitoringUpload` (drag-drop + click, result summary card + platform chips). ✅
+- **Dry-run match rate (live DB, client 8, April):** 685/884 = **77%** auto-matched. dv360 239/240, adform 446/585, external vendors (meta/googleads/flex/telex/infinety/…) 0% (m_00 or topic-key mismatch). The 23% → W3.h unmatched view. NOT loosening match key (false-match risk).
+- **NOT yet:** end-to-end through the real UI / write to live DB (offered to user). W3.e resolver folded into W3.c. 326/326 tests green.
+
+### Wave 3 follow-on (after ingest lands, same wave)
+- [x] **W3.e Resolver** — folded into the importer (W3.c): exact `(number,variant,audience,topic)` join on insert. ✅ (heuristic/manual fallback → W3.h)
+- [x] **W3.f Monitoring list UI** — `GET /api/monitoring` (periods + selected-period rows, left-join messages) + `MonitoringTable`/`MonitoringView`. Period selector, platform select, All/Matched/Unmatched pills, totals header, impressions-sorted table. Upload now refreshes the table in place (was: result vanished on navigate). ✅ (W3.h unmatched is covered by the Unmatched pill; a dedicated manual-link UI still pending.)
+- [ ] **W3.g Matrix cell stat badge** (W3.10) — once message has monitoring rows, MatrixGrid cell shows impressions/CTR. Styling deferred.
+- [ ] **W3.h Unmatched manual-link UI** (W3.11) — Unmatched pill already filters; still need a per-row "link to message" action for the 23%.
+- Deferred: W3.4 Meta parser, W3.9 Meta resolver (blocked — no Meta export).
+
+### Version note
+Wave 3 adds a table + migration + route + page UI → **minor** bump territory (`6.0.0-pre` rules: track here, no per-commit bump; graduation still user-decided).
+
+## 2026-05-31 — W3 product field + keyword→product rules (Structure → Monitoring)
+- `monitoring.product` column (migration `0018_nosy_blob.sql`). Resolution at import: audience→product (matrix) → keyword rule (topic+PMMID substring) → null. Helper `resolveProduct` in `adform-report.ts` (+4 unit tests).
+- Settings → Structure → **Monitoring** section: editable keyword→product rule list, stored as config `monitoringProductRules` (category `structure`). Importer reads it.
+- Monitoring list: new sortable `Product` column + `Product` MultiPill (mirrors creative-library Product/Type); platform select replaced by `Platform` MultiPill. Period dropdown + match pills now count-less; `toolbar__count` = `visible/total rows · CTR`.
+- Seeded Erste rules (microszamla/microhitel→VAL, max/wizz→HK, otthonstart/jelzalog→HITEL, onlineszamla→SZA) into config (client 8) + backfilled May rows: 731/837 got a product (SZK 389, HK 202, VAL 111, SZA 21, HITEL 8, null 106). Editable in the UI.
+- 326+4 tests green.
+
+## 2026-05-31 — W3 size grain + MonitoringDetailDialog (matched + unmatched)
+- `monitoring.size` (migration `0019`); parser `extractSize`; aggregation now keyed incl. size (unique index updated). May re-imported size-grained: 3002 rows (300x250/300x600/970x250/640x360/1x1…), 2994 with product, 2574 matched.
+- Table: sortable **Size** column; every row (matched + unmatched) opens `MonitoringDetailDialog`.
+- `MonitoringDetailDialog`: matched → live MC preview; unmatched → "unmatched" placeholder; both show an **audience × size** breakdown (impr/clicks/CTR + total) for that MC.
+- 333 tests green (3 new extractSize).
+- NOTE: per-period rows grew (~3000 for May) due to size grain — single fetch, lazy iframe previews, content-visibility on rows. Re-watch perf if periods accumulate.

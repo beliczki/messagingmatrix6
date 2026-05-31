@@ -397,6 +397,76 @@ export const reporting = sqliteTable(
   ],
 );
 
+// §3.7b — monitoring: message-level performance ingested from a standalone
+// AdForm "Creative custom report" XLSX (and later other platforms). One row
+// per (platform, message-key) per report period — the raw export is keyword/
+// banner-level (~85k rows/mo) but the matrix only needs message-level numbers,
+// so the importer aggregates. `platform`/`scope` are derived from the PMMID
+// scope prefix (p_adform / p_dv360 / p_meta_… / …). Distinct from `reporting`
+// above (the legacy workbook-sourced banner snapshot, slated for removal).
+export const monitoring = sqliteTable(
+  "monitoring",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    clientId: integer("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    // normalized platform (adform, dv360, googleads, meta, tiktok, …)
+    platform: text("platform").notNull(),
+    // raw PMMID scope prefix, e.g. "p_infinety_avpackage" — kept for fidelity
+    scope: text("scope"),
+    // representative full PMMID for this message-key (nullable)
+    pmmid: text("pmmid"),
+    // resolved link to the matrix message; null until/unless matched
+    messageId: integer("message_id").references(() => messages.id, {
+      onDelete: "set null",
+    }),
+    // resolved product code. Matched rows: from the matrix (audience→product);
+    // unmatched: from the keyword→product rules in Settings → Structure →
+    // Monitoring (matched against topic + pmmid). Null when neither resolves.
+    product: text("product"),
+    // creative size (e.g. "300x250", "1x1"), parsed from the Banner/Adgroups
+    // cell. Part of the aggregation key so the detail dialog can break an MC
+    // down per size. "" when no size token was found.
+    size: text("size").notNull().default(""),
+    // parsed message key (always present — rows without -m_ are skipped)
+    audienceKey: text("audience_key").notNull(),
+    topicKey: text("topic_key").notNull(),
+    mcNumber: integer("mc_number").notNull(),
+    mcVariant: text("mc_variant").notNull(),
+    // aggregated metrics
+    impressions: integer("impressions").notNull().default(0),
+    clicks: integer("clicks").notNull().default(0),
+    cost: real("cost").notNull().default(0),
+    conversions: integer("conversions").notNull().default(0),
+    ctr: real("ctr"),
+    // report period (from the XLSX Front Page)
+    periodFrom: text("period_from").notNull(),
+    periodTo: text("period_to").notNull(),
+    importedAt: text("imported_at")
+      .notNull()
+      .default(sql`(CURRENT_TIMESTAMP)`),
+    sourceFilename: text("source_filename"),
+  },
+  (t) => [
+    index("monitoring_client_message_idx").on(t.clientId, t.messageId),
+    index("monitoring_client_platform_idx").on(t.clientId, t.platform),
+    index("monitoring_client_mc_idx").on(t.clientId, t.mcNumber, t.mcVariant),
+    // one row per (platform, message-key, size) per period — re-upload replaces
+    uniqueIndex("monitoring_client_period_key_idx").on(
+      t.clientId,
+      t.platform,
+      t.periodFrom,
+      t.periodTo,
+      t.mcNumber,
+      t.mcVariant,
+      t.audienceKey,
+      t.topicKey,
+      t.size,
+    ),
+  ],
+);
+
 // §3.10 — public share-gallery metadata
 export const shareGalleries = sqliteTable(
   "share_galleries",

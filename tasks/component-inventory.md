@@ -731,3 +731,31 @@ Added an 11th workflow status `ARCHIVED`, sitting next to `INACTIVE` semanticall
 **Új semantic class-ok:** `tree-view-navigator`, `tree-view-navigator__label`, `tree-view-navigator__minimap-wrap`, `tree-view-navigator__controls-wrap`, `tree-view__minimap--docked`, `tree-view__controls--docked` (`app/globals.css` `@layer components`). A `--docked` variánsok kinullázzák a Panel absolute-positioning rétegét, hogy a MiniMap/Controls a toolbar dobozán belül álljon.
 
 **Architektúra delta:** a `ReactFlowProvider` átkerült `TreeView.tsx`-ből `MatrixGrid.tsx`-be, hogy a toolbar és a canvas ugyanazt az xyflow store-t lássa. Provider mindig fent van; üres store ha nincs `<ReactFlow>` mountolva, ami olcsó.
+
+---
+
+## 2026-05-31 — Wave 3 Monitoring ingest
+
+**Új page-komponens:** `monitoring/_components/MonitoringUpload.tsx` — az AdForm Creative-report XLSX feltöltő widget a Monitoring oldal placeholderje helyén (drag-drop + klikk, eredmény-összegző kártya).
+
+**Új semantic class-ok:**
+- `monitoring-upload` (page-szintű blokk), `monitoring-upload__header`
+- `monitoring-upload__dropzone` — dashed-border kattintható/drag-drop terület; az `upload-dialog__dropzone` mintáját követi, de inline (nem modal)
+- `monitoring-upload__result` — import-eredmény kártya (`rounded-lg border bg-white`)
+- `monitoring-upload__stats` / `monitoring-upload__stat` — `<dl>` grid a számokkal (Messages / Matched / Unmatched / Raw rows), a `text-[10px] uppercase tracking-wider` section-label konvencióval
+- újrahasznált: `tag-chip` (platform chipek), `error-alert`
+
+**W3.f lista-nézet** (`monitoring/_components/`): `MonitoringView.tsx` (wrapper: upload + tábla, `reloadToken`-nel frissít import után), `MonitoringTable.tsx`.
+- `monitoring-view` (wrapper blokk)
+- `monitoring-table` + `__toolbar` (period/platform `select` + match-filter) + `__match-filter` (All/Matched/Unmatched pill-group, a `tab-bar`-szerű inline rounded group) + `__totals` / `__total` (dl grid) + `__wrap` / `__table` (a `users__table` mintát követő `table-auto border-collapse text-sm`)
+- `status-badge--unmatched` — amber badge a nem-mátrixolt sorokra (a W2.7-ben tervezett tokennel egyezik); újrahasznált `tag-chip` a platform-oszlopban
+
+**W3.f layout-revízió** (Creative Library list-view mintára): a Monitoring oldal mostantól `monitoring flex h-full` + `monitoring__content` (table) + `RightToolbar`. `MonitoringView` birtokolja a layoutot és a RightToolbart (a feltöltés `reloadToken`-nel frissíti a táblát).
+- A szűrők a `monitoring-table__toolbar`-ba kerültek (`toolbar ... sticky top-0 min-h-12 border-b` — a `creative-library__toolbar` mintája): title + Report period select + Platform select (`w-36`, keskeny) + match-pillek + Clear + jobbra compact totál (`toolbar__count`).
+- A feltöltés a `RightToolbar` aljára került (`mt-auto`), collapsed-aware: ikon-gomb összecsukva, dropzone + help-szöveg + compact eredmény kibontva. Period szűrő = **riport-periódus** dropdown (a sorok periódusonként aggregáltak, nincs napi bontás → dátum-tartomány szűrő nem értelmezhető sor-szinten).
+
+**W3.f finomítás (Creative Library list-parity):** szürke sticky sort-header (`bg-slate-50`, oszloponként kattintható sort-nyilakkal — a `list-sort-header` stílusát követi, de a monitoring oszlopaira); `monitoring-row__preview` mini MC-preview cella (exportált `MatrixIframePreview` fit-rect, lazy iframe), kattintásra `MatrixDetailDialog` (újrahasznált a creative-library-ből, `MatrixNavItem` itemmel). Preview-pipeline: `/api/messages` + `/api/templates/folders` + `/api/audiences` (react-query) → `previewById` map a matched üzenetekhez. Period dropdown és match-pillek count nélkül; `toolbar__count` = `látszó/összes rows · CTR` (impr/cost kivéve).
+
+**W3 product mező:** `monitoring.product` oszlop (migráció `0018`). Importkor feloldva: audience→product (mátrix-autoritatív), különben kulcsszó→termék szabály (topic + PMMID substring). Szabályok: Settings → Structure → **MONITORING szekció** (`structure-tab__section--monitoring`, `monitoring-rule-row` szerkeszthető lista, config `monitoringProductRules`, category `structure`). A Monitoring lista `Product` oszlopa + `MultiPill` szűrője a tárolt `product`-ot használja.
+
+**W3 size grain + detail dialog:** `monitoring.size` oszlop (migráció `0019`), parser `extractSize` (első `NxN` token a Banner/Adgroupsból), aggregálás size-szinten. Tábla: új sortable **Size** oszlop; minden sor (matched ÉS unmatched) kattintható → **`MonitoringDetailDialog`** (`monitoring-detail`, `modal` shell): matched → `MatrixIframePreview`, unmatched → `status-badge--unmatched` placeholder; mindkettőnél **audience × size bontó tábla** (impr/clicks/CTR + total) az adott MC összes sorából. A `MatrixDetailDialog` használat megszűnt a monitoringban.

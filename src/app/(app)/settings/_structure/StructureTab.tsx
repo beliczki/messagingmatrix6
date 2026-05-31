@@ -15,6 +15,11 @@ import { SettingsHeaderActions } from "../SettingsView";
 
 type ConfigRow = { key: string; value: unknown };
 
+// Keyword→product rule for monitoring: when `keyword` appears (case-insensitive)
+// in an imported row's topic or PMMID, the row gets `product`. Used only when
+// the row's audience doesn't already resolve a product from the matrix.
+type ProductRule = { keyword: string; product: string };
+
 const STRUCTURE_KEYS = [
   ["audienceStructure", "Audience structure"],
   ["topicStructure", "Topic structure"],
@@ -41,6 +46,7 @@ type Draft = {
   treeStructure: string;
   creativeParsingRules: string;
   feedPatterns: Record<string, string>;
+  monitoringProductRules: ProductRule[];
   // Full patterns object preserved so we round-trip non-feed fields untouched.
   patternsBlob: Patterns;
 };
@@ -63,6 +69,7 @@ function defaultDraft(): Draft {
       2,
     ),
     feedPatterns: { ...(DEFAULT_PATTERNS.feed ?? {}) },
+    monitoringProductRules: [],
     patternsBlob: { ...DEFAULT_PATTERNS, feed: { ...DEFAULT_PATTERNS.feed } },
   };
 }
@@ -75,6 +82,17 @@ function rowsToDraft(structureRows: ConfigRow[], patterns: Patterns): Draft {
         typeof r.value === "string"
           ? r.value
           : JSON.stringify(r.value, null, 2);
+      continue;
+    }
+    if (r.key === "monitoringProductRules") {
+      if (Array.isArray(r.value)) {
+        d.monitoringProductRules = r.value.filter(
+          (x): x is ProductRule =>
+            !!x &&
+            typeof x.keyword === "string" &&
+            typeof x.product === "string",
+        );
+      }
       continue;
     }
     if (r.key in d && typeof r.value === "string") {
@@ -145,6 +163,13 @@ export function StructureTab() {
         { key: "treeStructure", value: d.treeStructure, category: "structure" },
         { key: "creativeParsingRules", value: parsedRules, category: "structure" },
         {
+          key: "monitoringProductRules",
+          value: d.monitoringProductRules.filter(
+            (r) => r.keyword.trim() !== "" && r.product.trim() !== "",
+          ),
+          category: "structure",
+        },
+        {
           key: "patterns",
           value: { ...d.patternsBlob, feed: d.feedPatterns },
           category: "patterns",
@@ -179,6 +204,50 @@ export function StructureTab() {
         setParsingRulesError((e as Error).message);
       }
     }
+  }
+
+  const reapply = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/monitoring/reapply-products", {
+        method: "POST",
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error ?? `reapply failed (${r.status})`);
+      }
+      return (await r.json()) as {
+        total: number;
+        updated: number;
+        withProduct: number;
+      };
+    },
+  });
+
+  function setRule(i: number, patch: Partial<ProductRule>) {
+    if (!draft) return;
+    const next = draft.monitoringProductRules.map((r, idx) =>
+      idx === i ? { ...r, ...patch } : r,
+    );
+    setDraft({ ...draft, monitoringProductRules: next });
+  }
+  function addRule() {
+    if (!draft) return;
+    setDraft({
+      ...draft,
+      monitoringProductRules: [
+        ...draft.monitoringProductRules,
+        { keyword: "", product: "" },
+      ],
+    });
+  }
+  function removeRule(i: number) {
+    if (!draft) return;
+    setDraft({
+      ...draft,
+      monitoringProductRules: draft.monitoringProductRules.filter(
+        (_, idx) => idx !== i,
+      ),
+    });
   }
 
   function setFeedPattern(column: string, value: string) {
@@ -430,6 +499,88 @@ export function StructureTab() {
             </p>
           </div>
         )}
+      </section>
+
+      <section className="structure-tab__section structure-tab__section--monitoring mb-6 rounded-lg border border-slate-200 bg-white p-4">
+        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-700">
+          Monitoring
+        </h3>
+        <p className="form-field__hint mb-4 text-xs text-slate-500">
+          Keyword → product rules for imported AdForm reports. Matched rows take
+          their product from the matrix (audience → product); for the rest, the
+          first rule whose <strong>keyword</strong> appears (case-insensitive) in
+          the row&apos;s <strong>topic</strong> or <strong>PMMID</strong> sets the{" "}
+          <strong>product</strong>. E.g.{" "}
+          <code className="font-mono">microszamla → VAL</code>,{" "}
+          <code className="font-mono">otthonstart → HITEL</code>.
+        </p>
+        <div className="space-y-2">
+          {draft.monitoringProductRules.map((rule, i) => (
+            <div
+              key={i}
+              className="monitoring-rule-row flex items-center gap-2"
+            >
+              <input
+                type="text"
+                value={rule.keyword}
+                placeholder="keyword (e.g. microszamla)"
+                onChange={(e) => setRule(i, { keyword: e.target.value })}
+                className="input-box flex-1 rounded-md border border-slate-300 px-2 py-1.5 font-mono text-xs focus:border-slate-500 focus:outline-none"
+              />
+              <span className="text-slate-400">→</span>
+              <input
+                type="text"
+                value={rule.product}
+                placeholder="product (e.g. VAL)"
+                onChange={(e) => setRule(i, { product: e.target.value })}
+                className="input-box w-32 rounded-md border border-slate-300 px-2 py-1.5 font-mono text-xs focus:border-slate-500 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={() => removeRule(i)}
+                title="Remove rule"
+                className="rounded border border-slate-200 px-2 py-1.5 text-xs text-slate-400 hover:bg-rose-50 hover:text-rose-600"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              type="button"
+              onClick={addRule}
+              className="toolbar-btn rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            >
+              + Add rule
+            </button>
+            <button
+              type="button"
+              onClick={() => reapply.mutate()}
+              disabled={reapply.isPending}
+              title="Recompute the product column on already-imported reports using the saved rules"
+              className="toolbar-btn rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            >
+              {reapply.isPending
+                ? "Re-applying…"
+                : "Re-apply to imported reports"}
+            </button>
+            {reapply.isSuccess ? (
+              <span className="text-xs text-emerald-600">
+                {reapply.data.updated} updated · {reapply.data.withProduct}/
+                {reapply.data.total} have a product
+              </span>
+            ) : null}
+            {reapply.isError ? (
+              <span className="text-xs text-rose-600">
+                {(reapply.error as Error).message}
+              </span>
+            ) : null}
+          </div>
+          <p className="form-field__hint text-xs text-slate-500">
+            Re-apply uses the <strong>saved</strong> rules — Save first, then
+            re-apply to refresh products on existing rows without re-uploading.
+          </p>
+        </div>
       </section>
     </div>
   );

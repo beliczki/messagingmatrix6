@@ -1,0 +1,149 @@
+import { NextResponse } from "next/server";
+import { and, eq } from "drizzle-orm";
+import { db } from "@/db";
+import { monitoring, messages as messagesTable } from "@/db/schema";
+import { withSession, denyDemo } from "@/lib/scoped";
+import { writeAudit } from "@/lib/audit";
+import { parseAdformReport, resolveProduct } from "@/lib/adform-report";
+import { loadProductContext } from "@/lib/monitoring-products";
+
+// POST /api/monitoring/import — multipart upload of a standalone AdForm
+// "Creative custom report" XLSX. Parses + aggregates to message level, resolves
+// each row to a matrix message by (number, variant, audience, topic), then
+// replaces the slice for this report period (one file = one period snapshot).
+
+export const POST = withSession(async ({ req, claims }) => {
+  const denied = denyDemo(claims);
+  if (denied) return denied;
+
+  const form = await req.formData().catch(() => null);
+  if (!form) {
+    return NextResponse.json(
+      { error: "multipart/form-data required" },
+      { status: 400 },
+    );
+  }
+  const file = form.get("file");
+  if (!(file instanceof File)) {
+    return NextResponse.json({ error: "file required" }, { status: 400 });
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  let parsed;
+  try {
+    parsed = parseAdformReport(buffer);
+  } catch (e) {
+    return NextResponse.json(
+      { error: "parse_failed", reason: (e as Error).message },
+      { status: 422 },
+    );
+  }
+
+  // Resolve each aggregated row to a matrix message via the exact message key.
+  const msgRows = db
+    .select({
+      id: messagesTable.id,
+      number: messagesTable.number,
+      variant: messagesTable.variant,
+      audience: messagesTable.audience,
+      topic: messagesTable.topic,
+    })
+    .from(messagesTable)
+    .where(eq(messagesTable.clientId, claims.cid))
+    .all();
+  const msgByKey = new Map<string, number>();
+  for (const m of msgRows) {
+    msgByKey.set(`${m.number}|${m.variant}|${m.audience}|${m.topic}`, m.id);
+  }
+  const resolve = (
+    number: number,
+    variant: string,
+    audience: string,
+    topic: string,
+  ): number | null =>
+    msgByKey.get(`${number}|${variant}|${audience}|${topic}`) ?? null;
+
+  // Product resolution inputs: audience→product (matrix-authoritative) + the
+  // keyword→product rules from Settings → Structure → Monitoring.
+  const { audienceProduct, rules: productRules } = loadProductContext(
+    claims.cid,
+  );
+
+  const values = parsed.rows.map((r) => ({
+    clientId: claims.cid,
+    platform: r.platform,
+    scope: r.scope,
+    pmmid: r.pmmid,
+    messageId: resolve(r.mcNumber, r.mcVariant, r.audienceKey, r.topicKey),
+    product: resolveProduct(
+      r.audienceKey,
+      r.topicKey,
+      r.pmmid,
+      audienceProduct,
+      productRules,
+    ),
+    size: r.size,
+    audienceKey: r.audienceKey,
+    topicKey: r.topicKey,
+    mcNumber: r.mcNumber,
+    mcVariant: r.mcVariant,
+    impressions: Math.round(r.impressions),
+    clicks: Math.round(r.clicks),
+    cost: r.cost,
+    conversions: Math.round(r.conversions),
+    ctr: r.ctr,
+    periodFrom: parsed.periodFrom,
+    periodTo: parsed.periodTo,
+    sourceFilename: file.name,
+  }));
+
+  // One report file = the full snapshot for its period. Re-uploading the same
+  // period replaces every row for it (all platforms), so totals never double.
+  db.transaction((tx) => {
+    tx.delete(monitoring)
+      .where(
+        and(
+          eq(monitoring.clientId, claims.cid),
+          eq(monitoring.periodFrom, parsed.periodFrom),
+          eq(monitoring.periodTo, parsed.periodTo),
+        ),
+      )
+      .run();
+    if (values.length > 0) {
+      tx.insert(monitoring).values(values).run();
+    }
+  });
+
+  const matched = values.filter((v) => v.messageId !== null).length;
+  const platforms = [...new Set(values.map((v) => v.platform))].sort();
+
+  writeAudit({
+    clientId: claims.cid,
+    userId: claims.sub,
+    entityType: "monitoring",
+    entityId: 0,
+    action: "bulk_create",
+    after: {
+      filename: file.name,
+      periodFrom: parsed.periodFrom,
+      periodTo: parsed.periodTo,
+      imported: values.length,
+      matched,
+      unmatched: values.length - matched,
+      skipped: parsed.skipped,
+      totalDataRows: parsed.totalDataRows,
+      platforms,
+    },
+  });
+
+  return NextResponse.json({
+    imported: values.length,
+    matched,
+    unmatched: values.length - matched,
+    skipped: parsed.skipped,
+    totalDataRows: parsed.totalDataRows,
+    periodFrom: parsed.periodFrom,
+    periodTo: parsed.periodTo,
+    platforms,
+  });
+});

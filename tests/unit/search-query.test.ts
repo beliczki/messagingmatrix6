@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { parseSearchQuery, hasNarrowingPrefix, type SearchFields } from "@/lib/search-query";
+import {
+  parseSearchQuery,
+  hasNarrowingPrefix,
+  narrowingAxes,
+  type SearchFields,
+} from "@/lib/search-query";
 
 function fields(p: Partial<SearchFields>): SearchFields {
   return {
@@ -161,5 +166,38 @@ describe("hasNarrowingPrefix", () => {
 
   it("unknown prefix is not narrowing", () => {
     expect(hasNarrowingPrefix("brand:erste")).toBe(false);
+  });
+});
+
+describe("narrowingAxes", () => {
+  it("free text / empty narrows neither axis", () => {
+    expect(narrowingAxes("")).toEqual({ audience: false, topic: false });
+    expect(narrowingAxes("retail eu")).toEqual({ audience: false, topic: false });
+  });
+
+  it("a:/p:/s: narrow only the audience (column) axis", () => {
+    expect(narrowingAxes("a:retail")).toEqual({ audience: true, topic: false });
+    expect(narrowingAxes("p:dv360")).toEqual({ audience: true, topic: false });
+    expect(narrowingAxes("s:performance")).toEqual({ audience: true, topic: false });
+  });
+
+  it("t: narrows only the topic (row) axis", () => {
+    expect(narrowingAxes("t:cf")).toEqual({ audience: false, topic: true });
+  });
+
+  it("mc: narrows both axes", () => {
+    expect(narrowingAxes("mc:314a")).toEqual({ audience: true, topic: true });
+  });
+
+  it("combines axes across multiple terms", () => {
+    expect(narrowingAxes("p:adform t:nemaradj")).toEqual({
+      audience: true,
+      topic: true,
+    });
+  });
+
+  it("ignores empty prefix values and unknown prefixes", () => {
+    expect(narrowingAxes("a:")).toEqual({ audience: false, topic: false });
+    expect(narrowingAxes("brand:erste")).toEqual({ audience: false, topic: false });
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { X, Filter as FilterIcon, Users, ListTree } from "lucide-react";
-import { type Filters } from "./types";
+import { type Filters, STATUS_COLOR } from "./types";
 import MultiPill from "../_components/MultiPill";
 
 type Props = {
@@ -34,7 +34,7 @@ export default function MatrixToolbar(p: Props) {
         <input
           type="search"
           placeholder="Filter… a: t: s: p: mc: OR …"
-          title='Free text searches all fields. Prefixes: a: (audience), t: (topic), s: (strategy), p: (platform), mc: (MC#). All prefixes also hide non-matching rows/columns. AND implicit, OR explicit. Quote "two words" for phrases.'
+          title='Free text searches all fields. Prefixes: a: (audience), t: (topic), s: (strategy), p: (platform), mc: (MC#). a:/p:/s: hide non-matching audience columns; t: hides non-matching topic rows; mc: hides both. Free text keeps the full grid. AND implicit, OR explicit. Quote "two words" for phrases.'
           value={p.filters.search}
           onChange={(e) =>
             p.setFilters({ ...p.filters, search: e.target.value })
@@ -53,6 +53,7 @@ export default function MatrixToolbar(p: Props) {
         label="Status"
         values={p.filters.statuses}
         options={p.statusOptions}
+        optionColors={STATUS_COLOR}
         onChange={(s) => p.setFilters({ ...p.filters, statuses: s })}
       />
 

@@ -2674,3 +2674,34 @@ Two bugs reported in Feed view / FeedExportPanel:
    - OPEN/flagged: `advert_name` + `Text:advert_name` still use `{{version}}`
      (lock counter) instead of `{{version_no}}` — same _69 leak in the
      advert_name column. Left for user decision (affects AdForm advert naming).
+
+---
+
+## 2026-05-31 — Matrix filters + status UI + editor stepper + global-edit (9-item batch)
+
+Decisions locked: (filter) only `mc:` collapses empties; a:/p:/s: pick audience
+columns, t: picks topic rows, all keep the full grid otherwise. (global) propagate
+creative+status fields, never placement (audience/topic/dates/pmmid/utm). Siblings =
+same (number,variant) — never spans >1 topic (verified). Delivery = phased.
+
+### Phase 1 — UI + filters (ship + review before Phase 2)
+- [x] **1.1** Status dropdown always lists ALL canonical statuses (`STATUS_OPTIONS`),
+      not just those present in data. `MatrixGrid.tsx:388` statusOptions.
+- [x] **1.2** Status filter checkboxes tinted per status color (`STATUS_COLOR`).
+      `MultiPill.tsx` — add optional per-option color dot, keep component generic.
+- [x] **1.3** MC editor: show status as a colored DOT only (no status-name text),
+      placed in the stepper before the MC label. `MessageEditor.tsx:458-471`.
+- [x] **1.4** Stepper steps between UNIQUE MCs (number,variant), not per-audience
+      duplicates; counter shows unique index/total. `MessageEditor.tsx:240-246,453`.
+- [x] **1.5** Filter-semantics redesign in `MatrixGrid.tsx:403-437`: a:/p:/s: select
+      audience columns by audience entity attrs (key/name/platform/strategy) without
+      pruning topic rows; t: selects topic rows without pruning audience columns;
+      only `mc:` prunes both rows+cols to populated cells. Product dropdown unchanged.
+
+### Phase 2 — global edit propagation (separate commit, after Phase 1 review)
+- [ ] **2.1** global/local toggle next to Autosave (`MessageEditor.tsx:~504`).
+- [ ] **2.2** When global ON, saving an edit fans the creative+status payload to all
+      same-(number,variant) siblings (each with its own version); placement fields
+      stay local. New API path / entity fn for sibling fan-out.
+- [ ] **2.3** Next to stepper counter, when global ON, warn "edits will update N other
+      audiences" (N = sibling count).

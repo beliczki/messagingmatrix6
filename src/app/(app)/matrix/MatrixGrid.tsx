@@ -26,8 +26,9 @@ import {
   type Topic,
   type View,
   EMPTY_FILTERS,
+  STATUS_OPTIONS,
 } from "./types";
-import { parseSearchQuery, hasNarrowingPrefix } from "@/lib/search-query";
+import { parseSearchQuery, narrowingAxes } from "@/lib/search-query";
 
 async function fetchJSON<T>(url: string): Promise<T> {
   const r = await fetch(url, { credentials: "include" });
@@ -385,10 +386,15 @@ export default function MatrixWorkspace() {
     return [...s].sort();
   }, [audiences, topics]);
 
+  // Always offer the full canonical status set so every status is filterable
+  // even when no message currently carries it. Any non-canonical status that
+  // does exist in the data is appended so nothing in use is ever hidden.
   const statusOptions = useMemo(() => {
-    const s = new Set<string>();
-    for (const m of messages) if (m.status) s.add(m.status);
-    return [...s].sort();
+    const present = new Set<string>();
+    for (const m of messages) if (m.status) present.add(m.status);
+    const canonical = STATUS_OPTIONS as readonly string[];
+    const extras = [...present].filter((s) => !canonical.includes(s)).sort();
+    return [...canonical, ...extras];
   }, [messages]);
 
   const audienceById = useMemo(
@@ -404,7 +410,7 @@ export default function MatrixWorkspace() {
     const ps = filters.products;
     const ss = filters.statuses;
     const predicate = parseSearchQuery(filters.search);
-    const narrowing = hasNarrowingPrefix(filters.search);
+    const axes = narrowingAxes(filters.search);
 
     let auds =
       ps.size === 0 ? audiences : audiences.filter((a) => a.product && ps.has(a.product));
@@ -427,11 +433,15 @@ export default function MatrixWorkspace() {
         return predicate({ audience, topic, strategy, platform, mc, free });
       });
     }
-    if (narrowing) {
+    // Prune each axis independently: an audience-axis prefix (a:/p:/s:) trims
+    // the visible columns, a topic-axis prefix (t:) trims the visible rows, and
+    // mc: trims both. The unpruned axis keeps its full set, so e.g. p:adform
+    // shows every topic row (empty cells included) under the adform columns.
+    if (axes.audience || axes.topic) {
       const usedAudKeys = new Set(msgs.map((m) => m.audience));
       const usedTopKeys = new Set(msgs.map((m) => m.topic));
-      auds = auds.filter((a) => usedAudKeys.has(a.key));
-      tops = tops.filter((t) => usedTopKeys.has(t.key));
+      if (axes.audience) auds = auds.filter((a) => usedAudKeys.has(a.key));
+      if (axes.topic) tops = tops.filter((t) => usedTopKeys.has(t.key));
     }
     return { auds, tops, msgs };
   }, [audiences, topics, messages, filters, audienceById, topicById]);

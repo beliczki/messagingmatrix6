@@ -145,6 +145,33 @@ export function emptySearchFields(): SearchFields {
   return { audience: "", topic: "", strategy: "", platform: "", mc: "", free: "" };
 }
 
+// Which grid axes a search narrows, for row/column pruning in the matrix.
+// a/p/s describe an audience, so they prune the audience (column) axis; t
+// describes a topic, so it prunes the topic (row) axis; mc identifies a single
+// card, so it prunes both. Free text prunes neither — it only filters cell
+// contents. This keeps p:/a:/t: from collapsing the full grid: only mc: does.
+export function narrowingAxes(input: string): {
+  audience: boolean;
+  topic: boolean;
+} {
+  let audience = false;
+  let topic = false;
+  for (const tok of tokenize(input.trim())) {
+    if (tok[0] === '"') continue;
+    const colon = tok.indexOf(":");
+    if (colon <= 0) continue;
+    if (tok.slice(colon + 1).length === 0) continue;
+    const prefix = tok.slice(0, colon).toLowerCase();
+    if (prefix === "a" || prefix === "p" || prefix === "s") audience = true;
+    else if (prefix === "t") topic = true;
+    else if (prefix === "mc") {
+      audience = true;
+      topic = true;
+    }
+  }
+  return { audience, topic };
+}
+
 export function hasNarrowingPrefix(input: string): boolean {
   const tokens = tokenize(input.trim());
   for (const tok of tokens) {

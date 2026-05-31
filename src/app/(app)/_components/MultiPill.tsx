@@ -7,9 +7,18 @@ type Props = {
   values: Set<string>;
   options: string[];
   onChange: (s: Set<string>) => void;
+  // Optional per-option color (Tailwind bg-* class) shown as a leading dot —
+  // used by the Status filter to tint each option with its status color.
+  optionColors?: Record<string, string>;
 };
 
-export default function MultiPill({ label, values, options, onChange }: Props) {
+export default function MultiPill({
+  label,
+  values,
+  options,
+  onChange,
+  optionColors,
+}: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -66,6 +75,13 @@ export default function MultiPill({ label, values, options, onChange }: Props) {
                     onChange(next);
                   }}
                 />
+                {optionColors ? (
+                  <span
+                    className={`multi-pill__dot size-2 shrink-0 rounded-full ${
+                      optionColors[opt] ?? "bg-slate-300"
+                    }`}
+                  />
+                ) : null}
                 <span className="truncate">{opt}</span>
               </label>
             );

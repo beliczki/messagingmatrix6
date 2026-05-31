@@ -237,20 +237,35 @@ export default function MessageEditor({
     [topics, message?.topic],
   );
 
-  const navIndex = useMemo(
-    () =>
-      message
-        ? visibleMessages.findIndex((m) => m.id === message.id)
-        : -1,
-    [visibleMessages, message?.id],
-  );
+  // The stepper walks UNIQUE messaging cards, not every per-audience copy of
+  // the same card. We dedupe the visible list by (number, variant) — which
+  // never spans more than one topic — keeping the first occurrence as the
+  // representative the arrows jump to.
+  const uniqueMcs = useMemo(() => {
+    const seen = new Set<string>();
+    const out: Message[] = [];
+    for (const m of visibleMessages) {
+      const key = `${m.number} ${m.variant}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(m);
+    }
+    return out;
+  }, [visibleMessages]);
+
+  const navIndex = useMemo(() => {
+    if (!message) return -1;
+    return uniqueMcs.findIndex(
+      (m) => m.number === message.number && m.variant === message.variant,
+    );
+  }, [uniqueMcs, message?.number, message?.variant]);
 
   function navigatePrev() {
-    if (navIndex > 0) onJump(visibleMessages[navIndex - 1].id);
+    if (navIndex > 0) onJump(uniqueMcs[navIndex - 1].id);
   }
   function navigateNext() {
-    if (navIndex >= 0 && navIndex < visibleMessages.length - 1) {
-      onJump(visibleMessages[navIndex + 1].id);
+    if (navIndex >= 0 && navIndex < uniqueMcs.length - 1) {
+      onJump(uniqueMcs[navIndex + 1].id);
     }
   }
 
@@ -439,36 +454,30 @@ export default function MessageEditor({
           >
             <ChevronLeft className="size-4" />
           </button>
+          <span
+            className={clsx(
+              "message-editor__status-dot size-2.5 shrink-0 rounded-full",
+              STATUS_COLOR[draft.status ?? ""] ?? "bg-slate-300",
+            )}
+            title={draft.status ?? "—"}
+            aria-label={`Status: ${draft.status ?? "none"}`}
+          />
           <span className="message-editor__mc-label font-mono text-base font-semibold text-slate-900">
             {mcLabel}
           </span>
           <button
             onClick={navigateNext}
-            disabled={navIndex < 0 || navIndex >= visibleMessages.length - 1}
+            disabled={navIndex < 0 || navIndex >= uniqueMcs.length - 1}
             aria-label="Next"
             className="message-editor__nav-next rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
           >
             <ChevronRight className="size-4" />
           </button>
-          {visibleMessages.length > 0 ? (
+          {uniqueMcs.length > 0 ? (
             <span className="message-editor__nav-counter text-xs text-slate-500">
-              {navIndex + 1}/{visibleMessages.length}
+              {navIndex + 1}/{uniqueMcs.length}
             </span>
           ) : null}
-          <span
-            className={clsx(
-              "status-badge ml-2 inline-flex items-center gap-1.5 rounded px-2 py-0.5 text-xs",
-              "border border-slate-200 bg-white",
-            )}
-          >
-            <span
-              className={clsx(
-                "status-dot size-2 rounded-full",
-                STATUS_COLOR[draft.status ?? ""] ?? "bg-slate-300",
-              )}
-            />
-            {draft.status ?? "—"}
-          </span>
           <SaveIndicator state={saveState} />
 
           <div className="message-editor__header-actions ml-auto flex items-center gap-2">

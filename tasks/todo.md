@@ -2732,3 +2732,71 @@ Still OPEN (user decision):
 - Phase-2 caveat: global save is last-write-wins on siblings; could optionally skip
   ACTIVE siblings if measurement-anchor protection is wanted.
 - Branch not pushed.
+
+---
+
+## 2026-06-01 — Finish interrupted trafficking refactor (resume after termination)
+
+Previous session was terminated mid-refactor: `createMessage`/`updateMessage`
+call sites had been rewired to a new `buildTrafficking(...)` + `listAudiences(...)`
+but the callee + import were never created, so the build was broken (4 real tsc
+errors). Picked up from the uncommitted diff on `feat/monitoring-ingest`.
+
+### Done
+- [x] **`trafficking.ts`**: added `buildTrafficking(input, audienceRow, topicRow,
+      patterns, audienceList, pmmid)` — a DB-row adapter over the existing
+      `generateTrafficking` pattern engine. Maps resolved audience/topic rows +
+      key strings into the flat + by-key eval context (so `{{audiences[Audience_Key]
+      .Field}}`, `{{PMMID}}`, `{{Landing_URL}}` all resolve). Loosened
+      `TraffickingContext.audiences` to `ReadonlyArray<Record<string,unknown>>`
+      (matches `generatePmmid`); dropped the unused `AudienceLite`. `generateTrafficking`
+      kept exported (engine).
+- [x] **`messages.ts`**: imported `buildTrafficking` + `listAudiences`. `createMessage`
+      / `updateMessage` already wired in the prior diff — now compile.
+- [x] **Migrated `copyMessage`**: now passes the full `audienceList` to BOTH
+      `generatePmmid` and `buildTrafficking` (was `[]` → would have produced empty
+      pmmids/UTMs under Erste by-key patterns), sets `finalTraffickedUrl` on insert.
+- [x] **Migrated `moveMessages`**: reordered loop so `newPmmid` is computed BEFORE
+      trafficking (utm_cd26 = {{PMMID}}); passes `audienceList`; sets
+      `finalTraffickedUrl` on update.
+- [x] Typecheck: 0 errors in `messages.ts` / `trafficking.ts`.
+- [x] Tests: **345 passed (36 files)**, 0 failures.
+
+### DATA companion — DONE (2026-06-01)
+Symptom reported: editing a message on the Trafficking tab "did not update" — UTMs
+showed generic junk (`utm_campaign=sza`, `utm_source=pro`, `utm_cd26=SZA_SZA_aftxpdall`,
+empty Final URL). Root cause: NOT the recompute (that worked) — Erste's `config.patterns`
+still held the generic DEFAULT patterns (`utm_cd26={{product}}_{{audience}}`, and no
+`final_trafficked_url` key at all). So generation faithfully produced wrong output.
+
+- [x] Rewrote `scripts/fix-erste-trafficking-patterns.ts` (was abandoned scaffolding
+      with bogus imports). Now: real imports (`@/db`, `@/lib/pmmid`, `@/lib/trafficking`),
+      installs the v5 ground-truth pmmid + trafficking patterns (verified verbatim
+      against `tests/fixtures/v5/dataset/config.json`), backfills a configurable MC
+      scope (`MC_NUMBERS`, default 314,315), `--dry-run`, merge-preserves
+      `feed`/`topicKey`/`audienceKey`.
+- [x] Safety check: PMMID is a live measurement key, and MC314/315 are all ACTIVE,
+      so checked AdForm exposure. Client 8 has 4 feed_exports; exactly ONE was
+      uploaded to AdForm (id=8, product **SZK**, 2026-05-03) — it carries only SZK
+      MCs (m_90/m_302/m_305…), NOT m_314/m_315 (SZA, never uploaded). Monitoring also
+      matches on mc/audience/topic, not pmmid, and has 0 rows for 314/315. So
+      rewriting `a_…`→`p_…` on these rows orphans NO live measurement. User chose:
+      install trafficking+pmmid fixture patterns; backfill 314+315 only.
+- [x] Backed up DB → `db/matrix.db.before-erste-pattern-install`.
+- [x] Dry-run (86 rows) → applied. **86 rows updated** (all MC314/315 variants).
+      MC314b @ SZA_afadpdall now: pmmid `p_adform-s_pro-a_SZA_afadpdall-…-m_314-v_b-n_1`,
+      `utm_source=adform`, `utm_content=banner`, `utm_campaign=26!1!account!onlinesz…`,
+      `utm_cd26={{PMMID}}`, Final URL fully populated. 0 remaining `a_…` pmmids,
+      0 empty Final URLs in 314/315. config now has `final_trafficked_url`. 345/345 tests.
+- NOTE: the other ~1361 imported rows already had correct `p_…` pmmids + Final URLs
+      (XLSX import trusts pre-computed values). Only ~89 v6-generated rows were wrong;
+      user scoped the backfill to 314/315. Other MCs will self-correct on next save
+      (config now holds the right patterns), or re-run with `MC_NUMBERS=…`.
+- `tests/integration/api/audiences-key-pattern.test.ts` (248–249) — pre-existing
+  `mcCount` type error (predates this session; `listAudiences` returns `Audience &
+  {mcCount}` but the `Audience` type lacks it). Type-only — tests still pass.
+
+### Open (carried over, unchanged)
+- `advert_name` / `Text:advert_name` patterns still use `{{version}}` (lock counter)
+  vs `{{version_no}}` — user decision.
+- Branch `feat/monitoring-ingest` not pushed.

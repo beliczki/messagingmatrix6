@@ -12,9 +12,10 @@ import {
 import { nextMcSlot, type ExistingMessage } from "@/lib/numbering";
 import { generatePmmid } from "@/lib/pmmid";
 import {
-  generateTrafficking,
+  buildTrafficking,
   type TraffickingPatterns,
 } from "@/lib/trafficking";
+import { listAudiences } from "@/lib/entities/audiences";
 
 const WRITABLE_FIELDS = [
   "audience",
@@ -197,6 +198,9 @@ export function createMessage(
   );
 
   const patterns = readClientPatterns(clientId);
+  // The Erste pmmid/trafficking patterns look the audience up by key
+  // ({{audiences[Audience_Key].Field}}), so the full list must be in context.
+  const audienceList = listAudiences(clientId);
   const pmmid = generatePmmid(
     {
       audience: input.audience,
@@ -205,21 +209,24 @@ export function createMessage(
       variant: slot.variant,
       versionNo: slot.version,
     },
-    [], // For PMMID we usually don't need the full audience array unless the
-    [], //   pattern uses array-by-key syntax. Add when needed.
+    audienceList,
+    [],
     patterns.pmmid,
   );
 
-  const traffic = generateTrafficking(
+  const traffic = buildTrafficking(
     {
       number: slot.number,
       variant: slot.variant,
-      audienceKey: input.audience,
-      topicKey: input.topic,
-      audience: audienceRow,
-      topic: topicRow,
+      audience: input.audience,
+      topic: input.topic,
+      landingUrl: input.landingUrl,
     },
-    patterns.trafficking,
+    audienceRow,
+    topicRow,
+    patterns,
+    audienceList,
+    pmmid,
   );
 
   return db
@@ -239,6 +246,7 @@ export function createMessage(
       utmContent: traffic.utm_content,
       utmTerm: traffic.utm_term,
       utmCd26: traffic.utm_cd26,
+      finalTraffickedUrl: traffic.final_trafficked_url,
     })
     .returning()
     .get();
@@ -255,10 +263,37 @@ export function updateMessage(
   if (current.version !== expectedVersion) {
     return { ok: false, current };
   }
+  // Trafficking is "generated on every save" (Trafficking tab). Recompute the
+  // UTM fields + final URL from the post-edit values so e.g. a landing_url edit
+  // flows through. PMMID is left as-is — it is the message's stable identity and
+  // is only (re)generated on create/copy/move.
+  const merged = { ...current, ...input };
+  const patterns = readClientPatterns(clientId);
+  const traffic = buildTrafficking(
+    {
+      number: merged.number,
+      variant: merged.variant,
+      audience: merged.audience,
+      topic: merged.topic,
+      landingUrl: merged.landingUrl,
+    },
+    findAudienceByKey(clientId, merged.audience),
+    findTopicByKey(clientId, merged.topic),
+    patterns,
+    listAudiences(clientId),
+    current.pmmid,
+  );
   const updated = db
     .update(messages)
     .set({
       ...input,
+      utmCampaign: traffic.utm_campaign,
+      utmSource: traffic.utm_source,
+      utmMedium: traffic.utm_medium,
+      utmContent: traffic.utm_content,
+      utmTerm: traffic.utm_term,
+      utmCd26: traffic.utm_cd26,
+      finalTraffickedUrl: traffic.final_trafficked_url,
       version: sql`${messages.version} + 1`,
       updatedAt: sql`CURRENT_TIMESTAMP`,
     })
@@ -458,6 +493,9 @@ export function copyMessages(
 
   const patterns = readClientPatterns(clientId);
   const liveAll = listLiveMessages(clientId);
+  // Full audience list for by-key pmmid/trafficking patterns
+  // ({{audiences[Audience_Key].Field}}).
+  const audienceList = listAudiences(clientId);
 
   // Plan-pass: build the placement for every (source × target audience) pair.
   // Planned rows count as occupants of their target cell so a batch copying
@@ -511,6 +549,7 @@ export function copyMessages(
   for (const p of plan) {
     const cloneable: MessageInput = pickWritable(p.source);
     const overrides: MessageInput = opts.fieldOverrides ?? {};
+    const merged = { ...cloneable, ...overrides };
     const audienceRow = targetAudienceRows.get(p.targetAud) as Audience;
     const topicRow = topicFor(p.source.topic);
 
@@ -522,20 +561,23 @@ export function copyMessages(
         variant: p.variant,
         versionNo: 1,
       },
-      [],
+      audienceList,
       [],
       patterns.pmmid,
     );
-    const traffic = generateTrafficking(
+    const traffic = buildTrafficking(
       {
         number: p.number,
         variant: p.variant,
-        audienceKey: p.targetAud,
-        topicKey: p.source.topic,
-        audience: audienceRow,
-        topic: topicRow,
+        audience: p.targetAud,
+        topic: p.source.topic,
+        landingUrl: merged.landingUrl,
       },
-      patterns.trafficking,
+      audienceRow,
+      topicRow,
+      patterns,
+      audienceList,
+      pmmid,
     );
 
     const row = db
@@ -556,6 +598,7 @@ export function copyMessages(
         utmContent: traffic.utm_content,
         utmTerm: traffic.utm_term,
         utmCd26: traffic.utm_cd26,
+        finalTraffickedUrl: traffic.final_trafficked_url,
       })
       .returning()
       .get();
@@ -612,6 +655,9 @@ export function moveMessages(
   }
 
   const patterns = readClientPatterns(clientId);
+  // Full audience list for by-key pmmid/trafficking patterns
+  // ({{audiences[Audience_Key].Field}}).
+  const audienceList = listAudiences(clientId);
 
   // Pre-pass: resolve all sources + validate same-topic + optimistic version.
   type Resolved = {
@@ -713,17 +759,7 @@ export function moveMessages(
   // Apply updates.
   const updated: Message[] = [];
   for (const p of plan) {
-    const traffic = generateTrafficking(
-      {
-        number: p.number,
-        variant: p.variant,
-        audienceKey: targetAudienceKey,
-        topicKey: p.source.topic,
-        audience: targetAudience,
-        topic: p.topicRow ?? undefined,
-      },
-      patterns.trafficking,
-    );
+    // PMMID first — utm_cd26 = {{PMMID}} reads the regenerated id.
     const newPmmid = generatePmmid(
       {
         audience: targetAudienceKey,
@@ -732,9 +768,23 @@ export function moveMessages(
         variant: p.variant,
         versionNo: p.source.versionNo,
       },
-      [],
+      audienceList,
       [],
       patterns.pmmid,
+    );
+    const traffic = buildTrafficking(
+      {
+        number: p.number,
+        variant: p.variant,
+        audience: targetAudienceKey,
+        topic: p.source.topic,
+        landingUrl: p.source.landingUrl,
+      },
+      targetAudience,
+      p.topicRow,
+      patterns,
+      audienceList,
+      newPmmid,
     );
     const row = db
       .update(messages)
@@ -749,6 +799,7 @@ export function moveMessages(
         utmContent: traffic.utm_content,
         utmTerm: traffic.utm_term,
         utmCd26: traffic.utm_cd26,
+        finalTraffickedUrl: traffic.final_trafficked_url,
         version: sql`${messages.version} + 1`,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })

@@ -27,6 +27,8 @@ async function fetchFeedExports(product: string): Promise<FeedExportRow[]> {
   return data.feedExports;
 }
 
+const SERVING_STATUSES = new Set(["ACTIVE", "INACTIVE"]);
+
 function uniqueMcOptions(messages: Message[]) {
   const seen = new Map<
     string,
@@ -57,8 +59,13 @@ export default function FeedExportPanel({
   const products = [...filters.products];
   const statuses = [...filters.statuses];
   const isSingleProduct = products.length === 1;
-  const isActiveOnly = statuses.length === 1 && statuses[0] === "ACTIVE";
-  const ready = isSingleProduct && isActiveOnly;
+  // ACTIVE and INACTIVE are the two "serving" statuses that belong in an AdForm
+  // feed (INACTIVE rows go in with ISACTIVE=FALSE). Draft/pipeline statuses
+  // (INCOMING, CONTENT, PLANNED, DEAD, …) must never be exported, so the gate
+  // requires the status filter to be a non-empty subset of the serving set.
+  const isServingStatusOnly =
+    statuses.length > 0 && statuses.every((s) => SERVING_STATUSES.has(s));
+  const ready = isSingleProduct && isServingStatusOnly;
   const product = isSingleProduct ? products[0] : null;
 
   const historyQ = useQuery({
@@ -117,6 +124,14 @@ export default function FeedExportPanel({
     )[0];
   }, [historyQ.data]);
 
+  // Must stay above the early return below — a hook called only on the `ready`
+  // branch would change the hook order when the status filter flips `ready`,
+  // crashing with "rendered more hooks than during the previous render".
+  const filteredIds = useMemo(
+    () => filteredMessages.map((m) => m.id),
+    [filteredMessages],
+  );
+
   if (!ready) {
     return (
       <div className="feed-export-panel feed-export-panel--gated rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
@@ -128,7 +143,7 @@ export default function FeedExportPanel({
             </div>
             <p className="mt-1 leading-snug">
               Filter to <strong>one product</strong> and{" "}
-              <strong>ACTIVE-only status</strong> to enable export.
+              <strong>ACTIVE / INACTIVE status</strong> to enable export.
             </p>
             <p className="mt-1 text-[10px] text-amber-700">
               {!isSingleProduct
@@ -137,10 +152,10 @@ export default function FeedExportPanel({
                   : `${products.length} products selected.`
                 : "Product OK."}
               {" · "}
-              {!isActiveOnly
+              {!isServingStatusOnly
                 ? statuses.length === 0
                   ? "No status selected."
-                  : `Status: ${statuses.join(", ")}.`
+                  : `Status: ${statuses.join(", ")} (only ACTIVE/INACTIVE allowed).`
                 : "Status OK."}
             </p>
           </div>
@@ -156,12 +171,7 @@ export default function FeedExportPanel({
   if (trimmedSearch) {
     filterChips.push({ key: "search", label: trimmedSearch });
   }
-  filterChips.push({ key: "status", label: "ACTIVE" });
-
-  const filteredIds = useMemo(
-    () => filteredMessages.map((m) => m.id),
-    [filteredMessages],
-  );
+  filterChips.push({ key: "status", label: statuses.join(", ") });
 
   return (
     <>

@@ -2623,3 +2623,54 @@ Wave 3 adds a table + migration + route + page UI → **minor** bump territory (
 - `MonitoringDetailDialog`: matched → live MC preview; unmatched → "unmatched" placeholder; both show an **audience × size** breakdown (impr/clicks/CTR + total) for that MC.
 - 333 tests green (3 new extractSize).
 - NOTE: per-period rows grew (~3000 for May) due to size grain — single fetch, lazy iframe previews, content-visibility on rows. Re-watch perf if periods accumulate.
+
+## 2026-05-31 — W3 table size-collapse + commit + spec
+- **Correction to the entry above:** the Monitoring **table no longer shows a Size column**. Sizes are collapsed client-side back to one display row per (platform, product, MC, audience, topic, message) — May shows ~837 display rows again. The size-grained rows (3002) are still returned by `GET /api/monitoring`; the **per-size breakdown lives only in `MonitoringDetailDialog`** (audience × size). Table sort keys: platform/product/mc/audience/topic/message/impr/clicks/ctr/cost/conv (no size).
+- **Committed** on branch `feat/monitoring-ingest`: `cbcd31c feat(monitoring): AdForm Creative-report ingest + matrix-matched view` (24 files: schema + migrations 0017/0018/0019, parser, monitoring-products, 3 routes, full Monitoring UI, StructureTab section, MatrixIframeTile export, tests, docs). Excluded `.codex/`, db backups, unrelated scripts. Branch is local (not pushed).
+- **Spec updated** (`docs/REBUILD_SPEC.md`, on disk only — `docs/` is gitignored, so NOT in the commit): §3.7a `monitoring` table, §3.7 retire note, §4.9a ingest routes, §6.6 `/monitoring` rewrite, §6.9 Structure→Monitoring rules, §3.9 known keys + `monitoringProductRules`.
+- Tests: 333 green. Still `6.0.0-pre` (no bump; tracked here).
+
+### Wave 3 — remaining
+- [ ] **W3.g** Matrix cell stat badge (impr/CTR on matched MatrixGrid cells).
+- [ ] **W3.h** Unmatched manual link-to-message action (Unmatched pill already filters).
+- [ ] **Retire legacy `reporting`** — drop table + repoint MCP `get_mc_reporting` / `monitoring_status` to `monitoring`, remove import/export-xlsx + snapshots refs. Do LAST.
+- Deferred: Meta parser/resolver (no sample export).
+
+---
+
+## 2026-05-31 — Feed export: hooks crash + allow INACTIVE
+
+Two bugs reported in Feed view / FeedExportPanel:
+
+1. **Crash on status-filter change** ("rendered more hooks than previous render").
+   Root cause: `filteredIds` `useMemo` in `FeedExportPanel.tsx` lives *after* the
+   `if (!ready) return` early-return → hook count changes when `ready` flips.
+   - [x] Hoist `filteredIds` useMemo above the early return.
+
+2. **Feed export only allowed ACTIVE-only status; INACTIVE should be includable.**
+   `IsActive` feed pattern is already `{{status}}=ACTIVE?TRUE:FALSE`, so INACTIVE
+   rows render `ISACTIVE=FALSE` once let through. Need to widen two gates:
+   - [x] UI gate (`FeedExportPanel.tsx`): allow status filter = non-empty subset of
+         {ACTIVE, INACTIVE}; update gate copy + the hardcoded "ACTIVE" filter chip.
+   - [x] Server build (`feed-export.ts`): include ACTIVE **or** INACTIVE (non-archived,
+         product-matched); update BuildOptions doc comment.
+   - Invariants check: only widens the current-serving set; sticky-superset /
+     version-bump / uploaded≠exported / default-row transforms all unaffected.
+
+### 2026-05-31 (cont.) — two feed data/config fixes (client 8 / Erste)
+
+3. **MC314 a/b/c stale PMMID** — ids 32756/57/58 had `audience=SZA_afadpdall`
+   but stored `pmmid=a_SZA_INCOMING-…` (imported with a mismatched PMMID column;
+   `import-xlsx.ts:381` trusts it verbatim, move-regen blocked for ACTIVE rows).
+   No measurement anchored to either key → safe. Fixed via one-time UPDATE
+   (swapped audience segment). Backup: `db/matrix.db.before-pmmid-314-fix`.
+
+4. **Text:template_variant_class wrong formula** — config `patterns.feed`
+   key was `MC{{number}}_{{variant}}_{{topic}}_{{version}}` (the advert-name
+   shape; `{{version}}` = optimistic-lock counter → _69/_51/_2…). v5 ground
+   truth: `template_variant_class → {{template_variant_classes}}`. Reset to
+   `{{Template_variant_classes}}` for client 8. Backup:
+   `db/matrix.db.before-tvc-pattern-fix`.
+   - OPEN/flagged: `advert_name` + `Text:advert_name` still use `{{version}}`
+     (lock counter) instead of `{{version_no}}` — same _69 leak in the
+     advert_name column. Left for user decision (affects AdForm advert naming).

@@ -67,8 +67,9 @@ export type BuildOptions = {
   forceNewVersion?: boolean;
   /**
    * If provided, restrict the export's row set to messages whose id is in
-   * this list (intersected with product + ACTIVE + carry-forward rules).
-   * Mirrors the user's matrix filter so the export reflects what they see.
+   * this list (intersected with product + ACTIVE/INACTIVE + carry-forward
+   * rules). Mirrors the user's matrix filter so the export reflects what they
+   * see.
    */
   messageIds?: number[] | null;
 };
@@ -369,9 +370,15 @@ export function buildFeedRowSet(opts: BuildOptions): {
     if (allowed && !allowed.has(m.id)) continue;
     const matchesProduct =
       productAudKeys.has(m.audience) && productTopicKeys.has(m.topic);
-    const isActive =
-      m.status === "ACTIVE" && m.archivedAt === null && matchesProduct;
-    if (isActive) {
+    // ACTIVE and INACTIVE are both serving statuses that belong in the feed —
+    // the IsActive column pattern ({{status}}=ACTIVE?TRUE:FALSE) renders the
+    // INACTIVE ones with ISACTIVE=FALSE so they stop serving but stay in the
+    // feed. Draft/pipeline statuses never enter. Archived is handled below.
+    const isServing =
+      (m.status === "ACTIVE" || m.status === "INACTIVE") &&
+      m.archivedAt === null &&
+      matchesProduct;
+    if (isServing) {
       inSet.push(m);
       continue;
     }

@@ -268,6 +268,73 @@ export function updateMessage(
   return { ok: true, row: updated };
 }
 
+// Fields that describe the messaging card itself — its creative content,
+// styling, template and lifecycle status — and are therefore shared by every
+// audience copy of the same (number, variant). The placement fields
+// (audience, topic, startDate, endDate) are per-copy and are deliberately
+// excluded so a global edit never overwrites a sibling's own placement.
+const PROPAGATED_FIELDS = WRITABLE_FIELDS.filter(
+  (f) =>
+    f !== "audience" &&
+    f !== "topic" &&
+    f !== "startDate" &&
+    f !== "endDate",
+) as WritableField[];
+
+// Non-archived rows that are the SAME messaging card as `primary` but on a
+// different audience. (number, variant) never spans more than one topic, so it
+// uniquely identifies the card. Used by the editor's global-edit warning count
+// and by the propagation fan-out below.
+export function findSiblings(clientId: number, primary: Message): Message[] {
+  return db
+    .select()
+    .from(messages)
+    .where(
+      and(
+        eq(messages.clientId, clientId),
+        eq(messages.number, primary.number),
+        eq(messages.variant, primary.variant),
+        isNull(messages.archivedAt),
+      ),
+    )
+    .all()
+    .filter((m) => m.id !== primary.id);
+}
+
+// Apply the shared (creative + status) subset of `input` to every sibling of
+// `primary`. Each sibling is force-updated (last-write-wins) and version-bumped
+// so any editor open on it will see a conflict on its next save. Placement
+// fields in `input` are dropped. Returns { before, after } pairs so the caller
+// can write per-sibling audit entries (revision history).
+export function propagateToSiblings(
+  clientId: number,
+  primary: Message,
+  input: MessageInput,
+): Array<{ before: Message; after: Message }> {
+  const payload: Record<string, unknown> = {};
+  for (const f of PROPAGATED_FIELDS) {
+    if (f in input) payload[f] = (input as Record<string, unknown>)[f];
+  }
+  if (Object.keys(payload).length === 0) return [];
+
+  const siblings = findSiblings(clientId, primary);
+  const changes: Array<{ before: Message; after: Message }> = [];
+  for (const sib of siblings) {
+    const after = db
+      .update(messages)
+      .set({
+        ...payload,
+        version: sql`${messages.version} + 1`,
+        updatedAt: sql`CURRENT_TIMESTAMP`,
+      })
+      .where(and(eq(messages.clientId, clientId), eq(messages.id, sib.id)))
+      .returning()
+      .get();
+    changes.push({ before: sib, after });
+  }
+  return changes;
+}
+
 export function archiveMessage(
   clientId: number,
   id: number,

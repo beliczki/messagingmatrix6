@@ -2699,9 +2699,9 @@ same (number,variant) — never spans >1 topic (verified). Delivery = phased.
       only `mc:` prunes both rows+cols to populated cells. Product dropdown unchanged.
 
 ### Phase 2 — global edit propagation (separate commit, after Phase 1 review)
-- [ ] **2.1** global/local toggle next to Autosave (`MessageEditor.tsx:~504`).
-- [ ] **2.2** When global ON, saving an edit fans the creative+status payload to all
+- [x] **2.1** global/local toggle next to Autosave (`MessageEditor.tsx:~504`).
+- [x] **2.2** When global ON, saving an edit fans the creative+status payload to all
       same-(number,variant) siblings (each with its own version); placement fields
       stay local. New API path / entity fn for sibling fan-out.
-- [ ] **2.3** Next to stepper counter, when global ON, warn "edits will update N other
+- [x] **2.3** Next to stepper counter, when global ON, warn "edits will update N other
       audiences" (N = sibling count).

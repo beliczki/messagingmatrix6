@@ -18,6 +18,8 @@ import {
   Trash2,
   ChevronDown,
   History,
+  Globe,
+  Users,
 } from "lucide-react";
 import clsx from "clsx";
 import { type Audience, type Message, type Topic, STATUS_COLOR } from "./types";
@@ -77,6 +79,8 @@ type Props = {
   topics: Topic[];
   /** Filtered, ordered set the user is currently navigating. */
   visibleMessages: Message[];
+  /** Count of other (non-archived) audience copies of the open card. */
+  siblingCount: number;
   onClose: () => void;
   onJump: (id: number) => void;
 };
@@ -178,6 +182,7 @@ export default function MessageEditor({
   audiences,
   topics,
   visibleMessages,
+  siblingCount,
   onClose,
   onJump,
 }: Props) {
@@ -188,6 +193,24 @@ export default function MessageEditor({
     null,
   );
   const [autoSave, setAutoSave] = useState<boolean>(true);
+  // Global edit: when on, saving fans the shared (creative + status) fields out
+  // to every other audience copy of this card. Persisted — it's a deliberate
+  // workflow mode, not a per-session accident.
+  const [globalEdit, setGlobalEdit] = useState<boolean>(false);
+  useEffect(() => {
+    try {
+      setGlobalEdit(localStorage.getItem("mm6_matrix_edit_global") === "1");
+    } catch {}
+  }, []);
+  function toggleGlobalEdit() {
+    setGlobalEdit((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem("mm6_matrix_edit_global", next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  }
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
   const [splitPercent, setSplitPercent] = useState<number>(50);
   const [previewSize, setPreviewSize] = useState<string | null>(null);
@@ -285,15 +308,20 @@ export default function MessageEditor({
     mutationFn: async (payload: Partial<EditableFields>) => {
       if (!committedSnapshot) throw new Error("no snapshot");
       if (Object.keys(payload).length === 0) return null;
-      const r = await fetch(`/api/messages/${committedSnapshot.id}`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "If-Match": String(committedSnapshot.version),
+      const r = await fetch(
+        `/api/messages/${committedSnapshot.id}${
+          globalEdit ? "?propagate=siblings" : ""
+        }`,
+        {
+          method: "PATCH",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "If-Match": String(committedSnapshot.version),
+          },
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      });
+      );
       if (r.status === 409) {
         const body = (await r.json()) as { currentRow: Message };
         throw new VersionMismatchError(body.currentRow);
@@ -478,6 +506,16 @@ export default function MessageEditor({
               {navIndex + 1}/{uniqueMcs.length}
             </span>
           ) : null}
+          {globalEdit && siblingCount > 0 ? (
+            <span
+              className="message-editor__global-warning inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700"
+              title={`Global edit is on — your changes to creative & status will also update ${siblingCount} other audience copy(ies) of this card.`}
+            >
+              <Users className="size-3" />
+              updates {siblingCount} other audience
+              {siblingCount === 1 ? "" : "s"}
+            </span>
+          ) : null}
           <SaveIndicator state={saveState} />
 
           <div className="message-editor__header-actions ml-auto flex items-center gap-2">
@@ -488,6 +526,23 @@ export default function MessageEditor({
             >
               <History className="size-3.5" />
               History
+            </button>
+            <button
+              onClick={toggleGlobalEdit}
+              className={clsx(
+                "message-editor__scope-toggle flex items-center gap-1 rounded border px-2 py-1 text-xs",
+                globalEdit
+                  ? "message-editor__scope-toggle--global border-amber-500 bg-amber-500 text-white"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+              )}
+              title={
+                globalEdit
+                  ? "Global: edits to creative & status propagate to all audience copies of this card"
+                  : "Local: edits apply only to this audience copy"
+              }
+            >
+              <Globe className="size-3.5" />
+              {globalEdit ? "Global" : "Local"}
             </button>
             <button
               onClick={() => setAutoSave((v) => !v)}

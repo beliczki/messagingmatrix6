@@ -451,6 +451,18 @@ export default function MatrixWorkspace() {
     [messages, openMessageId],
   );
 
+  // Other audience copies of the open card — drives the editor's global-edit
+  // warning. (number, variant) uniquely identifies a card across audiences.
+  const openSiblingCount = useMemo(() => {
+    if (!openMessage) return 0;
+    return messages.filter(
+      (m) =>
+        m.id !== openMessage.id &&
+        m.number === openMessage.number &&
+        m.variant === openMessage.variant,
+    ).length;
+  }, [openMessage, messages]);
+
   const headerEntity = useMemo(() => {
     if (!headerDialog) return null;
     if (headerDialog.kind === "audience") {
@@ -625,6 +637,7 @@ export default function MatrixWorkspace() {
         audiences={audiences}
         topics={topics}
         visibleMessages={filtered.msgs}
+        siblingCount={openSiblingCount}
         onClose={() => setOpenMessageId(null)}
         onJump={(id) => setOpenMessageId(id)}
       />

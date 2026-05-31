@@ -3,6 +3,7 @@ import {
   archiveMessage,
   getMessage,
   pickWritable,
+  propagateToSiblings,
   updateMessage,
 } from "@/lib/entities/messages";
 import { denyDemo, withSession } from "@/lib/scoped";
@@ -54,7 +55,28 @@ export const PATCH = withSession<Params>(async ({ req, claims, params }) => {
     before,
     after: result.row,
   });
-  return NextResponse.json({ message: result.row });
+
+  // Global edit: fan the shared (creative + status) fields out to every other
+  // audience copy of this same card. Triggered by ?propagate=siblings. Each
+  // sibling gets its own audit entry so the change shows in its history too.
+  let propagated = 0;
+  if (new URL(req.url).searchParams.get("propagate") === "siblings") {
+    const changes = propagateToSiblings(claims.cid, result.row, input);
+    for (const c of changes) {
+      writeAudit({
+        clientId: claims.cid,
+        userId: claims.sub,
+        entityType: "messages",
+        entityId: c.after.id,
+        action: "update",
+        before: c.before,
+        after: c.after,
+      });
+    }
+    propagated = changes.length;
+  }
+
+  return NextResponse.json({ message: result.row, propagated });
 });
 
 export const DELETE = withSession<Params>(async ({ req, claims, params }) => {

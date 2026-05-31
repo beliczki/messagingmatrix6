@@ -2705,3 +2705,30 @@ same (number,variant) — never spans >1 topic (verified). Delivery = phased.
       stay local. New API path / entity fn for sibling fan-out.
 - [x] **2.3** Next to stepper counter, when global ON, warn "edits will update N other
       audiences" (N = sibling count).
+
+### Review — session results (2026-05-31)
+
+Shipped on `feat/monitoring-ingest` (3 commits):
+- `cb8855e` feat(feed-export): allow INACTIVE + fix FeedExportPanel hooks-order crash.
+- `ea608f7` feat(matrix): per-axis filter pruning (`narrowingAxes`), full status list +
+  colored `MultiPill` dots, MC-unique editor stepper, status-dot-only header.
+- `1566cf1` feat(matrix): global edit mode — `findSiblings`/`propagateToSiblings`,
+  `PATCH ?propagate=siblings`, Global/Local toggle, sibling-count warning chip.
+
+DB data/config fixes (untracked `db/matrix.db`, client 8 / Erste; `.before-*` backups):
+- MC314 a/b/c (ids 32756/57/58) stale PMMID `a_SZA_INCOMING…` → corrected to
+  `a_SZA_afadpdall…` (no measurement anchored; root cause = import trusts PMMID
+  column verbatim, `import-xlsx.ts:381`).
+- `patterns.feed["Text:template_variant_class"]`: was the advert-name formula
+  `MC{{number}}_{{variant}}_{{topic}}_{{version}}` (version = optimistic-lock
+  counter) → reset to `{{Template_variant_classes}}` (v5-parity).
+
+Tests: 345 pass (added `narrowingAxes` unit cases + `propagate-siblings` integration).
+Spec updated: §6.2, §6.3, §6.10a, §7.7 (REBUILD_SPEC.md).
+
+Still OPEN (user decision):
+- `advert_name` / `Text:advert_name` patterns still use `{{version}}` (lock counter)
+  → likely should be `{{version_no}}`. Same `_69` leak in the ADVERT_NAME column.
+- Phase-2 caveat: global save is last-write-wins on siblings; could optionally skip
+  ACTIVE siblings if measurement-anchor protection is wanted.
+- Branch not pushed.

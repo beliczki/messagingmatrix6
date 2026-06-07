@@ -67,9 +67,11 @@ export default function LoginPage() {
               className="login__logo mx-auto mb-3 h-10"
             />
           ) : null}
-          <h1 className="login__title text-xl font-semibold" style={{ color: "var(--brand-primary)" }}>
-            {config?.lookAndFeel.pageTitle ?? "MessagingMatrix"}
-          </h1>
+          <img
+            src="/mmatrix.svg"
+            alt={config?.lookAndFeel.pageTitle ?? "MessagingMatrix"}
+            className="login__product-logo mx-auto h-20 w-20"
+          />
           {config ? (
             <p className="login__client-name mt-1 text-xs uppercase tracking-wide text-gray-500">
               {config.clientName}

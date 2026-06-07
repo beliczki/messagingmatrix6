@@ -102,24 +102,26 @@ describe("propagateToSiblings", () => {
     }
   });
 
-  it("never overwrites a sibling's placement fields (audience/topic/dates)", () => {
+  it("syncs flight dates to siblings, never overwrites audience/topic", () => {
     const primary = seedCard();
     const before = findSiblings(erste.id, primary);
     propagateToSiblings(erste.id, primary, {
       headline: "Updated",
-      // placement fields — must be ignored even if present in the payload
-      audience: "aud1",
-      topic: "top1",
+      // flight dates are campaign-level → propagate
       startDate: "2099-12-31",
       endDate: "2099-12-31",
+      // cell-defining placement — must be ignored even if present in the payload
+      audience: "aud1",
+      topic: "top1",
     } as never);
     const after = findSiblings(erste.id, primary);
     for (const sib of after) {
       const orig = before.find((b) => b.id === sib.id)!;
       expect(sib.headline).toBe("Updated"); // shared field changed
+      expect(sib.startDate).toBe("2099-12-31"); // dates sync
+      expect(sib.endDate).toBe("2099-12-31");
       expect(sib.audience).toBe(orig.audience); // placement untouched
-      expect(sib.startDate).toBe(orig.startDate);
-      expect(sib.endDate).toBe(orig.endDate);
+      expect(sib.topic).toBe(orig.topic);
     }
   });
 
@@ -137,9 +139,10 @@ describe("propagateToSiblings", () => {
   it("is a no-op when the payload has no shared fields", () => {
     const primary = seedCard();
     const before = findSiblings(erste.id, primary);
+    // Only cell-defining placement fields → nothing to propagate.
     const changes = propagateToSiblings(erste.id, primary, {
       audience: "aud2",
-      startDate: "2030-01-01",
+      topic: "top1",
     } as never);
     expect(changes).toHaveLength(0);
     const after = findSiblings(erste.id, primary);

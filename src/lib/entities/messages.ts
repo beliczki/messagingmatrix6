@@ -303,17 +303,13 @@ export function updateMessage(
   return { ok: true, row: updated };
 }
 
-// Fields that describe the messaging card itself — its creative content,
-// styling, template and lifecycle status — and are therefore shared by every
-// audience copy of the same (number, variant). The placement fields
-// (audience, topic, startDate, endDate) are per-copy and are deliberately
-// excluded so a global edit never overwrites a sibling's own placement.
+// Fields shared by every audience copy of the same (number, variant): creative
+// content, styling, template, lifecycle status, and the campaign flight dates
+// (startDate/endDate) — those are campaign-level, so a global edit syncs them to
+// all siblings. Only `audience` and `topic` stay per-copy: they define which
+// cell the card lives in, so propagating them would collapse placements.
 const PROPAGATED_FIELDS = WRITABLE_FIELDS.filter(
-  (f) =>
-    f !== "audience" &&
-    f !== "topic" &&
-    f !== "startDate" &&
-    f !== "endDate",
+  (f) => f !== "audience" && f !== "topic",
 ) as WritableField[];
 
 // Non-archived rows that are the SAME messaging card as `primary` but on a
@@ -336,11 +332,14 @@ export function findSiblings(clientId: number, primary: Message): Message[] {
     .filter((m) => m.id !== primary.id);
 }
 
-// Apply the shared (creative + status) subset of `input` to every sibling of
-// `primary`. Each sibling is force-updated (last-write-wins) and version-bumped
-// so any editor open on it will see a conflict on its next save. Placement
-// fields in `input` are dropped. Returns { before, after } pairs so the caller
-// can write per-sibling audit entries (revision history).
+// Apply the shared subset of `input` (creative + status + flight dates) to every
+// sibling of `primary`. Each sibling is force-updated (last-write-wins) and
+// version-bumped so any editor open on it will see a conflict on its next save.
+// audience/topic are dropped (per-copy placement). Trafficking is recomputed per
+// sibling so a propagated landing_url flows into that sibling's UTM/Final-URL
+// against ITS OWN audience/topic (pmmid stays the sibling's stable identity).
+// Returns { before, after } pairs so the caller can write per-sibling audit
+// entries (revision history).
 export function propagateToSiblings(
   clientId: number,
   primary: Message,
@@ -352,13 +351,37 @@ export function propagateToSiblings(
   }
   if (Object.keys(payload).length === 0) return [];
 
+  const patterns = readClientPatterns(clientId);
+  const audienceList = listAudiences(clientId);
   const siblings = findSiblings(clientId, primary);
   const changes: Array<{ before: Message; after: Message }> = [];
   for (const sib of siblings) {
+    const merged = { ...sib, ...payload } as Message;
+    const traffic = buildTrafficking(
+      {
+        number: merged.number,
+        variant: merged.variant,
+        audience: merged.audience,
+        topic: merged.topic,
+        landingUrl: merged.landingUrl,
+      },
+      findAudienceByKey(clientId, merged.audience),
+      findTopicByKey(clientId, merged.topic),
+      patterns,
+      audienceList,
+      sib.pmmid,
+    );
     const after = db
       .update(messages)
       .set({
         ...payload,
+        utmCampaign: traffic.utm_campaign,
+        utmSource: traffic.utm_source,
+        utmMedium: traffic.utm_medium,
+        utmContent: traffic.utm_content,
+        utmTerm: traffic.utm_term,
+        utmCd26: traffic.utm_cd26,
+        finalTraffickedUrl: traffic.final_trafficked_url,
         version: sql`${messages.version} + 1`,
         updatedAt: sql`CURRENT_TIMESTAMP`,
       })

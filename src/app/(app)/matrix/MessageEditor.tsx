@@ -336,7 +336,25 @@ export default function MessageEditor({
       if (saved) {
         // Bump our snapshot so the next save uses the new version.
         setCommittedSnapshot(saved);
-        qc.invalidateQueries({ queryKey: ["messages"] });
+        // Patch the saved row straight into the grid cache so reopening this
+        // card shows the persisted values immediately — invalidate alone is an
+        // async refetch the reopen can outrun, leaving the editor re-seeded
+        // from the stale grid row. The server response carries the recomputed
+        // UTM/Final-URL fields too, so they propagate as well.
+        qc.setQueryData<{ messages: Message[] }>(["messages"], (prev) =>
+          prev
+            ? {
+                messages: prev.messages.map((m) =>
+                  m.id === saved.id ? saved : m,
+                ),
+              }
+            : prev,
+        );
+        // Global edit fans the change out to sibling rows server-side; those
+        // updated rows aren't in this response, so refetch to pull them in.
+        if (globalEdit) {
+          qc.invalidateQueries({ queryKey: ["messages"] });
+        }
       }
       setSaveState({ kind: "saved" });
       // Clear "saved" indicator after 1.5s.

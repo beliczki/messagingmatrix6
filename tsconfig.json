@@ -20,5 +20,6 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules", "dist", ".next"]
+  "//exclude-scripts": "One-off dev/seed/maintenance scripts run via tsx, not part of the Next app or its build. Excluded from type-checking; they still need a SQLite→Postgres async pass (track in tasks/todo.md) before use.",
+  "exclude": ["node_modules", "dist", ".next", "scripts"]
 }

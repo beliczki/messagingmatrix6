@@ -3049,7 +3049,20 @@ not compile until the sweep completes — foundation + sweep land as ONE commit.
       `getSqlite` + sync queries. NOT shipped, don't block build/tests. Convert lazily
       when next needed (seed-dev, seed-keywords, rotate-mcp-token, import-erste are the
       likely-used ones).
-- [ ] PG-D cutover wiring (the "make it actually shared" step):
+- [x] PG-D CUTOVER DONE 2026-06-27. Local `.env.local` → shared DB via SSH tunnel
+      (localhost:5433); dev server verified serving from Postgres. Box: committed
+      migration (f18bb62) + tsconfig-exclude-scripts + vitest fix, pushed
+      feat/monitoring-ingest, box `git pull` + `npm ci` + `npm run build` (had to set
+      box `.env` DATABASE_URL→`postgres://...@localhost:5432/mm6` BEFORE build since the
+      root layout prerenders against the DB; preserved PORT/NODE_ENV/MCP_BEARER/STORAGE),
+      `pm2 restart`. LIVE: erste.messagingmatrix.ai serves from Postgres (config-public
+      OK, 401 on auth/me, 0 unstable restarts). Backups taken: box matrix.db.pre-pg-cutover-*
+      + .env.pre-pg-cutover-*. Rollback = restore .env + pm2 restart.
+- [ ] FINAL: merge feat/monitoring-ingest → main (origin/main still 07681a1, untouched;
+      local main already == feat at 292d3b3) + repoint box to main (same commit, no
+      rebuild). Then suggest version bump + CHANGELOG. The ~13 scripts/ still need an
+      async pass (excluded from build for now).
+- [ ] ~~PG-D cutover wiring~~ (done above):
       * Local: set `DATABASE_URL=postgres://postgres:<pw>@localhost:5433/mm6` in `.env`
         (via SSH tunnel) so `npm run dev:*` hit the shared Hetzner DB.
       * Box: set `DATABASE_URL=postgres://postgres:<pw>@localhost:5432/mm6` in the

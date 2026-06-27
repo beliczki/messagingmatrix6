@@ -8,7 +8,11 @@ import TemplateEditor from "./TemplateEditor";
 export default async function Page() {
   const claims = await readSessionFromCookies();
   if (!claims) redirect("/login");
-  const u = db.select().from(users).where(eq(users.id, claims.sub)).get();
+  const [u] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, claims.sub))
+    .limit(1);
   if (!u || u.role !== "admin") {
     return (
       <div className="flex h-full items-center justify-center p-8">

@@ -37,38 +37,40 @@ async function callTool(
   };
 }
 
-function seedAsset(
+async function seedAsset(
   clientId: number,
   fields: Partial<typeof assets.$inferInsert> & {
     fileName: string;
   },
 ) {
-  return db
+  const [row] = await db
     .insert(assets)
     .values({ clientId, type: "image", brand: "ERSTE", ...fields })
-    .returning()
-    .get();
+    .returning();
+  return row;
 }
 
-beforeEach(() => {
-  h = createTestDb();
-  erste = db.insert(clients).values({ key: "erste", name: "Erste" }).returning().get();
-  telekom = db
+beforeEach(async () => {
+  h = await createTestDb();
+  [erste] = await db
+    .insert(clients)
+    .values({ key: "erste", name: "Erste" })
+    .returning();
+  [telekom] = await db
     .insert(clients)
     .values({ key: "telekom", name: "Telekom" })
-    .returning()
-    .get();
+    .returning();
 });
 
-afterEach(() => {
-  h.cleanup();
+afterEach(async () => {
+  await h.cleanup();
 });
 
 describe("list_assets via MCP", () => {
   it("file_name_contains is case-insensitive substring match", async () => {
-    seedAsset(erste.id, { fileName: "SZA_george_c_sports_fitzone.jpg" });
-    seedAsset(erste.id, { fileName: "SZA_george_repter_deviza.jpg" });
-    seedAsset(erste.id, { fileName: "TKM_unrelated_banner.jpg" });
+    await seedAsset(erste.id, { fileName: "SZA_george_c_sports_fitzone.jpg" });
+    await seedAsset(erste.id, { fileName: "SZA_george_repter_deviza.jpg" });
+    await seedAsset(erste.id, { fileName: "TKM_unrelated_banner.jpg" });
 
     const { json } = await callTool(erste.id, "list_assets", {
       file_name_contains: "GEORGE",
@@ -81,15 +83,15 @@ describe("list_assets via MCP", () => {
   });
 
   it("visual_keyword_contains is case-insensitive substring match", async () => {
-    seedAsset(erste.id, {
+    await seedAsset(erste.id, {
       fileName: "a.jpg",
       visualKeyword: "sports fitzone",
     });
-    seedAsset(erste.id, {
+    await seedAsset(erste.id, {
       fileName: "b.jpg",
       visualKeyword: "trackers befektetes",
     });
-    seedAsset(erste.id, {
+    await seedAsset(erste.id, {
       fileName: "c.jpg",
       visualKeyword: "reppter george",
     });
@@ -102,19 +104,19 @@ describe("list_assets via MCP", () => {
   });
 
   it("brand/product/type are AND-combined exact-match filters", async () => {
-    seedAsset(erste.id, {
+    await seedAsset(erste.id, {
       fileName: "match.jpg",
       brand: "ERSTE",
       product: "SZA",
       type: "image",
     });
-    seedAsset(erste.id, {
+    await seedAsset(erste.id, {
       fileName: "wrong-product.jpg",
       brand: "ERSTE",
       product: "VAL",
       type: "image",
     });
-    seedAsset(erste.id, {
+    await seedAsset(erste.id, {
       fileName: "wrong-type.jpg",
       brand: "ERSTE",
       product: "SZA",
@@ -131,8 +133,8 @@ describe("list_assets via MCP", () => {
   });
 
   it("archived rows excluded by default, included with include_archived=true", async () => {
-    seedAsset(erste.id, { fileName: "live.jpg" });
-    seedAsset(erste.id, {
+    await seedAsset(erste.id, { fileName: "live.jpg" });
+    await seedAsset(erste.id, {
       fileName: "archived.jpg",
       archivedAt: "2026-01-01 00:00:00",
     });
@@ -149,8 +151,8 @@ describe("list_assets via MCP", () => {
   });
 
   it("only returns rows for the active client (tenant isolation)", async () => {
-    seedAsset(erste.id, { fileName: "ours.jpg" });
-    seedAsset(telekom.id, { fileName: "theirs.jpg" });
+    await seedAsset(erste.id, { fileName: "ours.jpg" });
+    await seedAsset(telekom.id, { fileName: "theirs.jpg" });
 
     const { json } = await callTool(erste.id, "list_assets", {});
     expect(json).toHaveLength(1);

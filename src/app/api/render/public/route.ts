@@ -38,11 +38,11 @@ export async function POST(req: NextRequest) {
     return bad("missing_params");
   }
 
-  const share = db
+  const [share] = await db
     .select()
     .from(shareGalleries)
     .where(eq(shareGalleries.id, shareId))
-    .get();
+    .limit(1);
   if (!share || share.archivedAt !== null) return bad("not_found", 404);
 
   let snapshot: Snapshot = {};
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
       : message.template;
   if (!templateName) return bad("missing_template");
 
-  const textFormatting = listTextFormatting(share.clientId).filter(
+  const textFormatting = (await listTextFormatting(share.clientId)).filter(
     (r) => r.archivedAt === null,
   );
 

@@ -50,6 +50,7 @@
     "lucide-react": "^1.11.0",
     "nanoid": "^5.0.9",
     "next": "15.5.15",
+    "postgres": "^3.4.9",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "sharp": "^0.34.5",

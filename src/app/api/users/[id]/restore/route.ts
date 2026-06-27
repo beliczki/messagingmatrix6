@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { users, nowUtc } from "@/db/schema";
 import { withAdmin } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 
@@ -16,25 +16,24 @@ function pickUser(u: typeof users.$inferSelect) {
   };
 }
 
-export const POST = withAdmin<{ id: string }>(({ claims, params }) => {
+export const POST = withAdmin<{ id: string }>(async ({ claims, params }) => {
   const id = params.id;
-  const existing = db
+  const [existing] = await db
     .select()
     .from(users)
     .where(and(eq(users.clientId, claims.cid), eq(users.id, id)))
-    .get();
+    .limit(1);
   if (!existing) {
     return NextResponse.json({ error: "user not found" }, { status: 404 });
   }
 
-  const updated = db
+  const [updated] = await db
     .update(users)
-    .set({ archivedAt: null, updatedAt: sql`CURRENT_TIMESTAMP` })
+    .set({ archivedAt: null, updatedAt: nowUtc })
     .where(and(eq(users.clientId, claims.cid), eq(users.id, id)))
-    .returning()
-    .get();
+    .returning();
 
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "users",

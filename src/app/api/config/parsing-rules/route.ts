@@ -7,8 +7,8 @@ import { DEFAULT_CREATIVE_PARSING_RULES } from "@/db/defaults";
 
 // Returns config.creativeParsingRules for the active client, falling back to
 // defaults so a fresh client still has working filename parsing.
-export const GET = withSession(({ claims }) => {
-  const row = db
+export const GET = withSession(async ({ claims }) => {
+  const [row] = await db
     .select()
     .from(config)
     .where(
@@ -17,7 +17,7 @@ export const GET = withSession(({ claims }) => {
         eq(config.key, "creativeParsingRules"),
       ),
     )
-    .get();
+    .limit(1);
   let rules: unknown = DEFAULT_CREATIVE_PARSING_RULES;
   if (row) {
     try {

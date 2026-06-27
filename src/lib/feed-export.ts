@@ -82,12 +82,12 @@ type Patterns = {
   [k: string]: unknown;
 };
 
-function readConfigValue(clientId: number, key: string): unknown {
-  const row = db
+async function readConfigValue(clientId: number, key: string): Promise<unknown> {
+  const [row] = await db
     .select()
     .from(configTable)
     .where(and(eq(configTable.clientId, clientId), eq(configTable.key, key)))
-    .get();
+    .limit(1);
   if (!row) return null;
   try {
     return JSON.parse(row.value);
@@ -96,13 +96,15 @@ function readConfigValue(clientId: number, key: string): unknown {
   }
 }
 
-function readFeedStructure(clientId: number): string {
-  const v = readConfigValue(clientId, "feedStructure");
+async function readFeedStructure(clientId: number): Promise<string> {
+  const v = await readConfigValue(clientId, "feedStructure");
   return typeof v === "string" ? v : "";
 }
 
-function readFeedPatterns(clientId: number): Record<string, string> {
-  const p = readConfigValue(clientId, "patterns") as Patterns | null;
+async function readFeedPatterns(
+  clientId: number,
+): Promise<Record<string, string>> {
+  const p = (await readConfigValue(clientId, "patterns")) as Patterns | null;
   return p?.feed ?? {};
 }
 
@@ -239,21 +241,17 @@ function buildDefaultRow(
 // ─────────────────────────────────────────────────────────────────────────────
 // Live snapshot lookup
 
-export function findLiveExport(
+export async function findLiveExport(
   clientId: number,
   product: string,
-): FeedExport | null {
+): Promise<FeedExport | null> {
   // Latest *uploaded* export for this (client, product), regardless of version.
-  const rows = db
+  const rows = await db
     .select()
     .from(feedExports)
     .where(
-      and(
-        eq(feedExports.clientId, clientId),
-        eq(feedExports.product, product),
-      ),
-    )
-    .all();
+      and(eq(feedExports.clientId, clientId), eq(feedExports.product, product)),
+    );
   const uploaded = rows
     .filter((r) => r.uploadedToAdformAt)
     .sort((a, b) =>
@@ -275,20 +273,20 @@ function readLiveMessageIds(live: FeedExport | null): number[] {
 // ─────────────────────────────────────────────────────────────────────────────
 // Build row set
 
-export function buildFeedRowSet(opts: BuildOptions): {
+export async function buildFeedRowSet(opts: BuildOptions): Promise<{
   rowSet: FeedRowSet;
   defaultMessage: DbMessage | null;
   liveExport: FeedExport | null;
-} {
+}> {
   const { clientId, product, defaultMessageId } = opts;
   const allowed =
     opts.messageIds && opts.messageIds.length > 0
       ? new Set(opts.messageIds)
       : null;
 
-  const feedStructure = readFeedStructure(clientId);
+  const feedStructure = await readFeedStructure(clientId);
   const columns = parseFeedColumns(feedStructure);
-  const feedPatterns = readFeedPatterns(clientId);
+  const feedPatterns = await readFeedPatterns(clientId);
 
   // Per-row text-formatter context. Loaded only if any resolved pattern
   // actually uses the `|formatted` modifier — otherwise we save the SELECT.
@@ -296,7 +294,7 @@ export function buildFeedRowSet(opts: BuildOptions): {
     /\|\s*formatted\b/.test(resolveFeedPattern(col, feedPatterns)),
   );
   const formattingRules: TextFormatting[] = usesFormatted
-    ? listTextFormatting(clientId)
+    ? await listTextFormatting(clientId)
     : [];
 
   // Cache per-template size lookups across messages — buildFeedRowSet may
@@ -324,16 +322,14 @@ export function buildFeedRowSet(opts: BuildOptions): {
     };
   }
 
-  const audiences = db
+  const audiences = await db
     .select()
     .from(audiencesTable)
-    .where(eq(audiencesTable.clientId, clientId))
-    .all();
-  const topics = db
+    .where(eq(audiencesTable.clientId, clientId));
+  const topics = await db
     .select()
     .from(topicsTable)
-    .where(eq(topicsTable.clientId, clientId))
-    .all();
+    .where(eq(topicsTable.clientId, clientId));
   const audIndex = new Map(audiences.map((a) => [a.key, a]));
   const topIndex = new Map(topics.map((t) => [t.key, t]));
 
@@ -341,14 +337,13 @@ export function buildFeedRowSet(opts: BuildOptions): {
   // and (every message id from the latest uploaded export). The carry-forwards
   // get re-evaluated through the current patterns; archived messages keep
   // their content but get IsActive forced FALSE downstream.
-  const liveExport = findLiveExport(clientId, product);
+  const liveExport = await findLiveExport(clientId, product);
   const liveIds = readLiveMessageIds(liveExport);
 
-  const allMessages = db
+  const allMessages = await db
     .select()
     .from(messagesTable)
-    .where(eq(messagesTable.clientId, clientId))
-    .all();
+    .where(eq(messagesTable.clientId, clientId));
 
   // Match the v6 matrix view's product-filter semantics exactly: a message is
   // in the product when BOTH its audience and its topic carry that product.

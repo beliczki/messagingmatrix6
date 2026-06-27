@@ -22,10 +22,12 @@ function pickUser(u: typeof users.$inferSelect) {
   };
 }
 
-function latestActionByUser(clientId: number): Map<string, string> {
-  // SQLite "bare columns with MAX": grouping by user_id with MAX(created_at)
-  // returns the action of the row that holds the max timestamp (since 3.7.11).
-  const rows = db
+async function latestActionByUser(
+  clientId: number,
+): Promise<Map<string, string>> {
+  // Grouping by user_id with MAX(created_at) returns the action of the row that
+  // holds the max timestamp.
+  const rows = await db
     .select({
       userId: auditLog.userId,
       action: auditLog.action,
@@ -33,8 +35,7 @@ function latestActionByUser(clientId: number): Map<string, string> {
     })
     .from(auditLog)
     .where(and(eq(auditLog.clientId, clientId), isNotNull(auditLog.userId)))
-    .groupBy(auditLog.userId)
-    .all();
+    .groupBy(auditLog.userId);
   const out = new Map<string, string>();
   for (const r of rows) {
     if (r.userId === null) continue;
@@ -43,18 +44,19 @@ function latestActionByUser(clientId: number): Map<string, string> {
   return out;
 }
 
-function fallbackLastActiveByUser(clientId: number): Map<string, string> {
+async function fallbackLastActiveByUser(
+  clientId: number,
+): Promise<Map<string, string>> {
   // For users who aren't currently live, surface the audit-log timestamp so
   // "last seen 2 hours ago" still works.
-  const rows = db
+  const rows = await db
     .select({
       userId: auditLog.userId,
       createdAt: sql<string>`MAX(${auditLog.createdAt})`.as("last_created"),
     })
     .from(auditLog)
     .where(and(eq(auditLog.clientId, clientId), isNotNull(auditLog.userId)))
-    .groupBy(auditLog.userId)
-    .all();
+    .groupBy(auditLog.userId);
   const out = new Map<string, string>();
   for (const r of rows) {
     if (r.userId === null) continue;
@@ -63,15 +65,15 @@ function fallbackLastActiveByUser(clientId: number): Map<string, string> {
   return out;
 }
 
-export const GET = withAdmin(({ req, claims }) => {
+export const GET = withAdmin(async ({ req, claims }) => {
   const includeArchived =
     new URL(req.url).searchParams.get("includeArchived") === "1";
   const where = includeArchived
     ? eq(users.clientId, claims.cid)
     : and(eq(users.clientId, claims.cid), isNull(users.archivedAt));
-  const rows = db.select().from(users).where(where).all();
-  const lastAction = latestActionByUser(claims.cid);
-  const auditLastActive = fallbackLastActiveByUser(claims.cid);
+  const rows = await db.select().from(users).where(where);
+  const lastAction = await latestActionByUser(claims.cid);
+  const auditLastActive = await fallbackLastActiveByUser(claims.cid);
   return NextResponse.json({
     users: rows.map((u) => {
       const live = isLive(u.id);
@@ -120,11 +122,11 @@ export const POST = withAdmin(async ({ req, claims }) => {
     );
   }
 
-  const existing = db
+  const [existing] = await db
     .select()
     .from(users)
     .where(and(eq(users.clientId, claims.cid), eq(users.email, email)))
-    .get();
+    .limit(1);
   if (existing) {
     return NextResponse.json(
       { error: `user with email "${email}" already exists for this client` },
@@ -133,7 +135,7 @@ export const POST = withAdmin(async ({ req, claims }) => {
   }
 
   const hashed = await hashPassword(password);
-  const inserted = db
+  const [inserted] = await db
     .insert(users)
     .values({
       id: nanoid(),
@@ -142,10 +144,9 @@ export const POST = withAdmin(async ({ req, claims }) => {
       password: hashed,
       role,
     })
-    .returning()
-    .get();
+    .returning();
 
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "users",

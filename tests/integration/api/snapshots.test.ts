@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { audiences, clients, messages, topics } from "@/db/schema";
+import { audiences, clients, messages } from "@/db/schema";
 import { createAudience } from "@/lib/entities/audiences";
 import { createTopic } from "@/lib/entities/topics";
 import { createMessage } from "@/lib/entities/messages";
@@ -17,22 +17,28 @@ let h: TestDb;
 let erste: { id: number };
 let telekom: { id: number };
 
-beforeEach(() => {
-  h = createTestDb();
-  erste = db.insert(clients).values({ key: "erste", name: "Erste" }).returning().get();
-  telekom = db.insert(clients).values({ key: "telekom", name: "Telekom" }).returning().get();
+beforeEach(async () => {
+  h = await createTestDb();
+  [erste] = await db
+    .insert(clients)
+    .values({ key: "erste", name: "Erste" })
+    .returning();
+  [telekom] = await db
+    .insert(clients)
+    .values({ key: "telekom", name: "Telekom" })
+    .returning();
 });
 
-afterEach(() => {
-  h.cleanup();
+afterEach(async () => {
+  await h.cleanup();
 });
 
 describe("snapshots — create + restore round trip", () => {
-  it("captures the live state and restores it after wipe", () => {
+  it("captures the live state and restores it after wipe", async () => {
     // Seed a tiny dataset.
-    const aud = createAudience(erste.id, { name: "Mass Market" });
-    const top = createTopic(erste.id, { name: "Card", product: "Card" });
-    const m = createMessage(erste.id, {
+    const aud = await createAudience(erste.id, { name: "Mass Market" });
+    const top = await createTopic(erste.id, { name: "Card", product: "Card" });
+    const m = await createMessage(erste.id, {
       audience: aud.key,
       topic: top.key,
       headline: "Original headline",
@@ -40,73 +46,75 @@ describe("snapshots — create + restore round trip", () => {
     expect(m.headline).toBe("Original headline");
 
     // Snapshot.
-    const snap = createSnapshot(erste.id, "before-edit", "u-test");
+    const snap = await createSnapshot(erste.id, "before-edit", "u-test");
     expect(snap.label).toBe("before-edit");
     expect(snap.counts.audiences).toBe(1);
     expect(snap.counts.topics).toBe(1);
     expect(snap.counts.messages).toBe(1);
 
     // Mutate: change message headline + delete the audience.
-    db.update(messages)
+    await db
+      .update(messages)
       .set({ headline: "Updated headline" })
-      .where(eq(messages.id, m.id))
-      .run();
-    db.delete(audiences).where(eq(audiences.id, aud.id)).run();
+      .where(eq(messages.id, m.id));
+    await db.delete(audiences).where(eq(audiences.id, aud.id));
 
     expect(
-      db.select().from(audiences).where(eq(audiences.clientId, erste.id)).all(),
+      await db.select().from(audiences).where(eq(audiences.clientId, erste.id)),
     ).toHaveLength(0);
     expect(
-      db.select().from(messages).where(eq(messages.id, m.id)).get()?.headline,
+      (await db.select().from(messages).where(eq(messages.id, m.id)))[0]
+        ?.headline,
     ).toBe("Updated headline");
 
     // Restore.
-    const r = restoreSnapshot(erste.id, snap.id);
+    const r = await restoreSnapshot(erste.id, snap.id);
     expect(r.ok).toBe(true);
     expect(
-      db.select().from(audiences).where(eq(audiences.clientId, erste.id)).all(),
+      await db.select().from(audiences).where(eq(audiences.clientId, erste.id)),
     ).toHaveLength(1);
     expect(
-      db.select().from(messages).where(eq(messages.id, m.id)).get()?.headline,
+      (await db.select().from(messages).where(eq(messages.id, m.id)))[0]
+        ?.headline,
     ).toBe("Original headline");
   });
 
-  it("scopes to the active client — restoring Erste does not touch Telekom", () => {
-    createAudience(erste.id, { name: "Erste Aud" });
-    createAudience(telekom.id, { name: "Telekom Aud" });
+  it("scopes to the active client — restoring Erste does not touch Telekom", async () => {
+    await createAudience(erste.id, { name: "Erste Aud" });
+    await createAudience(telekom.id, { name: "Telekom Aud" });
 
-    const snap = createSnapshot(erste.id, "erste-only", null);
+    const snap = await createSnapshot(erste.id, "erste-only", null);
 
     // Add another audience to both clients after the snapshot.
-    createAudience(erste.id, { name: "Erste Extra" });
-    const tExtra = createAudience(telekom.id, { name: "Telekom Extra" });
+    await createAudience(erste.id, { name: "Erste Extra" });
+    const tExtra = await createAudience(telekom.id, { name: "Telekom Extra" });
 
-    const r = restoreSnapshot(erste.id, snap.id);
+    const r = await restoreSnapshot(erste.id, snap.id);
     expect(r.ok).toBe(true);
 
     // Erste rolled back to 1.
     expect(
-      db.select().from(audiences).where(eq(audiences.clientId, erste.id)).all(),
+      await db.select().from(audiences).where(eq(audiences.clientId, erste.id)),
     ).toHaveLength(1);
     // Telekom untouched: still has both rows.
     expect(
-      db.select().from(audiences).where(eq(audiences.clientId, telekom.id)).all(),
+      await db.select().from(audiences).where(eq(audiences.clientId, telekom.id)),
     ).toHaveLength(2);
     // The Telekom-extra row id we inserted is still present.
     expect(
-      db.select().from(audiences).where(eq(audiences.id, tExtra.id)).get(),
+      (await db.select().from(audiences).where(eq(audiences.id, tExtra.id)))[0],
     ).not.toBeUndefined();
   });
 
-  it("listSnapshots returns newest first; deleteSnapshot removes one", () => {
-    const a = createSnapshot(erste.id, "first", null);
-    const b = createSnapshot(erste.id, "second", null);
-    const list = listSnapshots(erste.id);
+  it("listSnapshots returns newest first; deleteSnapshot removes one", async () => {
+    const a = await createSnapshot(erste.id, "first", null);
+    const b = await createSnapshot(erste.id, "second", null);
+    const list = await listSnapshots(erste.id);
     expect(list.map((s) => s.id)).toEqual([b.id, a.id]);
 
-    expect(deleteSnapshot(erste.id, a.id)).toBe(true);
-    expect(listSnapshots(erste.id).map((s) => s.id)).toEqual([b.id]);
+    expect(await deleteSnapshot(erste.id, a.id)).toBe(true);
+    expect((await listSnapshots(erste.id)).map((s) => s.id)).toEqual([b.id]);
     // Cross-client delete attempt: telekom can't delete erste's snapshot.
-    expect(deleteSnapshot(telekom.id, b.id)).toBe(false);
+    expect(await deleteSnapshot(telekom.id, b.id)).toBe(false);
   });
 });

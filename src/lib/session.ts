@@ -48,12 +48,12 @@ export async function readSession(
   } catch {
     return null;
   }
-  if (claims.cid !== activeClientId()) {
+  if (claims.cid !== (await activeClientId())) {
     return null; // foreign client → defense-in-depth, treat as unauthenticated
   }
   // Reject archived users — JWT may live up to 5 days after archive, so check
-  // the live row on every request. SQLite WAL + indexed PK lookup is sub-ms.
-  const liveUser = db
+  // the live row on every request. Indexed PK lookup is sub-ms.
+  const [liveUser] = await db
     .select({ id: users.id })
     .from(users)
     .where(
@@ -63,7 +63,7 @@ export async function readSession(
         isNull(users.archivedAt),
       ),
     )
-    .get();
+    .limit(1);
   if (!liveUser) return null;
   return claims;
 }

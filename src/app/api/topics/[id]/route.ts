@@ -1,88 +1,17 @@
-import { NextResponse } from "next/server";
+import { makeItemRoute } from "@/lib/entity-route";
 import {
   archiveTopic,
   getTopic,
   pickWritable,
   updateTopic,
 } from "@/lib/entities/topics";
-import { denyDemo, withSession } from "@/lib/scoped";
-import { writeAudit } from "@/lib/audit";
-import {
-  missingVersion,
-  readClientVersion,
-  versionMismatch,
-} from "@/lib/optimistic";
 
-type Params = { id: string };
-
-function parseId(s: string): number | null {
-  const n = Number(s);
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
-
-export const GET = withSession<Params>(({ claims, params }) => {
-  const id = parseId(params.id);
-  if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
-  const row = getTopic(claims.cid, id);
-  if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  return NextResponse.json({ topic: row });
-});
-
-export const PATCH = withSession<Params>(async ({ req, claims, params }) => {
-  const denial = denyDemo(claims);
-  if (denial) return denial;
-  const id = parseId(params.id);
-  if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
-  const body = await req.json().catch(() => null);
-  const expected = readClientVersion(req, body);
-  if (expected === null) return missingVersion();
-  const input = pickWritable(body);
-  const before = getTopic(claims.cid, id);
-  const result = updateTopic(claims.cid, id, expected, input);
-  if (!result.ok) {
-    if (!result.current) {
-      return NextResponse.json({ error: "not_found" }, { status: 404 });
-    }
-    return versionMismatch(result.current, result.current.version);
-  }
-  writeAudit({
-    clientId: claims.cid,
-    userId: claims.sub,
-    entityType: "topics",
-    entityId: id,
-    action: "update",
-    before,
-    after: result.row,
-  });
-  return NextResponse.json({ topic: result.row });
-});
-
-export const DELETE = withSession<Params>(async ({ req, claims, params }) => {
-  const denial = denyDemo(claims);
-  if (denial) return denial;
-  const id = parseId(params.id);
-  if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
-  const expected = readClientVersion(req, null);
-  if (expected === null) return missingVersion();
-  const before = getTopic(claims.cid, id);
-  const result = archiveTopic(claims.cid, id, expected);
-  if (!result.ok) {
-    if (!result.current) {
-      return NextResponse.json({ error: "not_found" }, { status: 404 });
-    }
-    return versionMismatch(result.current, result.current.version);
-  }
-  writeAudit({
-    clientId: claims.cid,
-    userId: claims.sub,
-    entityType: "topics",
-    entityId: id,
-    action: "archive",
-    before,
-    after: result.row,
-  });
-  return NextResponse.json({
-    topic: result.row,
-    cascadedMessageIds: result.cascadedMessageIds,
-  });
+export const { GET, PATCH, DELETE } = makeItemRoute({
+  itemKey: "topic",
+  entityType: "topics",
+  get: getTopic,
+  update: updateTopic,
+  archive: archiveTopic,
+  pickWritable,
+  cascade: true,
 });

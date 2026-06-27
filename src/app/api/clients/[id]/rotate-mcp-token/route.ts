@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { eq } from "drizzle-orm";
-import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import { clients } from "@/db/schema";
+import { clients, nowUtc } from "@/db/schema";
 import { withAdmin } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 
@@ -21,20 +20,23 @@ export const POST = withAdmin<{ id: string }>(async ({ claims, params }) => {
     return NextResponse.json({ error: "invalid id" }, { status: 400 });
   }
 
-  const existing = db.select().from(clients).where(eq(clients.id, id)).get();
+  const [existing] = await db
+    .select()
+    .from(clients)
+    .where(eq(clients.id, id))
+    .limit(1);
   if (!existing) {
     return NextResponse.json({ error: "client not found" }, { status: 404 });
   }
 
   const newToken = "mcp_" + crypto.randomBytes(32).toString("hex");
-  const updated = db
+  const [updated] = await db
     .update(clients)
-    .set({ mcpToken: newToken, updatedAt: sql`(CURRENT_TIMESTAMP)` })
+    .set({ mcpToken: newToken, updatedAt: nowUtc })
     .where(eq(clients.id, id))
-    .returning()
-    .get();
+    .returning();
 
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "clients",

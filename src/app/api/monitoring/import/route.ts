@@ -40,7 +40,7 @@ export const POST = withSession(async ({ req, claims }) => {
   }
 
   // Resolve each aggregated row to a matrix message via the exact message key.
-  const msgRows = db
+  const msgRows = await db
     .select({
       id: messagesTable.id,
       number: messagesTable.number,
@@ -49,8 +49,7 @@ export const POST = withSession(async ({ req, claims }) => {
       topic: messagesTable.topic,
     })
     .from(messagesTable)
-    .where(eq(messagesTable.clientId, claims.cid))
-    .all();
+    .where(eq(messagesTable.clientId, claims.cid));
   const msgByKey = new Map<string, number>();
   for (const m of msgRows) {
     msgByKey.set(`${m.number}|${m.variant}|${m.audience}|${m.topic}`, m.id);
@@ -65,9 +64,8 @@ export const POST = withSession(async ({ req, claims }) => {
 
   // Product resolution inputs: audience→product (matrix-authoritative) + the
   // keyword→product rules from Settings → Structure → Monitoring.
-  const { audienceProduct, rules: productRules } = loadProductContext(
-    claims.cid,
-  );
+  const { audienceProduct, rules: productRules } =
+    await loadProductContext(claims.cid);
 
   const values = parsed.rows.map((r) => ({
     clientId: claims.cid,
@@ -99,25 +97,25 @@ export const POST = withSession(async ({ req, claims }) => {
 
   // One report file = the full snapshot for its period. Re-uploading the same
   // period replaces every row for it (all platforms), so totals never double.
-  db.transaction((tx) => {
-    tx.delete(monitoring)
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(monitoring)
       .where(
         and(
           eq(monitoring.clientId, claims.cid),
           eq(monitoring.periodFrom, parsed.periodFrom),
           eq(monitoring.periodTo, parsed.periodTo),
         ),
-      )
-      .run();
+      );
     if (values.length > 0) {
-      tx.insert(monitoring).values(values).run();
+      await tx.insert(monitoring).values(values);
     }
   });
 
   const matched = values.filter((v) => v.messageId !== null).length;
   const platforms = [...new Set(values.map((v) => v.platform))].sort();
 
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "monitoring",

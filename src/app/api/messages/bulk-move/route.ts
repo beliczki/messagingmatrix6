@@ -29,7 +29,7 @@ export const POST = withSession(async ({ req, claims }) => {
     );
   }
 
-  const result = db.transaction(() =>
+  const result = await db.transaction(async () =>
     moveMessages(
       claims.cid,
       parsed.data.moves.map((m) => ({
@@ -75,7 +75,7 @@ export const POST = withSession(async ({ req, claims }) => {
     }
   }
 
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "messages",

@@ -26,12 +26,12 @@ const THEME_INIT_SCRIPT = (serverDefault: "light" | "dark" | "system") => `
   } catch(e) {}
 })();`;
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const laf = getActiveLookAndFeel();
+  const laf = await getActiveLookAndFeel();
   const style = lookAndFeelToCssVars(laf) as CSSProperties;
   return (
     <html lang="en" style={style} suppressHydrationWarning>

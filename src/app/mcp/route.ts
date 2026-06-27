@@ -4,7 +4,7 @@ import { resolveBearerClient, buildMcpServer } from "@/lib/mcp";
 export const dynamic = "force-dynamic";
 
 async function handle(req: Request): Promise<Response> {
-  const ctx = resolveBearerClient(req);
+  const ctx = await resolveBearerClient(req);
   if (!ctx) {
     return new Response(JSON.stringify({ error: "unauthorized" }), {
       status: 401,

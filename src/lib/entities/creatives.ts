@@ -1,6 +1,6 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { creatives, type Creative } from "@/db/schema";
+import { creatives, nowUtc, type Creative } from "@/db/schema";
 
 const WRITABLE_FIELDS = [
   "brand",
@@ -33,102 +33,102 @@ export function pickWritable(input: unknown): CreativeInput {
   return out as CreativeInput;
 }
 
-export function listCreatives(
+export async function listCreatives(
   clientId: number,
   opts: { includeArchived?: boolean } = {},
-): Creative[] {
+): Promise<Creative[]> {
   const where = opts.includeArchived
     ? eq(creatives.clientId, clientId)
     : and(eq(creatives.clientId, clientId), isNull(creatives.archivedAt));
-  return db
+  return db.select().from(creatives).where(where).orderBy(creatives.id);
+}
+
+export async function getCreative(
+  clientId: number,
+  id: number,
+): Promise<Creative | null> {
+  const rows = await db
     .select()
     .from(creatives)
-    .where(where)
-    .orderBy(creatives.id)
-    .all();
+    .where(and(eq(creatives.clientId, clientId), eq(creatives.id, id)))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
-export function getCreative(clientId: number, id: number): Creative | null {
-  return (
-    db
-      .select()
-      .from(creatives)
-      .where(and(eq(creatives.clientId, clientId), eq(creatives.id, id)))
-      .get() ?? null
-  );
-}
-
-export function createCreative(
+export async function createCreative(
   clientId: number,
   input: CreativeInput,
-): Creative {
-  return db
+): Promise<Creative> {
+  const [row] = await db
     .insert(creatives)
     .values({ ...input, clientId })
-    .returning()
-    .get();
+    .returning();
+  return row;
 }
 
-export function updateCreative(
+export async function updateCreative(
   clientId: number,
   id: number,
   expectedVersion: number,
   input: CreativeInput,
-): { ok: true; row: Creative } | { ok: false; current: Creative | null } {
-  const current = getCreative(clientId, id);
+): Promise<
+  { ok: true; row: Creative } | { ok: false; current: Creative | null }
+> {
+  const current = await getCreative(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
-  const updated = db
+  const [updated] = await db
     .update(creatives)
     .set({
       ...input,
       version: sql`${creatives.version} + 1`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: nowUtc,
     })
     .where(and(eq(creatives.clientId, clientId), eq(creatives.id, id)))
-    .returning()
-    .get();
+    .returning();
   return { ok: true, row: updated };
 }
 
-export function archiveCreative(
+export async function archiveCreative(
   clientId: number,
   id: number,
   expectedVersion: number,
-): { ok: true; row: Creative } | { ok: false; current: Creative | null } {
-  const current = getCreative(clientId, id);
+): Promise<
+  { ok: true; row: Creative } | { ok: false; current: Creative | null }
+> {
+  const current = await getCreative(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
-  const updated = db
+  const [updated] = await db
     .update(creatives)
     .set({
-      archivedAt: sql`CURRENT_TIMESTAMP`,
+      archivedAt: nowUtc,
       version: sql`${creatives.version} + 1`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: nowUtc,
     })
     .where(and(eq(creatives.clientId, clientId), eq(creatives.id, id)))
-    .returning()
-    .get();
+    .returning();
   return { ok: true, row: updated };
 }
 
-export function restoreCreative(
+export async function restoreCreative(
   clientId: number,
   id: number,
   expectedVersion: number,
-): { ok: true; row: Creative } | { ok: false; current: Creative | null } {
-  const current = getCreative(clientId, id);
+): Promise<
+  { ok: true; row: Creative } | { ok: false; current: Creative | null }
+> {
+  const current = await getCreative(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
-  const updated = db
+  const [updated] = await db
     .update(creatives)
     .set({
       archivedAt: null,
       version: sql`${creatives.version} + 1`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: nowUtc,
     })
     .where(and(eq(creatives.clientId, clientId), eq(creatives.id, id)))
-    .returning()
-    .get();
+    .returning();
   return { ok: true, row: updated };
 }

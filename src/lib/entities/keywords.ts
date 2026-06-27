@@ -1,6 +1,6 @@
 import { and, asc, eq, isNull, sql, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { keywords, type Keyword } from "@/db/schema";
+import { keywords, nowUtc, type Keyword } from "@/db/schema";
 
 // Per-client allowed-values list driving audience/topic dropdown autocomplete.
 // No `version` column — Keywords are admin-curated, low-contention. Last write
@@ -8,8 +8,8 @@ import { keywords, type Keyword } from "@/db/schema";
 // "Settings → Keywords tab" checkpoint.
 //
 // Pure constants live in `keywords-shared.ts` so client code can import them
-// without dragging `db` (and therefore `better-sqlite3` / Node `fs`) into the
-// browser bundle. Re-exported here for backward-compat with server callers.
+// without dragging `db` into the browser bundle. Re-exported here for
+// backward-compat with server callers.
 export {
   KEYWORD_FORMS,
   KEYWORD_FIELDS,
@@ -17,6 +17,16 @@ export {
 } from "@/lib/keywords-shared";
 
 export class KeywordError extends Error {}
+
+// Postgres unique-violation detector. postgres-js throws a PostgresError with
+// SQLSTATE 23505, which drizzle wraps in a DrizzleQueryError (the constraint
+// text lands on `.cause.message`, not `.message`) — so match on the code, which
+// is stable across both the raw and wrapped error shapes.
+function isUniqueViolation(e: unknown): boolean {
+  const code = (e as { code?: string; cause?: { code?: string } } | null)?.code;
+  const causeCode = (e as { cause?: { code?: string } } | null)?.cause?.code;
+  return code === "23505" || causeCode === "23505";
+}
 
 export type KeywordInput = {
   form: string;
@@ -32,14 +42,14 @@ function trimRequired(s: unknown, name: string): string {
   return t;
 }
 
-export function listKeywords(
+export async function listKeywords(
   clientId: number,
   opts: {
     form?: string;
     field?: string;
     includeArchived?: boolean;
   } = {},
-): Keyword[] {
+): Promise<Keyword[]> {
   const conds = [eq(keywords.clientId, clientId)];
   if (opts.form) conds.push(eq(keywords.form, opts.form));
   if (opts.field) conds.push(eq(keywords.field, opts.field));
@@ -48,31 +58,37 @@ export function listKeywords(
     .select()
     .from(keywords)
     .where(and(...conds))
-    .orderBy(asc(keywords.form), asc(keywords.field), asc(keywords.orderIndex), asc(keywords.id))
-    .all();
+    .orderBy(
+      asc(keywords.form),
+      asc(keywords.field),
+      asc(keywords.orderIndex),
+      asc(keywords.id),
+    );
 }
 
-export function getKeyword(clientId: number, id: number): Keyword | null {
-  return (
-    db
-      .select()
-      .from(keywords)
-      .where(and(eq(keywords.clientId, clientId), eq(keywords.id, id)))
-      .get() ?? null
-  );
+export async function getKeyword(
+  clientId: number,
+  id: number,
+): Promise<Keyword | null> {
+  const rows = await db
+    .select()
+    .from(keywords)
+    .where(and(eq(keywords.clientId, clientId), eq(keywords.id, id)))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
-export function createKeyword(
+export async function createKeyword(
   clientId: number,
   input: KeywordInput,
-): Keyword {
+): Promise<Keyword> {
   const form = trimRequired(input.form, "form");
   const field = trimRequired(input.field, "field");
   const value = trimRequired(input.value, "value");
   // If orderIndex not supplied, append: max(orderIndex)+1 within (form, field).
   let orderIndex = input.orderIndex;
   if (orderIndex === undefined) {
-    const max = db
+    const [max] = await db
       .select({ m: sql<number>`COALESCE(MAX(${keywords.orderIndex}), -1)` })
       .from(keywords)
       .where(
@@ -81,18 +97,17 @@ export function createKeyword(
           eq(keywords.form, form),
           eq(keywords.field, field),
         ),
-      )
-      .get();
+      );
     orderIndex = (max?.m ?? -1) + 1;
   }
   try {
-    return db
+    const [row] = await db
       .insert(keywords)
       .values({ clientId, form, field, value, orderIndex })
-      .returning()
-      .get();
+      .returning();
+    return row;
   } catch (e) {
-    if (e instanceof Error && /UNIQUE/i.test(e.message)) {
+    if (isUniqueViolation(e)) {
       throw new KeywordError(
         `value "${value}" already exists for ${form}.${field}`,
       );
@@ -106,12 +121,12 @@ export type KeywordUpdate = {
   orderIndex?: number;
 };
 
-export function updateKeyword(
+export async function updateKeyword(
   clientId: number,
   id: number,
   input: KeywordUpdate,
-): Keyword | null {
-  const current = getKeyword(clientId, id);
+): Promise<Keyword | null> {
+  const current = await getKeyword(clientId, id);
   if (!current) return null;
   const patch: Record<string, unknown> = {};
   if (input.value !== undefined) {
@@ -121,16 +136,16 @@ export function updateKeyword(
     patch.orderIndex = input.orderIndex;
   }
   if (Object.keys(patch).length === 0) return current;
-  patch.updatedAt = sql`CURRENT_TIMESTAMP`;
+  patch.updatedAt = nowUtc;
   try {
-    return db
+    const [row] = await db
       .update(keywords)
       .set(patch)
       .where(and(eq(keywords.clientId, clientId), eq(keywords.id, id)))
-      .returning()
-      .get();
+      .returning();
+    return row;
   } catch (e) {
-    if (e instanceof Error && /UNIQUE/i.test(e.message)) {
+    if (isUniqueViolation(e)) {
       throw new KeywordError(
         `value "${input.value}" already exists for ${current.form}.${current.field}`,
       );
@@ -139,29 +154,32 @@ export function updateKeyword(
   }
 }
 
-export function archiveKeyword(clientId: number, id: number): Keyword | null {
-  const current = getKeyword(clientId, id);
+export async function archiveKeyword(
+  clientId: number,
+  id: number,
+): Promise<Keyword | null> {
+  const current = await getKeyword(clientId, id);
   if (!current) return null;
-  return db
+  const [row] = await db
     .update(keywords)
-    .set({
-      archivedAt: sql`CURRENT_TIMESTAMP`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
-    })
+    .set({ archivedAt: nowUtc, updatedAt: nowUtc })
     .where(and(eq(keywords.clientId, clientId), eq(keywords.id, id)))
-    .returning()
-    .get();
+    .returning();
+  return row ?? null;
 }
 
-export function restoreKeyword(clientId: number, id: number): Keyword | null {
-  const current = getKeyword(clientId, id);
+export async function restoreKeyword(
+  clientId: number,
+  id: number,
+): Promise<Keyword | null> {
+  const current = await getKeyword(clientId, id);
   if (!current) return null;
-  return db
+  const [row] = await db
     .update(keywords)
-    .set({ archivedAt: null, updatedAt: sql`CURRENT_TIMESTAMP` })
+    .set({ archivedAt: null, updatedAt: nowUtc })
     .where(and(eq(keywords.clientId, clientId), eq(keywords.id, id)))
-    .returning()
-    .get();
+    .returning();
+  return row ?? null;
 }
 
 // Reset orderIndex for every id in `ids` to its array position, in one
@@ -169,75 +187,80 @@ export function restoreKeyword(clientId: number, id: number): Keyword | null {
 // silently ignored (the WHERE clause filters them out, the missing ids stay
 // at their previous orderIndex). Caller is responsible for passing the full
 // (form, field) cohort if they want a stable final order.
-export function reorderKeywords(
+export async function reorderKeywords(
   clientId: number,
   form: string,
   field: string,
   ids: number[],
-): void {
+): Promise<void> {
   if (ids.length === 0) return;
-  db.transaction((tx) => {
-    ids.forEach((id, i) => {
-      tx
+  await db.transaction(async (tx) => {
+    for (let i = 0; i < ids.length; i++) {
+      await tx
         .update(keywords)
-        .set({ orderIndex: i, updatedAt: sql`CURRENT_TIMESTAMP` })
+        .set({ orderIndex: i, updatedAt: nowUtc })
         .where(
           and(
             eq(keywords.clientId, clientId),
             eq(keywords.form, form),
             eq(keywords.field, field),
-            eq(keywords.id, id),
+            eq(keywords.id, ids[i]),
           ),
-        )
-        .run();
-    });
+        );
+    }
   });
 }
 
 // Bulk insert used by the XLSX importer. Skips duplicates silently so a
 // re-import on top of an existing wipe-fresh client is idempotent.
-export function bulkInsertKeywords(
+export async function bulkInsertKeywords(
   clientId: number,
   rows: { form: string; field: string; value: string; orderIndex: number }[],
-): number {
+): Promise<number> {
   if (rows.length === 0) return 0;
   let inserted = 0;
-  db.transaction((tx) => {
-    for (const r of rows) {
-      try {
-        tx
-          .insert(keywords)
-          .values({
-            clientId,
-            form: r.form,
-            field: r.field,
-            value: r.value,
-            orderIndex: r.orderIndex,
-          })
-          .run();
-        inserted++;
-      } catch (e) {
-        if (e instanceof Error && /UNIQUE/i.test(e.message)) continue;
-        throw e;
-      }
+  for (const r of rows) {
+    // Each insert is its own statement so a UNIQUE collision skips just that
+    // row (a single failed statement aborts the whole Postgres transaction,
+    // so we cannot swallow-and-continue inside one tx as SQLite allowed).
+    try {
+      await db.insert(keywords).values({
+        clientId,
+        form: r.form,
+        field: r.field,
+        value: r.value,
+        orderIndex: r.orderIndex,
+      });
+      inserted++;
+    } catch (e) {
+      if (isUniqueViolation(e)) continue;
+      throw e;
     }
-  });
+  }
   return inserted;
 }
 
 // Convenience: hard-delete every keyword for a client. Used by importer wipe.
-export function deleteAllKeywordsForClient(clientId: number): number {
-  const res = db.delete(keywords).where(eq(keywords.clientId, clientId)).run();
-  return res.changes;
+export async function deleteAllKeywordsForClient(
+  clientId: number,
+): Promise<number> {
+  const res = await db
+    .delete(keywords)
+    .where(eq(keywords.clientId, clientId))
+    .returning({ id: keywords.id });
+  return res.length;
 }
 
 // Convenience: hard-delete a set of keywords by id (admin tooling; not exposed
 // by the v1 UI which uses archive). Kept for tests + cleanup scripts.
-export function hardDeleteKeywords(clientId: number, ids: number[]): number {
+export async function hardDeleteKeywords(
+  clientId: number,
+  ids: number[],
+): Promise<number> {
   if (ids.length === 0) return 0;
-  const res = db
+  const res = await db
     .delete(keywords)
     .where(and(eq(keywords.clientId, clientId), inArray(keywords.id, ids)))
-    .run();
-  return res.changes;
+    .returning({ id: keywords.id });
+  return res.length;
 }

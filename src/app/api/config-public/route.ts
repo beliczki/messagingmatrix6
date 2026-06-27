@@ -10,12 +10,11 @@ import {
 // Spec §17.7 — public branding endpoint.
 // Returns active client's lookAndFeel + name; consumed by /login before auth.
 export async function GET() {
-  const cid = activeClientId();
-  const rows = db
+  const cid = await activeClientId();
+  const rows = await db
     .select()
     .from(config)
-    .where(and(eq(config.clientId, cid), inArray(config.key, ["lookAndFeel"])))
-    .all();
+    .where(and(eq(config.clientId, cid), inArray(config.key, ["lookAndFeel"])));
 
   let lookAndFeel: unknown = DEFAULT_LOOK_AND_FEEL;
   for (const r of rows) {
@@ -28,7 +27,7 @@ export async function GET() {
     }
   }
 
-  const client = getActiveClient();
+  const client = await getActiveClient();
   return NextResponse.json({
     clientKey: client.key,
     clientName: client.name,

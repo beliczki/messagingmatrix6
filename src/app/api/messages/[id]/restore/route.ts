@@ -23,8 +23,8 @@ export const POST = withSession<Params>(async ({ req, claims, params }) => {
   const body = await req.json().catch(() => null);
   const expected = readClientVersion(req, body);
   if (expected === null) return missingVersion();
-  const before = getMessage(claims.cid, id);
-  const result = restoreMessage(claims.cid, id, expected);
+  const before = await getMessage(claims.cid, id);
+  const result = await restoreMessage(claims.cid, id, expected);
   if (!result.ok) {
     if (result.reason === "parent_archived") {
       return NextResponse.json(
@@ -41,7 +41,7 @@ export const POST = withSession<Params>(async ({ req, claims, params }) => {
     }
     return versionMismatch(result.current, result.current.version);
   }
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "messages",

@@ -20,7 +20,7 @@ const VALID_ACTIONS = new Set([
   "bulk_restore",
 ]);
 
-export const GET = withAdmin(({ req, claims }) => {
+export const GET = withAdmin(async ({ req, claims }) => {
   const url = new URL(req.url);
   const entity = url.searchParams.get("entity");
   const actionsRaw = url.searchParams.get("actions");
@@ -49,14 +49,13 @@ export const GET = withAdmin(({ req, claims }) => {
   if (since) conds.push(gte(auditLog.createdAt, since));
   if (until) conds.push(lte(auditLog.createdAt, until));
 
-  const rows = db
+  const rows = await db
     .select()
     .from(auditLog)
     .where(and(...conds))
     .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
     .limit(limit + 1) // +1 to detect "has more"
-    .offset(offset)
-    .all();
+    .offset(offset);
 
   const hasMore = rows.length > limit;
   return NextResponse.json({

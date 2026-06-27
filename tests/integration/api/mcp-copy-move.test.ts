@@ -10,8 +10,8 @@ let h: TestDb;
 let erste: { id: number };
 let telekom: { id: number };
 
-function seedAudience(clientId: number, key: string) {
-  return db
+async function seedAudience(clientId: number, key: string) {
+  const [row] = await db
     .insert(audiences)
     .values({
       clientId,
@@ -22,12 +22,12 @@ function seedAudience(clientId: number, key: string) {
       strategy: "Prospecting",
       device: "Mobile",
     })
-    .returning()
-    .get();
+    .returning();
+  return row;
 }
 
-function seedTopic(clientId: number, key: string) {
-  return db
+async function seedTopic(clientId: number, key: string) {
+  const [row] = await db
     .insert(topics)
     .values({
       clientId,
@@ -36,8 +36,8 @@ function seedTopic(clientId: number, key: string) {
       orderIndex: 0,
       product: "Loans",
     })
-    .returning()
-    .get();
+    .returning();
+  return row;
 }
 
 type Handler = (args: Record<string, unknown>) => Promise<{
@@ -69,60 +69,57 @@ async function callTool(
   };
 }
 
-beforeEach(() => {
-  h = createTestDb();
-  erste = db.insert(clients).values({ key: "erste", name: "Erste" }).returning().get();
-  telekom = db
+beforeEach(async () => {
+  h = await createTestDb();
+  [erste] = await db
+    .insert(clients)
+    .values({ key: "erste", name: "Erste" })
+    .returning();
+  [telekom] = await db
     .insert(clients)
     .values({ key: "telekom", name: "Telekom" })
-    .returning()
-    .get();
+    .returning();
 });
 
-afterEach(() => {
-  h.cleanup();
+afterEach(async () => {
+  await h.cleanup();
 });
 
 describe("mc_copy_batch via MCP", () => {
-  it("copies one source into multiple audiences and writes a single bulk_copy audit row", () => {
-    seedAudience(erste.id, "aud1");
-    seedAudience(erste.id, "aud2");
-    seedAudience(erste.id, "aud3");
-    seedTopic(erste.id, "top1");
-    const source = createMessage(erste.id, {
+  it("copies one source into multiple audiences and writes a single bulk_copy audit row", async () => {
+    await seedAudience(erste.id, "aud1");
+    await seedAudience(erste.id, "aud2");
+    await seedAudience(erste.id, "aud3");
+    await seedTopic(erste.id, "top1");
+    const source = await createMessage(erste.id, {
       audience: "aud1",
       topic: "top1",
       name: "Source",
     });
 
-    return callTool(erste.id, "mc_copy_batch", {
+    const { isError, json } = await callTool(erste.id, "mc_copy_batch", {
       source_mc_labels: [source.pmmid!],
       target_audience_keys: ["aud2", "aud3"],
-    }).then(({ isError, json }) => {
-      expect(isError).toBe(false);
-      expect(json.created).toHaveLength(2);
-
-      const auditRows = db
-        .select()
-        .from(auditLog)
-        .where(
-          and(
-            eq(auditLog.clientId, erste.id),
-            eq(auditLog.action, "bulk_copy"),
-          ),
-        )
-        .all();
-      expect(auditRows).toHaveLength(1);
-      expect(auditRows[0].entityId).toBe(`bulk:${erste.id}`);
     });
+    expect(isError).toBe(false);
+    expect(json.created).toHaveLength(2);
+
+    const auditRows = await db
+      .select()
+      .from(auditLog)
+      .where(
+        and(eq(auditLog.clientId, erste.id), eq(auditLog.action, "bulk_copy")),
+      );
+    expect(auditRows).toHaveLength(1);
+    expect(auditRows[0].entityId).toBe(`bulk:${erste.id}`);
   });
 
   it("refuses sources from a different client (tenant isolation)", async () => {
-    seedAudience(erste.id, "aud1");
-    seedTopic(erste.id, "top1");
-    seedAudience(telekom.id, "audT");
-    seedTopic(telekom.id, "topT");
-    const telekomMsg = createMessage(telekom.id, {
+    await seedAudience(erste.id, "aud1");
+    await seedTopic(erste.id, "top1");
+    await seedAudience(telekom.id, "audT");
+    await seedTopic(telekom.id, "topT");
+    const telekomMsg = await createMessage(telekom.id, {
       audience: "audT",
       topic: "topT",
     });
@@ -138,11 +135,11 @@ describe("mc_copy_batch via MCP", () => {
 
 describe("mc_move_batch via MCP", () => {
   it("moves a batch into one audience and writes a single bulk_move audit row", async () => {
-    seedAudience(erste.id, "aud1");
-    seedAudience(erste.id, "aud2");
-    seedTopic(erste.id, "top1");
-    const a = createMessage(erste.id, { audience: "aud1", topic: "top1" });
-    const b = createMessage(erste.id, { audience: "aud1", topic: "top1" });
+    await seedAudience(erste.id, "aud1");
+    await seedAudience(erste.id, "aud2");
+    await seedTopic(erste.id, "top1");
+    const a = await createMessage(erste.id, { audience: "aud1", topic: "top1" });
+    const b = await createMessage(erste.id, { audience: "aud1", topic: "top1" });
 
     const { isError, json } = await callTool(erste.id, "mc_move_batch", {
       moves: [
@@ -155,21 +152,20 @@ describe("mc_move_batch via MCP", () => {
     expect(json.updated).toHaveLength(2);
     for (const row of json.updated) expect(row.audience).toBe("aud2");
 
-    const auditRows = db
+    const auditRows = await db
       .select()
       .from(auditLog)
       .where(
         and(eq(auditLog.clientId, erste.id), eq(auditLog.action, "bulk_move")),
-      )
-      .all();
+      );
     expect(auditRows).toHaveLength(1);
   });
 
   it("surfaces version_conflict and rolls the batch back", async () => {
-    seedAudience(erste.id, "aud1");
-    seedAudience(erste.id, "aud2");
-    seedTopic(erste.id, "top1");
-    const m = createMessage(erste.id, { audience: "aud1", topic: "top1" });
+    await seedAudience(erste.id, "aud1");
+    await seedAudience(erste.id, "aud2");
+    await seedTopic(erste.id, "top1");
+    const m = await createMessage(erste.id, { audience: "aud1", topic: "top1" });
 
     const { isError, text } = await callTool(erste.id, "mc_move_batch", {
       moves: [{ mc_label: m.pmmid!, version: m.version + 99 }],
@@ -179,22 +175,21 @@ describe("mc_move_batch via MCP", () => {
     expect(text).toContain("version_conflict");
 
     // Row unchanged.
-    const after = db
+    const [after] = await db
       .select()
       .from(messages)
       .where(eq(messages.id, m.id))
-      .get();
+      .limit(1);
     expect(after?.audience).toBe("aud1");
     expect(after?.version).toBe(m.version);
 
     // No audit row for the failed batch.
-    const auditRows = db
+    const auditRows = await db
       .select()
       .from(auditLog)
       .where(
         and(eq(auditLog.clientId, erste.id), eq(auditLog.action, "bulk_move")),
-      )
-      .all();
+      );
     expect(auditRows).toHaveLength(0);
   });
 });

@@ -7,26 +7,26 @@ import { type ProductRule } from "@/lib/adform-report";
 // audience→product map and the keyword→product rules saved in Settings →
 // Structure → Monitoring (config `monitoringProductRules`). Used by both the
 // import route and the "re-apply" route so the two never drift.
-export function loadProductContext(clientId: number): {
+export async function loadProductContext(clientId: number): Promise<{
   audienceProduct: Map<string, string | null>;
   rules: ProductRule[];
-} {
+}> {
   const audienceProduct = new Map<string, string | null>(
-    db
-      .select({ key: audiencesTable.key, product: audiencesTable.product })
-      .from(audiencesTable)
-      .where(eq(audiencesTable.clientId, clientId))
-      .all()
-      .map((a) => [a.key, a.product]),
+    (
+      await db
+        .select({ key: audiencesTable.key, product: audiencesTable.product })
+        .from(audiencesTable)
+        .where(eq(audiencesTable.clientId, clientId))
+    ).map((a) => [a.key, a.product]),
   );
 
-  const rulesRow = db
+  const [rulesRow] = await db
     .select({ value: config.value })
     .from(config)
     .where(
       and(eq(config.clientId, clientId), eq(config.key, "monitoringProductRules")),
     )
-    .get();
+    .limit(1);
 
   let rules: ProductRule[] = [];
   if (rulesRow?.value) {

@@ -57,21 +57,22 @@ function shape(
   };
 }
 
-function emailLookup(userId: string | null): Map<string, string> {
+async function emailLookup(
+  userId: string | null,
+): Promise<Map<string, string>> {
   if (!userId) return new Map();
-  const found = db
+  const found = await db
     .select({ id: users.id, email: users.email })
     .from(users)
-    .where(eq(users.id, userId))
-    .all();
+    .where(eq(users.id, userId));
   return new Map(found.map((u) => [u.id, u.email]));
 }
 
-export const GET = withSession(({ req, claims }) => {
+export const GET = withSession(async ({ req, claims }) => {
   const url = new URL(req.url);
   const product = url.searchParams.get("product");
   if (product) {
-    const row = db
+    const [row] = await db
       .select()
       .from(feedExports)
       .where(
@@ -81,13 +82,13 @@ export const GET = withSession(({ req, claims }) => {
           eq(feedExports.product, product),
         ),
       )
-      .get();
+      .limit(1);
     if (!row) return NextResponse.json({ snapshot: null });
     return NextResponse.json({
-      snapshot: shape(row, emailLookup(row.uploadedBy)),
+      snapshot: shape(row, await emailLookup(row.uploadedBy)),
     });
   }
-  const rows = db
+  const rows = await db
     .select()
     .from(feedExports)
     .where(
@@ -95,17 +96,15 @@ export const GET = withSession(({ req, claims }) => {
         eq(feedExports.clientId, claims.cid),
         eq(feedExports.source, SNAPSHOT_SOURCE),
       ),
-    )
-    .all();
+    );
   const ids = rows.map((r) => r.uploadedBy).filter((v): v is string => !!v);
   const found =
     ids.length === 0
       ? []
-      : db
+      : await db
           .select({ id: users.id, email: users.email })
           .from(users)
-          .where(inArray(users.id, ids))
-          .all();
+          .where(inArray(users.id, ids));
   const emailById = new Map(found.map((u) => [u.id, u.email]));
   return NextResponse.json({
     snapshots: rows.map((r) => shape(r, emailById)),
@@ -143,13 +142,13 @@ export const POST = withSession(async ({ req, claims }) => {
   // structure verbatim (same names, same order). Otherwise the diff would be
   // meaningless — we'd be comparing apples to oranges. Drop the upload with a
   // specific reason so the user knows which column to fix.
-  const structureRow = db
+  const [structureRow] = await db
     .select()
     .from(config)
     .where(
       and(eq(config.clientId, claims.cid), eq(config.key, "feedStructure")),
     )
-    .get();
+    .limit(1);
   const expected = parseFeedColumns(
     typeof structureRow?.value === "string"
       ? (() => {
@@ -201,7 +200,7 @@ export const POST = withSession(async ({ req, claims }) => {
       { status: 422 },
     );
   }
-  const knownAudiences = db
+  const knownAudiences = await db
     .select({ key: audiencesTable.key, product: audiencesTable.product })
     .from(audiencesTable)
     .where(
@@ -209,8 +208,7 @@ export const POST = withSession(async ({ req, claims }) => {
         eq(audiencesTable.clientId, claims.cid),
         inArray(audiencesTable.key, audKeys),
       ),
-    )
-    .all();
+    );
   const inferredProducts = new Set(
     knownAudiences.map((a) => a.product).filter((p): p is string => !!p),
   );
@@ -238,7 +236,7 @@ export const POST = withSession(async ({ req, claims }) => {
   // Upsert: one snapshot per (clientId, product). Re-uploading replaces the
   // previous one — explicit delete first so the audit log shows the
   // lifecycle and the autoincrement id reflects the new upload.
-  const previous = db
+  const [previous] = await db
     .select()
     .from(feedExports)
     .where(
@@ -248,9 +246,9 @@ export const POST = withSession(async ({ req, claims }) => {
         eq(feedExports.product, product),
       ),
     )
-    .get();
+    .limit(1);
   if (previous) {
-    db.delete(feedExports).where(eq(feedExports.id, previous.id)).run();
+    await db.delete(feedExports).where(eq(feedExports.id, previous.id));
   }
 
   // Default label: read the (number, variant) of the snapshot's DEFAULT row
@@ -262,7 +260,7 @@ export const POST = withSession(async ({ req, claims }) => {
   let defaultLabel: string | null = null;
   let defaultMessageId: number | null = null;
   if (defaultMc) {
-    const defaultMsg = db
+    const [defaultMsg] = await db
       .select()
       .from(messagesTable)
       .where(
@@ -272,13 +270,13 @@ export const POST = withSession(async ({ req, claims }) => {
           eq(messagesTable.variant, defaultMc.variant),
         ),
       )
-      .get();
+      .limit(1);
     const base = `MC${defaultMc.number}${defaultMc.variant}`;
     defaultLabel = defaultMsg?.name ? `${base} — ${defaultMsg.name}` : base;
     defaultMessageId = defaultMsg?.id ?? null;
   }
 
-  const inserted = db
+  const [inserted] = await db
     .insert(feedExports)
     .values({
       clientId: claims.cid,
@@ -297,10 +295,9 @@ export const POST = withSession(async ({ req, claims }) => {
       notes: `Uploaded from AdForm: ${file.name}`,
       source: SNAPSHOT_SOURCE,
     })
-    .returning()
-    .get();
+    .returning();
 
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "feed_exports",
@@ -318,7 +315,7 @@ export const POST = withSession(async ({ req, claims }) => {
   });
 
   return NextResponse.json({
-    snapshot: shape(inserted, emailLookup(inserted.uploadedBy)),
+    snapshot: shape(inserted, await emailLookup(inserted.uploadedBy)),
   });
 });
 
@@ -337,7 +334,7 @@ function findColumnMismatch(
   return null;
 }
 
-export const DELETE = withSession(({ req, claims }) => {
+export const DELETE = withSession(async ({ req, claims }) => {
   const denied = denyDemo(claims);
   if (denied) return denied;
 
@@ -347,7 +344,7 @@ export const DELETE = withSession(({ req, claims }) => {
     return NextResponse.json({ error: "product required" }, { status: 400 });
   }
 
-  const row = db
+  const [row] = await db
     .select()
     .from(feedExports)
     .where(
@@ -357,11 +354,11 @@ export const DELETE = withSession(({ req, claims }) => {
         eq(feedExports.product, product),
       ),
     )
-    .get();
+    .limit(1);
   if (!row) return NextResponse.json({ deleted: false });
 
-  db.delete(feedExports).where(eq(feedExports.id, row.id)).run();
-  writeAudit({
+  await db.delete(feedExports).where(eq(feedExports.id, row.id));
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "feed_exports",

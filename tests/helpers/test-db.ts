@@ -1,54 +1,71 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
-import Database from "better-sqlite3";
-import { _resetDbForTests, getSqlite } from "@/db";
+import postgres from "postgres";
+import { _resetDbForTests, _closeDbForTests } from "@/db";
 import { _resetActiveClientCacheForTests } from "@/lib/active-client";
 
 const MIGRATIONS_DIR = path.resolve(process.cwd(), "db", "migrations");
+const TEST_URL =
+  process.env.TEST_DATABASE_URL ??
+  "postgres://postgres:mm6dev@localhost:55432/mm6_test";
 
-function applyMigrations(dbPath: string) {
-  const conn = new Database(dbPath);
-  conn.pragma("foreign_keys = ON");
+// Migrations are applied once per test process; between tests we only
+// TRUNCATE … RESTART IDENTITY (fast, and resets sequences so id-sensitive
+// assertions stay stable — the SQLite "fresh file per test" equivalent).
+let migrated = false;
+
+async function applyMigrations(sql: postgres.Sql) {
   const files = readdirSync(MIGRATIONS_DIR)
     .filter((f) => f.endsWith(".sql"))
     .sort();
   for (const f of files) {
-    const sql = readFileSync(path.join(MIGRATIONS_DIR, f), "utf8");
-    // Drizzle uses `--> statement-breakpoint` between statements.
-    const parts = sql
+    const content = readFileSync(path.join(MIGRATIONS_DIR, f), "utf8");
+    // Drizzle separates statements with `--> statement-breakpoint`.
+    const parts = content
       .split(/-->\s*statement-breakpoint/)
       .map((p) => p.trim())
       .filter((p) => p.length > 0);
     for (const stmt of parts) {
-      conn.exec(stmt);
+      await sql.unsafe(stmt);
     }
   }
-  conn.close();
+}
+
+async function truncateAll(sql: postgres.Sql) {
+  const rows = await sql<{ tablename: string }[]>`
+    SELECT tablename FROM pg_tables WHERE schemaname = 'public'
+  `;
+  if (rows.length === 0) return;
+  const list = rows.map((r) => `"${r.tablename}"`).join(", ");
+  await sql.unsafe(`TRUNCATE ${list} RESTART IDENTITY CASCADE`);
 }
 
 export type TestDb = {
-  path: string;
-  cleanup: () => void;
+  url: string;
+  cleanup: () => Promise<void>;
 };
 
-// Fresh SQLite file per test. Applies all Drizzle migrations.
-// Resets the active-client singleton + the db module's connection.
-export function createTestDb(): TestDb {
-  const dir = mkdtempSync(path.join(tmpdir(), "mm6-test-"));
-  const dbPath = path.join(dir, "matrix.db");
-  applyMigrations(dbPath);
-  _resetDbForTests(dbPath);
+// Fresh, isolated DB state per test. Resets the active-client singleton + the
+// db module's connection.
+export async function createTestDb(): Promise<TestDb> {
+  const admin = postgres(TEST_URL, { max: 1, onnotice: () => {} });
+  try {
+    if (!migrated) {
+      await admin.unsafe("DROP SCHEMA public CASCADE; CREATE SCHEMA public;");
+      await applyMigrations(admin);
+      migrated = true;
+    } else {
+      await truncateAll(admin);
+    }
+  } finally {
+    await admin.end();
+  }
+  _resetDbForTests(TEST_URL);
   _resetActiveClientCacheForTests();
   return {
-    path: dbPath,
-    cleanup() {
-      try {
-        getSqlite().close();
-      } catch {
-        // already closed
-      }
-      rmSync(dir, { recursive: true, force: true });
+    url: TEST_URL,
+    async cleanup() {
+      await _closeDbForTests();
     },
   };
 }

@@ -9,13 +9,16 @@ import { createTestDb, type TestDb } from "../helpers/test-db";
 let h: TestDb;
 let erste: { id: number };
 
-beforeEach(() => {
-  h = createTestDb();
-  erste = db.insert(clients).values({ key: "erste", name: "Erste" }).returning().get();
+beforeEach(async () => {
+  h = await createTestDb();
+  [erste] = await db
+    .insert(clients)
+    .values({ key: "erste", name: "Erste" })
+    .returning();
 });
 
-afterEach(() => {
-  h.cleanup();
+afterEach(async () => {
+  await h.cleanup();
 });
 
 function buildXlsx(): Buffer {
@@ -43,9 +46,9 @@ function buildXlsx(): Buffer {
 }
 
 describe("XLSX importer: keywords sheet", () => {
-  it("seeds in-scope (form, field) values from a comma list, in order", () => {
+  it("seeds in-scope (form, field) values from a comma list, in order", async () => {
     const buf = buildXlsx();
-    const result = importErsteXlsx(buf, { clientId: erste.id, wipeFirst: false });
+    const result = await importErsteXlsx(buf, { clientId: erste.id, wipeFirst: false });
 
     // Inserted = 3 status + 3 platform + 3 device + 3 tag1 + 2 topic status
     //         = 14 keyword rows
@@ -61,11 +64,10 @@ describe("XLSX importer: keywords sheet", () => {
     const kwErrors = result.errors.filter((e) => /^keywords\[/.test(e));
     expect(kwErrors).toEqual([]);
 
-    const all = db
+    const all = await db
       .select()
       .from(keywords)
-      .where(eq(keywords.clientId, erste.id))
-      .all();
+      .where(eq(keywords.clientId, erste.id));
 
     // Status values keep XLSX order.
     const statuses = all
@@ -92,38 +94,35 @@ describe("XLSX importer: keywords sheet", () => {
     expect(all.find((k) => k.form === "assets")).toBeUndefined();
   });
 
-  it("dryRun=true makes no permanent rows", () => {
+  it("dryRun=true makes no permanent rows", async () => {
     const buf = buildXlsx();
-    const result = importErsteXlsx(buf, {
+    const result = await importErsteXlsx(buf, {
       clientId: erste.id,
       wipeFirst: false,
       dryRun: true,
     });
     expect(result.inserted.keywords).toBe(14);
-    const all = db
+    const all = await db
       .select()
       .from(keywords)
-      .where(eq(keywords.clientId, erste.id))
-      .all();
+      .where(eq(keywords.clientId, erste.id));
     expect(all).toHaveLength(0);
   });
 
-  it("wipe=true clears previous keywords for the same client", () => {
+  it("wipe=true clears previous keywords for the same client", async () => {
     const buf = buildXlsx();
-    importErsteXlsx(buf, { clientId: erste.id, wipeFirst: false });
-    const before = db
+    await importErsteXlsx(buf, { clientId: erste.id, wipeFirst: false });
+    const before = await db
       .select()
       .from(keywords)
-      .where(eq(keywords.clientId, erste.id))
-      .all();
+      .where(eq(keywords.clientId, erste.id));
     expect(before.length).toBeGreaterThan(0);
 
-    importErsteXlsx(buf, { clientId: erste.id, wipeFirst: true });
-    const after = db
+    await importErsteXlsx(buf, { clientId: erste.id, wipeFirst: true });
+    const after = await db
       .select()
       .from(keywords)
-      .where(eq(keywords.clientId, erste.id))
-      .all();
+      .where(eq(keywords.clientId, erste.id));
     // Same XLSX → same total. No accumulation, no UNIQUE violations.
     expect(after.length).toBe(before.length);
   });

@@ -1,1 +1,0 @@
-ALTER TABLE `monitoring` ADD `product` text;

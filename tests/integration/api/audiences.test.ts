@@ -16,106 +16,112 @@ let h: TestDb;
 let erste: { id: number };
 let telekom: { id: number };
 
-beforeEach(() => {
-  h = createTestDb();
-  erste = db.insert(clients).values({ key: "erste", name: "Erste" }).returning().get();
-  telekom = db.insert(clients).values({ key: "telekom", name: "Telekom" }).returning().get();
+beforeEach(async () => {
+  h = await createTestDb();
+  [erste] = await db
+    .insert(clients)
+    .values({ key: "erste", name: "Erste" })
+    .returning();
+  [telekom] = await db
+    .insert(clients)
+    .values({ key: "telekom", name: "Telekom" })
+    .returning();
   withActiveClientKey("erste");
 });
 
-afterEach(() => {
-  h.cleanup();
+afterEach(async () => {
+  await h.cleanup();
 });
 
 describe("audiences entity", () => {
-  it("creates with auto key + auto order_index", () => {
-    const a = createAudience(erste.id, { name: "Mass Market" });
+  it("creates with auto key + auto order_index", async () => {
+    const a = await createAudience(erste.id, { name: "Mass Market" });
     expect(a.clientId).toBe(erste.id);
     expect(a.key).toBe("aud1");
     expect(a.orderIndex).toBe(0);
     expect(a.version).toBe(1);
   });
 
-  it("auto-increments order_index per client", () => {
-    createAudience(erste.id, { name: "A" });
-    const second = createAudience(erste.id, { name: "B" });
+  it("auto-increments order_index per client", async () => {
+    await createAudience(erste.id, { name: "A" });
+    const second = await createAudience(erste.id, { name: "B" });
     expect(second.orderIndex).toBe(1);
     expect(second.key).toBe("aud2");
 
     // Telekom counter is independent.
-    const telekomFirst = createAudience(telekom.id, { name: "T1" });
+    const telekomFirst = await createAudience(telekom.id, { name: "T1" });
     expect(telekomFirst.orderIndex).toBe(0);
     expect(telekomFirst.key).toBe("aud1");
   });
 
-  it("optimistic lock — stale version returns current row", () => {
-    const a = createAudience(erste.id, { name: "A" });
-    const ok = updateAudience(erste.id, a.id, 1, { name: "A2" });
+  it("optimistic lock — stale version returns current row", async () => {
+    const a = await createAudience(erste.id, { name: "A" });
+    const ok = await updateAudience(erste.id, a.id, 1, { name: "A2" });
     expect(ok.ok).toBe(true);
     if (ok.ok) expect(ok.row.version).toBe(2);
 
     // Stale version should be rejected.
-    const stale = updateAudience(erste.id, a.id, 1, { name: "A3" });
+    const stale = await updateAudience(erste.id, a.id, 1, { name: "A3" });
     expect(stale.ok).toBe(false);
     if (!stale.ok) expect(stale.current?.version).toBe(2);
   });
 
-  it("archive enforces version, soft-deletes the row, restore brings it back", () => {
-    const a = createAudience(erste.id, { name: "A" });
-    const stale = archiveAudience(erste.id, a.id, 99);
+  it("archive enforces version, soft-deletes the row, restore brings it back", async () => {
+    const a = await createAudience(erste.id, { name: "A" });
+    const stale = await archiveAudience(erste.id, a.id, 99);
     expect(stale.ok).toBe(false);
-    expect(getAudience(erste.id, a.id)?.archivedAt).toBeNull();
+    expect((await getAudience(erste.id, a.id))?.archivedAt).toBeNull();
 
-    const ok = archiveAudience(erste.id, a.id, 1);
+    const ok = await archiveAudience(erste.id, a.id, 1);
     expect(ok.ok).toBe(true);
     if (ok.ok) expect(ok.cascadedMessageIds).toEqual([]);
-    const archived = getAudience(erste.id, a.id);
+    const archived = await getAudience(erste.id, a.id);
     expect(archived).not.toBeNull();
     expect(archived?.archivedAt).not.toBeNull();
     // Default list filters it out; includeArchived shows it.
-    expect(listAudiences(erste.id).map((r) => r.id)).not.toContain(a.id);
+    expect((await listAudiences(erste.id)).map((r) => r.id)).not.toContain(a.id);
     expect(
-      listAudiences(erste.id, { includeArchived: true }).map((r) => r.id),
+      (await listAudiences(erste.id, { includeArchived: true })).map((r) => r.id),
     ).toContain(a.id);
 
-    const restored = restoreAudience(erste.id, a.id, archived!.version);
+    const restored = await restoreAudience(erste.id, a.id, archived!.version);
     expect(restored.ok).toBe(true);
-    expect(getAudience(erste.id, a.id)?.archivedAt).toBeNull();
+    expect((await getAudience(erste.id, a.id))?.archivedAt).toBeNull();
   });
 
-  it("client scoping — Telekom audience is invisible to Erste", () => {
-    const e1 = createAudience(erste.id, { name: "Erste Aud" });
-    const t1 = createAudience(telekom.id, { name: "Telekom Aud" });
+  it("client scoping — Telekom audience is invisible to Erste", async () => {
+    const e1 = await createAudience(erste.id, { name: "Erste Aud" });
+    const t1 = await createAudience(telekom.id, { name: "Telekom Aud" });
 
-    const ersteList = listAudiences(erste.id);
+    const ersteList = await listAudiences(erste.id);
     expect(ersteList.map((a) => a.id)).toEqual([e1.id]);
     expect(ersteList.find((a) => a.id === t1.id)).toBeUndefined();
 
     // Direct lookup with mismatched client returns null even with the right id.
-    expect(getAudience(erste.id, t1.id)).toBeNull();
-    expect(getAudience(telekom.id, e1.id)).toBeNull();
+    expect(await getAudience(erste.id, t1.id)).toBeNull();
+    expect(await getAudience(telekom.id, e1.id)).toBeNull();
   });
 
-  it("update with mismatched client_id returns not-found, not 200", () => {
-    const t1 = createAudience(telekom.id, { name: "Telekom Aud" });
-    const result = updateAudience(erste.id, t1.id, 1, { name: "hijack" });
+  it("update with mismatched client_id returns not-found, not 200", async () => {
+    const t1 = await createAudience(telekom.id, { name: "Telekom Aud" });
+    const result = await updateAudience(erste.id, t1.id, 1, { name: "hijack" });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.current).toBeNull();
     // Telekom's row is untouched.
-    const fresh = getAudience(telekom.id, t1.id);
+    const fresh = await getAudience(telekom.id, t1.id);
     expect(fresh?.name).toBe("Telekom Aud");
   });
 
-  it("archive with mismatched client_id returns not-found", () => {
-    const t1 = createAudience(telekom.id, { name: "Telekom Aud" });
-    const result = archiveAudience(erste.id, t1.id, 1);
+  it("archive with mismatched client_id returns not-found", async () => {
+    const t1 = await createAudience(telekom.id, { name: "Telekom Aud" });
+    const result = await archiveAudience(erste.id, t1.id, 1);
     expect(result.ok).toBe(false);
-    expect(getAudience(telekom.id, t1.id)?.archivedAt).toBeNull();
+    expect((await getAudience(telekom.id, t1.id))?.archivedAt).toBeNull();
   });
 
-  it("same key allowed across clients (composite uniqueness)", () => {
-    const e1 = createAudience(erste.id, { key: "shared-key", name: "Erste" });
-    const t1 = createAudience(telekom.id, { key: "shared-key", name: "Telekom" });
+  it("same key allowed across clients (composite uniqueness)", async () => {
+    const e1 = await createAudience(erste.id, { key: "shared-key", name: "Erste" });
+    const t1 = await createAudience(telekom.id, { key: "shared-key", name: "Telekom" });
     expect(e1.key).toBe("shared-key");
     expect(t1.key).toBe("shared-key");
     expect(e1.id).not.toBe(t1.id);
@@ -123,20 +129,23 @@ describe("audiences entity", () => {
 });
 
 describe("audiences audit logging", () => {
-  it("create / update / delete each write one audit row scoped to the active client", () => {
-    const a = createAudience(erste.id, { name: "A" });
+  it("create / update / delete each write one audit row scoped to the active client", async () => {
+    const a = await createAudience(erste.id, { name: "A" });
     // The library helpers don't write audit themselves — that's the route's
     // job. So write audit explicitly to mirror the route behavior:
-    db.insert(auditLog).values({
+    await db.insert(auditLog).values({
       clientId: erste.id,
       userId: "u-erste-admin",
       entityType: "audiences",
       entityId: String(a.id),
       action: "create",
       after: JSON.stringify(a),
-    }).run();
+    });
 
-    const rows = db.select().from(auditLog).where(eq(auditLog.clientId, erste.id)).all();
+    const rows = await db
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.clientId, erste.id));
     expect(rows).toHaveLength(1);
     expect(rows[0].entityType).toBe("audiences");
     expect(rows[0].action).toBe("create");

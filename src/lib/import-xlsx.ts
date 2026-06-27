@@ -1,6 +1,10 @@
 import { eq } from "drizzle-orm";
+import type { ExtractTablesWithRelations } from "drizzle-orm";
+import type { PgTransaction } from "drizzle-orm/pg-core";
+import type { PostgresJsQueryResultHKT } from "drizzle-orm/postgres-js";
 import xlsx from "node-xlsx";
 import { db } from "@/db";
+import * as schema from "@/db/schema";
 import {
   audiences,
   assets,
@@ -12,6 +16,17 @@ import {
   topics,
 } from "@/db/schema";
 import { KEYWORD_FIELDS, type KeywordForm } from "@/lib/entities/keywords";
+
+// A db handle that is either the root connection or an open transaction. The
+// dry-run path MUST pass the transaction handle through to every write — in
+// Postgres the root `db` uses a different pooled connection, so writes issued
+// on it would escape the transaction and never roll back.
+type Tx = PgTransaction<
+  PostgresJsQueryResultHKT,
+  typeof schema,
+  ExtractTablesWithRelations<typeof schema>
+>;
+type DbHandle = typeof db | Tx;
 
 type Row = unknown[];
 type Sheet = { name: string; data: Row[] };
@@ -50,18 +65,9 @@ function n(v: unknown): number | null {
   const num = Number(v);
   return Number.isFinite(num) ? num : null;
 }
-function bool(v: unknown): boolean {
-  if (v === null || v === undefined) return false;
-  const t = String(v).trim().toLowerCase();
-  return t === "true" || t === "1" || t === "yes";
-}
 
-function findCol(
-  headers: string[],
-  ...candidates: string[]
-): number {
-  const norm = (x: string) =>
-    x.toLowerCase().replace(/[\s_-]+/g, "");
+function findCol(headers: string[], ...candidates: string[]): number {
+  const norm = (x: string) => x.toLowerCase().replace(/[\s_-]+/g, "");
   const normHeaders = headers.map((h) => norm(h ?? ""));
   for (const c of candidates) {
     const i = normHeaders.indexOf(norm(c));
@@ -83,10 +89,10 @@ export function emptyCounts(): ImportCounts {
   };
 }
 
-export function importErsteXlsx(
+export async function importErsteXlsx(
   input: string | Buffer,
   opts: ImportOptions,
-): ImportResult {
+): Promise<ImportResult> {
   const { clientId, wipeFirst, dryRun } = opts;
   const sheets = xlsx.parse(input, { raw: true }) as Sheet[];
   const byName = new Map<string, Row[]>(sheets.map((s) => [s.name, s.data]));
@@ -95,25 +101,26 @@ export function importErsteXlsx(
   const skipped = emptyCounts();
   const errors: string[] = [];
 
-  const work = () => {
+  const work = async (dbh: DbHandle) => {
     if (wipeFirst) {
       // Wipe order: children first (messages reference audience/topic keys),
       // then siblings, finally parents. Keywords has no FK to other entities
       // (only to clients) so it can wipe at any point — grouped with the
       // other tenant-scoped wipes for consistency.
-      db.delete(reporting).where(eq(reporting.clientId, clientId)).run();
-      db.delete(textFormatting).where(eq(textFormatting.clientId, clientId)).run();
-      db.delete(assets).where(eq(assets.clientId, clientId)).run();
-      db.delete(creatives).where(eq(creatives.clientId, clientId)).run();
-      db.delete(messages).where(eq(messages.clientId, clientId)).run();
-      db.delete(topics).where(eq(topics.clientId, clientId)).run();
-      db.delete(audiences).where(eq(audiences.clientId, clientId)).run();
-      db.delete(keywords).where(eq(keywords.clientId, clientId)).run();
+      await dbh.delete(reporting).where(eq(reporting.clientId, clientId));
+      await dbh.delete(textFormatting).where(eq(textFormatting.clientId, clientId));
+      await dbh.delete(assets).where(eq(assets.clientId, clientId));
+      await dbh.delete(creatives).where(eq(creatives.clientId, clientId));
+      await dbh.delete(messages).where(eq(messages.clientId, clientId));
+      await dbh.delete(topics).where(eq(topics.clientId, clientId));
+      await dbh.delete(audiences).where(eq(audiences.clientId, clientId));
+      await dbh.delete(keywords).where(eq(keywords.clientId, clientId));
     }
 
-    importAudiences(byName.get("audiences"), clientId, inserted, skipped, errors);
-    importTopics(byName.get("topics"), clientId, inserted, skipped, errors);
-    importMessages(
+    await importAudiences(dbh, byName.get("audiences"), clientId, inserted, skipped, errors);
+    await importTopics(dbh, byName.get("topics"), clientId, inserted, skipped, errors);
+    await importMessages(
+      dbh,
       byName.get("messages"),
       byName.get("AI messages"),
       clientId,
@@ -121,24 +128,24 @@ export function importErsteXlsx(
       skipped,
       errors,
     );
-    importCreatives(byName.get("creatives"), clientId, inserted, skipped, errors);
-    importAssets(byName.get("assets"), clientId, inserted, skipped, errors);
-    importTextFormatting(byName.get("textformats"), clientId, inserted, skipped, errors);
-    importReporting(byName.get("Reporting"), clientId, inserted, skipped, errors);
-    importKeywords(byName.get("keywords"), clientId, inserted, skipped, errors);
+    await importCreatives(dbh, byName.get("creatives"), clientId, inserted, skipped, errors);
+    await importAssets(dbh, byName.get("assets"), clientId, inserted, skipped, errors);
+    await importTextFormatting(dbh, byName.get("textformats"), clientId, inserted, skipped, errors);
+    await importReporting(dbh, byName.get("Reporting"), clientId, inserted, skipped, errors);
+    await importKeywords(dbh, byName.get("keywords"), clientId, inserted, skipped, errors);
   };
 
   if (dryRun) {
     try {
-      db.transaction((_tx) => {
-        work();
+      await db.transaction(async (tx) => {
+        await work(tx);
         throw new RollbackForDryRun();
       });
     } catch (e) {
       if (!(e instanceof RollbackForDryRun)) throw e;
     }
   } else {
-    work();
+    await work(db);
   }
 
   return { inserted, skipped, errors };
@@ -150,30 +157,14 @@ class RollbackForDryRun extends Error {
   }
 }
 
-// Helper: run the standard sheet loop. Skips header row + empty rows.
-function eachRow(
-  sheet: Row[] | undefined,
-  fn: (row: Row, headers: string[]) => void,
-): { headers: string[]; total: number } | null {
-  if (!sheet || sheet.length === 0) return null;
-  const headers = (sheet[0] as string[]).map((h) => String(h ?? ""));
-  let total = 0;
-  for (let i = 1; i < sheet.length; i++) {
-    const row = sheet[i] as Row;
-    if (!row || row.length === 0) continue;
-    fn(row, headers);
-    total++;
-  }
-  return { headers, total };
-}
-
-function importAudiences(
+async function importAudiences(
+  dbh: DbHandle,
   sheet: Row[] | undefined,
   clientId: number,
   inserted: ImportCounts,
   skipped: ImportCounts,
   errors: string[],
-): void {
+): Promise<void> {
   if (!sheet) {
     errors.push("audiences sheet missing");
     return;
@@ -210,7 +201,8 @@ function importAudiences(
       continue;
     }
     seen.add(key);
-    db.insert(audiences)
+    await dbh
+      .insert(audiences)
       .values({
         clientId,
         key,
@@ -230,19 +222,19 @@ function importAudiences(
         lineitemName: s(r[idx.ln]),
         lineitemId: s(r[idx.li]),
       })
-      .onConflictDoNothing()
-      .run();
+      .onConflictDoNothing();
     inserted.audiences++;
   }
 }
 
-function importTopics(
+async function importTopics(
+  dbh: DbHandle,
   sheet: Row[] | undefined,
   clientId: number,
   inserted: ImportCounts,
   skipped: ImportCounts,
   errors: string[],
-): void {
+): Promise<void> {
   if (!sheet) {
     errors.push("topics sheet missing");
     return;
@@ -274,7 +266,8 @@ function importTopics(
       continue;
     }
     seen.add(key);
-    db.insert(topics)
+    await dbh
+      .insert(topics)
       .values({
         clientId,
         key,
@@ -289,20 +282,20 @@ function importTopics(
         created: s(r[idx.created]),
         comment: s(r[idx.comment]),
       })
-      .onConflictDoNothing()
-      .run();
+      .onConflictDoNothing();
     inserted.topics++;
   }
 }
 
-function importMessages(
+async function importMessages(
+  dbh: DbHandle,
   sheet: Row[] | undefined,
   aiSheet: Row[] | undefined,
   clientId: number,
   inserted: ImportCounts,
   skipped: ImportCounts,
   errors: string[],
-): void {
+): Promise<void> {
   if (!sheet) {
     errors.push("messages sheet missing");
     return;
@@ -370,64 +363,63 @@ function importMessages(
       continue;
     }
 
-    db.insert(messages)
-      .values({
-        clientId,
-        number,
-        variant,
-        audience: audKey,
-        topic: topKey,
-        versionNo: n(r[idx.versionNo]) ?? 1,
-        pmmid: s(r[idx.pmmid]),
-        status: s(r[idx.status]),
-        startDate: s(r[idx.start]),
-        endDate: s(r[idx.end]),
-        template: s(r[idx.template]),
-        templateVariantClasses: s(r[idx.tvc]),
-        name: s(r[idx.name]),
-        headline: s(r[idx.headline]),
-        copy1: s(r[idx.copy1]),
-        copy2: s(r[idx.copy2]),
-        disclaimer: s(r[idx.disclaimer]),
-        headlineStyle: s(r[idx.headlineStyle]),
-        copy1Style: s(r[idx.copy1Style]),
-        copy2Style: s(r[idx.copy2Style]),
-        disclaimerStyle: s(r[idx.disclaimerStyle]),
-        customCss: s(r[idx.css]),
-        image1: s(r[idx.img1]),
-        image2: s(r[idx.img2]),
-        image3: s(r[idx.img3]),
-        image4: s(r[idx.img4]),
-        image5: s(r[idx.img5]),
-        image6: s(r[idx.img6]),
-        video1: s(r[idx.video1]),
-        flash: s(r[idx.flash]),
-        flashStyle: s(r[idx.flashStyle]),
-        cta: s(r[idx.cta]),
-        ctaStyle: s(r[idx.ctaStyle]),
-        landingUrl: s(r[idx.landingUrl]),
-        comment: s(r[idx.comment]),
-        utmCampaign: s(r[idx.utmCampaign]),
-        utmSource: s(r[idx.utmSource]),
-        utmMedium: s(r[idx.utmMedium]),
-        utmContent: s(r[idx.utmContent]),
-        utmTerm: s(r[idx.utmTerm]),
-        utmCd26: s(r[idx.utmCd26]),
-        finalTraffickedUrl: s(r[idx.finalUrl]),
-      })
-      .run();
+    await dbh.insert(messages).values({
+      clientId,
+      number,
+      variant,
+      audience: audKey,
+      topic: topKey,
+      versionNo: n(r[idx.versionNo]) ?? 1,
+      pmmid: s(r[idx.pmmid]),
+      status: s(r[idx.status]),
+      startDate: s(r[idx.start]),
+      endDate: s(r[idx.end]),
+      template: s(r[idx.template]),
+      templateVariantClasses: s(r[idx.tvc]),
+      name: s(r[idx.name]),
+      headline: s(r[idx.headline]),
+      copy1: s(r[idx.copy1]),
+      copy2: s(r[idx.copy2]),
+      disclaimer: s(r[idx.disclaimer]),
+      headlineStyle: s(r[idx.headlineStyle]),
+      copy1Style: s(r[idx.copy1Style]),
+      copy2Style: s(r[idx.copy2Style]),
+      disclaimerStyle: s(r[idx.disclaimerStyle]),
+      customCss: s(r[idx.css]),
+      image1: s(r[idx.img1]),
+      image2: s(r[idx.img2]),
+      image3: s(r[idx.img3]),
+      image4: s(r[idx.img4]),
+      image5: s(r[idx.img5]),
+      image6: s(r[idx.img6]),
+      video1: s(r[idx.video1]),
+      flash: s(r[idx.flash]),
+      flashStyle: s(r[idx.flashStyle]),
+      cta: s(r[idx.cta]),
+      ctaStyle: s(r[idx.ctaStyle]),
+      landingUrl: s(r[idx.landingUrl]),
+      comment: s(r[idx.comment]),
+      utmCampaign: s(r[idx.utmCampaign]),
+      utmSource: s(r[idx.utmSource]),
+      utmMedium: s(r[idx.utmMedium]),
+      utmContent: s(r[idx.utmContent]),
+      utmTerm: s(r[idx.utmTerm]),
+      utmCd26: s(r[idx.utmCd26]),
+      finalTraffickedUrl: s(r[idx.finalUrl]),
+    });
     inserted.messages++;
   }
 }
 
-export function importCreatives(
+export async function importCreatives(
+  dbh: DbHandle,
   sheet: Row[] | undefined,
   clientId: number,
   inserted: ImportCounts,
   skipped: ImportCounts,
   errors: string[],
   opts: { typeFilter?: string } = {},
-): void {
+): Promise<void> {
   if (!sheet) {
     errors.push("creatives sheet missing");
     return;
@@ -459,35 +451,34 @@ export function importCreatives(
       skipped.creatives++;
       continue;
     }
-    db.insert(creatives)
-      .values({
-        clientId,
-        brand: s(r[idx.brand]),
-        product: s(r[idx.product]),
-        type,
-        visualKeyword: s(r[idx.visualKeyword]),
-        copyKeyword: s(r[idx.copyKeyword]),
-        mcNumber: n(r[idx.mcNumber]),
-        mcVariant: s(r[idx.mcVariant]),
-        bannerVersion: s(r[idx.bannerVersion]),
-        fileFormat: s(r[idx.fileFormat]),
-        fileId: s(r[idx.fileId]),
-        fileName: s(r[idx.fileName]),
-        fileSize: s(r[idx.fileSize]),
-        fileDimensions: s(r[idx.fileDimensions]),
-      })
-      .run();
+    await dbh.insert(creatives).values({
+      clientId,
+      brand: s(r[idx.brand]),
+      product: s(r[idx.product]),
+      type,
+      visualKeyword: s(r[idx.visualKeyword]),
+      copyKeyword: s(r[idx.copyKeyword]),
+      mcNumber: n(r[idx.mcNumber]),
+      mcVariant: s(r[idx.mcVariant]),
+      bannerVersion: s(r[idx.bannerVersion]),
+      fileFormat: s(r[idx.fileFormat]),
+      fileId: s(r[idx.fileId]),
+      fileName: s(r[idx.fileName]),
+      fileSize: s(r[idx.fileSize]),
+      fileDimensions: s(r[idx.fileDimensions]),
+    });
     inserted.creatives++;
   }
 }
 
-export function importAssets(
+export async function importAssets(
+  dbh: DbHandle,
   sheet: Row[] | undefined,
   clientId: number,
   inserted: ImportCounts,
   skipped: ImportCounts,
   errors: string[],
-): void {
+): Promise<void> {
   if (!sheet) {
     errors.push("assets sheet missing");
     return;
@@ -510,31 +501,30 @@ export function importAssets(
       skipped.assets++;
       continue;
     }
-    db.insert(assets)
-      .values({
-        clientId,
-        brand: s(r[idx.brand]),
-        product: s(r[idx.product]),
-        type: s(r[idx.type]),
-        visualKeyword: s(r[idx.visualKeyword]),
-        fileFormat: s(r[idx.fileFormat]),
-        fileId: s(r[idx.fileId]),
-        fileName: s(r[idx.fileName]),
-        fileSize: s(r[idx.fileSize]),
-        fileDimensions: s(r[idx.fileDimensions]),
-      })
-      .run();
+    await dbh.insert(assets).values({
+      clientId,
+      brand: s(r[idx.brand]),
+      product: s(r[idx.product]),
+      type: s(r[idx.type]),
+      visualKeyword: s(r[idx.visualKeyword]),
+      fileFormat: s(r[idx.fileFormat]),
+      fileId: s(r[idx.fileId]),
+      fileName: s(r[idx.fileName]),
+      fileSize: s(r[idx.fileSize]),
+      fileDimensions: s(r[idx.fileDimensions]),
+    });
     inserted.assets++;
   }
 }
 
-function importTextFormatting(
+async function importTextFormatting(
+  dbh: DbHandle,
   sheet: Row[] | undefined,
   clientId: number,
   inserted: ImportCounts,
   skipped: ImportCounts,
   errors: string[],
-): void {
+): Promise<void> {
   if (!sheet) {
     errors.push("textformats sheet missing");
     return;
@@ -554,26 +544,25 @@ function importTextFormatting(
       skipped.text_formatting++;
       continue;
     }
-    db.insert(textFormatting)
-      .values({
-        clientId,
-        textOriginal: original,
-        textFormatted: formatted,
-        formattingScope: s(r[idx.scope]),
-        formattingMcScope: s(r[idx.mcScope]),
-      })
-      .run();
+    await dbh.insert(textFormatting).values({
+      clientId,
+      textOriginal: original,
+      textFormatted: formatted,
+      formattingScope: s(r[idx.scope]),
+      formattingMcScope: s(r[idx.mcScope]),
+    });
     inserted.text_formatting++;
   }
 }
 
-function importReporting(
+async function importReporting(
+  dbh: DbHandle,
   sheet: Row[] | undefined,
   clientId: number,
   inserted: ImportCounts,
   skipped: ImportCounts,
   errors: string[],
-): void {
+): Promise<void> {
   if (!sheet) {
     errors.push("Reporting sheet missing");
     return;
@@ -600,23 +589,21 @@ function importReporting(
       skipped.reporting++;
       continue;
     }
-    db.insert(reporting)
-      .values({
-        clientId,
-        level,
-        mcLabel: s(r[idx.mcLabel]),
-        size: s(r[idx.size]),
-        bannerId: s(r[idx.bannerId]),
-        bannerName: s(r[idx.bannerName]),
-        adformStatus: s(r[idx.adformStatus]),
-        impressions: n(r[idx.impressions]) ?? 0,
-        clicks: n(r[idx.clicks]) ?? 0,
-        ctr: n(r[idx.ctr]),
-        campaignId: s(r[idx.campaignId]),
-        campaignName: s(r[idx.campaignName]),
-        syncedAt: s(r[idx.syncedAt]),
-      })
-      .run();
+    await dbh.insert(reporting).values({
+      clientId,
+      level,
+      mcLabel: s(r[idx.mcLabel]),
+      size: s(r[idx.size]),
+      bannerId: s(r[idx.bannerId]),
+      bannerName: s(r[idx.bannerName]),
+      adformStatus: s(r[idx.adformStatus]),
+      impressions: n(r[idx.impressions]) ?? 0,
+      clicks: n(r[idx.clicks]) ?? 0,
+      ctr: n(r[idx.ctr]),
+      campaignId: s(r[idx.campaignId]),
+      campaignName: s(r[idx.campaignName]),
+      syncedAt: s(r[idx.syncedAt]),
+    });
     inserted.reporting++;
   }
 }
@@ -635,13 +622,14 @@ export function normalizeXlsxFieldName(name: string): string {
   return lowerFirst.replace(/_(.)/g, (_, c: string) => c.toUpperCase());
 }
 
-export function importKeywords(
+async function importKeywords(
+  dbh: DbHandle,
   sheet: Row[] | undefined,
   clientId: number,
   inserted: ImportCounts,
   skipped: ImportCounts,
-  errors: string[],
-): void {
+  _errors: string[],
+): Promise<void> {
   if (!sheet) {
     // Optional sheet — older XLSX exports may not have it. Silent.
     return;
@@ -660,8 +648,7 @@ export function importKeywords(
       continue;
     }
     // Form must be one we cover in v1 (audiences | topics). Drop tasks,
-    // messages, creatives, assets silently for now — they're seeded but
-    // out-of-scope until a future phase wires the matching UI.
+    // messages, creatives, assets silently for now.
     if (form !== "audiences" && form !== "topics") {
       skipped.keywords++;
       continue;
@@ -681,20 +668,19 @@ export function importKeywords(
     for (const raw of valuesCell.split(",")) {
       const value = raw.trim();
       if (!value) continue;
-      try {
-        db.insert(keywords)
-          .values({ clientId, form, field, value, orderIndex: next })
-          .run();
+      // onConflictDoNothing keeps re-imports idempotent on a wipe-fresh client
+      // AND is transaction-safe (a swallowed UNIQUE error would abort the whole
+      // Postgres transaction, breaking the dry-run rollback path).
+      const res = await dbh
+        .insert(keywords)
+        .values({ clientId, form, field, value, orderIndex: next })
+        .onConflictDoNothing()
+        .returning({ id: keywords.id });
+      if (res.length > 0) {
         inserted.keywords++;
         next++;
-      } catch (e) {
-        if (e instanceof Error && /UNIQUE/i.test(e.message)) {
-          // Duplicate within the cell or across cells — skip silently;
-          // re-imports stay idempotent on top of a wipe-fresh client.
-          skipped.keywords++;
-          continue;
-        }
-        errors.push(`keywords[${form}.${field}] "${value}": ${(e as Error).message}`);
+      } else {
+        skipped.keywords++;
       }
     }
     counters.set(cohortKey, next);

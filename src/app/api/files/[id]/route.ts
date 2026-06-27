@@ -7,7 +7,7 @@ import { denyDemo, withSession } from "@/lib/scoped";
 type Params = { id: string };
 
 export const GET = withSession<Params>(async ({ claims, params }) => {
-  const row = getFile(claims.cid, params.id);
+  const row = await getFile(claims.cid, params.id);
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   let bytes: Buffer;
@@ -32,12 +32,12 @@ export const GET = withSession<Params>(async ({ claims, params }) => {
 export const DELETE = withSession<Params>(async ({ claims, params }) => {
   const denial = denyDemo(claims);
   if (denial) return denial;
-  const before = getFile(claims.cid, params.id);
-  const result = archiveFile(claims.cid, params.id);
+  const before = await getFile(claims.cid, params.id);
+  const result = await archiveFile(claims.cid, params.id);
   if (!result.ok) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "uploaded_files",

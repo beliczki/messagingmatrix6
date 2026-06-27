@@ -76,7 +76,7 @@ function describeTool(name: string, raw: unknown): ToolDescriptor {
 }
 
 export const GET = withAdmin(async () => {
-  const server = buildMcpServer({ clientId: activeClientId() });
+  const server = buildMcpServer({ clientId: await activeClientId() });
   const registered = (server as unknown as {
     _registeredTools: Record<string, unknown>;
   })._registeredTools;

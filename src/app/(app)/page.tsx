@@ -17,12 +17,12 @@ export const dynamic = "force-dynamic";
 
 async function entityCounts(clientId: number) {
   const c = await Promise.all([
-    db.select({ n: count() }).from(audiences).where(eq(audiences.clientId, clientId)).all(),
-    db.select({ n: count() }).from(topics).where(eq(topics.clientId, clientId)).all(),
-    db.select({ n: count() }).from(messages).where(eq(messages.clientId, clientId)).all(),
-    db.select({ n: count() }).from(assets).where(eq(assets.clientId, clientId)).all(),
-    db.select({ n: count() }).from(creatives).where(eq(creatives.clientId, clientId)).all(),
-    db.select({ n: count() }).from(textFormatting).where(eq(textFormatting.clientId, clientId)).all(),
+    db.select({ n: count() }).from(audiences).where(eq(audiences.clientId, clientId)),
+    db.select({ n: count() }).from(topics).where(eq(topics.clientId, clientId)),
+    db.select({ n: count() }).from(messages).where(eq(messages.clientId, clientId)),
+    db.select({ n: count() }).from(assets).where(eq(assets.clientId, clientId)),
+    db.select({ n: count() }).from(creatives).where(eq(creatives.clientId, clientId)),
+    db.select({ n: count() }).from(textFormatting).where(eq(textFormatting.clientId, clientId)),
   ]);
   return {
     audiences: c[0][0]?.n ?? 0,
@@ -40,8 +40,7 @@ function recentActivity(clientId: number) {
     .from(auditLog)
     .where(eq(auditLog.clientId, clientId))
     .orderBy(desc(auditLog.id))
-    .limit(15)
-    .all();
+    .limit(15);
 }
 
 export default async function Dashboard() {
@@ -50,9 +49,9 @@ export default async function Dashboard() {
   const claims = await readSessionFromCookies();
   if (!claims) redirect("/login");
 
-  const client = getActiveClient();
+  const client = await getActiveClient();
   const counts = await entityCounts(client.id);
-  const activity = recentActivity(client.id);
+  const activity = await recentActivity(client.id);
 
   const cards: Array<[string, number, string]> = [
     ["Audiences", counts.audiences, "/matrix"],

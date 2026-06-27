@@ -16,8 +16,12 @@ let h: TestDb;
 let erste: { id: number };
 let telekom: { id: number };
 
-function seedAudienceAndTopic(clientId: number, audKey = "aud1", topKey = "top1") {
-  const a = db
+async function seedAudienceAndTopic(
+  clientId: number,
+  audKey = "aud1",
+  topKey = "top1",
+) {
+  const [a] = await db
     .insert(audiences)
     .values({
       clientId,
@@ -28,9 +32,8 @@ function seedAudienceAndTopic(clientId: number, audKey = "aud1", topKey = "top1"
       strategy: "Prospecting",
       device: "Mobile",
     })
-    .returning()
-    .get();
-  const t = db
+    .returning();
+  const [t] = await db
     .insert(topics)
     .values({
       clientId,
@@ -39,122 +42,139 @@ function seedAudienceAndTopic(clientId: number, audKey = "aud1", topKey = "top1"
       orderIndex: 0,
       product: "Loans",
     })
-    .returning()
-    .get();
+    .returning();
   return { a, t };
 }
 
-beforeEach(() => {
-  h = createTestDb();
-  erste = db.insert(clients).values({ key: "erste", name: "Erste" }).returning().get();
-  telekom = db.insert(clients).values({ key: "telekom", name: "Telekom" }).returning().get();
+beforeEach(async () => {
+  h = await createTestDb();
+  [erste] = await db
+    .insert(clients)
+    .values({ key: "erste", name: "Erste" })
+    .returning();
+  [telekom] = await db
+    .insert(clients)
+    .values({ key: "telekom", name: "Telekom" })
+    .returning();
 });
 
-afterEach(() => {
-  h.cleanup();
+afterEach(async () => {
+  await h.cleanup();
 });
 
 describe("messages — numbering on create", () => {
-  it("first message in empty matrix gets #1a v1", () => {
-    seedAudienceAndTopic(erste.id);
-    const m = createMessage(erste.id, { topic: "top1", audience: "aud1" });
+  it("first message in empty matrix gets #1a v1", async () => {
+    await seedAudienceAndTopic(erste.id);
+    const m = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
     expect(m.number).toBe(1);
     expect(m.variant).toBe("a");
     expect(m.versionNo).toBe(1);
   });
 
-  it("second message in same cell gets next variant (b)", () => {
-    seedAudienceAndTopic(erste.id);
-    const a = createMessage(erste.id, { topic: "top1", audience: "aud1" });
-    const b = createMessage(erste.id, { topic: "top1", audience: "aud1" });
+  it("second message in same cell gets next variant (b)", async () => {
+    await seedAudienceAndTopic(erste.id);
+    const a = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    const b = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
     expect(a.variant).toBe("a");
     expect(b.variant).toBe("b");
     expect(b.number).toBe(a.number);
   });
 
-  it("message in a different cell gets the next free number", () => {
-    seedAudienceAndTopic(erste.id, "aud1", "top1");
-    seedAudienceAndTopic(erste.id, "aud2", "top2");
-    createMessage(erste.id, { topic: "top1", audience: "aud1" });
-    const m = createMessage(erste.id, { topic: "top2", audience: "aud2" });
+  it("message in a different cell gets the next free number", async () => {
+    await seedAudienceAndTopic(erste.id, "aud1", "top1");
+    await seedAudienceAndTopic(erste.id, "aud2", "top2");
+    await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    const m = await createMessage(erste.id, { topic: "top2", audience: "aud2" });
     expect(m.number).toBe(2);
     expect(m.variant).toBe("a");
   });
 
-  it("PMMID is auto-filled from the hardcoded format when no pattern is set", () => {
-    seedAudienceAndTopic(erste.id);
-    const m = createMessage(erste.id, { topic: "top1", audience: "aud1" });
+  it("PMMID is auto-filled from the hardcoded format when no pattern is set", async () => {
+    await seedAudienceAndTopic(erste.id);
+    const m = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
     expect(m.pmmid).toBe("a_aud1-t_top1-m_1-v_a-n_1");
   });
 
-  it("create rejects unknown audience or topic", () => {
-    seedAudienceAndTopic(erste.id);
-    expect(() =>
+  it("create rejects unknown audience or topic", async () => {
+    await seedAudienceAndTopic(erste.id);
+    await expect(
       createMessage(erste.id, { topic: "top1", audience: "ghost" }),
-    ).toThrow(MessageError);
-    expect(() =>
+    ).rejects.toThrow(MessageError);
+    await expect(
       createMessage(erste.id, { topic: "ghost", audience: "aud1" }),
-    ).toThrow(MessageError);
+    ).rejects.toThrow(MessageError);
   });
 });
 
 describe("messages — cascade archive + parent-first restore", () => {
   it("archiving an audience cascades to all its messages", async () => {
     const { archiveAudience } = await import("@/lib/entities/audiences");
-    seedAudienceAndTopic(erste.id);
-    const m1 = createMessage(erste.id, { topic: "top1", audience: "aud1", name: "M1" });
-    const m2 = createMessage(erste.id, { topic: "top1", audience: "aud1", name: "M2" });
+    await seedAudienceAndTopic(erste.id);
+    const m1 = await createMessage(erste.id, {
+      topic: "top1",
+      audience: "aud1",
+      name: "M1",
+    });
+    const m2 = await createMessage(erste.id, {
+      topic: "top1",
+      audience: "aud1",
+      name: "M2",
+    });
 
-    const aud = db
+    const [aud] = await db
       .select()
       .from(audiences)
       .where(eq(audiences.clientId, erste.id))
-      .get();
-    const r = archiveAudience(erste.id, aud!.id, aud!.version);
+      .limit(1);
+    const r = await archiveAudience(erste.id, aud!.id, aud!.version);
     expect(r.ok).toBe(true);
     if (r.ok) {
       expect(r.cascadedMessageIds.sort()).toEqual([m1.id, m2.id].sort());
     }
 
-    expect(getMessage(erste.id, m1.id)?.archivedAt).not.toBeNull();
-    expect(getMessage(erste.id, m2.id)?.archivedAt).not.toBeNull();
+    expect((await getMessage(erste.id, m1.id))?.archivedAt).not.toBeNull();
+    expect((await getMessage(erste.id, m2.id))?.archivedAt).not.toBeNull();
     // listMessages default filter excludes archived rows.
-    expect(listMessages(erste.id)).toHaveLength(0);
+    expect(await listMessages(erste.id)).toHaveLength(0);
   });
 
   it("archiving a topic cascades to all its messages", async () => {
     const { archiveTopic } = await import("@/lib/entities/topics");
-    seedAudienceAndTopic(erste.id);
-    const m1 = createMessage(erste.id, { topic: "top1", audience: "aud1", name: "M1" });
+    await seedAudienceAndTopic(erste.id);
+    const m1 = await createMessage(erste.id, {
+      topic: "top1",
+      audience: "aud1",
+      name: "M1",
+    });
 
-    const topic = db
+    const [topic] = await db
       .select()
       .from(topics)
       .where(eq(topics.clientId, erste.id))
-      .get();
-    const r = archiveTopic(erste.id, topic!.id, topic!.version);
+      .limit(1);
+    const r = await archiveTopic(erste.id, topic!.id, topic!.version);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.cascadedMessageIds).toEqual([m1.id]);
 
-    expect(getMessage(erste.id, m1.id)?.archivedAt).not.toBeNull();
+    expect((await getMessage(erste.id, m1.id))?.archivedAt).not.toBeNull();
   });
 
   it("restoreMessage refuses while parent audience is archived (parent-first guard)", async () => {
     const { archiveAudience } = await import("@/lib/entities/audiences");
     const { restoreMessage } = await import("@/lib/entities/messages");
-    seedAudienceAndTopic(erste.id);
-    const m = createMessage(erste.id, { topic: "top1", audience: "aud1" });
-    const aud = db
+    await seedAudienceAndTopic(erste.id);
+    const m = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    const [aud] = await db
       .select()
       .from(audiences)
       .where(eq(audiences.clientId, erste.id))
-      .get();
-    archiveAudience(erste.id, aud!.id, aud!.version);
+      .limit(1);
+    await archiveAudience(erste.id, aud!.id, aud!.version);
 
     // m was cascade-archived; its version is now 2 (archive bumped).
-    const archived = getMessage(erste.id, m.id);
+    const archived = await getMessage(erste.id, m.id);
     expect(archived?.archivedAt).not.toBeNull();
-    const result = restoreMessage(erste.id, m.id, archived!.version);
+    const result = await restoreMessage(erste.id, m.id, archived!.version);
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe("parent_archived");
@@ -168,91 +188,107 @@ describe("messages — cascade archive + parent-first restore", () => {
       "@/lib/entities/audiences"
     );
     const { restoreMessage } = await import("@/lib/entities/messages");
-    seedAudienceAndTopic(erste.id);
-    const m = createMessage(erste.id, { topic: "top1", audience: "aud1" });
-    const aud = db
+    await seedAudienceAndTopic(erste.id);
+    const m = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    const [aud] = await db
       .select()
       .from(audiences)
       .where(eq(audiences.clientId, erste.id))
-      .get();
+      .limit(1);
 
-    archiveAudience(erste.id, aud!.id, aud!.version);
-    const audAfterArchive = db
+    await archiveAudience(erste.id, aud!.id, aud!.version);
+    const [audAfterArchive] = await db
       .select()
       .from(audiences)
       .where(eq(audiences.id, aud!.id))
-      .get();
-    restoreAudience(erste.id, aud!.id, audAfterArchive!.version);
+      .limit(1);
+    await restoreAudience(erste.id, aud!.id, audAfterArchive!.version);
 
-    const mArchived = getMessage(erste.id, m.id);
-    const r = restoreMessage(erste.id, m.id, mArchived!.version);
+    const mArchived = await getMessage(erste.id, m.id);
+    const r = await restoreMessage(erste.id, m.id, mArchived!.version);
     expect(r.ok).toBe(true);
-    expect(getMessage(erste.id, m.id)?.archivedAt).toBeNull();
+    expect((await getMessage(erste.id, m.id))?.archivedAt).toBeNull();
   });
 });
 
 describe("messages — soft archive", () => {
-  it("DELETE sets archived_at instead of removing the row", () => {
-    seedAudienceAndTopic(erste.id);
-    const m = createMessage(erste.id, { topic: "top1", audience: "aud1" });
-    const r = archiveMessage(erste.id, m.id, m.version);
+  it("DELETE sets archived_at instead of removing the row", async () => {
+    await seedAudienceAndTopic(erste.id);
+    const m = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    const r = await archiveMessage(erste.id, m.id, m.version);
     expect(r.ok).toBe(true);
     if (r.ok) expect(r.row.archivedAt).not.toBeNull();
-    expect(getMessage(erste.id, m.id)?.archivedAt).not.toBeNull();
+    expect((await getMessage(erste.id, m.id))?.archivedAt).not.toBeNull();
   });
 
-  it("listMessages excludes archived by default; includeArchived shows them", () => {
-    seedAudienceAndTopic(erste.id);
-    const m = createMessage(erste.id, { topic: "top1", audience: "aud1" });
-    archiveMessage(erste.id, m.id, m.version);
+  it("listMessages excludes archived by default; includeArchived shows them", async () => {
+    await seedAudienceAndTopic(erste.id);
+    const m = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    await archiveMessage(erste.id, m.id, m.version);
 
-    expect(listMessages(erste.id)).toHaveLength(0);
-    expect(listMessages(erste.id, { includeArchived: true })).toHaveLength(1);
+    expect(await listMessages(erste.id)).toHaveLength(0);
+    expect(await listMessages(erste.id, { includeArchived: true })).toHaveLength(
+      1,
+    );
   });
 
-  it("after archiving an MC, a new MC inserted in the same cell starts fresh from global max", () => {
+  it("after archiving an MC, a new MC inserted in the same cell starts fresh from global max", async () => {
     // Mirrors the v5 `cell-only-has-deleted` numbering rule, ported to archive.
-    seedAudienceAndTopic(erste.id);
-    const a = createMessage(erste.id, { topic: "top1", audience: "aud1" });
-    const b = createMessage(erste.id, { topic: "top1", audience: "aud1" });
-    archiveMessage(erste.id, a.id, a.version);
-    archiveMessage(erste.id, b.id, b.version);
+    await seedAudienceAndTopic(erste.id);
+    const a = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    const b = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    await archiveMessage(erste.id, a.id, a.version);
+    await archiveMessage(erste.id, b.id, b.version);
 
-    const fresh = createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    const fresh = await createMessage(erste.id, {
+      topic: "top1",
+      audience: "aud1",
+    });
     expect(fresh.number).toBe(1);
     expect(fresh.variant).toBe("a");
   });
 });
 
 describe("messages — client scoping", () => {
-  it("listMessages on Erste does not return Telekom messages", () => {
-    seedAudienceAndTopic(erste.id);
-    seedAudienceAndTopic(telekom.id);
-    createMessage(erste.id, { topic: "top1", audience: "aud1", name: "E" });
-    createMessage(telekom.id, { topic: "top1", audience: "aud1", name: "T" });
+  it("listMessages on Erste does not return Telekom messages", async () => {
+    await seedAudienceAndTopic(erste.id);
+    await seedAudienceAndTopic(telekom.id);
+    await createMessage(erste.id, { topic: "top1", audience: "aud1", name: "E" });
+    await createMessage(telekom.id, {
+      topic: "top1",
+      audience: "aud1",
+      name: "T",
+    });
 
-    const e = listMessages(erste.id);
-    const t = listMessages(telekom.id);
+    const e = await listMessages(erste.id);
+    const t = await listMessages(telekom.id);
     expect(e.map((r) => r.name)).toEqual(["E"]);
     expect(t.map((r) => r.name)).toEqual(["T"]);
   });
 
-  it("update with foreign client_id is a no-op (returns not-found)", () => {
-    seedAudienceAndTopic(telekom.id);
-    const t = createMessage(telekom.id, { topic: "top1", audience: "aud1", name: "T" });
-    const r = updateMessage(erste.id, t.id, t.version, { name: "hijack" });
+  it("update with foreign client_id is a no-op (returns not-found)", async () => {
+    await seedAudienceAndTopic(telekom.id);
+    const t = await createMessage(telekom.id, {
+      topic: "top1",
+      audience: "aud1",
+      name: "T",
+    });
+    const r = await updateMessage(erste.id, t.id, t.version, { name: "hijack" });
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.current).toBeNull();
-    expect(getMessage(telekom.id, t.id)?.name).toBe("T");
+    expect((await getMessage(telekom.id, t.id))?.name).toBe("T");
   });
 
-  it("MC numbering counts are isolated per client", () => {
-    seedAudienceAndTopic(erste.id);
-    seedAudienceAndTopic(telekom.id);
-    createMessage(erste.id, { topic: "top1", audience: "aud1" });
-    createMessage(erste.id, { topic: "top1", audience: "aud1" });
-    createMessage(erste.id, { topic: "top1", audience: "aud1" });
-    const tFirst = createMessage(telekom.id, { topic: "top1", audience: "aud1" });
+  it("MC numbering counts are isolated per client", async () => {
+    await seedAudienceAndTopic(erste.id);
+    await seedAudienceAndTopic(telekom.id);
+    await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    const tFirst = await createMessage(telekom.id, {
+      topic: "top1",
+      audience: "aud1",
+    });
     expect(tFirst.number).toBe(1);
     expect(tFirst.variant).toBe("a");
   });

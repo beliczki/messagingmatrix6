@@ -1,47 +1,54 @@
 import {
-  sqliteTable,
+  pgTable,
   text,
   integer,
   real,
   primaryKey,
   index,
   uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+} from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+
+// Reproduce SQLite's CURRENT_TIMESTAMP text format exactly:
+// "YYYY-MM-DD HH:MM:SS" in UTC, second precision, no timezone offset.
+// Timestamp columns are TEXT (not native timestamptz) — keeping the same
+// emitted string preserves string-sort ordering and `new Date(...)` parsing
+// across the SQLite→Postgres move. Do NOT switch these to timestamptz.
+export const nowUtc = sql`(to_char((now() AT TIME ZONE 'utc'), 'YYYY-MM-DD HH24:MI:SS'))`;
 
 // Multi-tenancy root. Spec §17.2.
 // Each running deploy is locked to one client via ACTIVE_CLIENT_KEY env var.
-export const clients = sqliteTable(
+export const clients = pgTable(
   "clients",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     key: text("key").notNull().unique(),
     name: text("name").notNull(),
     status: text("status").notNull().default("active"),
     mcpToken: text("mcp_token"),
     createdAt: text("created_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     updatedAt: text("updated_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
   },
   (t) => [index("clients_status_idx").on(t.status)],
 );
 
 // Cross-tenant settings. Spec §17.4.
-export const systemConfig = sqliteTable("system_config", {
+export const systemConfig = pgTable("system_config", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
   description: text("description"),
   updatedAt: text("updated_at")
     .notNull()
-    .default(sql`(CURRENT_TIMESTAMP)`),
+    .default(nowUtc),
 });
 
 // Per-client users. Spec §17.5.
 // Same email allowed across clients as separate rows with independent passwords.
-export const users = sqliteTable(
+export const users = pgTable(
   "users",
   {
     id: text("id").primaryKey(),
@@ -53,10 +60,10 @@ export const users = sqliteTable(
     role: text("role").notNull().default("user"),
     createdAt: text("created_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     updatedAt: text("updated_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     archivedAt: text("archived_at"),
   },
   (t) => [
@@ -66,10 +73,10 @@ export const users = sqliteTable(
 );
 
 // Server-side action history. Spec §3.13 + §17.3.
-export const auditLog = sqliteTable(
+export const auditLog = pgTable(
   "audit_log",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     clientId: integer("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
@@ -81,7 +88,7 @@ export const auditLog = sqliteTable(
     after: text("after"),
     createdAt: text("created_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
   },
   (t) => [
     index("audit_client_user_idx").on(t.clientId, t.userId),
@@ -92,7 +99,7 @@ export const auditLog = sqliteTable(
 
 // Per-client config (Spec §17.4). Composite PK (client_id, key).
 // Categories: patterns, lookAndFeel, structure, storage, adform.
-export const config = sqliteTable(
+export const config = pgTable(
   "config",
   {
     clientId: integer("client_id")
@@ -104,7 +111,7 @@ export const config = sqliteTable(
     description: text("description"),
     updatedAt: text("updated_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
   },
   (t) => [
     primaryKey({ columns: [t.clientId, t.key] }),
@@ -117,10 +124,10 @@ export const config = sqliteTable(
 // locking (§3 preamble). Every index from §3 is composite-prefixed with client_id.
 
 // §3.1
-export const audiences = sqliteTable(
+export const audiences = pgTable(
   "audiences",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     clientId: integer("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
@@ -143,10 +150,10 @@ export const audiences = sqliteTable(
     version: integer("version").notNull().default(1),
     createdAt: text("created_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     updatedAt: text("updated_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     archivedAt: text("archived_at"),
   },
   (t) => [
@@ -157,10 +164,10 @@ export const audiences = sqliteTable(
 );
 
 // §3.2 — narrower than audiences: no targeting/trafficking columns
-export const topics = sqliteTable(
+export const topics = pgTable(
   "topics",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     clientId: integer("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
@@ -179,10 +186,10 @@ export const topics = sqliteTable(
     version: integer("version").notNull().default(1),
     createdAt: text("created_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     updatedAt: text("updated_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     archivedAt: text("archived_at"),
   },
   (t) => [
@@ -193,10 +200,10 @@ export const topics = sqliteTable(
 );
 
 // §3.3
-export const messages = sqliteTable(
+export const messages = pgTable(
   "messages",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     clientId: integer("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
@@ -249,10 +256,10 @@ export const messages = sqliteTable(
     version: integer("version").notNull().default(1),
     createdAt: text("created_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     updatedAt: text("updated_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     archivedAt: text("archived_at"),
   },
   (t) => [
@@ -268,10 +275,10 @@ export const messages = sqliteTable(
 );
 
 // §3.4
-export const assets = sqliteTable(
+export const assets = pgTable(
   "assets",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     clientId: integer("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
@@ -288,10 +295,10 @@ export const assets = sqliteTable(
     version: integer("version").notNull().default(1),
     createdAt: text("created_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     updatedAt: text("updated_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     archivedAt: text("archived_at"),
   },
   (t) => [
@@ -303,10 +310,10 @@ export const assets = sqliteTable(
 );
 
 // §3.5
-export const creatives = sqliteTable(
+export const creatives = pgTable(
   "creatives",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     clientId: integer("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
@@ -329,10 +336,10 @@ export const creatives = sqliteTable(
     version: integer("version").notNull().default(1),
     createdAt: text("created_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     updatedAt: text("updated_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     archivedAt: text("archived_at"),
   },
   (t) => [
@@ -345,10 +352,10 @@ export const creatives = sqliteTable(
 );
 
 // §3.6
-export const textFormatting = sqliteTable(
+export const textFormatting = pgTable(
   "text_formatting",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     clientId: integer("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
@@ -359,20 +366,20 @@ export const textFormatting = sqliteTable(
     version: integer("version").notNull().default(1),
     createdAt: text("created_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     updatedAt: text("updated_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     archivedAt: text("archived_at"),
   },
   (t) => [index("text_formatting_client_idx").on(t.clientId)],
 );
 
 // §3.7
-export const reporting = sqliteTable(
+export const reporting = pgTable(
   "reporting",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     clientId: integer("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
@@ -404,10 +411,10 @@ export const reporting = sqliteTable(
 // so the importer aggregates. `platform`/`scope` are derived from the PMMID
 // scope prefix (p_adform / p_dv360 / p_meta_… / …). Distinct from `reporting`
 // above (the legacy workbook-sourced banner snapshot, slated for removal).
-export const monitoring = sqliteTable(
+export const monitoring = pgTable(
   "monitoring",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     clientId: integer("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
@@ -445,7 +452,7 @@ export const monitoring = sqliteTable(
     periodTo: text("period_to").notNull(),
     importedAt: text("imported_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     sourceFilename: text("source_filename"),
   },
   (t) => [
@@ -468,7 +475,7 @@ export const monitoring = sqliteTable(
 );
 
 // §3.10 — public share-gallery metadata
-export const shareGalleries = sqliteTable(
+export const shareGalleries = pgTable(
   "share_galleries",
   {
     id: text("id").primaryKey(),
@@ -483,10 +490,10 @@ export const shareGalleries = sqliteTable(
     downloadCount: integer("download_count").notNull().default(0),
     createdAt: text("created_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     updatedAt: text("updated_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     archivedAt: text("archived_at"),
   },
   (t) => [index("share_galleries_client_idx").on(t.clientId)],
@@ -496,7 +503,7 @@ export const shareGalleries = sqliteTable(
 // for matrix items and "creative:{id}" for uploaded creatives. annotation is
 // optional JSON: {type:"point", x, y} or {type:"rect", x, y, w, h} where all
 // coords are normalized 0-1 (relative to the item's preview surface).
-export const shareComments = sqliteTable(
+export const shareComments = pgTable(
   "share_comments",
   {
     id: text("id").primaryKey(),
@@ -509,7 +516,7 @@ export const shareComments = sqliteTable(
     annotation: text("annotation"),
     createdAt: text("created_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     archivedAt: text("archived_at"),
   },
   (t) => [
@@ -519,7 +526,7 @@ export const shareComments = sqliteTable(
 );
 
 // §3.11 — unified file registry
-export const uploadedFiles = sqliteTable(
+export const uploadedFiles = pgTable(
   "uploaded_files",
   {
     id: text("id").primaryKey(),
@@ -537,7 +544,7 @@ export const uploadedFiles = sqliteTable(
     category: text("category").notNull(),
     createdAt: text("created_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     archivedAt: text("archived_at"),
   },
   (t) => [
@@ -559,10 +566,10 @@ export const uploadedFiles = sqliteTable(
 // names and values are arrays of full row objects. Restore wipes-then-inserts
 // in a transaction. Does NOT include config / clients / system_config /
 // audit_log (history must survive restore).
-export const snapshots = sqliteTable(
+export const snapshots = pgTable(
   "snapshots",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     clientId: integer("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
@@ -571,7 +578,7 @@ export const snapshots = sqliteTable(
     payloadJson: text("payload_json").notNull(),
     createdAt: text("created_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
   },
   (t) => [index("snapshots_client_created_idx").on(t.clientId, t.createdAt)],
 );
@@ -593,10 +600,10 @@ export type Snapshot = typeof snapshots.$inferSelect;
 //     messageIds: number[],         // one per row (DEFAULT row → -1 sentinel)
 //     defaultRowIndex: number       // index of the DEFAULT row in `rows`
 //   }
-export const feedExports = sqliteTable(
+export const feedExports = pgTable(
   "feed_exports",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     clientId: integer("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
@@ -604,7 +611,7 @@ export const feedExports = sqliteTable(
     feedVersion: integer("feed_version").notNull(),
     exportedAt: text("exported_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     exportedBy: text("exported_by"),
     uploadedToAdformAt: text("uploaded_to_adform_at"),
     uploadedBy: text("uploaded_by"),
@@ -642,10 +649,10 @@ export type NewFeedExport = typeof feedExports.$inferInsert;
 // name (e.g. "buyingPlatform", not the XLSX "Buying_platform"). `value` is the
 // allowed string. Editor dropdowns autocomplete from this list but accept
 // freeform input — empty list ⇒ pure freeform.
-export const keywords = sqliteTable(
+export const keywords = pgTable(
   "keywords",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
     clientId: integer("client_id")
       .notNull()
       .references(() => clients.id, { onDelete: "cascade" }),
@@ -655,10 +662,10 @@ export const keywords = sqliteTable(
     orderIndex: integer("order_index").notNull().default(0),
     createdAt: text("created_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     updatedAt: text("updated_at")
       .notNull()
-      .default(sql`(CURRENT_TIMESTAMP)`),
+      .default(nowUtc),
     archivedAt: text("archived_at"),
   },
   (t) => [

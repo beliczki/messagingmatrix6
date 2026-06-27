@@ -6,16 +6,18 @@ import { DEFAULT_LOOK_AND_FEEL } from "@/db/defaults";
 
 export type LookAndFeel = typeof DEFAULT_LOOK_AND_FEEL;
 
-export function getActiveLookAndFeel(): LookAndFeel {
-  return getLookAndFeelByClientId(activeClientId());
+export async function getActiveLookAndFeel(): Promise<LookAndFeel> {
+  return getLookAndFeelByClientId(await activeClientId());
 }
 
-export function getLookAndFeelByClientId(clientId: number): LookAndFeel {
-  const row = db
+export async function getLookAndFeelByClientId(
+  clientId: number,
+): Promise<LookAndFeel> {
+  const [row] = await db
     .select()
     .from(config)
     .where(and(eq(config.clientId, clientId), eq(config.key, "lookAndFeel")))
-    .get();
+    .limit(1);
   if (!row) return DEFAULT_LOOK_AND_FEEL;
 
   let parsed: Partial<LookAndFeel>;

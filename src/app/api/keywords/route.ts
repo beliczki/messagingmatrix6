@@ -8,13 +8,13 @@ import {
 import { denyDemo, withAdmin, withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 
-export const GET = withSession(({ req, claims }) => {
+export const GET = withSession(async ({ req, claims }) => {
   const url = new URL(req.url);
   const form = url.searchParams.get("form") ?? undefined;
   const field = url.searchParams.get("field") ?? undefined;
   const includeArchived = url.searchParams.get("includeArchived") === "1";
   return NextResponse.json({
-    keywords: listKeywords(claims.cid, { form, field, includeArchived }),
+    keywords: await listKeywords(claims.cid, { form, field, includeArchived }),
     schema: KEYWORD_FIELDS,
   });
 });
@@ -28,14 +28,14 @@ export const POST = withAdmin(async ({ req, claims }) => {
   }
   const { form, field, value, orderIndex } = body as Record<string, unknown>;
   try {
-    const row = createKeyword(claims.cid, {
+    const row = await createKeyword(claims.cid, {
       form: String(form ?? ""),
       field: String(field ?? ""),
       value: String(value ?? ""),
       orderIndex:
         typeof orderIndex === "number" ? orderIndex : undefined,
     });
-    writeAudit({
+    await writeAudit({
       clientId: claims.cid,
       userId: claims.sub,
       entityType: "keywords",

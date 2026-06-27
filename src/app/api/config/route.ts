@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
-import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import { config } from "@/db/schema";
+import { config, nowUtc } from "@/db/schema";
 import { withSession, withAdmin } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 
@@ -22,27 +21,25 @@ function parseValue(raw: string): unknown {
   }
 }
 
-export const GET = withSession(({ req, claims }) => {
+export const GET = withSession(async ({ req, claims }) => {
   const url = new URL(req.url);
   const key = url.searchParams.get("key");
   const category = url.searchParams.get("category");
 
-  const rows = (() => {
+  const rows = await (() => {
     if (key) {
       return db
         .select()
         .from(config)
-        .where(and(eq(config.clientId, claims.cid), eq(config.key, key)))
-        .all();
+        .where(and(eq(config.clientId, claims.cid), eq(config.key, key)));
     }
     if (category) {
       return db
         .select()
         .from(config)
-        .where(and(eq(config.clientId, claims.cid), eq(config.category, category)))
-        .all();
+        .where(and(eq(config.clientId, claims.cid), eq(config.category, category)));
     }
-    return db.select().from(config).where(eq(config.clientId, claims.cid)).all();
+    return db.select().from(config).where(eq(config.clientId, claims.cid));
   })();
 
   const out: ConfigRowOut[] = rows.map((r) => ({
@@ -69,32 +66,32 @@ export const PUT = withAdmin(async ({ req, claims }) => {
   const category =
     typeof body.category === "string" ? body.category : null;
 
-  const existing = db
+  const [existing] = await db
     .select()
     .from(config)
     .where(and(eq(config.clientId, claims.cid), eq(config.key, key)))
-    .get();
+    .limit(1);
 
   const beforeValue = existing ? parseValue(existing.value) : null;
 
   if (existing) {
-    db.update(config)
+    await db
+      .update(config)
       .set({
         value: valueStr,
         category,
-        updatedAt: sql`(CURRENT_TIMESTAMP)`,
+        updatedAt: nowUtc,
       })
-      .where(and(eq(config.clientId, claims.cid), eq(config.key, key)))
-      .run();
+      .where(and(eq(config.clientId, claims.cid), eq(config.key, key)));
   } else {
-    db.insert(config)
-      .values({ clientId: claims.cid, key, value: valueStr, category })
-      .run();
+    await db
+      .insert(config)
+      .values({ clientId: claims.cid, key, value: valueStr, category });
   }
 
   const afterValue = parseValue(valueStr);
 
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "config",

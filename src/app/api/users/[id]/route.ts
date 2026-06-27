@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
-import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { users, nowUtc } from "@/db/schema";
 import { withAdmin } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 import { hashPassword } from "@/lib/auth";
@@ -23,11 +22,11 @@ function pickUser(u: typeof users.$inferSelect) {
 export const PATCH = withAdmin<{ id: string }>(
   async ({ req, claims, params }) => {
     const id = params.id;
-    const existing = db
+    const [existing] = await db
       .select()
       .from(users)
       .where(and(eq(users.clientId, claims.cid), eq(users.id, id)))
-      .get();
+      .limit(1);
     if (!existing) {
       return NextResponse.json({ error: "user not found" }, { status: 404 });
     }
@@ -77,14 +76,13 @@ export const PATCH = withAdmin<{ id: string }>(
       );
     }
 
-    const updated = db
+    const [updated] = await db
       .update(users)
-      .set({ ...patch, updatedAt: sql`(CURRENT_TIMESTAMP)` })
+      .set({ ...patch, updatedAt: nowUtc })
       .where(and(eq(users.clientId, claims.cid), eq(users.id, id)))
-      .returning()
-      .get();
+      .returning();
 
-    writeAudit({
+    await writeAudit({
       clientId: claims.cid,
       userId: claims.sub,
       entityType: "users",
@@ -98,7 +96,7 @@ export const PATCH = withAdmin<{ id: string }>(
   },
 );
 
-export const DELETE = withAdmin<{ id: string }>(({ claims, params }) => {
+export const DELETE = withAdmin<{ id: string }>(async ({ claims, params }) => {
   const id = params.id;
   if (id === claims.sub) {
     return NextResponse.json(
@@ -106,26 +104,25 @@ export const DELETE = withAdmin<{ id: string }>(({ claims, params }) => {
       { status: 400 },
     );
   }
-  const existing = db
+  const [existing] = await db
     .select()
     .from(users)
     .where(and(eq(users.clientId, claims.cid), eq(users.id, id)))
-    .get();
+    .limit(1);
   if (!existing) {
     return NextResponse.json({ error: "user not found" }, { status: 404 });
   }
 
-  const updated = db
+  const [updated] = await db
     .update(users)
     .set({
-      archivedAt: sql`CURRENT_TIMESTAMP`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      archivedAt: nowUtc,
+      updatedAt: nowUtc,
     })
     .where(and(eq(users.clientId, claims.cid), eq(users.id, id)))
-    .returning()
-    .get();
+    .returning();
 
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "users",

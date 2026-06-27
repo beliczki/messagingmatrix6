@@ -13,27 +13,33 @@ let h: TestDb;
 let erste: { id: number };
 let telekom: { id: number };
 
-beforeEach(() => {
-  h = createTestDb();
+beforeEach(async () => {
+  h = await createTestDb();
   _resetSubscribersForTests();
-  erste = db.insert(clients).values({ key: "erste", name: "Erste" }).returning().get();
-  telekom = db.insert(clients).values({ key: "telekom", name: "Telekom" }).returning().get();
+  [erste] = await db
+    .insert(clients)
+    .values({ key: "erste", name: "Erste" })
+    .returning();
+  [telekom] = await db
+    .insert(clients)
+    .values({ key: "telekom", name: "Telekom" })
+    .returning();
 });
 
-afterEach(() => {
-  h.cleanup();
+afterEach(async () => {
+  await h.cleanup();
   _resetSubscribersForTests();
 });
 
 describe("SSE broadcast (Spec §4.11)", () => {
-  it("writeAudit broadcasts to active subscribers of the same client", () => {
+  it("writeAudit broadcasts to active subscribers of the same client", async () => {
     const events: BroadcastEvent[] = [];
     subscribe(erste.id, (e) => events.push(e));
 
-    db.insert(audiences)
-      .values({ clientId: erste.id, key: "aud1", name: "A", orderIndex: 0 })
-      .run();
-    writeAudit({
+    await db
+      .insert(audiences)
+      .values({ clientId: erste.id, key: "aud1", name: "A", orderIndex: 0 });
+    await writeAudit({
       clientId: erste.id,
       userId: "u1",
       entityType: "audiences",
@@ -50,13 +56,13 @@ describe("SSE broadcast (Spec §4.11)", () => {
     });
   });
 
-  it("broadcasts are scoped per client — Erste subscribers don't see Telekom events", () => {
+  it("broadcasts are scoped per client — Erste subscribers don't see Telekom events", async () => {
     const ersteEvents: BroadcastEvent[] = [];
     const telekomEvents: BroadcastEvent[] = [];
     subscribe(erste.id, (e) => ersteEvents.push(e));
     subscribe(telekom.id, (e) => telekomEvents.push(e));
 
-    writeAudit({
+    await writeAudit({
       clientId: telekom.id,
       userId: "tk-user",
       entityType: "messages",
@@ -69,11 +75,11 @@ describe("SSE broadcast (Spec §4.11)", () => {
     expect(telekomEvents[0].entity).toBe("messages");
   });
 
-  it("unsubscribe stops further events", () => {
+  it("unsubscribe stops further events", async () => {
     const events: BroadcastEvent[] = [];
     const unsub = subscribe(erste.id, (e) => events.push(e));
 
-    writeAudit({
+    await writeAudit({
       clientId: erste.id,
       userId: "u",
       entityType: "topics",
@@ -83,7 +89,7 @@ describe("SSE broadcast (Spec §4.11)", () => {
     expect(events).toHaveLength(1);
 
     unsub();
-    writeAudit({
+    await writeAudit({
       clientId: erste.id,
       userId: "u",
       entityType: "topics",
@@ -93,14 +99,14 @@ describe("SSE broadcast (Spec §4.11)", () => {
     expect(events).toHaveLength(1);
   });
 
-  it("a throwing subscriber does not break sibling subscribers", () => {
+  it("a throwing subscriber does not break sibling subscribers", async () => {
     const seen: BroadcastEvent[] = [];
     subscribe(erste.id, () => {
       throw new Error("boom");
     });
     subscribe(erste.id, (e) => seen.push(e));
 
-    writeAudit({
+    await writeAudit({
       clientId: erste.id,
       userId: "u",
       entityType: "audiences",

@@ -181,42 +181,26 @@ export type ExportResult = {
   counts: ExportCounts;
 };
 
-export function exportClientXlsx(clientId: number): ExportResult {
-  const audiencesRows = db
-    .select()
-    .from(audiences)
-    .where(eq(audiences.clientId, clientId))
-    .all();
-  const topicsRows = db
-    .select()
-    .from(topics)
-    .where(eq(topics.clientId, clientId))
-    .all();
-  const messagesRows = db
-    .select()
-    .from(messages)
-    .where(eq(messages.clientId, clientId))
-    .all();
-  const creativesRows = db
-    .select()
-    .from(creatives)
-    .where(eq(creatives.clientId, clientId))
-    .all();
-  const assetsRows = db
-    .select()
-    .from(assets)
-    .where(eq(assets.clientId, clientId))
-    .all();
-  const textFormattingRows = db
-    .select()
-    .from(textFormatting)
-    .where(eq(textFormatting.clientId, clientId))
-    .all();
-  const reportingRows = db
-    .select()
-    .from(reporting)
-    .where(eq(reporting.clientId, clientId))
-    .all();
+export async function exportClientXlsx(
+  clientId: number,
+): Promise<ExportResult> {
+  const [
+    audiencesRows,
+    topicsRows,
+    messagesRows,
+    creativesRows,
+    assetsRows,
+    textFormattingRows,
+    reportingRows,
+  ] = await Promise.all([
+    db.select().from(audiences).where(eq(audiences.clientId, clientId)),
+    db.select().from(topics).where(eq(topics.clientId, clientId)),
+    db.select().from(messages).where(eq(messages.clientId, clientId)),
+    db.select().from(creatives).where(eq(creatives.clientId, clientId)),
+    db.select().from(assets).where(eq(assets.clientId, clientId)),
+    db.select().from(textFormatting).where(eq(textFormatting.clientId, clientId)),
+    db.select().from(reporting).where(eq(reporting.clientId, clientId)),
+  ]);
 
   const sheets = [
     buildSheet("audiences", audienceCols, audiencesRows),

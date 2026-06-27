@@ -16,18 +16,19 @@ function parseId(s: string): number | null {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-function loadRow(clientId: number, id: number) {
-  return db
+async function loadRow(clientId: number, id: number) {
+  const [row] = await db
     .select()
     .from(feedExports)
     .where(and(eq(feedExports.clientId, clientId), eq(feedExports.id, id)))
-    .get();
+    .limit(1);
+  return row ?? null;
 }
 
-export const GET = withSession<Params>(({ req, claims, params }) => {
+export const GET = withSession<Params>(async ({ req, claims, params }) => {
   const id = parseId(params.id);
   if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
-  const row = loadRow(claims.cid, id);
+  const row = await loadRow(claims.cid, id);
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   const url = new URL(req.url);
@@ -37,11 +38,11 @@ export const GET = withSession<Params>(({ req, claims, params }) => {
       return NextResponse.json({ error: "invalid_payload" }, { status: 500 });
     }
     const buffer = buildXlsxBuffer(payload);
-    const client = db
+    const [client] = await db
       .select()
       .from(clients)
       .where(eq(clients.id, claims.cid))
-      .get();
+      .limit(1);
     const clientKey = client?.key ?? `client-${claims.cid}`;
     const filename = `${clientKey}-${row.product}-feed-v${row.feedVersion}-${row.id}.xlsx`;
     return new NextResponse(new Uint8Array(buffer), {
@@ -75,10 +76,10 @@ export const GET = withSession<Params>(({ req, claims, params }) => {
   });
 });
 
-export const DELETE = withSession<Params>(({ claims, params }) => {
+export const DELETE = withSession<Params>(async ({ claims, params }) => {
   const id = parseId(params.id);
   if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
-  const row = loadRow(claims.cid, id);
+  const row = await loadRow(claims.cid, id);
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
   // MM6-built exports that have been published can't be deleted (the
   // sticky-superset rule depends on them as the AdForm baseline). AdForm
@@ -93,10 +94,10 @@ export const DELETE = withSession<Params>(({ claims, params }) => {
       { status: 409 },
     );
   }
-  db.delete(feedExports)
-    .where(and(eq(feedExports.clientId, claims.cid), eq(feedExports.id, id)))
-    .run();
-  writeAudit({
+  await db
+    .delete(feedExports)
+    .where(and(eq(feedExports.clientId, claims.cid), eq(feedExports.id, id)));
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "feed_exports",

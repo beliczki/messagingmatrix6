@@ -1,21 +1,27 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { eq } from "drizzle-orm";
 import { SignJWT } from "jose";
 import { db } from "@/db";
 import { clients, users } from "@/db/schema";
 import { signSession, hashPassword } from "@/lib/auth";
 import { activeClientId, getActiveClient } from "@/lib/active-client";
 import { createTestDb, withActiveClientKey, type TestDb } from "../../helpers/test-db";
-import { nanoid } from "nanoid";
 
 let h: TestDb;
 
 beforeEach(async () => {
-  h = createTestDb();
+  h = await createTestDb();
   process.env.JWT_SECRET = "test-secret-test-secret-test-secret";
 
   // Seed two clients + one user per client.
-  const erste = db.insert(clients).values({ key: "erste", name: "Erste" }).returning().get();
-  const telekom = db.insert(clients).values({ key: "telekom", name: "Telekom" }).returning().get();
+  const [erste] = await db
+    .insert(clients)
+    .values({ key: "erste", name: "Erste" })
+    .returning();
+  const [telekom] = await db
+    .insert(clients)
+    .values({ key: "telekom", name: "Telekom" })
+    .returning();
   await db.insert(users).values({
     id: "u-erste",
     clientId: erste.id,
@@ -32,8 +38,8 @@ beforeEach(async () => {
   });
 });
 
-afterEach(() => {
-  h.cleanup();
+afterEach(async () => {
+  await h.cleanup();
 });
 
 // Spec §17.6 — defense-in-depth: even if a token is signed with the right
@@ -43,13 +49,15 @@ afterEach(() => {
 describe("readSession rejects foreign client_id", () => {
   it("a JWT with cid pointing at Telekom is rejected on the Erste deploy", async () => {
     withActiveClientKey("erste");
-    const erste = getActiveClient();
+    const erste = await getActiveClient();
     expect(erste.key).toBe("erste");
 
     // Forge a JWT carrying the foreign Telekom client_id but signed with the
     // real secret (worst-case scenario: token leaked, attacker has the secret
     // hash). This must still be rejected because cid !== active_client_id.
-    const telekomId = db.select().from(clients).where(eqKey("telekom")).get()!.id;
+    const telekomId = (
+      await db.select().from(clients).where(eq(clients.key, "telekom")).limit(1)
+    )[0]!.id;
     const forgedToken = await new SignJWT({ cid: telekomId, role: "admin", email: "t@x.com" })
       .setProtectedHeader({ alg: "HS256" })
       .setSubject("u-telekom")
@@ -65,8 +73,10 @@ describe("readSession rejects foreign client_id", () => {
 
   it("a JWT signed with the right secret AND right cid is accepted", async () => {
     withActiveClientKey("erste");
-    const erste = getActiveClient();
-    const u = db.select().from(users).where(eqUserId("u-erste")).get()!;
+    const erste = await getActiveClient();
+    const u = (
+      await db.select().from(users).where(eq(users.id, "u-erste")).limit(1)
+    )[0]!;
     const validToken = await signSession(u);
 
     const claims = await import("@/lib/session").then((m) =>
@@ -79,7 +89,7 @@ describe("readSession rejects foreign client_id", () => {
 
   it("a token signed with a different secret is rejected even if cid is right", async () => {
     withActiveClientKey("erste");
-    const cid = activeClientId();
+    const cid = await activeClientId();
     const wrongToken = await new SignJWT({ cid, role: "admin", email: "x@x.com" })
       .setProtectedHeader({ alg: "HS256" })
       .setSubject("u-erste")
@@ -95,7 +105,9 @@ describe("readSession rejects foreign client_id", () => {
 
   it("a valid JWT for an archived user is rejected (Phase 10a soft-delete)", async () => {
     withActiveClientKey("erste");
-    const u = db.select().from(users).where(eqUserId("u-erste")).get()!;
+    const u = (
+      await db.select().from(users).where(eq(users.id, "u-erste")).limit(1)
+    )[0]!;
     const validToken = await signSession(u);
 
     // First confirm it works.
@@ -105,10 +117,10 @@ describe("readSession rejects foreign client_id", () => {
     expect(before).not.toBeNull();
 
     // Archive the user.
-    db.update(users)
+    await db
+      .update(users)
       .set({ archivedAt: new Date().toISOString() })
-      .where(eqUserId("u-erste"))
-      .run();
+      .where(eq(users.id, "u-erste"));
 
     // Same token, now rejected.
     const after = await import("@/lib/session").then((m) =>
@@ -117,14 +129,6 @@ describe("readSession rejects foreign client_id", () => {
     expect(after).toBeNull();
   });
 });
-
-import { eq } from "drizzle-orm";
-function eqKey(k: string) {
-  return eq(clients.key, k);
-}
-function eqUserId(id: string) {
-  return eq(users.id, id);
-}
 
 // Minimal NextRequest shim — readSession only touches headers + cookies.
 function makeReq(bearer: string): import("next/server").NextRequest {

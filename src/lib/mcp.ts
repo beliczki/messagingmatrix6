@@ -62,35 +62,34 @@ type RateState = { count: number; windowStart: number };
 const rateState = new Map<number, RateState>();
 const RATE_WINDOW_MS = 60_000;
 
-function readRateLimit(clientId: number): number {
-  const row = db
+async function readRateLimit(clientId: number): Promise<number> {
+  const [row] = await db
     .select()
     .from(clients)
     .where(eq(clients.id, clientId))
-    .get();
+    .limit(1);
   if (!row) return 60;
-  // Read from config(client_id, key='mcp.rateLimit'). Imported lazily to
-  // avoid a circular dep with the schema barrel.
-  const cfgRow = db
+  // Read from config(client_id, key='mcp.rateLimit').
+  const [cfgRow] = await db
     .select()
     .from(configTable)
     .where(
       and(eq(configTable.clientId, clientId), eq(configTable.key, "mcp.rateLimit")),
     )
-    .get();
+    .limit(1);
   if (!cfgRow) return 60;
   const parsed = Number(cfgRow.value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 60;
 }
 
-function checkAndConsumeRate(clientId: number): {
+async function checkAndConsumeRate(clientId: number): Promise<{
   ok: boolean;
   remaining: number;
   resetAt: number;
   limit: number;
-} {
+}> {
   const now = Date.now();
-  const limit = readRateLimit(clientId);
+  const limit = await readRateLimit(clientId);
   let s = rateState.get(clientId);
   if (!s || now - s.windowStart >= RATE_WINDOW_MS) {
     s = { count: 0, windowStart: now };
@@ -122,7 +121,9 @@ export function _resetMcpRateLimitForTests() {
 //   Authorization: Bearer <token>     (standard)
 //   ?secret=<token>                   (claude.ai connector compat)
 // Deploy-pinned: bearer's resolved client must match ACTIVE_CLIENT_KEY.
-export function resolveBearerClient(req: Request): McpContext | null {
+export async function resolveBearerClient(
+  req: Request,
+): Promise<McpContext | null> {
   const auth = req.headers.get("authorization");
   let token: string | null = null;
   if (auth && auth.toLowerCase().startsWith("bearer ")) {
@@ -134,14 +135,14 @@ export function resolveBearerClient(req: Request): McpContext | null {
   }
   if (!token) return null;
 
-  const row = db
+  const [row] = await db
     .select()
     .from(clients)
     .where(eq(clients.mcpToken, token))
-    .get();
+    .limit(1);
   if (!row) return null;
 
-  if (row.id !== activeClientId()) return null;
+  if (row.id !== (await activeClientId())) return null;
 
   return { clientId: row.id };
 }
@@ -164,7 +165,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ product, include_archived }) => {
-      let rows = listAudiences(ctx.clientId, {
+      let rows = await listAudiences(ctx.clientId, {
         includeArchived: include_archived,
       });
       if (product) rows = rows.filter((r) => r.product === product);
@@ -183,7 +184,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ product, include_archived }) => {
-      let rows = listTopics(ctx.clientId, {
+      let rows = await listTopics(ctx.clientId, {
         includeArchived: include_archived,
       });
       if (product) rows = rows.filter((r) => r.product === product);
@@ -213,57 +214,57 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
       if (args.audience_key) conds.push(eq(messages.audience, args.audience_key));
       if (args.status) conds.push(eq(messages.status, args.status));
       if (args.product) {
-        const audKeys = db
-          .select({ key: audiences.key })
-          .from(audiences)
-          .where(
-            and(
-              eq(audiences.clientId, ctx.clientId),
-              eq(audiences.product, args.product),
-            ),
-          )
-          .all()
-          .map((r) => r.key);
-        const topKeys = db
-          .select({ key: topics.key })
-          .from(topics)
-          .where(
-            and(
-              eq(topics.clientId, ctx.clientId),
-              eq(topics.product, args.product),
-            ),
-          )
-          .all()
-          .map((r) => r.key);
+        const audKeys = (
+          await db
+            .select({ key: audiences.key })
+            .from(audiences)
+            .where(
+              and(
+                eq(audiences.clientId, ctx.clientId),
+                eq(audiences.product, args.product),
+              ),
+            )
+        ).map((r) => r.key);
+        const topKeys = (
+          await db
+            .select({ key: topics.key })
+            .from(topics)
+            .where(
+              and(
+                eq(topics.clientId, ctx.clientId),
+                eq(topics.product, args.product),
+              ),
+            )
+        ).map((r) => r.key);
         if (audKeys.length === 0 && topKeys.length === 0) return jsonResult([]);
         conds.push(
           sql`(${messages.audience} IN ${audKeys.length ? audKeys : [""]} OR ${messages.topic} IN ${topKeys.length ? topKeys : [""]})`,
         );
       }
       if (args.monitoring_status) {
-        const labels = db
-          .select({ label: reporting.mcLabel })
-          .from(reporting)
-          .where(
-            and(
-              eq(reporting.clientId, ctx.clientId),
-              eq(reporting.adformStatus, args.monitoring_status),
-            ),
-          )
-          .all()
+        const labels = (
+          await db
+            .select({ label: reporting.mcLabel })
+            .from(reporting)
+            .where(
+              and(
+                eq(reporting.clientId, ctx.clientId),
+                eq(reporting.adformStatus, args.monitoring_status),
+              ),
+            )
+        )
           .map((r) => r.label)
           .filter((l): l is string => !!l);
         if (labels.length === 0) return jsonResult([]);
         conds.push(inArray(messages.pmmid, labels));
       }
       const limit = args.limit ?? 100;
-      const rows = db
+      const rows = await db
         .select()
         .from(messages)
         .where(and(...conds))
         .orderBy(messages.number, messages.variant)
-        .limit(limit)
-        .all();
+        .limit(limit);
       return jsonResult(rows);
     },
   );
@@ -300,13 +301,12 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
       if (args.product) conds.push(eq(assets.product, args.product));
       if (args.type) conds.push(eq(assets.type, args.type));
       const limit = args.limit ?? 100;
-      const rows = db
+      const rows = await db
         .select()
         .from(assets)
         .where(and(...conds))
         .orderBy(assets.fileName)
-        .limit(limit)
-        .all();
+        .limit(limit);
       return jsonResult(rows);
     },
   );
@@ -319,18 +319,14 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
       inputSchema: { mc_label: z.string() },
     },
     async ({ mc_label }) => {
-      const row =
-        db
-          .select()
-          .from(messages)
-          .where(
-            and(
-              eq(messages.clientId, ctx.clientId),
-              eq(messages.pmmid, mc_label),
-            ),
-          )
-          .get() ?? null;
-      return jsonResult(row);
+      const [row] = await db
+        .select()
+        .from(messages)
+        .where(
+          and(eq(messages.clientId, ctx.clientId), eq(messages.pmmid, mc_label)),
+        )
+        .limit(1);
+      return jsonResult(row ?? null);
     },
   );
 }
@@ -343,7 +339,7 @@ function registerMetaTools(server: McpServer, ctx: McpContext): void {
         "List templates visible to the active client, with sizes and placeholder bindings.",
       inputSchema: {},
     },
-    async () => jsonResult(listVisibleTemplates(ctx.clientId)),
+    async () => jsonResult(await listVisibleTemplates(ctx.clientId)),
   );
 
   server.registerTool(
@@ -354,18 +350,18 @@ function registerMetaTools(server: McpServer, ctx: McpContext): void {
       inputSchema: {},
     },
     async () => {
-      const audProducts = db
-        .select({ product: audiences.product })
-        .from(audiences)
-        .where(eq(audiences.clientId, ctx.clientId))
-        .all()
-        .map((r) => r.product);
-      const topProducts = db
-        .select({ product: topics.product })
-        .from(topics)
-        .where(eq(topics.clientId, ctx.clientId))
-        .all()
-        .map((r) => r.product);
+      const audProducts = (
+        await db
+          .select({ product: audiences.product })
+          .from(audiences)
+          .where(eq(audiences.clientId, ctx.clientId))
+      ).map((r) => r.product);
+      const topProducts = (
+        await db
+          .select({ product: topics.product })
+          .from(topics)
+          .where(eq(topics.clientId, ctx.clientId))
+      ).map((r) => r.product);
       const set = new Set<string>();
       for (const p of [...audProducts, ...topProducts]) {
         if (p && p.trim()) set.add(p.trim());
@@ -382,32 +378,36 @@ function registerMetaTools(server: McpServer, ctx: McpContext): void {
       inputSchema: {},
     },
     async () => {
-      const audCount = db
-        .select({ c: sql<number>`count(*)` })
-        .from(audiences)
-        .where(eq(audiences.clientId, ctx.clientId))
-        .get()?.c ?? 0;
-      const topCount = db
-        .select({ c: sql<number>`count(*)` })
-        .from(topics)
-        .where(eq(topics.clientId, ctx.clientId))
-        .get()?.c ?? 0;
-      const msgRows = db
+      const audCount =
+        (
+          await db
+            .select({ c: sql<number>`count(*)::int` })
+            .from(audiences)
+            .where(eq(audiences.clientId, ctx.clientId))
+        )[0]?.c ?? 0;
+      const topCount =
+        (
+          await db
+            .select({ c: sql<number>`count(*)::int` })
+            .from(topics)
+            .where(eq(topics.clientId, ctx.clientId))
+        )[0]?.c ?? 0;
+      const msgRows = await db
         .select({ status: messages.status })
         .from(messages)
-        .where(eq(messages.clientId, ctx.clientId))
-        .all();
+        .where(eq(messages.clientId, ctx.clientId));
       const byStatus: Record<string, number> = {};
       for (const r of msgRows) {
         const k = r.status ?? "(null)";
         byStatus[k] = (byStatus[k] ?? 0) + 1;
       }
       const lastSync =
-        db
-          .select({ ts: max(reporting.syncedAt) })
-          .from(reporting)
-          .where(eq(reporting.clientId, ctx.clientId))
-          .get()?.ts ?? null;
+        (
+          await db
+            .select({ ts: max(reporting.syncedAt) })
+            .from(reporting)
+            .where(eq(reporting.clientId, ctx.clientId))
+        )[0]?.ts ?? null;
       return jsonResult({
         audiences: audCount,
         topics: topCount,
@@ -426,7 +426,7 @@ function registerMetaTools(server: McpServer, ctx: McpContext): void {
       inputSchema: { mc_label: z.string() },
     },
     async ({ mc_label }) => {
-      const rows = db
+      const rows = await db
         .select()
         .from(reporting)
         .where(
@@ -434,8 +434,7 @@ function registerMetaTools(server: McpServer, ctx: McpContext): void {
             eq(reporting.clientId, ctx.clientId),
             eq(reporting.mcLabel, mc_label),
           ),
-        )
-        .all();
+        );
       const label = rows.find((r) => r.level === "MC") ?? null;
       const banners = rows.filter((r) => r.level !== "MC");
       return jsonResult({ label, banners });
@@ -464,8 +463,8 @@ function errorResult(message: string, extra?: unknown) {
   };
 }
 
-function requireRate(ctx: McpContext) {
-  const r = checkAndConsumeRate(ctx.clientId);
+async function requireRate(ctx: McpContext) {
+  const r = await checkAndConsumeRate(ctx.clientId);
   if (r.ok) return null;
   return errorResult("rate_limited", {
     limit: r.limit,
@@ -473,34 +472,35 @@ function requireRate(ctx: McpContext) {
   });
 }
 
-function findAudienceByKey(
+async function findAudienceByKey(
   clientId: number,
   key: string,
-): Audience | null {
-  return (
-    db
-      .select()
-      .from(audiences)
-      .where(and(eq(audiences.clientId, clientId), eq(audiences.key, key)))
-      .get() ?? null
-  );
+): Promise<Audience | null> {
+  const [row] = await db
+    .select()
+    .from(audiences)
+    .where(and(eq(audiences.clientId, clientId), eq(audiences.key, key)))
+    .limit(1);
+  return row ?? null;
 }
 
-function findTopicByKey(clientId: number, key: string): Topic | null {
-  return (
-    db
-      .select()
-      .from(topics)
-      .where(and(eq(topics.clientId, clientId), eq(topics.key, key)))
-      .get() ?? null
-  );
+async function findTopicByKey(
+  clientId: number,
+  key: string,
+): Promise<Topic | null> {
+  const [row] = await db
+    .select()
+    .from(topics)
+    .where(and(eq(topics.clientId, clientId), eq(topics.key, key)))
+    .limit(1);
+  return row ?? null;
 }
 
 // Thin alias kept so existing call-sites in this file don't churn.
 function findMessageByPmmid(
   clientId: number,
   pmmid: string,
-): Message | null {
+): Promise<Message | null> {
   return getMessageByPmmid(clientId, pmmid);
 }
 
@@ -515,14 +515,14 @@ function registerAudienceWriteTools(server: McpServer, ctx: McpContext): void {
       inputSchema: { name: z.string(), fields: fieldsArg },
     },
     async ({ name, fields }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
       try {
-        const row = createAudience(ctx.clientId, {
+        const row = await createAudience(ctx.clientId, {
           name,
           ...pickAudienceWritable(fields ?? {}),
         });
-        writeAudit({
+        await writeAudit({
           clientId: ctx.clientId,
           userId: mcpUserId(ctx),
           entityType: "audiences",
@@ -550,11 +550,11 @@ function registerAudienceWriteTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ key, version, fields }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
-      const existing = findAudienceByKey(ctx.clientId, key);
+      const existing = await findAudienceByKey(ctx.clientId, key);
       if (!existing) return errorResult(`audience '${key}' not found`);
-      const result = updateAudience(
+      const result = await updateAudience(
         ctx.clientId,
         existing.id,
         version,
@@ -563,7 +563,7 @@ function registerAudienceWriteTools(server: McpServer, ctx: McpContext): void {
       if (!result.ok) {
         return errorResult("version_conflict", { current: result.current });
       }
-      writeAudit({
+      await writeAudit({
         clientId: ctx.clientId,
         userId: mcpUserId(ctx),
         entityType: "audiences",
@@ -587,15 +587,15 @@ function registerAudienceWriteTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ key, version }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
-      const existing = findAudienceByKey(ctx.clientId, key);
+      const existing = await findAudienceByKey(ctx.clientId, key);
       if (!existing) return errorResult(`audience '${key}' not found`);
-      const result = archiveAudience(ctx.clientId, existing.id, version);
+      const result = await archiveAudience(ctx.clientId, existing.id, version);
       if (!result.ok) {
         return errorResult("version_conflict", { current: result.current });
       }
-      writeAudit({
+      await writeAudit({
         clientId: ctx.clientId,
         userId: mcpUserId(ctx),
         entityType: "audiences",
@@ -623,15 +623,15 @@ function registerAudienceWriteTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ key, version }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
-      const existing = findAudienceByKey(ctx.clientId, key);
+      const existing = await findAudienceByKey(ctx.clientId, key);
       if (!existing) return errorResult(`audience '${key}' not found`);
-      const result = restoreAudience(ctx.clientId, existing.id, version);
+      const result = await restoreAudience(ctx.clientId, existing.id, version);
       if (!result.ok) {
         return errorResult("version_conflict", { current: result.current });
       }
-      writeAudit({
+      await writeAudit({
         clientId: ctx.clientId,
         userId: mcpUserId(ctx),
         entityType: "audiences",
@@ -654,14 +654,14 @@ function registerTopicWriteTools(server: McpServer, ctx: McpContext): void {
       inputSchema: { name: z.string(), fields: fieldsArg },
     },
     async ({ name, fields }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
       try {
-        const row = createTopic(ctx.clientId, {
+        const row = await createTopic(ctx.clientId, {
           name,
           ...pickTopicWritable(fields ?? {}),
         });
-        writeAudit({
+        await writeAudit({
           clientId: ctx.clientId,
           userId: mcpUserId(ctx),
           entityType: "topics",
@@ -689,11 +689,11 @@ function registerTopicWriteTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ key, version, fields }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
-      const existing = findTopicByKey(ctx.clientId, key);
+      const existing = await findTopicByKey(ctx.clientId, key);
       if (!existing) return errorResult(`topic '${key}' not found`);
-      const result = updateTopic(
+      const result = await updateTopic(
         ctx.clientId,
         existing.id,
         version,
@@ -702,7 +702,7 @@ function registerTopicWriteTools(server: McpServer, ctx: McpContext): void {
       if (!result.ok) {
         return errorResult("version_conflict", { current: result.current });
       }
-      writeAudit({
+      await writeAudit({
         clientId: ctx.clientId,
         userId: mcpUserId(ctx),
         entityType: "topics",
@@ -726,15 +726,15 @@ function registerTopicWriteTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ key, version }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
-      const existing = findTopicByKey(ctx.clientId, key);
+      const existing = await findTopicByKey(ctx.clientId, key);
       if (!existing) return errorResult(`topic '${key}' not found`);
-      const result = archiveTopic(ctx.clientId, existing.id, version);
+      const result = await archiveTopic(ctx.clientId, existing.id, version);
       if (!result.ok) {
         return errorResult("version_conflict", { current: result.current });
       }
-      writeAudit({
+      await writeAudit({
         clientId: ctx.clientId,
         userId: mcpUserId(ctx),
         entityType: "topics",
@@ -762,15 +762,15 @@ function registerTopicWriteTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ key, version }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
-      const existing = findTopicByKey(ctx.clientId, key);
+      const existing = await findTopicByKey(ctx.clientId, key);
       if (!existing) return errorResult(`topic '${key}' not found`);
-      const result = restoreTopic(ctx.clientId, existing.id, version);
+      const result = await restoreTopic(ctx.clientId, existing.id, version);
       if (!result.ok) {
         return errorResult("version_conflict", { current: result.current });
       }
-      writeAudit({
+      await writeAudit({
         clientId: ctx.clientId,
         userId: mcpUserId(ctx),
         entityType: "topics",
@@ -797,15 +797,15 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ audience_key, topic_key, fields }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
       try {
-        const row = createMessage(ctx.clientId, {
+        const row = await createMessage(ctx.clientId, {
           audience: audience_key,
           topic: topic_key,
           ...pickMessageWritable(fields ?? {}),
         });
-        writeAudit({
+        await writeAudit({
           clientId: ctx.clientId,
           userId: mcpUserId(ctx),
           entityType: "messages",
@@ -833,11 +833,11 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ mc_label, version, fields }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
-      const existing = findMessageByPmmid(ctx.clientId, mc_label);
+      const existing = await findMessageByPmmid(ctx.clientId, mc_label);
       if (!existing) return errorResult(`message '${mc_label}' not found`);
-      const result = updateMessage(
+      const result = await updateMessage(
         ctx.clientId,
         existing.id,
         version,
@@ -846,7 +846,7 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
       if (!result.ok) {
         return errorResult("version_conflict", { current: result.current });
       }
-      writeAudit({
+      await writeAudit({
         clientId: ctx.clientId,
         userId: mcpUserId(ctx),
         entityType: "messages",
@@ -870,15 +870,15 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ mc_label, version }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
-      const existing = findMessageByPmmid(ctx.clientId, mc_label);
+      const existing = await findMessageByPmmid(ctx.clientId, mc_label);
       if (!existing) return errorResult(`message '${mc_label}' not found`);
-      const result = archiveMessage(ctx.clientId, existing.id, version);
+      const result = await archiveMessage(ctx.clientId, existing.id, version);
       if (!result.ok) {
         return errorResult("version_conflict", { current: result.current });
       }
-      writeAudit({
+      await writeAudit({
         clientId: ctx.clientId,
         userId: mcpUserId(ctx),
         entityType: "messages",
@@ -902,11 +902,11 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ mc_label, version }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
-      const existing = findMessageByPmmid(ctx.clientId, mc_label);
+      const existing = await findMessageByPmmid(ctx.clientId, mc_label);
       if (!existing) return errorResult(`message '${mc_label}' not found`);
-      const result = restoreMessage(ctx.clientId, existing.id, version);
+      const result = await restoreMessage(ctx.clientId, existing.id, version);
       if (!result.ok) {
         if (result.reason === "parent_archived") {
           return errorResult("parent_archived", {
@@ -916,7 +916,7 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
         }
         return errorResult("version_conflict", { current: result.current });
       }
-      writeAudit({
+      await writeAudit({
         clientId: ctx.clientId,
         userId: mcpUserId(ctx),
         entityType: "messages",
@@ -931,13 +931,15 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
 }
 
 // ── Batch tools ──
-// All batch tools wrap their work in `db.transaction((tx) => …)`. Better-sqlite3
-// transactions are synchronous and run on the same connection, so the entity
-// lib functions (which use the `db` proxy) are part of the transaction. Any
-// throw inside the body rolls back. Audit is written ONCE per batch with
-// action=bulk_create / bulk_update so SSE doesn't lie about uncommitted work
-// (writeAudit broadcasts unconditionally — pulling individual audit calls into
-// the txn body would emit rollback-then-broadcast on failure).
+// All batch tools wrap their work in `await db.transaction(async () => …)`. The
+// `db` proxy threads the active transaction through an AsyncLocalStorage context
+// (see src/db/index.ts), so the entity lib functions — which use the module
+// global `db` — run inside the transaction even on Postgres (where the tx is on
+// its own pooled connection). Any throw inside the body rolls back. Audit is
+// written ONCE per batch with action=bulk_create / bulk_update so SSE doesn't lie
+// about uncommitted work (writeAudit broadcasts unconditionally — pulling
+// individual audit calls into the txn body would emit rollback-then-broadcast on
+// failure).
 
 function registerBatchTools(server: McpServer, ctx: McpContext): void {
   server.registerTool(
@@ -952,14 +954,14 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ audiences: items }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
       try {
-        const inserted = db.transaction(() => {
+        const inserted = await db.transaction(async () => {
           const out = [];
           for (const it of items) {
             out.push(
-              createAudience(ctx.clientId, {
+              await createAudience(ctx.clientId, {
                 name: it.name,
                 ...pickAudienceWritable(it.fields ?? {}),
               }),
@@ -967,7 +969,7 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
           }
           return out;
         });
-        writeAudit({
+        await writeAudit({
           clientId: ctx.clientId,
           userId: mcpUserId(ctx),
           entityType: "audiences",
@@ -993,14 +995,14 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ topics: items }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
       try {
-        const inserted = db.transaction(() => {
+        const inserted = await db.transaction(async () => {
           const out = [];
           for (const it of items) {
             out.push(
-              createTopic(ctx.clientId, {
+              await createTopic(ctx.clientId, {
                 name: it.name,
                 ...pickTopicWritable(it.fields ?? {}),
               }),
@@ -1008,7 +1010,7 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
           }
           return out;
         });
-        writeAudit({
+        await writeAudit({
           clientId: ctx.clientId,
           userId: mcpUserId(ctx),
           entityType: "topics",
@@ -1040,14 +1042,14 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ messages: items }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
       try {
-        const inserted = db.transaction(() => {
+        const inserted = await db.transaction(async () => {
           const out = [];
           for (const it of items) {
             out.push(
-              createMessage(ctx.clientId, {
+              await createMessage(ctx.clientId, {
                 audience: it.audience_key,
                 topic: it.topic_key,
                 ...pickMessageWritable(it.fields ?? {}),
@@ -1056,7 +1058,7 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
           }
           return out;
         });
-        writeAudit({
+        await writeAudit({
           clientId: ctx.clientId,
           userId: mcpUserId(ctx),
           entityType: "messages",
@@ -1088,20 +1090,20 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ updates }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
       try {
-        const updated = db.transaction(() => {
+        const updated = await db.transaction(async () => {
           const out = [];
           for (const u of updates) {
-            const existing = findMessageByPmmid(ctx.clientId, u.mc_label);
+            const existing = await findMessageByPmmid(ctx.clientId, u.mc_label);
             if (!existing) {
               throw new BatchError(
                 `message '${u.mc_label}' not found`,
                 u.mc_label,
               );
             }
-            const r = updateMessage(
+            const r = await updateMessage(
               ctx.clientId,
               existing.id,
               u.version,
@@ -1118,7 +1120,7 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
           }
           return out;
         });
-        writeAudit({
+        await writeAudit({
           clientId: ctx.clientId,
           userId: mcpUserId(ctx),
           entityType: "messages",
@@ -1151,15 +1153,15 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ source_mc_labels, target_audience_keys, field_overrides }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
       try {
-        const result = db.transaction(() =>
+        const result = await db.transaction(async () =>
           copyMessages(ctx.clientId, source_mc_labels, target_audience_keys, {
             fieldOverrides: pickMessageWritable(field_overrides ?? {}),
           }),
         );
-        writeAudit({
+        await writeAudit({
           clientId: ctx.clientId,
           userId: mcpUserId(ctx),
           entityType: "messages",
@@ -1191,10 +1193,10 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ moves, target_audience_key }) => {
-      const limited = requireRate(ctx);
+      const limited = await requireRate(ctx);
       if (limited) return limited;
       try {
-        const result = db.transaction(() =>
+        const result = await db.transaction(async () =>
           moveMessages(
             ctx.clientId,
             moves.map((m) => ({
@@ -1207,7 +1209,7 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
         if (!result.ok) {
           throw new BatchError(result.reason, result.mcLabel, result.current);
         }
-        writeAudit({
+        await writeAudit({
           clientId: ctx.clientId,
           userId: mcpUserId(ctx),
           entityType: "messages",

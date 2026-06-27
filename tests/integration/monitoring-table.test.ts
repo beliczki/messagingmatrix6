@@ -7,13 +7,16 @@ import { createTestDb, type TestDb } from "../helpers/test-db";
 let h: TestDb;
 let erste: { id: number };
 
-beforeEach(() => {
-  h = createTestDb();
-  erste = db.insert(clients).values({ key: "erste", name: "Erste" }).returning().get();
+beforeEach(async () => {
+  h = await createTestDb();
+  [erste] = await db
+    .insert(clients)
+    .values({ key: "erste", name: "Erste" })
+    .returning();
 });
 
-afterEach(() => {
-  h.cleanup();
+afterEach(async () => {
+  await h.cleanup();
 });
 
 function baseRow(over: Partial<typeof monitoring.$inferInsert> = {}) {
@@ -39,37 +42,46 @@ function baseRow(over: Partial<typeof monitoring.$inferInsert> = {}) {
 }
 
 describe("monitoring table (migration 0017)", () => {
-  it("accepts a row and stores aggregated metrics", () => {
-    db.insert(monitoring).values(baseRow()).run();
-    const row = db.select().from(monitoring).where(eq(monitoring.clientId, erste.id)).get();
+  it("accepts a row and stores aggregated metrics", async () => {
+    await db.insert(monitoring).values(baseRow());
+    const [row] = await db
+      .select()
+      .from(monitoring)
+      .where(eq(monitoring.clientId, erste.id))
+      .limit(1);
     expect(row).toMatchObject({ platform: "adform", impressions: 100, cost: 12.5 });
     expect(row!.importedAt).toBeTruthy(); // CURRENT_TIMESTAMP default
   });
 
-  it("enforces one row per (platform, period, message-key)", () => {
-    db.insert(monitoring).values(baseRow()).run();
-    expect(() => db.insert(monitoring).values(baseRow()).run()).toThrow();
+  it("enforces one row per (platform, period, message-key)", async () => {
+    await db.insert(monitoring).values(baseRow());
+    await expect(db.insert(monitoring).values(baseRow())).rejects.toThrow();
     // a different variant is a different key — allowed
-    expect(() => db.insert(monitoring).values(baseRow({ mcVariant: "b" })).run()).not.toThrow();
+    await expect(
+      db.insert(monitoring).values(baseRow({ mcVariant: "b" })),
+    ).resolves.toBeDefined();
   });
 
-  it("nulls messageId when the linked message is deleted (set null)", () => {
-    const msg = db
+  it("nulls messageId when the linked message is deleted (set null)", async () => {
+    const [msg] = await db
       .insert(messages)
       .values({ clientId: erste.id, number: 1, variant: "a", audience: "VAL_x", topic: "topic_one" })
-      .returning()
-      .get();
-    db.insert(monitoring).values(baseRow({ messageId: msg.id })).run();
+      .returning();
+    await db.insert(monitoring).values(baseRow({ messageId: msg.id }));
 
-    db.delete(messages).where(eq(messages.id, msg.id)).run();
-    const row = db.select().from(monitoring).where(eq(monitoring.clientId, erste.id)).get();
+    await db.delete(messages).where(eq(messages.id, msg.id));
+    const [row] = await db
+      .select()
+      .from(monitoring)
+      .where(eq(monitoring.clientId, erste.id))
+      .limit(1);
     expect(row!.messageId).toBeNull();
   });
 
-  it("cascades delete from clients", () => {
-    db.insert(monitoring).values(baseRow()).run();
-    db.delete(clients).where(eq(clients.id, erste.id)).run();
-    const rows = db.select().from(monitoring).all();
+  it("cascades delete from clients", async () => {
+    await db.insert(monitoring).values(baseRow());
+    await db.delete(clients).where(eq(clients.id, erste.id));
+    const rows = await db.select().from(monitoring);
     expect(rows).toHaveLength(0);
   });
 });

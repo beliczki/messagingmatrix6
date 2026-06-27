@@ -1,6 +1,6 @@
 import { and, count, eq, isNull, max, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { config, messages, topics, type Topic } from "@/db/schema";
+import { config, messages, topics, nowUtc, type Topic } from "@/db/schema";
 import { evaluatePattern } from "@/lib/patterns";
 
 const WRITABLE_FIELDS = [
@@ -31,72 +31,72 @@ export function pickWritable(input: unknown): TopicInput {
   return out as TopicInput;
 }
 
-export function listTopics(
+export async function listTopics(
   clientId: number,
   opts: { includeArchived?: boolean } = {},
-): Topic[] {
+): Promise<Array<Topic & { mcCount: number }>> {
   const where = opts.includeArchived
     ? eq(topics.clientId, clientId)
     : and(eq(topics.clientId, clientId), isNull(topics.archivedAt));
-  const rows = db
+  const rows = await db
     .select()
     .from(topics)
     .where(where)
-    .orderBy(topics.orderIndex)
-    .all();
-  const counts = mcCountsByTopic(clientId);
+    .orderBy(topics.orderIndex);
+  const counts = await mcCountsByTopic(clientId);
   return rows.map((r) => ({ ...r, mcCount: counts.get(r.key) ?? 0 }));
 }
 
-function mcCountsByTopic(clientId: number): Map<string, number> {
-  const rows = db
+async function mcCountsByTopic(
+  clientId: number,
+): Promise<Map<string, number>> {
+  const rows = await db
     .select({ key: messages.topic, n: count() })
     .from(messages)
     .where(eq(messages.clientId, clientId))
-    .groupBy(messages.topic)
-    .all();
+    .groupBy(messages.topic);
   const m = new Map<string, number>();
   for (const r of rows) m.set(r.key, r.n);
   return m;
 }
 
-export function countMessagesByTopic(
+export async function countMessagesByTopic(
   clientId: number,
   topicKey: string,
-): number {
-  const row = db
+): Promise<number> {
+  const [row] = await db
     .select({ n: count() })
     .from(messages)
-    .where(and(eq(messages.clientId, clientId), eq(messages.topic, topicKey)))
-    .get();
+    .where(and(eq(messages.clientId, clientId), eq(messages.topic, topicKey)));
   return row?.n ?? 0;
 }
 
-export function getTopic(clientId: number, id: number): Topic | null {
-  return (
-    db
-      .select()
-      .from(topics)
-      .where(and(eq(topics.clientId, clientId), eq(topics.id, id)))
-      .get() ?? null
-  );
+export async function getTopic(
+  clientId: number,
+  id: number,
+): Promise<Topic | null> {
+  const rows = await db
+    .select()
+    .from(topics)
+    .where(and(eq(topics.clientId, clientId), eq(topics.id, id)))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
-function nextOrderIndex(clientId: number): number {
-  const row = db
+async function nextOrderIndex(clientId: number): Promise<number> {
+  const [row] = await db
     .select({ m: max(topics.orderIndex) })
     .from(topics)
-    .where(eq(topics.clientId, clientId))
-    .get();
+    .where(eq(topics.clientId, clientId));
   return (row?.m ?? -1) + 1;
 }
 
-function readTopicKeyPattern(clientId: number): string | null {
-  const row = db
+async function readTopicKeyPattern(clientId: number): Promise<string | null> {
+  const [row] = await db
     .select()
     .from(config)
     .where(and(eq(config.clientId, clientId), eq(config.key, "patterns")))
-    .get();
+    .limit(1);
   if (!row) return null;
   try {
     const parsed = JSON.parse(row.value) as { topicKey?: string };
@@ -109,12 +109,12 @@ function readTopicKeyPattern(clientId: number): string | null {
 // Spec §3.2:
 //   If config.patterns.topicKey is set, evaluate it.
 //   Otherwise: top{order_index+1}.
-export function generateTopicKey(
+export async function generateTopicKey(
   clientId: number,
   context: Pick<Topic, "product" | "tag1" | "tag2" | "tag3" | "tag4">,
   orderIndex: number,
-): string {
-  const pattern = readTopicKeyPattern(clientId);
+): Promise<string> {
+  const pattern = await readTopicKeyPattern(clientId);
   if (pattern) {
     const out = evaluatePattern(pattern, context as Record<string, unknown>);
     if (out.trim() !== "") return out;
@@ -141,13 +141,16 @@ function shouldRegenerateKey(before: Topic, input: TopicInput): boolean {
 
 export class TopicError extends Error {}
 
-export function createTopic(clientId: number, input: TopicInput): Topic {
+export async function createTopic(
+  clientId: number,
+  input: TopicInput,
+): Promise<Topic> {
   if (!input.name) throw new TopicError("name is required");
-  const orderIndex = input.orderIndex ?? nextOrderIndex(clientId);
+  const orderIndex = input.orderIndex ?? (await nextOrderIndex(clientId));
 
   const key =
     input.key ??
-    generateTopicKey(
+    (await generateTopicKey(
       clientId,
       {
         product: input.product ?? null,
@@ -157,9 +160,9 @@ export function createTopic(clientId: number, input: TopicInput): Topic {
         tag4: input.tag4 ?? null,
       },
       orderIndex,
-    );
+    ));
 
-  return db
+  const [row] = await db
     .insert(topics)
     .values({
       clientId,
@@ -176,17 +179,17 @@ export function createTopic(clientId: number, input: TopicInput): Topic {
       comment: input.comment,
       created: input.created,
     })
-    .returning()
-    .get();
+    .returning();
+  return row;
 }
 
-export function updateTopic(
+export async function updateTopic(
   clientId: number,
   id: number,
   expectedVersion: number,
   input: TopicInput,
-): { ok: true; row: Topic } | { ok: false; current: Topic | null } {
-  const current = getTopic(clientId, id);
+): Promise<{ ok: true; row: Topic } | { ok: false; current: Topic | null }> {
+  const current = await getTopic(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) {
     return { ok: false, current };
@@ -199,9 +202,9 @@ export function updateTopic(
   if (
     input.key === undefined &&
     shouldRegenerateKey(current, input) &&
-    countMessagesByTopic(clientId, current.key) === 0
+    (await countMessagesByTopic(clientId, current.key)) === 0
   ) {
-    key = generateTopicKey(
+    key = await generateTopicKey(
       clientId,
       {
         product: merged.product,
@@ -214,46 +217,45 @@ export function updateTopic(
     );
   }
 
-  const updated = db
+  const [updated] = await db
     .update(topics)
     .set({
       ...input,
       key,
       version: sql`${topics.version} + 1`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: nowUtc,
     })
     .where(and(eq(topics.clientId, clientId), eq(topics.id, id)))
-    .returning()
-    .get();
+    .returning();
   return { ok: true, row: updated };
 }
 
 // Cascade archive: topic archive → also archives every message attached to
 // this topic by key. Reporting NOT cascaded (history). Atomic via transaction.
-export function archiveTopic(
+export async function archiveTopic(
   clientId: number,
   id: number,
   expectedVersion: number,
-):
+): Promise<
   | { ok: true; row: Topic; cascadedMessageIds: number[] }
-  | { ok: false; current: Topic | null } {
-  const current = getTopic(clientId, id);
+  | { ok: false; current: Topic | null }
+> {
+  const current = await getTopic(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
 
-  return db.transaction((tx) => {
-    const updated = tx
+  return db.transaction(async (tx) => {
+    const [updated] = await tx
       .update(topics)
       .set({
-        archivedAt: sql`CURRENT_TIMESTAMP`,
+        archivedAt: nowUtc,
         version: sql`${topics.version} + 1`,
-        updatedAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: nowUtc,
       })
       .where(and(eq(topics.clientId, clientId), eq(topics.id, id)))
-      .returning()
-      .get();
+      .returning();
 
-    const cascadedMessages = tx
+    const cascadedMessages = await tx
       .select({ id: messages.id })
       .from(messages)
       .where(
@@ -262,15 +264,15 @@ export function archiveTopic(
           eq(messages.topic, current.key),
           isNull(messages.archivedAt),
         ),
-      )
-      .all();
+      );
 
     if (cascadedMessages.length > 0) {
-      tx.update(messages)
+      await tx
+        .update(messages)
         .set({
-          archivedAt: sql`CURRENT_TIMESTAMP`,
+          archivedAt: nowUtc,
           version: sql`${messages.version} + 1`,
-          updatedAt: sql`CURRENT_TIMESTAMP`,
+          updatedAt: nowUtc,
         })
         .where(
           and(
@@ -278,8 +280,7 @@ export function archiveTopic(
             eq(messages.topic, current.key),
             isNull(messages.archivedAt),
           ),
-        )
-        .run();
+        );
     }
 
     return {
@@ -300,14 +301,16 @@ function nextNameSuffix(name: string): string {
   return `${name} (1)`;
 }
 
-function nextKeyForDuplicate(clientId: number, sourceKey: string): string {
+async function nextKeyForDuplicate(
+  clientId: number,
+  sourceKey: string,
+): Promise<string> {
   const m = KEY_SUFFIX_RE.exec(sourceKey);
   const base = m ? m[1] : sourceKey;
-  const existing = db
+  const existing = await db
     .select({ key: topics.key })
     .from(topics)
-    .where(eq(topics.clientId, clientId))
-    .all();
+    .where(eq(topics.clientId, clientId));
   const baseEsc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const re = new RegExp(`^${baseEsc}_(\\d+)$`);
   let max = 0;
@@ -321,15 +324,18 @@ function nextKeyForDuplicate(clientId: number, sourceKey: string): string {
   return `${base}_${max + 1}`;
 }
 
-export function duplicateTopic(clientId: number, id: number): Topic | null {
-  const src = getTopic(clientId, id);
+export async function duplicateTopic(
+  clientId: number,
+  id: number,
+): Promise<Topic | null> {
+  const src = await getTopic(clientId, id);
   if (!src) return null;
-  const orderIndex = nextOrderIndex(clientId);
-  return db
+  const orderIndex = await nextOrderIndex(clientId);
+  const [row] = await db
     .insert(topics)
     .values({
       clientId,
-      key: nextKeyForDuplicate(clientId, src.key),
+      key: await nextKeyForDuplicate(clientId, src.key),
       name: nextNameSuffix(src.name),
       orderIndex,
       status: src.status,
@@ -342,8 +348,8 @@ export function duplicateTopic(clientId: number, id: number): Topic | null {
       comment: src.comment,
       created: src.created,
     })
-    .returning()
-    .get();
+    .returning();
+  return row;
 }
 
 export type DeleteTopicResult =
@@ -352,50 +358,46 @@ export type DeleteTopicResult =
   | { ok: false; reason: "version_mismatch"; current: Topic }
   | { ok: false; reason: "in_use"; referencedBy: number[] };
 
-export function deleteTopic(
+export async function deleteTopic(
   clientId: number,
   id: number,
   expectedVersion: number,
-): DeleteTopicResult {
-  const current = getTopic(clientId, id);
+): Promise<DeleteTopicResult> {
+  const current = await getTopic(clientId, id);
   if (!current) return { ok: false, reason: "not_found" };
   if (current.version !== expectedVersion) {
     return { ok: false, reason: "version_mismatch", current };
   }
-  const refs = db
+  const refs = await db
     .select({ id: messages.id })
     .from(messages)
-    .where(
-      and(eq(messages.clientId, clientId), eq(messages.topic, current.key)),
-    )
-    .limit(50)
-    .all();
+    .where(and(eq(messages.clientId, clientId), eq(messages.topic, current.key)))
+    .limit(50);
   if (refs.length > 0) {
     return { ok: false, reason: "in_use", referencedBy: refs.map((r) => r.id) };
   }
-  db.delete(topics)
-    .where(and(eq(topics.clientId, clientId), eq(topics.id, id)))
-    .run();
+  await db
+    .delete(topics)
+    .where(and(eq(topics.clientId, clientId), eq(topics.id, id)));
   return { ok: true };
 }
 
-export function restoreTopic(
+export async function restoreTopic(
   clientId: number,
   id: number,
   expectedVersion: number,
-): { ok: true; row: Topic } | { ok: false; current: Topic | null } {
-  const current = getTopic(clientId, id);
+): Promise<{ ok: true; row: Topic } | { ok: false; current: Topic | null }> {
+  const current = await getTopic(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
-  const updated = db
+  const [updated] = await db
     .update(topics)
     .set({
       archivedAt: null,
       version: sql`${topics.version} + 1`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: nowUtc,
     })
     .where(and(eq(topics.clientId, clientId), eq(topics.id, id)))
-    .returning()
-    .get();
+    .returning();
   return { ok: true, row: updated };
 }

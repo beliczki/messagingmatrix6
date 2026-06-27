@@ -27,7 +27,7 @@ export const POST = withSession(async ({ req, claims }) => {
     );
   }
   try {
-    const result = db.transaction(() =>
+    const result = await db.transaction(async () =>
       copyMessages(
         claims.cid,
         parsed.data.source_mc_labels,
@@ -35,7 +35,7 @@ export const POST = withSession(async ({ req, claims }) => {
         { fieldOverrides: pickWritable(parsed.data.field_overrides ?? {}) },
       ),
     );
-    writeAudit({
+    await writeAudit({
       clientId: claims.cid,
       userId: claims.sub,
       entityType: "messages",

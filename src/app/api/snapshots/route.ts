@@ -3,8 +3,8 @@ import { createSnapshot, listSnapshots } from "@/lib/snapshots";
 import { withAdmin } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 
-export const GET = withAdmin(({ claims }) => {
-  return NextResponse.json({ snapshots: listSnapshots(claims.cid) });
+export const GET = withAdmin(async ({ claims }) => {
+  return NextResponse.json({ snapshots: await listSnapshots(claims.cid) });
 });
 
 export const POST = withAdmin(async ({ req, claims }) => {
@@ -16,8 +16,8 @@ export const POST = withAdmin(async ({ req, claims }) => {
       { status: 400 },
     );
   }
-  const meta = createSnapshot(claims.cid, labelRaw, claims.sub);
-  writeAudit({
+  const meta = await createSnapshot(claims.cid, labelRaw, claims.sub);
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "snapshots",

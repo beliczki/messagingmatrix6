@@ -1,6 +1,6 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { textFormatting, type TextFormatting } from "@/db/schema";
+import { textFormatting, nowUtc, type TextFormatting } from "@/db/schema";
 
 const WRITABLE_FIELDS = [
   "textOriginal",
@@ -26,10 +26,10 @@ export function pickWritable(input: unknown): TextFormattingInput {
 
 export class TextFormattingError extends Error {}
 
-export function listTextFormatting(
+export async function listTextFormatting(
   clientId: number,
   opts: { includeArchived?: boolean } = {},
-): TextFormatting[] {
+): Promise<TextFormatting[]> {
   const where = opts.includeArchived
     ? eq(textFormatting.clientId, clientId)
     : and(
@@ -40,39 +40,32 @@ export function listTextFormatting(
     .select()
     .from(textFormatting)
     .where(where)
-    .orderBy(textFormatting.id)
-    .all();
+    .orderBy(textFormatting.id);
 }
 
-export function getTextFormatting(
+export async function getTextFormatting(
   clientId: number,
   id: number,
-): TextFormatting | null {
-  return (
-    db
-      .select()
-      .from(textFormatting)
-      .where(
-        and(
-          eq(textFormatting.clientId, clientId),
-          eq(textFormatting.id, id),
-        ),
-      )
-      .get() ?? null
-  );
+): Promise<TextFormatting | null> {
+  const rows = await db
+    .select()
+    .from(textFormatting)
+    .where(and(eq(textFormatting.clientId, clientId), eq(textFormatting.id, id)))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
-export function createTextFormatting(
+export async function createTextFormatting(
   clientId: number,
   input: TextFormattingInput,
-): TextFormatting {
+): Promise<TextFormatting> {
   if (!input.textOriginal) {
     throw new TextFormattingError("textOriginal is required");
   }
   if (!input.textFormatted) {
     throw new TextFormattingError("textFormatted is required");
   }
-  return db
+  const [row] = await db
     .insert(textFormatting)
     .values({
       clientId,
@@ -81,83 +74,83 @@ export function createTextFormatting(
       formattingScope: input.formattingScope ?? null,
       formattingMcScope: input.formattingMcScope ?? null,
     })
-    .returning()
-    .get();
+    .returning();
+  return row;
 }
 
-export function updateTextFormatting(
+export async function updateTextFormatting(
   clientId: number,
   id: number,
   expectedVersion: number,
   input: TextFormattingInput,
-):
+): Promise<
   | { ok: true; row: TextFormatting }
-  | { ok: false; current: TextFormatting | null } {
-  const current = getTextFormatting(clientId, id);
+  | { ok: false; current: TextFormatting | null }
+> {
+  const current = await getTextFormatting(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
-  const updated = db
+  const [updated] = await db
     .update(textFormatting)
     .set({
       ...input,
       version: sql`${textFormatting.version} + 1`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: nowUtc,
     })
     .where(
       and(eq(textFormatting.clientId, clientId), eq(textFormatting.id, id)),
     )
-    .returning()
-    .get();
+    .returning();
   return { ok: true, row: updated };
 }
 
-export function archiveTextFormatting(
+export async function archiveTextFormatting(
   clientId: number,
   id: number,
   expectedVersion: number,
-):
+): Promise<
   | { ok: true; row: TextFormatting }
-  | { ok: false; current: TextFormatting | null } {
-  const current = getTextFormatting(clientId, id);
+  | { ok: false; current: TextFormatting | null }
+> {
+  const current = await getTextFormatting(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
-  const updated = db
+  const [updated] = await db
     .update(textFormatting)
     .set({
-      archivedAt: sql`CURRENT_TIMESTAMP`,
+      archivedAt: nowUtc,
       version: sql`${textFormatting.version} + 1`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: nowUtc,
     })
     .where(
       and(eq(textFormatting.clientId, clientId), eq(textFormatting.id, id)),
     )
-    .returning()
-    .get();
+    .returning();
   return { ok: true, row: updated };
 }
 
-export function restoreTextFormatting(
+export async function restoreTextFormatting(
   clientId: number,
   id: number,
   expectedVersion: number,
-):
+): Promise<
   | { ok: true; row: TextFormatting }
-  | { ok: false; current: TextFormatting | null } {
-  const current = getTextFormatting(clientId, id);
+  | { ok: false; current: TextFormatting | null }
+> {
+  const current = await getTextFormatting(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
-  const updated = db
+  const [updated] = await db
     .update(textFormatting)
     .set({
       archivedAt: null,
       version: sql`${textFormatting.version} + 1`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: nowUtc,
     })
     .where(
       and(eq(textFormatting.clientId, clientId), eq(textFormatting.id, id)),
     )
-    .returning()
-    .get();
+    .returning();
   return { ok: true, row: updated };
 }
 

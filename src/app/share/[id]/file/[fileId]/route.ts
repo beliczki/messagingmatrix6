@@ -22,11 +22,11 @@ export async function GET(
   { params }: { params: Promise<Params> },
 ) {
   const { id, fileId } = await params;
-  const share = db
+  const [share] = await db
     .select()
     .from(shareGalleries)
     .where(eq(shareGalleries.id, id))
-    .get();
+    .limit(1);
   if (!share || share.archivedAt !== null) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -46,11 +46,11 @@ export async function GET(
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  const file = db
+  const [file] = await db
     .select()
     .from(uploadedFiles)
     .where(eq(uploadedFiles.id, fileId))
-    .get();
+    .limit(1);
   if (!file || file.clientId !== share.clientId) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -65,11 +65,11 @@ export async function GET(
     const w =
       ALLOWED_THUMB_WIDTHS.find((n) => n >= wRaw) ??
       ALLOWED_THUMB_WIDTHS[ALLOWED_THUMB_WIDTHS.length - 1];
-    const client = db
+    const [client] = await db
       .select({ key: clients.key })
       .from(clients)
       .where(eq(clients.id, file.clientId))
-      .get();
+      .limit(1);
     if (!client) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
@@ -103,10 +103,10 @@ export async function GET(
   } catch {
     return NextResponse.json({ error: "storage_missing" }, { status: 410 });
   }
-  db.update(shareGalleries)
+  await db
+    .update(shareGalleries)
     .set({ downloadCount: sql`${shareGalleries.downloadCount} + 1` })
-    .where(eq(shareGalleries.id, id))
-    .run();
+    .where(eq(shareGalleries.id, id));
   return new NextResponse(new Uint8Array(bytes), {
     headers: {
       "Content-Type": file.mimeType ?? "application/octet-stream",

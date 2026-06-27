@@ -2889,5 +2889,207 @@ Target: /var/www/mm6-erste, port 6001, PM2 `mm6-erste`, domain erste.messagingma
 - [ ] nginx -t, reload; verify https://erste.messagingmatrix.ai
 
 ### Phase F — Verify & wrap
-- [ ] Smoke test login/grid, check pm2 logs
-- [ ] MCP endpoint note, version bump suggestion
+- [x] Smoke test login/grid, check pm2 logs
+- [x] MCP endpoint note, version bump suggestion
+
+### REVIEW — DONE 2026-06-07
+LIVE: https://erste.messagingmatrix.ai → mm6 (Next 15) /var/www/mm6-erste, port 6001, PM2 `mm6-erste`.
+- Code: main @ 5cf245e (incl. flight-date + per-sibling trafficking propagation dc3103c).
+- Data: db/matrix.db online-backup snapshot (1450 msgs, integrity ok) + storage/erste 7049 files (1.3G).
+- nginx: erste site now single proxy→6001 + /mcp SSE block; SSL/redirect preserved. Old v5 config saved as
+  messagingmatrix.v5-backup-20260607. v5 erste (port 3003) still running, just unserved (retained).
+- Added 2G swap (/swapfile, in fstab) for build headroom.
+- Enabled pm2-root systemd unit (was MISSING — nothing survived reboot before); pm2 save'd.
+- Fresh JWT_SECRET + MCP_BEARER_TOKEN generated server-side (.env, chmod 600).
+ROLLBACK: cp messagingmatrix.v5-backup-20260607 → sites-available/messagingmatrix; nginx -t; reload (back to v5).
+TODO (user): point claude.ai ERSTE MCP connector at new bearer if it 401s; bump 6.0.0-pre→6.0.0 when ready.
+
+---
+
+## SLICE (planned, not started) — Shared Postgres on self-hosted Supabase: local == live
+
+**Goal (decided with user 2026-06-07):** ONE shared live read+write database, hit by
+both local dev and the Hetzner deploy, so local testing runs against live data.
+Postgres chosen specifically because **Supabase's Table Editor** gives a native,
+Excel-like spreadsheet cell editor (click-type-tab, paste ranges, add columns in UI).
+
+**Hosting:** Supabase **self-hosted on Hetzner** (Docker compose). Confirmed FREE —
+Supabase core is open source; only cost is the Hetzner server itself (already have
+46.224.60.159, may need more RAM/disk for the Postgres + Studio stack). No cloud bill.
+
+**This is a real migration slice, not a one-liner.** mm6 today is SQLite via direct
+queries in `src/lib/entities/*` + a file-based migration runner. Sequencing:
+
+### PG-A — Stand up Supabase on Hetzner  (decisions: SAME 4GB box; TRIMMED Postgres+Studio; SSH-tunnel, no public port)
+- [x] Capacity checked: box `ubuntu-4gb-nbg1-1`, 2.6G free + 2G swap, 19G disk free.
+      Runs 5 live PM2 apps incl. mm6-erste:6001 — so containers are mem-capped to
+      not OOM prod. Docker 29 + Compose v5 already installed.
+- [x] Postgres up: `/opt/supabase-mm6/docker-compose.yml`, `postgres:16` (matches local
+      dev engine), bound `127.0.0.1:5432` ONLY, `mem_limit:1g`, password in `.env`
+      (chmod 600), named volume `mm6-db-data`, db `mm6`.
+- [x] SSH tunnel verified: `ssh -fNT -L 5433:localhost:5432 -i ~/.ssh/mm_key2
+      root@46.224.60.159` → local psql reaches it. Drizzle migrations APPLIED to the
+      server db → 19 tables live on Hetzner.
+- [x] Studio + postgres-meta added — `supabase/postgres-meta:v0.96.6` +
+      `supabase/studio:2026.06.03-sha-0bca601`, mem-capped (meta 256m, studio 768m),
+      studio bound `127.0.0.1:3001`. All 3 containers healthy; meta introspects all
+      19 tables; Studio UI 200. Full stack uses only ~300MB extra → 2.2G free, prod safe.
+      Demo JWT keys (localhost-only behind tunnel). NO Studio login — access control IS
+      the SSH key (only someone who can open the tunnel reaches it).
+      TUNNELS: DB `ssh -fNT -L 5433:localhost:5432 -i ~/.ssh/mm_key2 root@46.224.60.159`
+               Studio `ssh -fNT -L 3001:localhost:3001 -i ~/.ssh/mm_key2 root@46.224.60.159`
+               → open http://localhost:3001 in browser.
+- [ ] Backfill existing `db/matrix.db` data into the server Postgres (see PG-B).
+      (Studio shows empty tables until this runs.)
+
+PG-A DONE. Remaining: finish code sweep (PG-C), backfill data (PG-B), wire local +
+live deploy to the shared DB (PG-D).
+
+### PG-B — Schema + data port
+- [x] Translate SQLite schema → Postgres — DONE 2026-06-27. `src/db/schema.ts` now
+      `drizzle-orm/pg-core`. Mappings: `sqliteTable`→`pgTable`; `integer.primaryKey
+      ({autoIncrement})`→`integer.primaryKey().generatedByDefaultAsIdentity()`
+      (explicit-id insert still allowed → needed for data backfill); JSON-in-text
+      cols KEPT as `text` (no jsonb — code does manual JSON.parse, no behaviour
+      change); `real`→`real`. Timestamp parity: all `text` CURRENT_TIMESTAMP cols
+      now default to `to_char(now() at time zone 'utc','YYYY-MM-DD HH24:MI:SS')`
+      → emits byte-identical "2026-06-27 11:24:44" string. No native timestamptz.
+- [x] `drizzle.config.ts` dialect → postgresql; `postgres` (postgres-js) driver added
+- [x] `src/db/index.ts` rewritten for postgres-js (pool max 10, `prepare:false` for
+      Supabase pooler compat). `getSqlite()`→`getClient()`; added `_closeDbForTests`.
+- [x] Regenerated migrations: old sqlite SQL → `db/migrations.sqlite-archive/`;
+      fresh PG `db/migrations/0000_stiff_bucky.sql` (390 lines, 19 tables).
+- [x] DE-RISK PROVEN on real PG (local docker `mm6pg:55432`): all 19 tables apply;
+      identity PK auto-gen (id=1); explicit-id insert (id=99) OK; timestamp format
+      matches SQLite exactly; `TRUNCATE … RESTART IDENTITY CASCADE` resets cleanly
+      (→ the per-test reset mechanism for the new harness).
+- [x] Backfill DONE 2026-06-27 via `scripts/backfill-to-pg.mjs` (better-sqlite3 read →
+      postgres-js write through the tunnel). 16,348 rows loaded, counts match SQLite
+      exactly (messages 1450, creatives 1425, reporting 4380, monitoring 3002,
+      uploaded_files 3981, audiences 180, topics 82…). Ids + timestamps preserved;
+      identity sequences reset (messages max 32870 → next 32871). Re-runnable
+      (TRUNCATE…RESTART IDENTITY CASCADE first, filters to PG columns). PG-B COMPLETE.
+
+### PG-C — Query layer: sync→async sweep (THE long pole, ~150 fns + 26 test files)
+Reality: better-sqlite3 is SYNC, postgres-js is ASYNC. Every Drizzle `.get()/.all()/
+.run()` (62 in src, 61 in tests) → `await`; ~150 sync entity/lib fns → async;
+transitive to all callers (routes, MCP server, Server Components, helpers). Tree will
+not compile until the sweep completes — foundation + sweep land as ONE commit.
+- [x] Rewrite `tests/helpers/test-db.ts` — DONE. Migrate-once into `mm6_test` DB,
+      then TRUNCATE…RESTART IDENTITY between tests. `createTestDb()`/`cleanup()` now
+      async → tests' beforeEach/afterEach become async. PATTERN PROVEN:
+      assets-creatives.test.ts 6/6 green on real Postgres.
+- [x] Convert `src/lib/entities/*` to async — ALL 8 DONE: assets, creatives,
+      text-formatting, keywords, files, topics, audiences, messages.
+      Conversion rules (locked): fns→async/Promise; drop `.get()`→`await …limit(1)`,
+      `[0]??null`; `.all()`→`await` (no terminal); `.returning().get()`→
+      `const [row]=await …returning()`; `sql\`CURRENT_TIMESTAMP\``→imported `nowUtc`;
+      `db.transaction((tx)=>…)`→`await db.transaction(async (tx)=>…)` + `for…of`
+      (forEach won't await); `.run().changes`→`.returning({id}).length`.
+      PG SEMANTIC TRAP handled: a failed statement aborts the WHOLE pg tx (SQLite
+      didn't) → `bulkInsertKeywords` now does per-row statements, not one tx.
+- [~] Convert entities' test files. DONE+GREEN on PG: assets-creatives (6/6),
+      messages (15/15 — also exercises audiences/topics cascade tx). Key test-side
+      rule: async throws → `await expect(p).rejects.toThrow()` (not `.toThrow`).
+      TODO: audiences, topics, keywords, text-formatting, files, propagate-siblings,
+      snapshots, entity-history, copy-move, mcp-*, auth/*, monitoring, import-* (~22)
+- [~] Convert callers. Lib helpers DONE (12): active-client (highest ripple), audit,
+      auth, session, branding, monitoring-products, snapshots, auth-server, storage,
+      templates, feed-export, import-xlsx. PG fixes captured: snapshot restore resets
+      identity sequences; import-xlsx dry-run now threads the tx handle (global `db`
+      escapes the tx on PG → would persist a dry run) + keywords use
+      onConflictDoNothing().returning() (tx-safe vs swallowed-UNIQUE which aborts a pg tx).
+      export-xlsx + mcp.ts DONE. ENTIRE src/lib + src/db + entities = 0 tsc errors. ✅
+      (mcp.ts: helpers async, all read/write/batch tools awaited, 6 tx → async via ALS,
+      raw count(*) cast ::int to avoid bigint-as-string.)
+      Remaining tsc: src/app routes+components 367 (~57 files), tests 654 (~22 files),
+      scripts 146 (one-off, last).
+- [x] ROUTE FACTORY (user's idea — dedupe, not copy-paste-convert): `src/lib/entity-route.ts`
+      with makeCollectionRoute / makeItemRoute / makeRestoreRoute / makeDuplicateRoute /
+      makeHardDeleteRoute. Replaced 19 byte-identical entity-CRUD route files (audiences,
+      topics, assets, creatives, text_formatting × collection/item/restore + aud/top
+      duplicate+hard-delete) with ~12-line factory calls. Async wiring lives in ONE place.
+      0 tsc errors in factory+routes; src/app 367→256.
+- [~] Bespoke routes IN PROGRESS. DONE: messages collection (→factory!), messages/[id]
+      (propagate), messages/[id]/restore, bulk-copy, bulk-move, audiences|topics history,
+      feed-exports/route. src/app 367→189. src/lib still 0.
+- [x] ALL src/ CONVERTED — 0 tsc errors across entities + lib + db + every route +
+      MCP routes + all Server Components ((app)/page,layout,settings,templates +
+      share/[id]/page + root layout). The app builds + runs on Postgres.
+- [x] Test harness parallelism fix: integration files share one mm6_test DB, so root
+      `vitest.config` now sets `fileParallelism: false` (project-level not honored).
+      Without it, files race on DROP/CREATE/TRUNCATE → "relation already exists".
+- [ ] Bespoke routes (all converted above): adform-snapshots, share-galleries(+[id]/restore),
+      feed-exports, adform-snapshots, share-galleries, monitoring(+import/reapply), clients,
+      users, config(+parsing-rules/public), snapshots, files(+thumbnail/restore), keywords
+      (+reorder), export/xlsx, import/xlsx, drive/proxy, render/public, mcp routes,
+      audiences|topics [id]/history (entity-history — candidate for its own tiny factory),
+      share/* , layout.tsx, share/[id]/page.tsx.
+- [~] Test files conversion (async + harness). DONE+GREEN: assets-creatives, messages,
+      audiences, topics, audiences-key-pattern, audiences-duplicate-delete (54+ tests pass
+      together — serial harness confirmed). Pattern: async beforeEach/afterEach, await all
+      entity/db calls, `[x]=await …returning()`, drop `.get()/.all()/.run()`,
+      `.toThrow`→`.rejects.toThrow`, helpers (seedTopic/setPattern) async.
+      REMAINING (~14): topics-duplicate-delete, propagate-siblings, copy-move-messages,
+      snapshots, keywords, text-formatting, files, entity-history, mcp-copy-move,
+      mcp-list-assets, monitoring-table, import-keywords-xlsx, templates/scan,
+      auth/foreign-jwt, auth/per-client-login, sse/broadcast.
+- [x] ALL ~22 test files converted. **FULL SUITE GREEN: 345/345 on Postgres.**
+      src/ + tests/ = 0 tsc errors. Two more PG-specific bugs fixed at the finish:
+      (1) unique-violation detection — postgres-js wraps the error in DrizzleQueryError
+      so `/UNIQUE/i.test(e.message)` missed it; now check SQLSTATE `23505` on e/e.cause
+      (keywords.ts `isUniqueViolation`). (2) snapshot list ordering — 2nd-precision
+      timestamps tie, PG won't preserve insertion order → added `desc(id)` tiebreaker.
+      Also: listAudiences/listTopics return type now honestly includes `mcCount`.
+
+### PG-C — DONE ✅  (PG-A + PG-B + PG-C all complete; app + full test suite run on Postgres)
+
+### Remaining
+- [ ] scripts/ (13 one-off dev/seed/maintenance tools, 146 tsc errs) — reference removed
+      `getSqlite` + sync queries. NOT shipped, don't block build/tests. Convert lazily
+      when next needed (seed-dev, seed-keywords, rotate-mcp-token, import-erste are the
+      likely-used ones).
+- [ ] PG-D cutover wiring (the "make it actually shared" step):
+      * Local: set `DATABASE_URL=postgres://postgres:<pw>@localhost:5433/mm6` in `.env`
+        (via SSH tunnel) so `npm run dev:*` hit the shared Hetzner DB.
+      * Box: set `DATABASE_URL=postgres://postgres:<pw>@localhost:5432/mm6` in the
+        mm6-erste `.env`, `npm run build`, `pm2 restart mm6-erste`. ⚠️ flips LIVE prod
+        from SQLite→Postgres — confirm + take a matrix.db backup first.
+- [ ] Version bump (minor — storage/schema change) + CHANGELOG entry.
+
+### Review (2026-06-27)
+SQLite→Postgres migration to a shared self-hosted Supabase on Hetzner. Approach: kept
+Drizzle, switched dialect sqlite→pg-core + driver better-sqlite3→postgres-js. The cost
+was sync→async across ~150 fns rippling to every caller. Did it in dependency order
+(entities → lib → routes → components → tests), tsc + the 345-test suite as the gate.
+Surfaced + fixed ~8 genuine Postgres semantic differences a blind conversion would miss
+(AsyncLocalStorage tx context, sequence resets, dry-run tx threading, onConflict for
+imports, count(*) bigint casts, 23505 detection, ordering tiebreakers, timestamp-format
+parity). Deduped 19 identical CRUD routes into `entity-route.ts` (user's idea). Infra:
+Postgres + Studio on the 4GB box (localhost-only, SSH-tunnelled, mem-capped); 16,348
+rows backfilled. NOT yet done: deploy cutover (PG-D) + the one-off scripts.
+      ARCH: `src/db/index.ts` now wraps `db` in an AsyncLocalStorage tx context →
+      inside `db.transaction(...)` the global `db` (used by entity fns) auto-routes
+      through the tx, so batch tools / snapshot restore / keyword reorder stay atomic
+      on PG without threading tx through every entity fn. KEY INVARIANT — see memory.
+      Routes TODO: ~55 handlers under src/app/api/** + src/app/share/**.
+      Server Components TODO: src/app/layout.tsx, src/app/share/[id]/page.tsx (the
+      (app)/* ones — page/layout/templates — also need awaiting). Pattern: `await
+      requireSession/requireAdmin`, `await activeClientId()`, `await <entity fn>`.
+      NOTE: tsc error total is non-monotonic mid-sweep (async ripples outward) — track
+      by files-remaining, not raw count.
+- [ ] Convert remaining ~22 test files; one-off `scripts/*` last (not shipped)
+- [ ] tsc clean + full `npm test` green against Postgres
+- [ ] Connection pooling verified; decide read-latency strategy (local→Hetzner over WAN)
+
+### PG-D — Re-point + verify
+- [ ] Re-point all 4 dev deploys (erste/telekom/proficio/demo) to the shared `DATABASE_URL`
+- [ ] Re-point Hetzner deploy `.env` to the same DB
+- [ ] Integration tests against Postgres — MUST cover AdForm feed-export invariants
+      (sticky-superset, version-bump, uploaded≠exported, default-row) and masonry data paths
+- [ ] Version bump (minor — schema/storage change) + CHANGELOG
+
+**Open questions to resolve before PG-A:**
+- Single shared DB for ALL clients, or one DB per client? (multi-tenancy: ACTIVE_CLIENT_KEY today)
+- Local read latency acceptable, or need embedded replica strategy?
+- Migration cutover order vs the GO LIVE slice above (do that on SQLite first, then this?)

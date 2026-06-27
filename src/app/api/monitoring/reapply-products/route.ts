@@ -16,9 +16,9 @@ export const POST = withSession(async ({ claims }) => {
   const denied = denyDemo(claims);
   if (denied) return denied;
 
-  const { audienceProduct, rules } = loadProductContext(claims.cid);
+  const { audienceProduct, rules } = await loadProductContext(claims.cid);
 
-  const rows = db
+  const rows = await db
     .select({
       id: monitoring.id,
       audienceKey: monitoring.audienceKey,
@@ -27,12 +27,11 @@ export const POST = withSession(async ({ claims }) => {
       product: monitoring.product,
     })
     .from(monitoring)
-    .where(eq(monitoring.clientId, claims.cid))
-    .all();
+    .where(eq(monitoring.clientId, claims.cid));
 
   let updated = 0;
   let withProduct = 0;
-  db.transaction((tx) => {
+  await db.transaction(async (tx) => {
     for (const r of rows) {
       const next = resolveProduct(
         r.audienceKey,
@@ -43,16 +42,16 @@ export const POST = withSession(async ({ claims }) => {
       );
       if (next) withProduct += 1;
       if (next !== r.product) {
-        tx.update(monitoring)
+        await tx
+          .update(monitoring)
           .set({ product: next })
-          .where(eq(monitoring.id, r.id))
-          .run();
+          .where(eq(monitoring.id, r.id));
         updated += 1;
       }
     }
   });
 
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "monitoring",

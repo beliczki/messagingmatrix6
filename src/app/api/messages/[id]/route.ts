@@ -21,10 +21,10 @@ function parseId(s: string): number | null {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-export const GET = withSession<Params>(({ claims, params }) => {
+export const GET = withSession<Params>(async ({ claims, params }) => {
   const id = parseId(params.id);
   if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
-  const row = getMessage(claims.cid, id);
+  const row = await getMessage(claims.cid, id);
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
   return NextResponse.json({ message: row });
 });
@@ -38,15 +38,15 @@ export const PATCH = withSession<Params>(async ({ req, claims, params }) => {
   const expected = readClientVersion(req, body);
   if (expected === null) return missingVersion();
   const input = pickWritable(body);
-  const before = getMessage(claims.cid, id);
-  const result = updateMessage(claims.cid, id, expected, input);
+  const before = await getMessage(claims.cid, id);
+  const result = await updateMessage(claims.cid, id, expected, input);
   if (!result.ok) {
     if (!result.current) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
     return versionMismatch(result.current, result.current.version);
   }
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "messages",
@@ -61,9 +61,9 @@ export const PATCH = withSession<Params>(async ({ req, claims, params }) => {
   // sibling gets its own audit entry so the change shows in its history too.
   let propagated = 0;
   if (new URL(req.url).searchParams.get("propagate") === "siblings") {
-    const changes = propagateToSiblings(claims.cid, result.row, input);
+    const changes = await propagateToSiblings(claims.cid, result.row, input);
     for (const c of changes) {
-      writeAudit({
+      await writeAudit({
         clientId: claims.cid,
         userId: claims.sub,
         entityType: "messages",
@@ -86,15 +86,15 @@ export const DELETE = withSession<Params>(async ({ req, claims, params }) => {
   if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
   const expected = readClientVersion(req, null);
   if (expected === null) return missingVersion();
-  const before = getMessage(claims.cid, id);
-  const result = archiveMessage(claims.cid, id, expected);
+  const before = await getMessage(claims.cid, id);
+  const result = await archiveMessage(claims.cid, id, expected);
   if (!result.ok) {
     if (!result.current) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });
     }
     return versionMismatch(result.current, result.current.version);
   }
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "messages",

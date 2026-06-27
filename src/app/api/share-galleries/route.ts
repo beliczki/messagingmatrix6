@@ -29,7 +29,7 @@ type SnapshotMetadata = {
   }>;
 };
 
-export const GET = withSession(({ req, claims }) => {
+export const GET = withSession(async ({ req, claims }) => {
   const includeArchived =
     new URL(req.url).searchParams.get("includeArchived") === "1";
   const where = includeArchived
@@ -38,45 +38,44 @@ export const GET = withSession(({ req, claims }) => {
         eq(shareGalleries.clientId, claims.cid),
         isNull(shareGalleries.archivedAt),
       );
-  const rows = db
+  const rows = await db
     .select()
     .from(shareGalleries)
     .where(where)
-    .orderBy(desc(shareGalleries.createdAt))
-    .all();
+    .orderBy(desc(shareGalleries.createdAt));
 
   const userIds = [
     ...new Set(rows.map((r) => r.createdBy).filter((s): s is string => !!s)),
   ];
   const emailById = userIds.length
     ? new Map(
-        db
-          .select({ id: users.id, email: users.email })
-          .from(users)
-          .where(inArray(users.id, userIds))
-          .all()
-          .map((u) => [u.id, u.email]),
+        (
+          await db
+            .select({ id: users.id, email: users.email })
+            .from(users)
+            .where(inArray(users.id, userIds))
+        ).map((u) => [u.id, u.email]),
       )
     : new Map<string, string>();
 
   const shareIds = rows.map((r) => r.id);
   const commentCountById = shareIds.length
     ? new Map(
-        db
-          .select({
-            id: shareComments.shareGalleryId,
-            count: sql<number>`count(*)`.as("count"),
-          })
-          .from(shareComments)
-          .where(
-            and(
-              inArray(shareComments.shareGalleryId, shareIds),
-              isNull(shareComments.archivedAt),
-            ),
-          )
-          .groupBy(shareComments.shareGalleryId)
-          .all()
-          .map((c) => [c.id, Number(c.count)]),
+        (
+          await db
+            .select({
+              id: shareComments.shareGalleryId,
+              count: sql<number>`count(*)`.as("count"),
+            })
+            .from(shareComments)
+            .where(
+              and(
+                inArray(shareComments.shareGalleryId, shareIds),
+                isNull(shareComments.archivedAt),
+              ),
+            )
+            .groupBy(shareComments.shareGalleryId)
+        ).map((c) => [c.id, Number(c.count)]),
       )
     : new Map<string, number>();
 
@@ -170,7 +169,7 @@ export const POST = withSession(async ({ req, claims }) => {
     new Set([...mcIds, ...matrixPairsIn.map((p) => p.messageId)]),
   );
   const messageRows = allMessageIds.length
-    ? db
+    ? await db
         .select()
         .from(messages)
         .where(
@@ -179,7 +178,6 @@ export const POST = withSession(async ({ req, claims }) => {
             inArray(messages.id, allMessageIds),
           ),
         )
-        .all()
     : [];
 
   // Fan out legacy mcIds → matrix pairs by defaulting each to the message's
@@ -205,7 +203,7 @@ export const POST = withSession(async ({ req, claims }) => {
     matrixItems.push(p);
   }
   const creativeRows = creativeIds.length
-    ? db
+    ? await db
         .select()
         .from(creatives)
         .where(
@@ -214,7 +212,6 @@ export const POST = withSession(async ({ req, claims }) => {
             inArray(creatives.id, creativeIds),
           ),
         )
-        .all()
     : [];
   if (messageRows.length === 0 && creativeRows.length === 0) {
     return NextResponse.json(
@@ -230,7 +227,7 @@ export const POST = withSession(async ({ req, claims }) => {
     new Set(creativeRows.map((c) => c.fileId).filter((s): s is string => !!s)),
   );
   const fileRows = fileIds.length
-    ? db
+    ? await db
         .select({
           id: uploadedFiles.id,
           filename: uploadedFiles.filename,
@@ -245,7 +242,6 @@ export const POST = withSession(async ({ req, claims }) => {
             inArray(uploadedFiles.id, fileIds),
           ),
         )
-        .all()
     : [];
 
   const metadata: SnapshotMetadata = {
@@ -257,7 +253,7 @@ export const POST = withSession(async ({ req, claims }) => {
   };
 
   const id = nanoid(12);
-  const inserted = db
+  const [inserted] = await db
     .insert(shareGalleries)
     .values({
       id,
@@ -267,10 +263,9 @@ export const POST = withSession(async ({ req, claims }) => {
       createdBy: claims.sub,
       metadata: JSON.stringify(metadata),
     })
-    .returning()
-    .get();
+    .returning();
 
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "share_galleries",

@@ -14,8 +14,8 @@ import { createTestDb, type TestDb } from "../../helpers/test-db";
 let h: TestDb;
 let erste: { id: number };
 
-function seedAudience(clientId: number, key: string) {
-  return db
+async function seedAudience(clientId: number, key: string) {
+  const [row] = await db
     .insert(audiences)
     .values({
       clientId,
@@ -26,27 +26,27 @@ function seedAudience(clientId: number, key: string) {
       strategy: "Prospecting",
       device: "Mobile",
     })
-    .returning()
-    .get();
+    .returning();
+  return row;
 }
 
-function seedTopic(clientId: number, key: string) {
-  return db
+async function seedTopic(clientId: number, key: string) {
+  const [row] = await db
     .insert(topics)
     .values({ clientId, key, name: key.toUpperCase(), orderIndex: 0, product: "Loans" })
-    .returning()
-    .get();
+    .returning();
+  return row;
 }
 
 // One source card copied across three audiences → primary + 3 siblings, all
 // same (number, variant), each on its own audience.
-function seedCard() {
-  seedAudience(erste.id, "aud1");
-  seedAudience(erste.id, "aud2");
-  seedAudience(erste.id, "aud3");
-  seedAudience(erste.id, "aud4");
-  seedTopic(erste.id, "top1");
-  const primary = createMessage(erste.id, {
+async function seedCard() {
+  await seedAudience(erste.id, "aud1");
+  await seedAudience(erste.id, "aud2");
+  await seedAudience(erste.id, "aud3");
+  await seedAudience(erste.id, "aud4");
+  await seedTopic(erste.id, "top1");
+  const primary = await createMessage(erste.id, {
     audience: "aud1",
     topic: "top1",
     name: "Card",
@@ -54,58 +54,61 @@ function seedCard() {
     status: "INCOMING",
     startDate: "2026-01-01",
   });
-  copyMessages(erste.id, [primary.pmmid!], ["aud2", "aud3", "aud4"]);
-  return getMessage(erste.id, primary.id)!;
+  await copyMessages(erste.id, [primary.pmmid!], ["aud2", "aud3", "aud4"]);
+  return (await getMessage(erste.id, primary.id))!;
 }
 
-beforeEach(() => {
-  h = createTestDb();
-  erste = db.insert(clients).values({ key: "erste", name: "Erste" }).returning().get();
+beforeEach(async () => {
+  h = await createTestDb();
+  [erste] = await db
+    .insert(clients)
+    .values({ key: "erste", name: "Erste" })
+    .returning();
 });
 
-afterEach(() => {
-  h.cleanup();
+afterEach(async () => {
+  await h.cleanup();
 });
 
 describe("findSiblings", () => {
-  it("returns the other audience copies of the same (number, variant)", () => {
-    const primary = seedCard();
-    const sibs = findSiblings(erste.id, primary);
+  it("returns the other audience copies of the same (number, variant)", async () => {
+    const primary = await seedCard();
+    const sibs = await findSiblings(erste.id, primary);
     expect(sibs).toHaveLength(3);
     expect(sibs.every((s) => s.number === primary.number && s.variant === primary.variant)).toBe(true);
     expect(sibs.every((s) => s.id !== primary.id)).toBe(true);
     expect(sibs.map((s) => s.audience).sort()).toEqual(["aud2", "aud3", "aud4"]);
   });
 
-  it("excludes archived siblings", () => {
-    const primary = seedCard();
-    const victim = findSiblings(erste.id, primary)[0];
-    db.update(messages)
+  it("excludes archived siblings", async () => {
+    const primary = await seedCard();
+    const victim = (await findSiblings(erste.id, primary))[0];
+    await db
+      .update(messages)
       .set({ archivedAt: "2026-05-01" })
-      .where(eq(messages.id, victim.id))
-      .run();
-    expect(findSiblings(erste.id, primary)).toHaveLength(2);
+      .where(eq(messages.id, victim.id));
+    expect(await findSiblings(erste.id, primary)).toHaveLength(2);
   });
 });
 
 describe("propagateToSiblings", () => {
-  it("propagates shared creative + status fields to every sibling", () => {
-    const primary = seedCard();
-    const changes = propagateToSiblings(erste.id, primary, {
+  it("propagates shared creative + status fields to every sibling", async () => {
+    const primary = await seedCard();
+    const changes = await propagateToSiblings(erste.id, primary, {
       headline: "Updated",
       status: "ACTIVE",
     });
     expect(changes).toHaveLength(3);
-    for (const sib of findSiblings(erste.id, primary)) {
+    for (const sib of await findSiblings(erste.id, primary)) {
       expect(sib.headline).toBe("Updated");
       expect(sib.status).toBe("ACTIVE");
     }
   });
 
-  it("syncs flight dates to siblings, never overwrites audience/topic", () => {
-    const primary = seedCard();
-    const before = findSiblings(erste.id, primary);
-    propagateToSiblings(erste.id, primary, {
+  it("syncs flight dates to siblings, never overwrites audience/topic", async () => {
+    const primary = await seedCard();
+    const before = await findSiblings(erste.id, primary);
+    await propagateToSiblings(erste.id, primary, {
       headline: "Updated",
       // flight dates are campaign-level → propagate
       startDate: "2099-12-31",
@@ -114,7 +117,7 @@ describe("propagateToSiblings", () => {
       audience: "aud1",
       topic: "top1",
     } as never);
-    const after = findSiblings(erste.id, primary);
+    const after = await findSiblings(erste.id, primary);
     for (const sib of after) {
       const orig = before.find((b) => b.id === sib.id)!;
       expect(sib.headline).toBe("Updated"); // shared field changed
@@ -125,27 +128,27 @@ describe("propagateToSiblings", () => {
     }
   });
 
-  it("bumps each sibling's optimistic-lock version", () => {
-    const primary = seedCard();
-    const before = findSiblings(erste.id, primary);
-    propagateToSiblings(erste.id, primary, { headline: "Updated" });
-    const after = findSiblings(erste.id, primary);
+  it("bumps each sibling's optimistic-lock version", async () => {
+    const primary = await seedCard();
+    const before = await findSiblings(erste.id, primary);
+    await propagateToSiblings(erste.id, primary, { headline: "Updated" });
+    const after = await findSiblings(erste.id, primary);
     for (const sib of after) {
       const orig = before.find((b) => b.id === sib.id)!;
       expect(sib.version).toBe(orig.version + 1);
     }
   });
 
-  it("is a no-op when the payload has no shared fields", () => {
-    const primary = seedCard();
-    const before = findSiblings(erste.id, primary);
+  it("is a no-op when the payload has no shared fields", async () => {
+    const primary = await seedCard();
+    const before = await findSiblings(erste.id, primary);
     // Only cell-defining placement fields → nothing to propagate.
-    const changes = propagateToSiblings(erste.id, primary, {
+    const changes = await propagateToSiblings(erste.id, primary, {
       audience: "aud2",
       topic: "top1",
     } as never);
     expect(changes).toHaveLength(0);
-    const after = findSiblings(erste.id, primary);
+    const after = await findSiblings(erste.id, primary);
     for (const sib of after) {
       const orig = before.find((b) => b.id === sib.id)!;
       expect(sib.version).toBe(orig.version); // untouched

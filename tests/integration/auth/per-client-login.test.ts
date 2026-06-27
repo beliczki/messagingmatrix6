@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/db";
 import { clients, users } from "@/db/schema";
@@ -8,12 +9,18 @@ import { createTestDb, withActiveClientKey, type TestDb } from "../../helpers/te
 let h: TestDb;
 
 beforeEach(async () => {
-  h = createTestDb();
+  h = await createTestDb();
   process.env.JWT_SECRET = "test-secret-test-secret-test-secret";
 
   // Seed two clients with the SAME admin email + DIFFERENT passwords.
-  const erste = db.insert(clients).values({ key: "erste", name: "Erste" }).returning().get();
-  const telekom = db.insert(clients).values({ key: "telekom", name: "Telekom" }).returning().get();
+  const [erste] = await db
+    .insert(clients)
+    .values({ key: "erste", name: "Erste" })
+    .returning();
+  const [telekom] = await db
+    .insert(clients)
+    .values({ key: "telekom", name: "Telekom" })
+    .returning();
   const sharedEmail = "admin@example.com";
   await db.insert(users).values({
     id: nanoid(),
@@ -31,8 +38,8 @@ beforeEach(async () => {
   });
 });
 
-afterEach(() => {
-  h.cleanup();
+afterEach(async () => {
+  await h.cleanup();
 });
 
 describe("authenticate scoped to active client", () => {
@@ -52,12 +59,11 @@ describe("authenticate scoped to active client", () => {
     withActiveClientKey("erste");
     const u = await authenticate("admin@example.com", "erste-pw");
     expect(u).not.toBeNull();
-    const erste = db.select().from(clients).where(eqKey("erste")).get();
+    const [erste] = await db
+      .select()
+      .from(clients)
+      .where(eq(clients.key, "erste"))
+      .limit(1);
     expect(u?.clientId).toBe(erste?.id);
   });
 });
-
-import { eq } from "drizzle-orm";
-function eqKey(k: string) {
-  return eq(clients.key, k);
-}

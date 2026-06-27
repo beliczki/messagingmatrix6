@@ -12,7 +12,7 @@ type Params = { filename: string };
 // need to terminate that here.
 export const GET = withSession<Params>(async ({ claims, params }) => {
   const filename = decodeURIComponent(params.filename);
-  const row = getFileByFilename(claims.cid, filename);
+  const row = await getFileByFilename(claims.cid, filename);
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   let bytes: Buffer;

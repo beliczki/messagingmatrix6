@@ -11,18 +11,18 @@ import { withSession } from "@/lib/scoped";
 // PostgREST/SQLite truncation ceiling; the period selector keeps it that way.
 
 export const GET = withSession(async ({ req, claims }) => {
-  const periods = db
+  const periods = await db
     .select({
       periodFrom: monitoring.periodFrom,
       periodTo: monitoring.periodTo,
-      rows: sql<number>`count(*)`,
-      impressions: sql<number>`sum(${monitoring.impressions})`,
+      // ::int / ::float8 so postgres-js returns JS numbers, not bigint strings.
+      rows: sql<number>`count(*)::int`,
+      impressions: sql<number>`coalesce(sum(${monitoring.impressions}), 0)::float8`,
     })
     .from(monitoring)
     .where(eq(monitoring.clientId, claims.cid))
     .groupBy(monitoring.periodFrom, monitoring.periodTo)
-    .orderBy(desc(monitoring.periodFrom))
-    .all();
+    .orderBy(desc(monitoring.periodFrom));
 
   if (periods.length === 0) {
     return NextResponse.json({ periods: [], selected: null, rows: [] });
@@ -60,8 +60,7 @@ export const GET = withSession(async ({ req, claims }) => {
         eq(monitoring.periodFrom, selected.periodFrom),
       ),
     )
-    .orderBy(desc(monitoring.impressions))
-    .all();
+    .orderBy(desc(monitoring.impressions));
 
   return NextResponse.json({
     periods,

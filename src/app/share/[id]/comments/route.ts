@@ -14,11 +14,11 @@ const MAX_NAME = 80;
 const MAX_BODY = 2000;
 
 async function findShare(shareId: string) {
-  const share = db
+  const [share] = await db
     .select()
     .from(shareGalleries)
     .where(eq(shareGalleries.id, shareId))
-    .get();
+    .limit(1);
   if (!share || share.archivedAt !== null) return null;
   return share;
 }
@@ -32,7 +32,7 @@ export async function GET(
   if (!share) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const rows = db
+  const rows = await db
     .select()
     .from(shareComments)
     .where(
@@ -41,8 +41,7 @@ export async function GET(
         isNull(shareComments.archivedAt),
       ),
     )
-    .orderBy(shareComments.createdAt)
-    .all();
+    .orderBy(shareComments.createdAt);
   return NextResponse.json({ comments: rows });
 }
 
@@ -83,7 +82,7 @@ export async function POST(
     return NextResponse.json({ error: "body required" }, { status: 400 });
   }
   const annotation = parseAnnotation(body?.annotation);
-  const inserted = db
+  const [inserted] = await db
     .insert(shareComments)
     .values({
       id: nanoid(12),
@@ -93,8 +92,7 @@ export async function POST(
       body: text,
       annotation: annotation ? JSON.stringify(annotation) : null,
     })
-    .returning()
-    .get();
+    .returning();
   return NextResponse.json({ comment: inserted }, { status: 201 });
 }
 

@@ -227,8 +227,10 @@ export function listAllTemplates(): TemplateInfo[] {
     .filter((t): t is TemplateInfo => !!t);
 }
 
-export function listVisibleTemplates(clientId: number): TemplateInfo[] {
-  const visibility = readVisibleTemplatesConfig(clientId);
+export async function listVisibleTemplates(
+  clientId: number,
+): Promise<TemplateInfo[]> {
+  const visibility = await readVisibleTemplatesConfig(clientId);
   const all = listAllTemplates();
   // If config is empty / not set, default to ALL templates visible (less
   // confusing for fresh clients than an empty dropdown).
@@ -238,19 +240,16 @@ export function listVisibleTemplates(clientId: number): TemplateInfo[] {
   return all.filter((t) => visibility[t.name] !== false);
 }
 
-function readVisibleTemplatesConfig(
+async function readVisibleTemplatesConfig(
   clientId: number,
-): Record<string, boolean> | null {
-  const row = db
+): Promise<Record<string, boolean> | null> {
+  const [row] = await db
     .select()
     .from(config)
     .where(
-      and(
-        eq(config.clientId, clientId),
-        eq(config.key, "visibleTemplates"),
-      ),
+      and(eq(config.clientId, clientId), eq(config.key, "visibleTemplates")),
     )
-    .get();
+    .limit(1);
   if (!row) return null;
   try {
     const parsed = JSON.parse(row.value);

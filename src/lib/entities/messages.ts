@@ -4,6 +4,7 @@ import {
   audiences,
   config,
   messages,
+  nowUtc,
   topics,
   type Audience,
   type Message,
@@ -71,12 +72,12 @@ type ClientPatterns = {
   trafficking?: TraffickingPatterns;
 };
 
-function readClientPatterns(clientId: number): ClientPatterns {
-  const row = db
+async function readClientPatterns(clientId: number): Promise<ClientPatterns> {
+  const [row] = await db
     .select()
     .from(config)
     .where(and(eq(config.clientId, clientId), eq(config.key, "patterns")))
-    .get();
+    .limit(1);
   if (!row) return {};
   try {
     return JSON.parse(row.value) as ClientPatterns;
@@ -85,7 +86,9 @@ function readClientPatterns(clientId: number): ClientPatterns {
   }
 }
 
-function listLiveMessages(clientId: number): ExistingMessage[] {
+async function listLiveMessages(
+  clientId: number,
+): Promise<ExistingMessage[]> {
   return db
     .select({
       number: messages.number,
@@ -96,47 +99,46 @@ function listLiveMessages(clientId: number): ExistingMessage[] {
       archivedAt: messages.archivedAt,
     })
     .from(messages)
-    .where(eq(messages.clientId, clientId))
-    .all();
+    .where(eq(messages.clientId, clientId));
 }
 
-function findAudienceByKey(
+async function findAudienceByKey(
   clientId: number,
   key: string,
-): Audience | null {
-  return (
-    db
-      .select()
-      .from(audiences)
-      .where(and(eq(audiences.clientId, clientId), eq(audiences.key, key)))
-      .get() ?? null
-  );
+): Promise<Audience | null> {
+  const rows = await db
+    .select()
+    .from(audiences)
+    .where(and(eq(audiences.clientId, clientId), eq(audiences.key, key)))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
-function findTopicByKey(clientId: number, key: string): Topic | null {
-  return (
-    db
-      .select()
-      .from(topics)
-      .where(and(eq(topics.clientId, clientId), eq(topics.key, key)))
-      .get() ?? null
-  );
+async function findTopicByKey(
+  clientId: number,
+  key: string,
+): Promise<Topic | null> {
+  const rows = await db
+    .select()
+    .from(topics)
+    .where(and(eq(topics.clientId, clientId), eq(topics.key, key)))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
 // Default list filters out archived rows. The legacy status='deleted' soft-
 // delete (pre-Phase-10a) is also filtered out, since live data may still carry
 // it from before the archived_at migration.
-export function listMessages(
+export async function listMessages(
   clientId: number,
   opts: { includeArchived?: boolean } = {},
-): Message[] {
+): Promise<Message[]> {
   if (opts.includeArchived) {
     return db
       .select()
       .from(messages)
       .where(eq(messages.clientId, clientId))
-      .orderBy(messages.number, messages.variant)
-      .all();
+      .orderBy(messages.number, messages.variant);
   }
   return db
     .select()
@@ -148,59 +150,59 @@ export function listMessages(
         sql`(${messages.status} IS NULL OR ${messages.status} != 'deleted')`,
       ),
     )
-    .orderBy(messages.number, messages.variant)
-    .all();
+    .orderBy(messages.number, messages.variant);
 }
 
-export function getMessage(clientId: number, id: number): Message | null {
-  return (
-    db
-      .select()
-      .from(messages)
-      .where(and(eq(messages.clientId, clientId), eq(messages.id, id)))
-      .get() ?? null
-  );
+export async function getMessage(
+  clientId: number,
+  id: number,
+): Promise<Message | null> {
+  const rows = await db
+    .select()
+    .from(messages)
+    .where(and(eq(messages.clientId, clientId), eq(messages.id, id)))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
-export function getMessageByPmmid(
+export async function getMessageByPmmid(
   clientId: number,
   pmmid: string,
-): Message | null {
-  return (
-    db
-      .select()
-      .from(messages)
-      .where(and(eq(messages.clientId, clientId), eq(messages.pmmid, pmmid)))
-      .get() ?? null
-  );
+): Promise<Message | null> {
+  const rows = await db
+    .select()
+    .from(messages)
+    .where(and(eq(messages.clientId, clientId), eq(messages.pmmid, pmmid)))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
-export function createMessage(
+export async function createMessage(
   clientId: number,
   input: MessageInput,
-): Message {
+): Promise<Message> {
   if (!input.audience) throw new MessageError("audience is required");
   if (!input.topic) throw new MessageError("topic is required");
 
-  const audienceRow = findAudienceByKey(clientId, input.audience);
+  const audienceRow = await findAudienceByKey(clientId, input.audience);
   if (!audienceRow) {
     throw new MessageError(`audience '${input.audience}' not found`);
   }
-  const topicRow = findTopicByKey(clientId, input.topic);
+  const topicRow = await findTopicByKey(clientId, input.topic);
   if (!topicRow) {
     throw new MessageError(`topic '${input.topic}' not found`);
   }
 
   const slot = nextMcSlot(
-    listLiveMessages(clientId),
+    await listLiveMessages(clientId),
     input.topic,
     input.audience,
   );
 
-  const patterns = readClientPatterns(clientId);
+  const patterns = await readClientPatterns(clientId);
   // The Erste pmmid/trafficking patterns look the audience up by key
   // ({{audiences[Audience_Key].Field}}), so the full list must be in context.
-  const audienceList = listAudiences(clientId);
+  const audienceList = await listAudiences(clientId);
   const pmmid = generatePmmid(
     {
       audience: input.audience,
@@ -229,7 +231,7 @@ export function createMessage(
     pmmid,
   );
 
-  return db
+  const [row] = await db
     .insert(messages)
     .values({
       ...input,
@@ -248,17 +250,17 @@ export function createMessage(
       utmCd26: traffic.utm_cd26,
       finalTraffickedUrl: traffic.final_trafficked_url,
     })
-    .returning()
-    .get();
+    .returning();
+  return row;
 }
 
-export function updateMessage(
+export async function updateMessage(
   clientId: number,
   id: number,
   expectedVersion: number,
   input: MessageInput,
-): { ok: true; row: Message } | { ok: false; current: Message | null } {
-  const current = getMessage(clientId, id);
+): Promise<{ ok: true; row: Message } | { ok: false; current: Message | null }> {
+  const current = await getMessage(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) {
     return { ok: false, current };
@@ -268,7 +270,7 @@ export function updateMessage(
   // flows through. PMMID is left as-is — it is the message's stable identity and
   // is only (re)generated on create/copy/move.
   const merged = { ...current, ...input };
-  const patterns = readClientPatterns(clientId);
+  const patterns = await readClientPatterns(clientId);
   const traffic = buildTrafficking(
     {
       number: merged.number,
@@ -277,13 +279,13 @@ export function updateMessage(
       topic: merged.topic,
       landingUrl: merged.landingUrl,
     },
-    findAudienceByKey(clientId, merged.audience),
-    findTopicByKey(clientId, merged.topic),
+    await findAudienceByKey(clientId, merged.audience),
+    await findTopicByKey(clientId, merged.topic),
     patterns,
-    listAudiences(clientId),
+    await listAudiences(clientId),
     current.pmmid,
   );
-  const updated = db
+  const [updated] = await db
     .update(messages)
     .set({
       ...input,
@@ -295,11 +297,10 @@ export function updateMessage(
       utmCd26: traffic.utm_cd26,
       finalTraffickedUrl: traffic.final_trafficked_url,
       version: sql`${messages.version} + 1`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: nowUtc,
     })
     .where(and(eq(messages.clientId, clientId), eq(messages.id, id)))
-    .returning()
-    .get();
+    .returning();
   return { ok: true, row: updated };
 }
 
@@ -316,8 +317,11 @@ const PROPAGATED_FIELDS = WRITABLE_FIELDS.filter(
 // different audience. (number, variant) never spans more than one topic, so it
 // uniquely identifies the card. Used by the editor's global-edit warning count
 // and by the propagation fan-out below.
-export function findSiblings(clientId: number, primary: Message): Message[] {
-  return db
+export async function findSiblings(
+  clientId: number,
+  primary: Message,
+): Promise<Message[]> {
+  const rows = await db
     .select()
     .from(messages)
     .where(
@@ -327,9 +331,8 @@ export function findSiblings(clientId: number, primary: Message): Message[] {
         eq(messages.variant, primary.variant),
         isNull(messages.archivedAt),
       ),
-    )
-    .all()
-    .filter((m) => m.id !== primary.id);
+    );
+  return rows.filter((m) => m.id !== primary.id);
 }
 
 // Apply the shared subset of `input` (creative + status + flight dates) to every
@@ -340,20 +343,20 @@ export function findSiblings(clientId: number, primary: Message): Message[] {
 // against ITS OWN audience/topic (pmmid stays the sibling's stable identity).
 // Returns { before, after } pairs so the caller can write per-sibling audit
 // entries (revision history).
-export function propagateToSiblings(
+export async function propagateToSiblings(
   clientId: number,
   primary: Message,
   input: MessageInput,
-): Array<{ before: Message; after: Message }> {
+): Promise<Array<{ before: Message; after: Message }>> {
   const payload: Record<string, unknown> = {};
   for (const f of PROPAGATED_FIELDS) {
     if (f in input) payload[f] = (input as Record<string, unknown>)[f];
   }
   if (Object.keys(payload).length === 0) return [];
 
-  const patterns = readClientPatterns(clientId);
-  const audienceList = listAudiences(clientId);
-  const siblings = findSiblings(clientId, primary);
+  const patterns = await readClientPatterns(clientId);
+  const audienceList = await listAudiences(clientId);
+  const siblings = await findSiblings(clientId, primary);
   const changes: Array<{ before: Message; after: Message }> = [];
   for (const sib of siblings) {
     const merged = { ...sib, ...payload } as Message;
@@ -365,13 +368,13 @@ export function propagateToSiblings(
         topic: merged.topic,
         landingUrl: merged.landingUrl,
       },
-      findAudienceByKey(clientId, merged.audience),
-      findTopicByKey(clientId, merged.topic),
+      await findAudienceByKey(clientId, merged.audience),
+      await findTopicByKey(clientId, merged.topic),
       patterns,
       audienceList,
       sib.pmmid,
     );
-    const after = db
+    const [after] = await db
       .update(messages)
       .set({
         ...payload,
@@ -383,59 +386,58 @@ export function propagateToSiblings(
         utmCd26: traffic.utm_cd26,
         finalTraffickedUrl: traffic.final_trafficked_url,
         version: sql`${messages.version} + 1`,
-        updatedAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: nowUtc,
       })
       .where(and(eq(messages.clientId, clientId), eq(messages.id, sib.id)))
-      .returning()
-      .get();
+      .returning();
     changes.push({ before: sib, after });
   }
   return changes;
 }
 
-export function archiveMessage(
+export async function archiveMessage(
   clientId: number,
   id: number,
   expectedVersion: number,
-): { ok: true; row: Message } | { ok: false; current: Message | null } {
-  const current = getMessage(clientId, id);
+): Promise<{ ok: true; row: Message } | { ok: false; current: Message | null }> {
+  const current = await getMessage(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) {
     return { ok: false, current };
   }
-  const updated = db
+  const [updated] = await db
     .update(messages)
     .set({
-      archivedAt: sql`CURRENT_TIMESTAMP`,
+      archivedAt: nowUtc,
       version: sql`${messages.version} + 1`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: nowUtc,
     })
     .where(and(eq(messages.clientId, clientId), eq(messages.id, id)))
-    .returning()
-    .get();
+    .returning();
   return { ok: true, row: updated };
 }
 
 // Restore a message. Parent-first guard: if either the audience or the topic
 // the message points at is currently archived, the restore is rejected.
 // Caller (HTTP/MCP) should map `parent_archived` to a 409.
-export function restoreMessage(
+export async function restoreMessage(
   clientId: number,
   id: number,
   expectedVersion: number,
-):
+): Promise<
   | { ok: true; row: Message }
   | {
       ok: false;
       current: Message | null;
       reason?: "parent_archived";
       parent?: { type: "audience" | "topic"; key: string };
-    } {
-  const current = getMessage(clientId, id);
+    }
+> {
+  const current = await getMessage(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
 
-  const audienceRow = findAudienceByKey(clientId, current.audience);
+  const audienceRow = await findAudienceByKey(clientId, current.audience);
   if (audienceRow && audienceRow.archivedAt !== null) {
     return {
       ok: false,
@@ -444,7 +446,7 @@ export function restoreMessage(
       parent: { type: "audience", key: current.audience },
     };
   }
-  const topicRow = findTopicByKey(clientId, current.topic);
+  const topicRow = await findTopicByKey(clientId, current.topic);
   if (topicRow && topicRow.archivedAt !== null) {
     return {
       ok: false,
@@ -454,16 +456,15 @@ export function restoreMessage(
     };
   }
 
-  const updated = db
+  const [updated] = await db
     .update(messages)
     .set({
       archivedAt: null,
       version: sql`${messages.version} + 1`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: nowUtc,
     })
     .where(and(eq(messages.clientId, clientId), eq(messages.id, id)))
-    .returning()
-    .get();
+    .returning();
   return { ok: true, row: updated };
 }
 
@@ -477,16 +478,16 @@ export type CopyOpts = { fieldOverrides?: MessageInput };
 // target audience (PMMID encodes audience+topic+number+variant+versionNo, so
 // it can't be cloned verbatim). versionNo resets to 1 — a copy is a new MC,
 // not a creative revision of the source.
-export function copyMessages(
+export async function copyMessages(
   clientId: number,
   sourceMcLabels: string[],
   targetAudienceKeys: string[],
   opts: CopyOpts = {},
-): { created: Message[] } {
+): Promise<{ created: Message[] }> {
   // Resolve all sources up front so a bad label fails before any insert.
   const sources: Message[] = [];
   for (const label of sourceMcLabels) {
-    const source = getMessageByPmmid(clientId, label);
+    const source = await getMessageByPmmid(clientId, label);
     if (!source) {
       throw new MessageError(`message '${label}' not found`);
     }
@@ -496,7 +497,7 @@ export function copyMessages(
   // Resolve every target audience once.
   const targetAudienceRows = new Map<string, Audience>();
   for (const key of targetAudienceKeys) {
-    const row = findAudienceByKey(clientId, key);
+    const row = await findAudienceByKey(clientId, key);
     if (!row) {
       throw new MessageError(`audience '${key}' not found`);
     }
@@ -505,20 +506,20 @@ export function copyMessages(
 
   // Topic rows cached by key — every target inherits source.topic.
   const topicRows = new Map<string, Topic | null>();
-  const topicFor = (key: string): Topic => {
+  const topicFor = async (key: string): Promise<Topic> => {
     if (!topicRows.has(key)) {
-      const row = findTopicByKey(clientId, key);
+      const row = await findTopicByKey(clientId, key);
       if (!row) throw new MessageError(`topic '${key}' not found`);
       topicRows.set(key, row);
     }
     return topicRows.get(key) as Topic;
   };
 
-  const patterns = readClientPatterns(clientId);
-  const liveAll = listLiveMessages(clientId);
+  const patterns = await readClientPatterns(clientId);
+  const liveAll = await listLiveMessages(clientId);
   // Full audience list for by-key pmmid/trafficking patterns
   // ({{audiences[Audience_Key].Field}}).
-  const audienceList = listAudiences(clientId);
+  const audienceList = await listAudiences(clientId);
 
   // Plan-pass: build the placement for every (source × target audience) pair.
   // Planned rows count as occupants of their target cell so a batch copying
@@ -572,9 +573,8 @@ export function copyMessages(
   for (const p of plan) {
     const cloneable: MessageInput = pickWritable(p.source);
     const overrides: MessageInput = opts.fieldOverrides ?? {};
-    const merged = { ...cloneable, ...overrides };
     const audienceRow = targetAudienceRows.get(p.targetAud) as Audience;
-    const topicRow = topicFor(p.source.topic);
+    const topicRow = await topicFor(p.source.topic);
 
     const pmmid = generatePmmid(
       {
@@ -594,7 +594,7 @@ export function copyMessages(
         variant: p.variant,
         audience: p.targetAud,
         topic: p.source.topic,
-        landingUrl: merged.landingUrl,
+        landingUrl: { ...cloneable, ...overrides }.landingUrl,
       },
       audienceRow,
       topicRow,
@@ -603,7 +603,7 @@ export function copyMessages(
       pmmid,
     );
 
-    const row = db
+    const [row] = await db
       .insert(messages)
       .values({
         ...cloneable,
@@ -623,8 +623,7 @@ export function copyMessages(
         utmCd26: traffic.utm_cd26,
         finalTraffickedUrl: traffic.final_trafficked_url,
       })
-      .returning()
-      .get();
+      .returning();
     created.push(row);
   }
   return { created };
@@ -663,12 +662,12 @@ const BLOCKED_MOVE_STATUSES = new Set(["ACTIVE", "INACTIVE", "ARCHIVED"]);
 // regenerated. Rows in BLOCKED_MOVE_STATUSES are rejected up front.
 // On (number, variant) collision in the target cell, variant auto-bumps to the
 // next free char so moves always succeed without renumbering existing rows.
-export function moveMessages(
+export async function moveMessages(
   clientId: number,
   moves: MoveItem[],
   targetAudienceKey: string,
-): MoveResult {
-  const targetAudience = findAudienceByKey(clientId, targetAudienceKey);
+): Promise<MoveResult> {
+  const targetAudience = await findAudienceByKey(clientId, targetAudienceKey);
   if (!targetAudience) {
     return {
       ok: false,
@@ -677,10 +676,10 @@ export function moveMessages(
     };
   }
 
-  const patterns = readClientPatterns(clientId);
+  const patterns = await readClientPatterns(clientId);
   // Full audience list for by-key pmmid/trafficking patterns
   // ({{audiences[Audience_Key].Field}}).
-  const audienceList = listAudiences(clientId);
+  const audienceList = await listAudiences(clientId);
 
   // Pre-pass: resolve all sources + validate same-topic + optimistic version.
   type Resolved = {
@@ -690,7 +689,7 @@ export function moveMessages(
   };
   const resolved: Resolved[] = [];
   for (const m of moves) {
-    const source = getMessageByPmmid(clientId, m.mcLabel);
+    const source = await getMessageByPmmid(clientId, m.mcLabel);
     if (!source) {
       return { ok: false, reason: "not_found", mcLabel: m.mcLabel };
     }
@@ -711,7 +710,7 @@ export function moveMessages(
         current: source,
       };
     }
-    const topicRow = findTopicByKey(clientId, source.topic);
+    const topicRow = await findTopicByKey(clientId, source.topic);
     resolved.push({ item: m, source, topicRow });
   }
 
@@ -730,7 +729,7 @@ export function moveMessages(
   // cell. We start from the live messages and append our own plan as we go,
   // so a batch moving multiple MCs into the same cell doesn't collide with
   // itself.
-  const liveAll = listLiveMessages(clientId);
+  const liveAll = await listLiveMessages(clientId);
   type Plan = Resolved & { number: number; variant: string };
   const plan: Plan[] = [];
 
@@ -809,7 +808,7 @@ export function moveMessages(
       audienceList,
       newPmmid,
     );
-    const row = db
+    const [row] = await db
       .update(messages)
       .set({
         audience: targetAudienceKey,
@@ -824,13 +823,10 @@ export function moveMessages(
         utmCd26: traffic.utm_cd26,
         finalTraffickedUrl: traffic.final_trafficked_url,
         version: sql`${messages.version} + 1`,
-        updatedAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: nowUtc,
       })
-      .where(
-        and(eq(messages.clientId, clientId), eq(messages.id, p.source.id)),
-      )
-      .returning()
-      .get();
+      .where(and(eq(messages.clientId, clientId), eq(messages.id, p.source.id)))
+      .returning();
     updated.push(row);
   }
   return { ok: true, updated };

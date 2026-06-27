@@ -42,7 +42,7 @@ export async function writeFile(
   category: StorageCategory,
   ext: string,
 ): Promise<StoredFile> {
-  const client = getActiveClient();
+  const client = await getActiveClient();
   const sha = crypto.createHash("sha256").update(buffer).digest("hex");
   const now = new Date();
   const yyyy = String(now.getFullYear());

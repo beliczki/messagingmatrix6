@@ -8,12 +8,12 @@ type Params = { id: string };
 export const POST = withSession<Params>(async ({ claims, params }) => {
   const denial = denyDemo(claims);
   if (denial) return denial;
-  const before = getFile(claims.cid, params.id);
-  const result = restoreFile(claims.cid, params.id);
+  const before = await getFile(claims.cid, params.id);
+  const result = await restoreFile(claims.cid, params.id);
   if (!result.ok) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "uploaded_files",

@@ -9,7 +9,11 @@ export async function GET(req: NextRequest) {
   if (!claims) {
     return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
   }
-  const u = db.select().from(users).where(eq(users.id, claims.sub)).get();
+  const [u] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, claims.sub))
+    .limit(1);
   if (!u) {
     return NextResponse.json({ error: "user_not_found" }, { status: 404 });
   }

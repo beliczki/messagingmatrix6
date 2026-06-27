@@ -11,7 +11,7 @@ export async function readSessionFromCookies(): Promise<JwtClaims | null> {
   if (!token) return null;
   try {
     const claims = await verifySession(token);
-    if (claims.cid !== activeClientId()) return null; // foreign cid → reject
+    if (claims.cid !== (await activeClientId())) return null; // foreign cid → reject
     return claims;
   } catch {
     return null;

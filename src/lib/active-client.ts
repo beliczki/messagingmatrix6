@@ -21,7 +21,7 @@ function readEnvKey(): string {
   return k;
 }
 
-function seedDefaultsForClient(clientId: number) {
+async function seedDefaultsForClient(clientId: number) {
   const rows = defaultConfigSeed().map((r) => ({
     clientId,
     key: r.key,
@@ -29,32 +29,35 @@ function seedDefaultsForClient(clientId: number) {
     value: typeof r.value === "string" ? r.value : JSON.stringify(r.value),
   }));
   if (rows.length === 0) return;
-  db.insert(config).values(rows).run();
+  await db.insert(config).values(rows);
 }
 
-export function getActiveClient(): Client {
+export async function getActiveClient(): Promise<Client> {
   if (cached) return cached;
   const key = readEnvKey();
 
-  const existing = db.select().from(clients).where(eq(clients.key, key)).get();
+  const [existing] = await db
+    .select()
+    .from(clients)
+    .where(eq(clients.key, key))
+    .limit(1);
   if (existing) {
     cached = existing;
     return existing;
   }
 
   // Auto-create on first boot (Spec §17.2 / §17.6).
-  const inserted = db
+  const [inserted] = await db
     .insert(clients)
     .values({ key, name: key.charAt(0).toUpperCase() + key.slice(1) })
-    .returning()
-    .get();
-  seedDefaultsForClient(inserted.id);
+    .returning();
+  await seedDefaultsForClient(inserted.id);
   cached = inserted;
   return inserted;
 }
 
-export function activeClientId(): number {
-  return getActiveClient().id;
+export async function activeClientId(): Promise<number> {
+  return (await getActiveClient()).id;
 }
 
 // Test-only: clear the cached singleton between integration tests.

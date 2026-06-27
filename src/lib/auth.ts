@@ -72,12 +72,12 @@ export async function authenticate(
   email: string,
   password: string,
 ): Promise<User | null> {
-  const cid = activeClientId();
-  const user = db
+  const cid = await activeClientId();
+  const [user] = await db
     .select()
     .from(users)
     .where(and(eq(users.clientId, cid), eq(users.email, email)))
-    .get();
+    .limit(1);
   if (!user) return null;
   const ok = await verifyPassword(password, user.password);
   return ok ? user : null;

@@ -1,6 +1,6 @@
 import { and, count, eq, isNull, max, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { audiences, config, messages, type Audience } from "@/db/schema";
+import { audiences, config, messages, nowUtc, type Audience } from "@/db/schema";
 import { evaluatePattern } from "@/lib/patterns";
 
 const WRITABLE_FIELDS = [
@@ -35,77 +35,79 @@ export function pickWritable(input: unknown): AudienceInput {
   return out as AudienceInput;
 }
 
-export function listAudiences(
+export async function listAudiences(
   clientId: number,
   opts: { includeArchived?: boolean } = {},
-): Audience[] {
+): Promise<Array<Audience & { mcCount: number }>> {
   const where = opts.includeArchived
     ? eq(audiences.clientId, clientId)
     : and(eq(audiences.clientId, clientId), isNull(audiences.archivedAt));
-  const rows = db
+  const rows = await db
     .select()
     .from(audiences)
     .where(where)
-    .orderBy(audiences.orderIndex)
-    .all();
-  const counts = mcCountsByAudience(clientId);
+    .orderBy(audiences.orderIndex);
+  const counts = await mcCountsByAudience(clientId);
   return rows.map((r) => ({ ...r, mcCount: counts.get(r.key) ?? 0 }));
 }
 
 // Map<audience.key, count of messages referencing it (archived OR live)>.
 // One query for the whole client, used by listAudiences and the update-regen
 // guard.
-function mcCountsByAudience(clientId: number): Map<string, number> {
-  const rows = db
+async function mcCountsByAudience(
+  clientId: number,
+): Promise<Map<string, number>> {
+  const rows = await db
     .select({ key: messages.audience, n: count() })
     .from(messages)
     .where(eq(messages.clientId, clientId))
-    .groupBy(messages.audience)
-    .all();
+    .groupBy(messages.audience);
   const m = new Map<string, number>();
   for (const r of rows) m.set(r.key, r.n);
   return m;
 }
 
-export function countMessagesByAudience(
+export async function countMessagesByAudience(
   clientId: number,
   audienceKey: string,
-): number {
-  const row = db
+): Promise<number> {
+  const [row] = await db
     .select({ n: count() })
     .from(messages)
     .where(
       and(eq(messages.clientId, clientId), eq(messages.audience, audienceKey)),
-    )
-    .get();
+    );
   return row?.n ?? 0;
 }
 
-export function getAudience(clientId: number, id: number): Audience | null {
-  return (
-    db
-      .select()
-      .from(audiences)
-      .where(and(eq(audiences.clientId, clientId), eq(audiences.id, id)))
-      .get() ?? null
-  );
+export async function getAudience(
+  clientId: number,
+  id: number,
+): Promise<Audience | null> {
+  const rows = await db
+    .select()
+    .from(audiences)
+    .where(and(eq(audiences.clientId, clientId), eq(audiences.id, id)))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
-function nextOrderIndex(clientId: number): number {
-  const row = db
+async function nextOrderIndex(clientId: number): Promise<number> {
+  const [row] = await db
     .select({ m: max(audiences.orderIndex) })
     .from(audiences)
-    .where(eq(audiences.clientId, clientId))
-    .get();
+    .where(eq(audiences.clientId, clientId));
   return (row?.m ?? -1) + 1;
 }
 
-function readAudienceKeyPattern(clientId: number): string | null {
-  const row = db
+async function readAudienceKeyPattern(
+  clientId: number,
+): Promise<string | null> {
+  const [row] = await db
     .select()
     .from(config)
     .where(and(eq(config.clientId, clientId), eq(config.key, "patterns")))
-    .get();
+    .limit(1);
   if (!row) return null;
   try {
     const parsed = JSON.parse(row.value) as { audienceKey?: string };
@@ -117,15 +119,15 @@ function readAudienceKeyPattern(clientId: number): string | null {
 
 // If config.patterns.audienceKey is set, evaluate it. Otherwise: aud{N+1}.
 // Pattern context includes product + strategy + buyingPlatform + device + tag.
-export function generateAudienceKey(
+export async function generateAudienceKey(
   clientId: number,
   context: Pick<
     Audience,
     "product" | "strategy" | "buyingPlatform" | "device" | "tag"
   >,
   orderIndex: number,
-): string {
-  const pattern = readAudienceKeyPattern(clientId);
+): Promise<string> {
+  const pattern = await readAudienceKeyPattern(clientId);
   if (pattern) {
     const out = evaluatePattern(pattern, context as Record<string, unknown>);
     if (out.trim() !== "") return out;
@@ -133,14 +135,14 @@ export function generateAudienceKey(
   return `aud${orderIndex + 1}`;
 }
 
-export function createAudience(
+export async function createAudience(
   clientId: number,
   input: AudienceInput,
-): Audience {
-  const orderIndex = input.orderIndex ?? nextOrderIndex(clientId);
+): Promise<Audience> {
+  const orderIndex = input.orderIndex ?? (await nextOrderIndex(clientId));
   const key =
     input.key ??
-    generateAudienceKey(
+    (await generateAudienceKey(
       clientId,
       {
         product: input.product ?? null,
@@ -150,11 +152,11 @@ export function createAudience(
         tag: input.tag ?? null,
       },
       orderIndex,
-    );
+    ));
   if (!input.name) {
     throw new BadRequest("name is required");
   }
-  return db
+  const [row] = await db
     .insert(audiences)
     .values({
       clientId,
@@ -175,8 +177,8 @@ export function createAudience(
       lineitemName: input.lineitemName,
       lineitemId: input.lineitemId,
     })
-    .returning()
-    .get();
+    .returning();
+  return row;
 }
 
 // Fields that, when changed, may trigger an auto-key regeneration (matches
@@ -201,13 +203,15 @@ function shouldRegenerateAudienceKey(
   return false;
 }
 
-export function updateAudience(
+export async function updateAudience(
   clientId: number,
   id: number,
   expectedVersion: number,
   input: AudienceInput,
-): { ok: true; row: Audience } | { ok: false; current: Audience | null } {
-  const current = getAudience(clientId, id);
+): Promise<
+  { ok: true; row: Audience } | { ok: false; current: Audience | null }
+> {
+  const current = await getAudience(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) {
     return { ok: false, current };
@@ -221,10 +225,10 @@ export function updateAudience(
   if (
     input.key === undefined &&
     shouldRegenerateAudienceKey(current, input) &&
-    countMessagesByAudience(clientId, current.key) === 0
+    (await countMessagesByAudience(clientId, current.key)) === 0
   ) {
     const merged = { ...current, ...input } as Audience;
-    key = generateAudienceKey(
+    key = await generateAudienceKey(
       clientId,
       {
         product: merged.product,
@@ -237,17 +241,16 @@ export function updateAudience(
     );
   }
 
-  const updated = db
+  const [updated] = await db
     .update(audiences)
     .set({
       ...input,
       key,
       version: sql`${audiences.version} + 1`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: nowUtc,
     })
     .where(and(eq(audiences.clientId, clientId), eq(audiences.id, id)))
-    .returning()
-    .get();
+    .returning();
   return { ok: true, row: updated };
 }
 
@@ -258,28 +261,27 @@ export type ArchiveResult<T> =
   | { ok: true; row: T; cascadedMessageIds: number[] }
   | { ok: false; current: T | null };
 
-export function archiveAudience(
+export async function archiveAudience(
   clientId: number,
   id: number,
   expectedVersion: number,
-): ArchiveResult<Audience> {
-  const current = getAudience(clientId, id);
+): Promise<ArchiveResult<Audience>> {
+  const current = await getAudience(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
 
-  return db.transaction((tx) => {
-    const updated = tx
+  return db.transaction(async (tx) => {
+    const [updated] = await tx
       .update(audiences)
       .set({
-        archivedAt: sql`CURRENT_TIMESTAMP`,
+        archivedAt: nowUtc,
         version: sql`${audiences.version} + 1`,
-        updatedAt: sql`CURRENT_TIMESTAMP`,
+        updatedAt: nowUtc,
       })
       .where(and(eq(audiences.clientId, clientId), eq(audiences.id, id)))
-      .returning()
-      .get();
+      .returning();
 
-    const cascadedMessages = tx
+    const cascadedMessages = await tx
       .select({ id: messages.id })
       .from(messages)
       .where(
@@ -288,15 +290,15 @@ export function archiveAudience(
           eq(messages.audience, current.key),
           isNull(messages.archivedAt),
         ),
-      )
-      .all();
+      );
 
     if (cascadedMessages.length > 0) {
-      tx.update(messages)
+      await tx
+        .update(messages)
         .set({
-          archivedAt: sql`CURRENT_TIMESTAMP`,
+          archivedAt: nowUtc,
           version: sql`${messages.version} + 1`,
-          updatedAt: sql`CURRENT_TIMESTAMP`,
+          updatedAt: nowUtc,
         })
         .where(
           and(
@@ -304,8 +306,7 @@ export function archiveAudience(
             eq(messages.audience, current.key),
             isNull(messages.archivedAt),
           ),
-        )
-        .run();
+        );
     }
 
     return {
@@ -330,14 +331,16 @@ function nextNameSuffix(name: string): string {
 
 // Scan existing audience keys for the same base; pick max(n)+1 to survive
 // sparse states like base_1, base_3 → base_4.
-function nextKeyForDuplicate(clientId: number, sourceKey: string): string {
+async function nextKeyForDuplicate(
+  clientId: number,
+  sourceKey: string,
+): Promise<string> {
   const m = KEY_SUFFIX_RE.exec(sourceKey);
   const base = m ? m[1] : sourceKey;
-  const existing = db
+  const existing = await db
     .select({ key: audiences.key })
     .from(audiences)
-    .where(eq(audiences.clientId, clientId))
-    .all();
+    .where(eq(audiences.clientId, clientId));
   const baseEsc = base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const re = new RegExp(`^${baseEsc}_(\\d+)$`);
   let max = 0;
@@ -351,15 +354,18 @@ function nextKeyForDuplicate(clientId: number, sourceKey: string): string {
   return `${base}_${max + 1}`;
 }
 
-export function duplicateAudience(clientId: number, id: number): Audience | null {
-  const src = getAudience(clientId, id);
+export async function duplicateAudience(
+  clientId: number,
+  id: number,
+): Promise<Audience | null> {
+  const src = await getAudience(clientId, id);
   if (!src) return null;
-  const orderIndex = nextOrderIndex(clientId);
-  return db
+  const orderIndex = await nextOrderIndex(clientId);
+  const [row] = await db
     .insert(audiences)
     .values({
       clientId,
-      key: nextKeyForDuplicate(clientId, src.key),
+      key: await nextKeyForDuplicate(clientId, src.key),
       name: nextNameSuffix(src.name),
       orderIndex,
       status: src.status,
@@ -376,8 +382,8 @@ export function duplicateAudience(clientId: number, id: number): Audience | null
       lineitemName: src.lineitemName,
       lineitemId: src.lineitemId,
     })
-    .returning()
-    .get();
+    .returning();
+  return row;
 }
 
 // Hard delete. Refuses if any message row references the audience by key
@@ -389,57 +395,54 @@ export type DeleteResult<T> =
   | { ok: false; reason: "version_mismatch"; current: T }
   | { ok: false; reason: "in_use"; referencedBy: number[] };
 
-export function deleteAudience(
+export async function deleteAudience(
   clientId: number,
   id: number,
   expectedVersion: number,
-): DeleteResult<Audience> {
-  const current = getAudience(clientId, id);
+): Promise<DeleteResult<Audience>> {
+  const current = await getAudience(clientId, id);
   if (!current) return { ok: false, reason: "not_found" };
   if (current.version !== expectedVersion) {
     return { ok: false, reason: "version_mismatch", current };
   }
-  const refs = db
+  const refs = await db
     .select({ id: messages.id })
     .from(messages)
     .where(
-      and(
-        eq(messages.clientId, clientId),
-        eq(messages.audience, current.key),
-      ),
+      and(eq(messages.clientId, clientId), eq(messages.audience, current.key)),
     )
-    .limit(50)
-    .all();
+    .limit(50);
   if (refs.length > 0) {
     return { ok: false, reason: "in_use", referencedBy: refs.map((r) => r.id) };
   }
-  db.delete(audiences)
-    .where(and(eq(audiences.clientId, clientId), eq(audiences.id, id)))
-    .run();
+  await db
+    .delete(audiences)
+    .where(and(eq(audiences.clientId, clientId), eq(audiences.id, id)));
   return { ok: true };
 }
 
 // Restore an audience. No parent-first guard (audiences are top-level).
 // Does NOT cascade-restore the messages — user must restore those individually
 // if they want them back.
-export function restoreAudience(
+export async function restoreAudience(
   clientId: number,
   id: number,
   expectedVersion: number,
-): { ok: true; row: Audience } | { ok: false; current: Audience | null } {
-  const current = getAudience(clientId, id);
+): Promise<
+  { ok: true; row: Audience } | { ok: false; current: Audience | null }
+> {
+  const current = await getAudience(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
-  const updated = db
+  const [updated] = await db
     .update(audiences)
     .set({
       archivedAt: null,
       version: sql`${audiences.version} + 1`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: nowUtc,
     })
     .where(and(eq(audiences.clientId, clientId), eq(audiences.id, id)))
-    .returning()
-    .get();
+    .returning();
   return { ok: true, row: updated };
 }
 

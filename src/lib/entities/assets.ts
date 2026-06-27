@@ -1,6 +1,6 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { assets, type Asset } from "@/db/schema";
+import { assets, nowUtc, type Asset } from "@/db/schema";
 
 const WRITABLE_FIELDS = [
   "brand",
@@ -28,90 +28,96 @@ export function pickWritable(input: unknown): AssetInput {
   return out as AssetInput;
 }
 
-export function listAssets(
+export async function listAssets(
   clientId: number,
   opts: { includeArchived?: boolean } = {},
-): Asset[] {
+): Promise<Asset[]> {
   const where = opts.includeArchived
     ? eq(assets.clientId, clientId)
     : and(eq(assets.clientId, clientId), isNull(assets.archivedAt));
-  return db.select().from(assets).where(where).orderBy(assets.id).all();
+  return db.select().from(assets).where(where).orderBy(assets.id);
 }
 
-export function getAsset(clientId: number, id: number): Asset | null {
-  return (
-    db
-      .select()
-      .from(assets)
-      .where(and(eq(assets.clientId, clientId), eq(assets.id, id)))
-      .get() ?? null
-  );
+export async function getAsset(
+  clientId: number,
+  id: number,
+): Promise<Asset | null> {
+  const rows = await db
+    .select()
+    .from(assets)
+    .where(and(eq(assets.clientId, clientId), eq(assets.id, id)))
+    .limit(1);
+  return rows[0] ?? null;
 }
 
-export function createAsset(clientId: number, input: AssetInput): Asset {
-  return db.insert(assets).values({ ...input, clientId }).returning().get();
+export async function createAsset(
+  clientId: number,
+  input: AssetInput,
+): Promise<Asset> {
+  const [row] = await db
+    .insert(assets)
+    .values({ ...input, clientId })
+    .returning();
+  return row;
 }
 
-export function updateAsset(
+export async function updateAsset(
   clientId: number,
   id: number,
   expectedVersion: number,
   input: AssetInput,
-): { ok: true; row: Asset } | { ok: false; current: Asset | null } {
-  const current = getAsset(clientId, id);
+): Promise<{ ok: true; row: Asset } | { ok: false; current: Asset | null }> {
+  const current = await getAsset(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
-  const updated = db
+  const [updated] = await db
     .update(assets)
     .set({
       ...input,
       version: sql`${assets.version} + 1`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: nowUtc,
     })
     .where(and(eq(assets.clientId, clientId), eq(assets.id, id)))
-    .returning()
-    .get();
+    .returning();
   return { ok: true, row: updated };
 }
 
-export function archiveAsset(
+export async function archiveAsset(
   clientId: number,
   id: number,
   expectedVersion: number,
-): { ok: true; row: Asset } | { ok: false; current: Asset | null } {
-  const current = getAsset(clientId, id);
+): Promise<{ ok: true; row: Asset } | { ok: false; current: Asset | null }> {
+  const current = await getAsset(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
-  const updated = db
+  const [updated] = await db
     .update(assets)
     .set({
-      archivedAt: sql`CURRENT_TIMESTAMP`,
+      archivedAt: nowUtc,
       version: sql`${assets.version} + 1`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: nowUtc,
     })
     .where(and(eq(assets.clientId, clientId), eq(assets.id, id)))
-    .returning()
-    .get();
+    .returning();
   return { ok: true, row: updated };
 }
 
-export function restoreAsset(
+export async function restoreAsset(
   clientId: number,
   id: number,
   expectedVersion: number,
-): { ok: true; row: Asset } | { ok: false; current: Asset | null } {
-  const current = getAsset(clientId, id);
+): Promise<{ ok: true; row: Asset } | { ok: false; current: Asset | null }> {
+  const current = await getAsset(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
-  const updated = db
+  const [updated] = await db
     .update(assets)
     .set({
       archivedAt: null,
       version: sql`${assets.version} + 1`,
-      updatedAt: sql`CURRENT_TIMESTAMP`,
+      updatedAt: nowUtc,
     })
     .where(and(eq(assets.clientId, clientId), eq(assets.id, id)))
-    .returning()
-    .get();
+    .returning();
   return { ok: true, row: updated };
 }

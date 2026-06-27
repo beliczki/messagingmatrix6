@@ -28,18 +28,16 @@ export type AuditInput = {
   after?: unknown;
 };
 
-export function writeAudit(input: AuditInput): void {
-  db.insert(auditLog)
-    .values({
-      clientId: input.clientId,
-      userId: input.userId,
-      entityType: input.entityType,
-      entityId: String(input.entityId),
-      action: input.action,
-      before: input.before === undefined ? null : JSON.stringify(input.before),
-      after: input.after === undefined ? null : JSON.stringify(input.after),
-    })
-    .run();
+export async function writeAudit(input: AuditInput): Promise<void> {
+  await db.insert(auditLog).values({
+    clientId: input.clientId,
+    userId: input.userId,
+    entityType: input.entityType,
+    entityId: String(input.entityId),
+    action: input.action,
+    before: input.before === undefined ? null : JSON.stringify(input.before),
+    after: input.after === undefined ? null : JSON.stringify(input.after),
+  });
   broadcast(input.clientId, {
     entity: input.entityType,
     ids: [input.entityId],
@@ -53,11 +51,11 @@ export type AuditRow = typeof auditLog.$inferSelect;
 /** Revision history for a single entity — newest first, capped at 100.
  *  Reads the `before`/`after` snapshots `writeAudit` already records on
  *  every change; no separate history store. */
-export function readEntityHistory(
+export async function readEntityHistory(
   clientId: number,
   entityType: string,
   entityId: string | number,
-): AuditRow[] {
+): Promise<AuditRow[]> {
   return db
     .select()
     .from(auditLog)
@@ -69,6 +67,5 @@ export function readEntityHistory(
       ),
     )
     .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
-    .limit(100)
-    .all();
+    .limit(100);
 }

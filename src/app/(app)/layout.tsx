@@ -1,4 +1,3 @@
-import path from "node:path";
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
@@ -9,10 +8,8 @@ import { QueryProvider } from "../_components/QueryProvider";
 import AppShell from "../_components/AppShell";
 import pkg from "../../../package.json";
 
-function resolveDbPath(): string {
-  const url = process.env.DATABASE_URL;
-  if (!url) return path.resolve(process.cwd(), "db", "matrix.db");
-  return url.replace(/^file:/, "");
+function resolveDbUrl(): string {
+  return process.env.DATABASE_URL ?? "(DATABASE_URL unset)";
 }
 
 // Authed app shell. Anything under /(app)/ requires login + matches active client.
@@ -24,10 +21,14 @@ export default async function AppLayout({
   const claims = await readSessionFromCookies();
   if (!claims) redirect("/login");
 
-  const u = db.select().from(users).where(eq(users.id, claims.sub)).get();
+  const [u] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, claims.sub))
+    .limit(1);
   if (!u) redirect("/login");
 
-  const client = getActiveClient();
+  const client = await getActiveClient();
 
   const aboutInfo = {
     activeClient: {
@@ -40,7 +41,7 @@ export default async function AppLayout({
       activeClientKey: process.env.ACTIVE_CLIENT_KEY ?? "(unset)",
       nodeEnv: process.env.NODE_ENV ?? "(unset)",
     },
-    dbPath: resolveDbPath(),
+    dbPath: resolveDbUrl(),
     appVersion: pkg.version,
   };
 

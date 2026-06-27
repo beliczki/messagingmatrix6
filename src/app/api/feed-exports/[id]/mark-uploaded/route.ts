@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
-import { sql } from "drizzle-orm";
 import { db } from "@/db";
-import { feedExports } from "@/db/schema";
+import { feedExports, nowUtc } from "@/db/schema";
 import { withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 
@@ -13,15 +12,15 @@ function parseId(s: string): number | null {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
-export const POST = withSession<Params>(({ claims, params }) => {
+export const POST = withSession<Params>(async ({ claims, params }) => {
   const id = parseId(params.id);
   if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
 
-  const row = db
+  const [row] = await db
     .select()
     .from(feedExports)
     .where(and(eq(feedExports.clientId, claims.cid), eq(feedExports.id, id)))
-    .get();
+    .limit(1);
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
   if (row.uploadedToAdformAt) {
@@ -31,15 +30,15 @@ export const POST = withSession<Params>(({ claims, params }) => {
     );
   }
 
-  db.update(feedExports)
+  await db
+    .update(feedExports)
     .set({
-      uploadedToAdformAt: sql`(CURRENT_TIMESTAMP)`,
+      uploadedToAdformAt: nowUtc,
       uploadedBy: claims.sub,
     })
-    .where(and(eq(feedExports.clientId, claims.cid), eq(feedExports.id, id)))
-    .run();
+    .where(and(eq(feedExports.clientId, claims.cid), eq(feedExports.id, id)));
 
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "feed_exports",
@@ -54,11 +53,11 @@ export const POST = withSession<Params>(({ claims, params }) => {
     },
   });
 
-  const updated = db
+  const [updated] = await db
     .select()
     .from(feedExports)
     .where(and(eq(feedExports.clientId, claims.cid), eq(feedExports.id, id)))
-    .get();
+    .limit(1);
 
   return NextResponse.json({
     feedExport: {

@@ -20,10 +20,10 @@ export const POST = withAdmin(async ({ req, claims }) => {
   ) {
     return NextResponse.json({ error: "bad_body" }, { status: 400 });
   }
-  const before = listKeywords(claims.cid, { form, field });
-  reorderKeywords(claims.cid, form, field, ids as number[]);
-  const after = listKeywords(claims.cid, { form, field });
-  writeAudit({
+  const before = await listKeywords(claims.cid, { form, field });
+  await reorderKeywords(claims.cid, form, field, ids as number[]);
+  const after = await listKeywords(claims.cid, { form, field });
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "keywords",

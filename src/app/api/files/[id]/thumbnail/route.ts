@@ -14,7 +14,7 @@ const ALLOWED_OUTPUT = new Set(["image/jpeg", "image/png", "image/webp", "image/
 
 // Spec §4.4 — on-the-fly resize cached under storage/{clientKey}/.thumbs/.
 export const GET = withSession<Params>(async ({ req, claims, params }) => {
-  const row = getFile(claims.cid, params.id);
+  const row = await getFile(claims.cid, params.id);
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
   if (!row.mimeType?.startsWith("image/")) {
     return NextResponse.json({ error: "not_an_image" }, { status: 415 });
@@ -42,7 +42,7 @@ export const GET = withSession<Params>(async ({ req, claims, params }) => {
     ALLOWED_WIDTHS.find((n) => n >= wRaw) ??
     ALLOWED_WIDTHS[ALLOWED_WIDTHS.length - 1];
 
-  const client = getActiveClient();
+  const client = await getActiveClient();
   const ext = path.extname(row.storagePath) || ".jpg";
   const thumbRel = path.join(
     client.key,

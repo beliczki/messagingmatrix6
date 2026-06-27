@@ -55,7 +55,7 @@ export const POST = withAdmin(async ({ req, claims }) => {
 
   let result: ImportResult;
   try {
-    result = importErsteXlsx(buffer, {
+    result = await importErsteXlsx(buffer, {
       clientId: claims.cid,
       wipeFirst,
       dryRun,
@@ -69,7 +69,7 @@ export const POST = withAdmin(async ({ req, claims }) => {
     for (const entity of ENTITY_TYPES) {
       const count = result.inserted[entity];
       if (count > 0) {
-        writeAudit({
+        await writeAudit({
           clientId: claims.cid,
           userId: claims.sub,
           entityType: entity,

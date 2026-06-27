@@ -53,24 +53,23 @@ function shapeRow(
   };
 }
 
-function resolveEmails(
+async function resolveEmails(
   rows: Array<{ exportedBy: string | null; uploadedBy: string | null }>,
-): Map<string, string> {
+): Promise<Map<string, string>> {
   const ids = new Set<string>();
   for (const r of rows) {
     if (r.exportedBy) ids.add(r.exportedBy);
     if (r.uploadedBy) ids.add(r.uploadedBy);
   }
   if (ids.size === 0) return new Map();
-  const found = db
+  const found = await db
     .select({ id: users.id, email: users.email })
     .from(users)
-    .where(inArray(users.id, [...ids]))
-    .all();
+    .where(inArray(users.id, [...ids]));
   return new Map(found.map((u) => [u.id, u.email]));
 }
 
-export const GET = withSession(({ req, claims }) => {
+export const GET = withSession(async ({ req, claims }) => {
   const url = new URL(req.url);
   const product = url.searchParams.get("product");
 
@@ -81,14 +80,13 @@ export const GET = withSession(({ req, claims }) => {
       )
     : eq(feedExports.clientId, claims.cid);
 
-  const rows = db
+  const rows = await db
     .select()
     .from(feedExports)
     .where(where)
-    .orderBy(desc(feedExports.exportedAt))
-    .all();
+    .orderBy(desc(feedExports.exportedAt));
 
-  const emailById = resolveEmails(rows);
+  const emailById = await resolveEmails(rows);
   return NextResponse.json({
     feedExports: rows.map((r) => shapeRow(r, emailById)),
   });
@@ -124,7 +122,7 @@ export const POST = withSession(async ({ req, claims }) => {
   // commits to a download). Same response shape minus the persisted row.
   const dryRun = body.dryRun === true;
 
-  const built = buildFeedRowSet({
+  const built = await buildFeedRowSet({
     clientId: claims.cid,
     product,
     defaultMessageId,
@@ -161,7 +159,7 @@ export const POST = withSession(async ({ req, claims }) => {
   // The user-facing preview diff uses an AdForm snapshot if one is uploaded
   // (matched by PMMID — MM6 has no advert_id, AdForm has). Otherwise fall
   // back to the MM6-last-export diff we already computed for versioning.
-  const snapshotRow = db
+  const [snapshotRow] = await db
     .select()
     .from(feedExports)
     .where(
@@ -171,7 +169,7 @@ export const POST = withSession(async ({ req, claims }) => {
         eq(feedExports.product, product),
       ),
     )
-    .get();
+    .limit(1);
   const snapshotPayload = snapshotRow
     ? deserializePayload(snapshotRow.payloadJson)
     : null;
@@ -227,7 +225,7 @@ export const POST = withSession(async ({ req, claims }) => {
     });
   }
 
-  const inserted = db
+  const [inserted] = await db
     .insert(feedExports)
     .values({
       clientId: claims.cid,
@@ -240,10 +238,9 @@ export const POST = withSession(async ({ req, claims }) => {
       payloadJson: serializePayload(built.rowSet),
       notes,
     })
-    .returning()
-    .get();
+    .returning();
 
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "feed_exports",
@@ -260,7 +257,7 @@ export const POST = withSession(async ({ req, claims }) => {
     },
   });
 
-  const emailById = resolveEmails([inserted]);
+  const emailById = await resolveEmails([inserted]);
   return NextResponse.json({
     feedExport: shapeRow(inserted, emailById),
     decision,

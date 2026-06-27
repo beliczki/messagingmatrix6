@@ -31,25 +31,25 @@ export default async function SharePage({
 }) {
   const { id } = await params;
 
-  const share = db
+  const [share] = await db
     .select()
     .from(shareGalleries)
     .where(eq(shareGalleries.id, id))
-    .get();
+    .limit(1);
   if (!share) notFound();
 
   if (share.archivedAt === null) {
-    db.update(shareGalleries)
+    await db
+      .update(shareGalleries)
       .set({ viewCount: sql`${shareGalleries.viewCount} + 1` })
-      .where(eq(shareGalleries.id, id))
-      .run();
+      .where(eq(shareGalleries.id, id));
   }
 
-  const client = db
+  const [client] = await db
     .select()
     .from(clients)
     .where(eq(clients.id, share.clientId))
-    .get();
+    .limit(1);
   if (!client) notFound();
 
   const meta: SnapshotMetadata = (() => {
@@ -75,7 +75,7 @@ export default async function SharePage({
   const creativeRows = (meta.creatives ?? []) as SnapshotCreative[];
   const fileRows = (meta.files ?? []) as SnapshotFile[];
 
-  const laf = getLookAndFeelByClientId(client.id);
+  const laf = await getLookAndFeelByClientId(client.id);
   const style = lookAndFeelToCssVars(laf) as CSSProperties;
 
   const generated = meta.generatedAt

@@ -42,16 +42,22 @@ function makeTemplate(
   );
 }
 
-beforeEach(() => {
-  h = createTestDb();
+beforeEach(async () => {
+  h = await createTestDb();
   templatesRoot = fs.mkdtempSync(path.join(os.tmpdir(), "mm6-tpl-"));
   _setTemplatesRootForTests(templatesRoot);
-  erste = db.insert(clients).values({ key: "erste", name: "Erste" }).returning().get();
-  telekom = db.insert(clients).values({ key: "telekom", name: "Telekom" }).returning().get();
+  [erste] = await db
+    .insert(clients)
+    .values({ key: "erste", name: "Erste" })
+    .returning();
+  [telekom] = await db
+    .insert(clients)
+    .values({ key: "telekom", name: "Telekom" })
+    .returning();
 });
 
-afterEach(() => {
-  h.cleanup();
+afterEach(async () => {
+  await h.cleanup();
   fs.rmSync(templatesRoot, { recursive: true, force: true });
 });
 
@@ -100,26 +106,24 @@ describe("template scanner", () => {
     expect(listAllTemplates().map((t) => t.name)).toEqual(["a", "b"]);
   });
 
-  it("listVisibleTemplates with no per-client config → all visible (sensible default for fresh clients)", () => {
+  it("listVisibleTemplates with no per-client config → all visible (sensible default for fresh clients)", async () => {
     makeTemplate(templatesRoot, "a", { sizes: ["300x250"] });
     makeTemplate(templatesRoot, "b", { sizes: ["300x250"] });
-    expect(listVisibleTemplates(erste.id).map((t) => t.name)).toEqual(["a", "b"]);
+    expect((await listVisibleTemplates(erste.id)).map((t) => t.name)).toEqual(["a", "b"]);
   });
 
-  it("listVisibleTemplates respects config.visibleTemplates per client", () => {
+  it("listVisibleTemplates respects config.visibleTemplates per client", async () => {
     makeTemplate(templatesRoot, "a", { sizes: ["300x250"] });
     makeTemplate(templatesRoot, "b", { sizes: ["300x250"] });
-    db.insert(config)
-      .values({
-        clientId: erste.id,
-        key: "visibleTemplates",
-        value: JSON.stringify({ a: true, b: false }),
-        category: "templates",
-      })
-      .run();
-    expect(listVisibleTemplates(erste.id).map((t) => t.name)).toEqual(["a"]);
+    await db.insert(config).values({
+      clientId: erste.id,
+      key: "visibleTemplates",
+      value: JSON.stringify({ a: true, b: false }),
+      category: "templates",
+    });
+    expect((await listVisibleTemplates(erste.id)).map((t) => t.name)).toEqual(["a"]);
     // Telekom has no config → still sees both.
-    expect(listVisibleTemplates(telekom.id).map((t) => t.name)).toEqual(["a", "b"]);
+    expect((await listVisibleTemplates(telekom.id)).map((t) => t.name)).toEqual(["a", "b"]);
   });
 
   it("returns null for unknown template", () => {

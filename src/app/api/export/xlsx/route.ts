@@ -9,15 +9,15 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export const GET = withSession(({ claims }) => {
-  const client = db
+export const GET = withSession(async ({ claims }) => {
+  const [client] = await db
     .select()
     .from(clients)
     .where(eq(clients.id, claims.cid))
-    .get();
+    .limit(1);
   const clientKey = client?.key ?? `client-${claims.cid}`;
 
-  const { buffer } = exportClientXlsx(claims.cid);
+  const { buffer } = await exportClientXlsx(claims.cid);
   const filename = `${clientKey}-${todayIso()}.xlsx`;
 
   return new NextResponse(new Uint8Array(buffer), {

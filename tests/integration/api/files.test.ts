@@ -26,25 +26,23 @@ const TINY_PNG = Buffer.from(
   "base64",
 );
 
-beforeEach(() => {
-  h = createTestDb();
+beforeEach(async () => {
+  h = await createTestDb();
   storageRoot = fs.mkdtempSync(path.join(os.tmpdir(), "mm6-storage-"));
   _setStorageRootForTests(storageRoot);
 
-  erste = db
+  [erste] = await db
     .insert(clients)
     .values({ key: "erste", name: "Erste" })
-    .returning()
-    .get();
-  telekom = db
+    .returning();
+  [telekom] = await db
     .insert(clients)
     .values({ key: "telekom", name: "Telekom" })
-    .returning()
-    .get();
+    .returning();
 });
 
-afterEach(() => {
-  h.cleanup();
+afterEach(async () => {
+  await h.cleanup();
   fs.rmSync(storageRoot, { recursive: true, force: true });
 });
 
@@ -120,8 +118,8 @@ describe("file upload + sha256 dedup", () => {
       category: "asset",
       uploadedBy: "u-telekom",
     });
-    expect(getFile(erste.id, t.id)).toBeNull();
-    expect(getFile(telekom.id, t.id)?.id).toBe(t.id);
+    expect(await getFile(erste.id, t.id)).toBeNull();
+    expect((await getFile(telekom.id, t.id))?.id).toBe(t.id);
   });
 
   it("listFiles is per-client", async () => {
@@ -141,9 +139,9 @@ describe("file upload + sha256 dedup", () => {
       category: "asset",
       uploadedBy: "u2",
     });
-    expect(listFiles(erste.id)).toHaveLength(1);
-    expect(listFiles(telekom.id)).toHaveLength(1);
-    expect(listFiles(erste.id)[0].originalFilename).toBe("e.png");
+    expect(await listFiles(erste.id)).toHaveLength(1);
+    expect(await listFiles(telekom.id)).toHaveLength(1);
+    expect((await listFiles(erste.id))[0].originalFilename).toBe("e.png");
   });
 
   it("deleting last logical row unlinks bytes; deleting one of N keeps bytes on disk", async () => {
@@ -182,19 +180,19 @@ describe("file upload + sha256 dedup", () => {
       category: "asset",
       uploadedBy: "u",
     });
-    const r = archiveFile(erste.id, f.id);
+    const r = await archiveFile(erste.id, f.id);
     expect(r.ok).toBe(true);
-    expect(getFile(erste.id, f.id)?.archivedAt).not.toBeNull();
+    expect((await getFile(erste.id, f.id))?.archivedAt).not.toBeNull();
     // Bytes still on disk.
     expect((await readFileBytes(f.storagePath)).length).toBe(TINY_PNG.length);
     // Default list filter excludes it.
-    expect(listFiles(erste.id).map((x) => x.id)).not.toContain(f.id);
+    expect((await listFiles(erste.id)).map((x) => x.id)).not.toContain(f.id);
     expect(
-      listFiles(erste.id, { includeArchived: true }).map((x) => x.id),
+      (await listFiles(erste.id, { includeArchived: true })).map((x) => x.id),
     ).toContain(f.id);
 
-    const back = restoreFile(erste.id, f.id);
+    const back = await restoreFile(erste.id, f.id);
     expect(back.ok).toBe(true);
-    expect(getFile(erste.id, f.id)?.archivedAt).toBeNull();
+    expect((await getFile(erste.id, f.id))?.archivedAt).toBeNull();
   });
 });

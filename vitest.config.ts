@@ -31,7 +31,7 @@ export default defineConfig({
           // truncates + re-seeds, so files must run strictly serially — no two
           // files racing on the shared schema (DROP/CREATE/TRUNCATE).
           sequence: { concurrent: false },
-          poolOptions: { threads: { singleThread: true, maxThreads: 1, minThreads: 1 } },
+          poolOptions: { threads: { singleThread: true } },
         },
       },
       {

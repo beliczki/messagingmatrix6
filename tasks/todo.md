@@ -3058,10 +3058,17 @@ not compile until the sweep completes — foundation + sweep land as ONE commit.
       `pm2 restart`. LIVE: erste.messagingmatrix.ai serves from Postgres (config-public
       OK, 401 on auth/me, 0 unstable restarts). Backups taken: box matrix.db.pre-pg-cutover-*
       + .env.pre-pg-cutover-*. Rollback = restore .env + pm2 restart.
-- [ ] FINAL: merge feat/monitoring-ingest → main (origin/main still 07681a1, untouched;
-      local main already == feat at 292d3b3) + repoint box to main (same commit, no
-      rebuild). Then suggest version bump + CHANGELOG. The ~13 scripts/ still need an
-      async pass (excluded from build for now).
+- [x] MERGED TO MAIN 2026-06-27: origin/main 07681a1 → 2a60fc5 (fast-forward, linear).
+      Box repointed to main (same code → no rebuild/restart, app stayed online).
+      CHANGELOG.md added (Keep-a-Changelog; entry under [Unreleased]).
+      NO version bump — stays 6.0.0-pre per the pre-launch versioning rule; the change
+      is captured in CHANGELOG [Unreleased], promoted to 6.0.0 at the launch bump.
+- [ ] Follow-ups (non-blocking): convert the 13 one-off `scripts/*` to async (excluded
+      from build via tsconfig); optionally delete the merged `feat/monitoring-ingest`
+      branch; remove the now-unused `better-sqlite3` dependency from package.json.
+
+### MIGRATION COMPLETE ✅ — SQLite→Postgres shared Supabase on Hetzner is LIVE for both
+### local dev and erste.messagingmatrix.ai. 345/345 tests green, merged to main.
 - [ ] ~~PG-D cutover wiring~~ (done above):
       * Local: set `DATABASE_URL=postgres://postgres:<pw>@localhost:5433/mm6` in `.env`
         (via SSH tunnel) so `npm run dev:*` hit the shared Hetzner DB.

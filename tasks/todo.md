@@ -3113,3 +3113,39 @@ rows backfilled. NOT yet done: deploy cutover (PG-D) + the one-off scripts.
 - Single shared DB for ALL clients, or one DB per client? (multi-tenancy: ACTIVE_CLIENT_KEY today)
 - Local read latency acceptable, or need embedded replica strategy?
 - Migration cutover order vs the GO LIVE slice above (do that on SQLite first, then this?)
+
+### Session checkpoint (2026-06-28) — MCP list_mc + Postgres migration fallout sweep
+
+Live prod (mm6-erste @ fb06b98). All shipped to main + deployed + tested (354 green).
+
+**MCP `list_mc` (25805b2):** was capped at 100/1000 and returned full 40-col rows
+(blows agent context). Now: lean projection by default + `verbose=true` for full row,
+`offset` paging (stable order number,variant), `limit` max 1000→5000, description
+spells it out (auto-renders on Settings→MCP via /api/mcp/tools). Unblocks the agent's
+naming/reporting joins — one `list_mc({limit:5000})` covers the ~3,400-MC set.
+
+**SQLite→PG dialect fallout (surfaced one-by-one in prod, now swept):**
+- `cc9fed7` — unawaited now-async lib calls serialized as `{}` → `.find is not a
+  function`: `/api/templates`, `/api/files`, `/api/messages/[id]/history`, `/api/render`.
+- `d0d21f9` — `/api/users` `GROUP BY` bare column (PG 42803, "Failed to load users")
+  → `DISTINCT ON`.
+- `a79faa0` — Assets search used `like()` (PG case-sensitive) → `ilike()`.
+- `fb06b98` — **keyword routes** (PATCH/DELETE/restore) left getKeyword/updateKeyword/
+  archiveKeyword/restoreKeyword + writeAudit unawaited (assignment-pattern blind spot
+  the first scan missed) → returned `{keyword:{}}`, dead 404 guards, garbage audit.
+  Also awaited the fire-and-forget writeAudit in keyword + files/upload routes.
+- Re-scanned ALL three call shapes (inline / `const x = fn()` / `return fn()`) across
+  src/app + src/lib — remaining unawaited = verified false positives (copy/move via
+  db.transaction; UploadDialog's own local uploadFile).
+
+**Tests (617b425, fb06b98):** `tests/integration/api/route-pg-regression.test.ts` — FIRST
+route-level tests (call exported handlers w/ forged session). 5 cases covering all the
+above; each verified to FAIL on the pre-fix code. Suite 349→354.
+
+**Infra (not in repo):** durable local-dev DB tunnel — `autossh` launchd agent
+`com.mm6.db-tunnel` keeps localhost:5433→Hetzner PG alive across sleep/wake. Documented
+in REBUILD_SPEC §19. (ECONNREFUSED on dev = tunnel down, not an app bug.)
+
+**Not done / open:** unawaited `writeAudit` elsewhere all checked — only keyword+upload
+were affected, now fixed. No version bump (still pre-6.0.0). `.codex/` untracked (not
+mine, left alone).

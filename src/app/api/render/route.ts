@@ -19,7 +19,7 @@ export const POST = withSession(async ({ req, claims }) => {
   // explicit override (used by share-gallery rendering with a frozen ruleset).
   const textFormatting = Array.isArray(body?.textFormatting)
     ? body.textFormatting
-    : listTextFormatting(claims.cid);
+    : await listTextFormatting(claims.cid);
 
   const inline = body?.inline === true;
   const skipAnimations = body?.skipAnimations === true;

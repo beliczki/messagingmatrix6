@@ -10,7 +10,7 @@ const VALID_CATS = new Set<StorageCategory>([
   "share-file",
 ]);
 
-export const GET = withSession(({ req, claims }) => {
+export const GET = withSession(async ({ req, claims }) => {
   const url = new URL(req.url);
   const cat = url.searchParams.get("category");
   const q = url.searchParams.get("q") ?? undefined;
@@ -20,6 +20,6 @@ export const GET = withSession(({ req, claims }) => {
       ? (cat as StorageCategory)
       : undefined;
   return NextResponse.json({
-    files: listFiles(claims.cid, { category, q, includeArchived }),
+    files: await listFiles(claims.cid, { category, q, includeArchived }),
   });
 });

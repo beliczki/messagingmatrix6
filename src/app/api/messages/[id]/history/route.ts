@@ -11,10 +11,10 @@ function parseId(s: string): number | null {
 
 // Revision history for one MC (message) — the audit-log `before`/`after`
 // snapshots.
-export const GET = withSession<Params>(({ claims, params }) => {
+export const GET = withSession<Params>(async ({ claims, params }) => {
   const id = parseId(params.id);
   if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
   return NextResponse.json({
-    history: readEntityHistory(claims.cid, "messages", id),
+    history: await readEntityHistory(claims.cid, "messages", id),
   });
 });

@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, like } from "drizzle-orm";
+import { and, desc, eq, isNull, ilike } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/db";
 import { uploadedFiles, nowUtc, type UploadedFile } from "@/db/schema";
@@ -93,7 +93,9 @@ export async function listFiles(
   const where = [eq(uploadedFiles.clientId, clientId)];
   if (opts.category) where.push(eq(uploadedFiles.category, opts.category));
   if (opts.q && opts.q.trim()) {
-    where.push(like(uploadedFiles.filename, `%${opts.q.trim()}%`));
+    // ilike, not like: Postgres LIKE is case-sensitive (SQLite's was not), so
+    // a plain like() would silently miss "GEORGE" vs "george.jpg".
+    where.push(ilike(uploadedFiles.filename, `%${opts.q.trim()}%`));
   }
   if (!opts.includeArchived) {
     where.push(isNull(uploadedFiles.archivedAt));

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq, isNull, isNotNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, isNotNull, sql } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/db";
 import { auditLog, users } from "@/db/schema";
@@ -25,17 +25,17 @@ function pickUser(u: typeof users.$inferSelect) {
 async function latestActionByUser(
   clientId: number,
 ): Promise<Map<string, string>> {
-  // Grouping by user_id with MAX(created_at) returns the action of the row that
-  // holds the max timestamp.
+  // Each user's most-recent audit action. Postgres rejects a bare `action`
+  // column alongside MAX(created_at) GROUP BY user_id (a SQLite-ism); DISTINCT
+  // ON (user_id) ordered by created_at DESC returns the latest row per user.
   const rows = await db
-    .select({
+    .selectDistinctOn([auditLog.userId], {
       userId: auditLog.userId,
       action: auditLog.action,
-      createdAt: sql<string>`MAX(${auditLog.createdAt})`.as("last_created"),
     })
     .from(auditLog)
     .where(and(eq(auditLog.clientId, clientId), isNotNull(auditLog.userId)))
-    .groupBy(auditLog.userId);
+    .orderBy(auditLog.userId, desc(auditLog.createdAt));
   const out = new Map<string, string>();
   for (const r of rows) {
     if (r.userId === null) continue;

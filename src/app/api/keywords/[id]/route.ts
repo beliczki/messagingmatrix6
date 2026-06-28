@@ -24,18 +24,18 @@ export const PATCH = withAdmin<Params>(async ({ req, claims, params }) => {
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "bad_body" }, { status: 400 });
   }
-  const before = getKeyword(claims.cid, id);
+  const before = await getKeyword(claims.cid, id);
   if (!before) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
   const { value, orderIndex } = body as Record<string, unknown>;
   try {
-    const row = updateKeyword(claims.cid, id, {
+    const row = await updateKeyword(claims.cid, id, {
       value: typeof value === "string" ? value : undefined,
       orderIndex: typeof orderIndex === "number" ? orderIndex : undefined,
     });
     if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
-    writeAudit({
+    await writeAudit({
       clientId: claims.cid,
       userId: claims.sub,
       entityType: "keywords",
@@ -58,13 +58,13 @@ export const DELETE = withAdmin<Params>(async ({ claims, params }) => {
   if (denial) return denial;
   const id = parseId(params.id);
   if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
-  const before = getKeyword(claims.cid, id);
+  const before = await getKeyword(claims.cid, id);
   if (!before) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const row = archiveKeyword(claims.cid, id);
+  const row = await archiveKeyword(claims.cid, id);
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "keywords",

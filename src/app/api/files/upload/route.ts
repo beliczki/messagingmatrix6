@@ -65,7 +65,7 @@ export const POST = withSession(async ({ req, claims }) => {
     dimensions,
   });
 
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "uploaded_files",

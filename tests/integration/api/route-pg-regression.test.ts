@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { and, eq } from "drizzle-orm";
 import type { NextRequest } from "next/server";
 import { db } from "@/db";
 import {
   auditLog,
   clients,
+  keywords,
   messages,
   uploadedFiles,
   users,
@@ -29,16 +31,26 @@ import { GET as templatesGET } from "@/app/api/templates/route";
 import { GET as filesGET } from "@/app/api/files/route";
 import { GET as historyGET } from "@/app/api/messages/[id]/history/route";
 import { GET as usersGET } from "@/app/api/users/route";
+import { PATCH as keywordsPATCH } from "@/app/api/keywords/[id]/route";
 
 let h: TestDb;
 let erste: { id: number };
 
-// readSession only touches headers + cookies; route handlers also read req.url.
-function authedReq(token: string, url = "http://localhost/api"): NextRequest {
+// readSession only touches headers + cookies; route handlers also read req.url
+// and, for writes, req.json().
+function authedReq(
+  token: string,
+  url = "http://localhost/api",
+  body?: unknown,
+): NextRequest {
   return {
     url,
-    headers: new Headers({ authorization: `Bearer ${token}` }),
+    headers: new Headers({
+      authorization: `Bearer ${token}`,
+      "content-type": "application/json",
+    }),
     cookies: { get: () => undefined },
+    json: async () => body,
   } as unknown as NextRequest;
 }
 
@@ -164,5 +176,55 @@ describe("route handlers: SQLite->Postgres regression", () => {
       (u: { email: string }) => u.email === "admin@erste.test",
     );
     expect(admin.lastAction).toBe("archive"); // the newer row, not "create"
+  });
+
+  it("PATCH /api/keywords/[id] returns the updated row AND writes a durable audit entry (unawaited-async + fire-and-forget guard)", async () => {
+    const [kw] = await db
+      .insert(keywords)
+      .values({
+        clientId: erste.id,
+        form: "deposit",
+        field: "amount",
+        value: "old",
+        orderIndex: 0,
+      })
+      .returning();
+
+    const res = await keywordsPATCH(
+      authedReq(
+        await adminToken(),
+        `http://localhost/api/keywords/${kw.id}`,
+        { value: "new" },
+      ),
+      { params: Promise.resolve({ id: String(kw.id) }) },
+    );
+    expect(res.status).toBe(200);
+    const body = await bodyOf(res);
+    // Pre-fix: updateKeyword's Promise was serialized as {}, so value was
+    // undefined and the persisted row never came back.
+    expect(body.keyword.value).toBe("new");
+
+    // The write actually committed.
+    const [persisted] = await db
+      .select()
+      .from(keywords)
+      .where(eq(keywords.id, kw.id));
+    expect(persisted.value).toBe("new");
+
+    // And the audit row is durable with REAL before/after (pre-fix the
+    // fire-and-forget writeAudit stringified Promises into "{}").
+    const audits = await db
+      .select()
+      .from(auditLog)
+      .where(
+        and(
+          eq(auditLog.clientId, erste.id),
+          eq(auditLog.entityType, "keywords"),
+        ),
+      );
+    expect(audits).toHaveLength(1);
+    expect(audits[0].action).toBe("update");
+    expect(JSON.parse(audits[0].before!).value).toBe("old");
+    expect(JSON.parse(audits[0].after!).value).toBe("new");
   });
 });

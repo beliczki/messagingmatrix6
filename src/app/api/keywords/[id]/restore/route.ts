@@ -15,13 +15,13 @@ export const POST = withAdmin<Params>(async ({ claims, params }) => {
   if (denial) return denial;
   const id = parseId(params.id);
   if (!id) return NextResponse.json({ error: "bad_id" }, { status: 400 });
-  const before = getKeyword(claims.cid, id);
+  const before = await getKeyword(claims.cid, id);
   if (!before) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const row = restoreKeyword(claims.cid, id);
+  const row = await restoreKeyword(claims.cid, id);
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
-  writeAudit({
+  await writeAudit({
     clientId: claims.cid,
     userId: claims.sub,
     entityType: "keywords",

@@ -196,14 +196,16 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
     "list_mc",
     {
       description:
-        "List messages (MCs). Filters: topic_key, audience_key, product (matches either audience.product or topic.product), status, monitoring_status (matches reporting.adform_status for the MC), limit (default 100). Default excludes soft-archived rows; pass include_archived=true to see them.",
+        "List messages (MCs). Returns a LEAN projection by default (id, number, variant, audience, topic, version_no, pmmid, status, start_date, end_date, template, name, headline) — pass verbose=true for the full row (copy/styles/custom_css/images/video). Paging: limit (default 100, MAX 5000 — set this explicitly to fetch more than 100 in one call) and offset (skip N rows; stable order is number,variant, so offset paging is gap-free for a full export). Filters: topic_key, audience_key, product (matches either audience.product or topic.product), status, monitoring_status (matches reporting.adform_status for the MC). Default excludes soft-archived rows; pass include_archived=true to see them.",
       inputSchema: {
         topic_key: z.string().optional(),
         audience_key: z.string().optional(),
         product: z.string().optional(),
         status: z.string().optional(),
         monitoring_status: z.string().optional(),
-        limit: z.number().int().positive().max(1000).optional(),
+        limit: z.number().int().positive().max(5000).optional(),
+        offset: z.number().int().nonnegative().optional(),
+        verbose: z.boolean().optional(),
         include_archived: z.boolean().optional(),
       },
     },
@@ -259,12 +261,40 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
         conds.push(inArray(messages.pmmid, labels));
       }
       const limit = args.limit ?? 100;
-      const rows = await db
-        .select()
-        .from(messages)
-        .where(and(...conds))
-        .orderBy(messages.number, messages.variant)
-        .limit(limit);
+      const offset = args.offset ?? 0;
+      // Lean projection: identity, scheduling, naming, and the reporting join
+      // key (pmmid) — drops the heavy blobs (copy/styles/custom_css/images).
+      // Keeps a full-table fetch cheap enough to page through in context.
+      const lean = {
+        id: messages.id,
+        number: messages.number,
+        variant: messages.variant,
+        audience: messages.audience,
+        topic: messages.topic,
+        versionNo: messages.versionNo,
+        pmmid: messages.pmmid,
+        status: messages.status,
+        startDate: messages.startDate,
+        endDate: messages.endDate,
+        template: messages.template,
+        name: messages.name,
+        headline: messages.headline,
+      };
+      const rows = args.verbose
+        ? await db
+            .select()
+            .from(messages)
+            .where(and(...conds))
+            .orderBy(messages.number, messages.variant)
+            .limit(limit)
+            .offset(offset)
+        : await db
+            .select(lean)
+            .from(messages)
+            .where(and(...conds))
+            .orderBy(messages.number, messages.variant)
+            .limit(limit)
+            .offset(offset);
       return jsonResult(rows);
     },
   );

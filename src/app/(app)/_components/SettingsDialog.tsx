@@ -9,6 +9,7 @@ type AboutInfo = {
   user: { email: string; role: string };
   env: { activeClientKey: string; nodeEnv: string };
   dbPath: string;
+  objectStore: string;
   appVersion: string;
 };
 

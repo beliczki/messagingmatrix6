@@ -5,6 +5,7 @@ type AboutInfo = {
   user: { email: string; role: string };
   env: { activeClientKey: string; nodeEnv: string };
   dbPath: string;
+  objectStore: string;
   appVersion: string;
 };
 
@@ -18,6 +19,7 @@ export function AboutTab({ info }: { info: AboutInfo }) {
       `${info.activeClient.name} (${info.activeClient.key}) — ${info.activeClient.status}`,
     ],
     ["Database path", info.dbPath],
+    ["Object store", info.objectStore],
     ["Logged in as", `${info.user.email} (${info.user.role})`],
   ];
 

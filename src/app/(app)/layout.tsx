@@ -12,6 +12,14 @@ function resolveDbUrl(): string {
   return process.env.DATABASE_URL ?? "(DATABASE_URL unset)";
 }
 
+// Object-store backend, no secret. S3 mode shows bucket + endpoint (incl. port);
+// otherwise the local-disk fallback path.
+function resolveObjectStore(): string {
+  const bucket = process.env.S3_BUCKET;
+  if (!bucket) return `local disk (${process.env.STORAGE_ROOT ?? "./storage"})`;
+  return `${bucket} @ ${process.env.S3_ENDPOINT ?? "(default AWS endpoint)"}`;
+}
+
 // Authed app shell. Anything under /(app)/ requires login + matches active client.
 export default async function AppLayout({
   children,
@@ -42,6 +50,7 @@ export default async function AppLayout({
       nodeEnv: process.env.NODE_ENV ?? "(unset)",
     },
     dbPath: resolveDbUrl(),
+    objectStore: resolveObjectStore(),
     appVersion: pkg.version,
   };
 

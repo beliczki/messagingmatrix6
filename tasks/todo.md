@@ -3149,3 +3149,104 @@ in REBUILD_SPEC §19. (ECONNREFUSED on dev = tunnel down, not an app bug.)
 **Not done / open:** unawaited `writeAudit` elsewhere all checked — only keyword+upload
 were affected, now fixed. No version bump (still pre-6.0.0). `.codex/` untracked (not
 mine, left alone).
+
+### Session checkpoint (2026-06-28) — PLAN: shared object store (Supabase Storage) for uploaded files
+
+**Problem:** Postgres is now shared (Hetzner Supabase via tunnel) but files are local
+disk only (`storage/{clientKey}/...`, `uploadedFiles.storagePath` = relative key).
+Shared DB rows point at bytes that exist on only one machine → drift. Fix: move the
+byte store to Supabase Storage so local dev + live share one bucket (mirrors the DB
+decision). Plus a one-time data reset.
+
+**Decisions (locked with user):**
+- Backend = Supabase Storage on existing Hetzner Supabase, S3-compatible API.
+- Code written against generic S3 (env-swappable to MinIO/R2 later).
+- `storagePath` relative keys reused verbatim as object keys → NO schema change.
+- Local-fs backend kept as fallback when S3 env absent (tests + offline dev).
+- Reset: KEEP all assets (migrate their files into bucket), HARD-DELETE all creatives
+  + their orphaned files, user re-uploads a fresh creative set via the app.
+
+**Reporting note (needs user confirm):** `reporting` has NO FK or loose ref to
+creatives (`bannerId`/`mcLabel` are free text). Clearing creatives → ZERO DB ref
+errors. Reporting only goes *semantically* stale. Recommend clearing it anyway since
+the new creative set makes old stats meaningless — but it's optional, not required.
+
+**Plan:**
+- [x] 1. [ops, read-only] SSH Hetzner: confirm storage-api is running + how exposed
+       (port/URL) + S3 protocol enabled vs REST-only. Decides @aws-sdk/client-s3 vs
+       @supabase/supabase-js storage client. Capture endpoint + credentials.
+- [x] 2. [infra] Create private bucket (e.g. `mm6-files`). Add env vars to .env.local +
+       live .env + .env.example (S3_ENDPOINT/REGION/BUCKET/ACCESS_KEY_ID/SECRET — final
+       names after step 1).
+- [x] 3. [code] storage.ts: extract a tiny driver, two impls (fs=current, s3=new),
+       selected by env. writeFile/readFileBytes/deleteStorageFile route through it. Key
+       computation unchanged. resolveStoragePath stops being a disk path.
+- [x] 4. [code] Thumbnails are a derived cache → keep LOCAL on-disk cache, but source
+       reads go through the bucket driver. Give files/[id]/thumbnail + share/[id]/file/
+       [fileId] a dedicated local `.thumbs` cache dir helper (not resolveStoragePath).
+- [ ] 5. [migration] Upload existing live `storage/{clientKey}/assets/**` to bucket under
+       same key. Verify count vs uploadedFiles asset rows.
+- [ ] 6. [migration] Hard-delete creatives rows + purge their fileId→uploadedFiles rows
+       + bucket objects, ref-counting against assets (shared-sha dedup) first.
+- [ ] 7. [migration] (pending confirm) truncate reporting for client.
+- [x] 8. [test] Keep fs-backend tests green; add s3-driver-selected + key round-trip test.
+- [ ] 9. [verify] Upload creative locally → appears on live (+ reverse); thumbnails both.
+- [ ] 10. [docs/version] minor-class change. Update .env.example, REBUILD_SPEC storage
+       section, memory note. Suggest version bump at end.
+
+**Templates root (`templates/`, TEMPLATES_ROOT) = OUT OF SCOPE** — separate admin-managed
+store, flag only.
+
+**[CORRECTION 2026-06-28]** SSH inspection found the Hetzner "Supabase" is Postgres-ONLY
+(studio + meta + db containers; NO storage-api/kong/auth). Supabase Storage was never
+deployed. Disk: 17G free of 38G. **Backend changed: MinIO on the box** (user re-confirmed).
+- MinIO container added to /opt/supabase-mm6 compose, bound 127.0.0.1:9000.
+- Networking mirrors the DB tunnel: live app (PM2 on host) → localhost:9000 direct;
+  local dev → MinIO via an SSH tunnel forward (extend com.mm6.db-tunnel to also fwd 9000).
+- Bytes always streamed through Next app routes (auth-gated, as today) → NO presigned
+  URLs to the browser → S3 endpoint only needs to be reachable by the Next server, which
+  the tunnel satisfies. No public exposure / TLS needed.
+- Env (generic S3): S3_ENDPOINT, S3_REGION=us-east-1, S3_BUCKET=mm6-files,
+  S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_FORCE_PATH_STYLE=true. Swappable to R2 later.
+
+
+**[PROGRESS 2026-06-28] Reversible core DONE + verified:**
+- MinIO live on box (bucket mm6-files), tunnel fwd :9000, health 200 from laptop.
+- storage.ts: env-selected driver (S3 when S3_BUCKET set, else local-fs fallback).
+  storagePath == object key, no schema change. Traversal guard centralized (safeRel).
+- Step 4: thumb routes needed NO change — resolveStoragePath still = local disk path,
+  now used only for the regenerable .thumbs cache; source reads go through the driver.
+- @aws-sdk/client-s3 added. .env.local (tunnel) + .env.example wired.
+- Tests 11/11 (tests/integration/api/files-s3.test.ts mocks the SDK, hermetic, no leak).
+- tsc clean. REAL S3 round-trip via tunnel w/ live creds = match.
+
+**REMAINING — all PROD-affecting / destructive, GATED on explicit go + pg_dump backup:**
+- [ ] 2b. Flip LIVE box app to S3: add S3_* to /var/www/mm6-erste/.env (endpoint
+       http://127.0.0.1:9000, direct), pm2 restart mm6-erste. Changes prod behavior.
+- [ ] 5. Migrate existing asset files (live disk /var/www/mm6-erste/storage) -> bucket,
+       same key. Scope = uploadedFiles referenced by surviving assets (incl. shared-sha).
+- [ ] 6. DESTRUCTIVE: delete all creatives rows + their uploadedFiles rows (ref-count vs
+       assets). Creative bytes never migrated -> just DB rows + local disk cleanup.
+- [ ] 7. DESTRUCTIVE: truncate reporting (clientId scope). Confirmed by user.
+- [ ] 9. E2E verify: upload creative locally -> visible on live; thumbnails both sides.
+- [ ] 10. Docs (REBUILD_SPEC storage section), memory note, version bump suggestion.
+
+**[DONE 2026-06-28] Full cutover complete + verified:**
+- 2b. Live app flipped to S3: S3_* in /var/www/mm6-erste/.env (direct 127.0.0.1:9000),
+      pm2 restarted, online, no post-flip errors. Backup: .env.pre-s3-cutover-*.
+- 5.  Asset files migrated: 154/154 DB-referenced asset paths in bucket, 0 missing.
+- 6+7. DESTRUCTIVE reset (atomic txn, scoped client_id=8/erste, other clients untouched):
+      creatives 1425→0, creative uploaded_files 3680→0, reporting 4380→0, assets 156 kept.
+      pg_dump backup taken first: /opt/supabase-mm6/backups/mm6-precutover-20260628-193405.sql.gz
+- 9.  E2E drift proof: laptop PUT (via tunnel) → box GET (direct) = MATCH. Drift eliminated.
+- 10. docs/REBUILD_SPEC §20 added; memory project_mm6_object_store + db-tunnel note updated.
+- Tests 358 passing (was 354 + 4 new S3-driver tests in tests/integration/api/files-s3.test.ts).
+
+**Review / notes:**
+- Dead weight left on box disk (harmless): /var/www/mm6-erste/storage/erste/creatives
+  (~480M) + _inbox-creatives (~481M) are now orphaned (creatives never went to bucket).
+  Reclaim later if needed; _inbox-* are ingest staging (Phase 11), leave them.
+- Hygiene TODO (optional): app uses MinIO ROOT creds. Could scope a non-root access key.
+- NOT committed (code: storage.ts, files-s3.test.ts, .env.example, package.json[-lock]).
+  Pre-6.0.0 so no version bump — tracked here. Commit when ready.
+- User to re-upload the fresh creative set via the app.

@@ -3250,3 +3250,10 @@ deployed. Disk: 17G free of 38G. **Backend changed: MinIO on the box** (user re-
 - NOT committed (code: storage.ts, files-s3.test.ts, .env.example, package.json[-lock]).
   Pre-6.0.0 so no version bump — tracked here. Commit when ready.
 - User to re-upload the fresh creative set via the app.
+
+**[DEPLOYED 2026-06-29] Committed 4e297f6 + live.**
+- Pushed main c9c4d9f..4e297f6. Box: git pull → npm install (@aws-sdk/client-s3) →
+  next build (ok) → pm2 restart. Box HEAD 4e297f6, app online, GET / 307, no errors.
+- NOTE: live only began ACTUALLY using S3 at this deploy — before it, the box ran the
+  old fs-only storage.ts (so S3 env was inert and live read from disk; never broke).
+  Now the S3 driver is live: assets served from bucket, creatives=0/assets=156 (shared DB).

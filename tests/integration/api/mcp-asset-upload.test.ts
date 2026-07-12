@@ -124,6 +124,20 @@ describe("asset_upload via MCP", () => {
     expect(resolved!.id).toBe(replaced.json.file.id); // newest wins
   });
 
+  it("rejects truncated image data (header parses, full decode fails)", async () => {
+    // Cut the tail off a valid PNG: metadata (IHDR) still reads, pixels don't.
+    const truncated = Buffer.from(TINY_PNG_B64, "base64").subarray(0, 40);
+    const res = await call({
+      filename: "truncated.png",
+      data_base64: truncated.toString("base64"),
+    });
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain("corrupt or truncated");
+    // nothing stored
+    const rows = await db.select().from(uploadedFiles);
+    expect(rows).toHaveLength(0);
+  });
+
   it("requires exactly one of data_base64 / source_url", async () => {
     const neither = await call({ filename: "x.png" });
     expect(neither.isError).toBe(true);

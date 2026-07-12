@@ -1193,13 +1193,21 @@ function registerAssetWriteTools(server: McpServer, ctx: McpContext): void {
 
       let dimensions: string | undefined;
       if (mimeType.startsWith("image/")) {
+        // Full decode, not just metadata(): the header parses fine on a
+        // TRUNCATED file (dimensions live in the first KBs), which is exactly
+        // how a clipped base64 payload slips through and stores a broken
+        // image. stats() decodes every pixel and fails on premature EOF.
         try {
-          const meta = await sharp(buffer).metadata();
+          const img = sharp(buffer);
+          const meta = await img.metadata();
+          await img.stats();
           if (meta.width && meta.height) {
             dimensions = `${meta.width}x${meta.height}`;
           }
-        } catch {
-          // non-image bytes with an image extension — dimensions stay unset
+        } catch (e) {
+          return errorResult(
+            `image data is corrupt or truncated (${(e as Error).message}) — nothing was stored. If you sent data_base64, the payload was likely clipped in transit; re-encode and retry, or use source_url instead`,
+          );
         }
       }
 

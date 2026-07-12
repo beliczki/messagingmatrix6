@@ -3476,3 +3476,18 @@ egyezik a tervezett unique index follow-uppal.
   user szerint valaki épp deploy-ol → a boxhoz nem nyúltam (nincs pull/build/restart).
 - Következő lépés (más csinálja / külön session): box git pull ff→a3dbce5, npm run
   build, pm2 restart mm6-erste, majd az élő mc_create sémában ellenőrizni a variant-ot.
+
+**[DONE 2026-07-12] fix(mc): szám-egyediség topic-szintű — batch card-létrehozás feloldva (f59b600, deployolva):**
+- Agent-riport: mc_create_batch "MC number 316 is already in use", de list_mc 0 sort
+  mutat → "ghost reservation" gyanú. Valójában NINCS ghost: a DB-ben 0 db MC316 sor.
+- Root cause: a batch egy tranzakcióban ugyanazt a számot kérte több audience-cellába;
+  az 1. tétel friss sora beakasztotta a GLOBÁLIS "already in use" guardot a 2. tételnél
+  → atomikus rollback. A findSiblings-invariáns csak topic-átlépést tilt, ezért a guard
+  mostantól csak MÁSIK topicban élő számra dob (üzenetben a blokkoló topic nevével);
+  azonos topic másik audience = a kártya audience-másolata, legitim cél.
+- Új dormant-twin guard explicit claimekre: archivált/legacy-deleted azonos-cellás iker
+  (azonos PMMID, restore-duplikátum) érthető hibával elutasítva ("exists archived in
+  this cell — restore it instead").
+- MCP mc_create/mc_create_batch description frissítve. Tesztek: 409/409 (+2 az agent-
+  forgatókönyvre: cross-audience batch placement; archivált másik-cellás sor nem blokkol).
+- Deploy: box a3dbce5→f59b600, build ok, pm2 restart, Ready 1.2s.

@@ -151,7 +151,19 @@ export async function resolveBearerClient(
 
   if (row.id !== (await activeClientId())) return null;
 
-  return { clientId: row.id, origin: new URL(req.url).origin };
+  return { clientId: row.id, origin: requestOrigin(req) };
+}
+
+// The origin the client actually dialed. `req.url` is unreliable behind the
+// nginx proxy — `next start` rebuilds it from its bind address (localhost:6001)
+// — so prefer the standard forwarded headers, then Host, then req.url.
+function requestOrigin(req: Request): string {
+  const url = new URL(req.url);
+  const proto =
+    req.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");
+  const host =
+    req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? url.host;
+  return `${proto}://${host}`;
 }
 
 function jsonResult(value: unknown) {

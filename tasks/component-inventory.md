@@ -603,6 +603,7 @@ The Edit toggle and the entire selection-actions block moved out of the top `mat
 - `edit-mode-panel__count` — "N selected · topic Foo" header.
 - `edit-mode-panel__actions` — 2×2 grid of Copy / Move / Delete / Cancel.
 - `edit-mode-panel__pending` — stacked Apply (N) / Cancel shown while a target picker is open.
+- `edit-mode-panel__error` — rose box (`border-rose-200 bg-rose-50 text-[10px] text-rose-700`) at the panel bottom showing the last failed bulk copy/move (Apply or DnD), e.g. "MC330a is ACTIVE — measured cards keep their PMMID and can't be moved". Clears on pending-action change or edit-mode toggle.
 - `edit-mode-toggle`, `edit-mode-toggle--active` — collapsed-mode icon-only Edit button, rendered in the right toolbar's narrow column below the density CycleIconButton.
 
 **Reuse:**
@@ -763,3 +764,8 @@ Added an 11th workflow status `ARCHIVED`, sitting next to `INACTIVE` semanticall
 **W3 product mező:** `monitoring.product` oszlop (migráció `0018`). Importkor feloldva: audience→product (mátrix-autoritatív), különben kulcsszó→termék szabály (topic + PMMID substring). Szabályok: Settings → Structure → **MONITORING szekció** (`structure-tab__section--monitoring`, `monitoring-rule-row` szerkeszthető lista, config `monitoringProductRules`, category `structure`). A Monitoring lista `Product` oszlopa + `MultiPill` szűrője a tárolt `product`-ot használja.
 
 **W3 size grain + detail dialog:** `monitoring.size` oszlop (migráció `0019`), parser `extractSize` (első `NxN` token a Banner/Adgroupsból), aggregálás size-szinten. Tábla: új sortable **Size** oszlop; minden sor (matched ÉS unmatched) kattintható → **`MonitoringDetailDialog`** (`monitoring-detail`, `modal` shell): matched → `MatrixIframePreview`, unmatched → `status-badge--unmatched` placeholder; mindkettőnél **audience × size bontó tábla** (impr/clicks/CTR + total) az adott MC összes sorából. A `MatrixDetailDialog` használat megszűnt a monitoringban.
+
+**Multi-number cells + show-archived (2026-07-12):**
+- `create-mc-dialog` — a Matrix `+ new` occupied-cell választója (`modal` shell, `max-w-xs`, ShareCreateDialog-minta): `__cell` (topic/audience uppercase label), `__options` (gomblista), `__option` (per-szám "New variant of MCn" `toolbar-btn` stílus) + `__option--new` ("New MC number", `toolbar-btn--primary`), `__divider`, `__error` (rose hibadoboz, az `edit-mode-panel__error`-ral azonos stílus).
+- `archive-toggle` kapott `className` propot (mt-auto pinneléshez); mostantól a Matrix / Creative Library / Assets right-toolbar ALJÁN ül (az Upload gomb felett, ahol van Upload), nem a view-switcher alatt. Collapsed módban is alulra tűzve.
+- Archivált MC-k a Matrixban: `mc-chip--archived row--archived` (+ `row--archived__title` a labelen) a grid chipeken, `matrix-feed__row--archived row--archived` a feed sorokon, `tree-view__node-wrap--archived row--archived` a tree leaf-eken. Edit módban az archivált chip PlainChip (nem kijelölhető/húzható).

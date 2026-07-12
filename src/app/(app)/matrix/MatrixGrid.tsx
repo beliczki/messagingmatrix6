@@ -15,9 +15,11 @@ import FeedExportPanel from "./FeedExportPanel";
 import EditModePanel from "./EditModePanel";
 import MatrixToolbar from "./MatrixToolbar";
 import MessageEditor from "./MessageEditor";
+import CreateMcDialog from "./CreateMcDialog";
 import HeaderDetailDialog from "./HeaderDetailDialog";
 import RightToolbar from "../_components/RightToolbar";
 import CycleIconButton from "../_components/CycleIconButton";
+import ArchiveToggle from "../_components/ArchiveToggle";
 import {
   type Audience,
   type Density,
@@ -50,6 +52,41 @@ async function postJSON<T>(url: string, body: unknown): Promise<T> {
   return r.json();
 }
 
+// Bulk copy/move failures arrive as Error("<status>: <json body>") from
+// postJSON. Map the structured codes the bulk routes emit to operator-readable
+// text; fall back to the raw message for anything unrecognized. labelFor turns
+// the server's mc_label (a full PMMID) into the short pill label (MC330a).
+function bulkErrorText(
+  err: Error,
+  labelFor: (mcLabel: string) => string,
+): string {
+  const body = err.message.replace(/^\d+:\s*/, "");
+  try {
+    const j = JSON.parse(body) as {
+      error?: string;
+      mc_label?: string;
+      status?: string;
+    };
+    const label = j.mc_label ? labelFor(j.mc_label) : "";
+    switch (j.error) {
+      case "row_locked_by_status":
+        return `${label} is ${j.status} — measured cards keep their PMMID and can't be moved`;
+      case "version_conflict":
+        return `${label} changed since the grid loaded — reload and retry`;
+      case "not_found":
+        return `${label} no longer exists — reload and retry`;
+      case "cross_topic_move_not_supported":
+        return "Selection spans multiple topics — move works within one topic";
+      case "target_audience_not_found":
+        return "Target audience not found — reload and retry";
+      default:
+        return typeof j.error === "string" ? j.error : err.message;
+    }
+  } catch {
+    return err.message;
+  }
+}
+
 export type Selection = { topic: string | null; mcIds: Set<number> };
 export type PendingAction = {
   kind: "copy" | "move";
@@ -68,6 +105,7 @@ export type EditApi = {
   pendingAction: PendingAction;
   applyPending: () => void;
   bulkBusy: boolean;
+  bulkError: string | null;
 };
 
 const STORAGE_KEY = "mm6_matrix_state_v1";
@@ -96,6 +134,17 @@ export default function MatrixWorkspace() {
   const [transposed, setTransposed] = useState<boolean>(true);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [openMessageId, setOpenMessageId] = useState<number | null>(null);
+  // Unpersisted, like every other page's archive toggle — a session starts
+  // live-only.
+  const [showArchived, setShowArchived] = useState(false);
+  // Occupied-cell "+ new" chooser (CreateMcDialog): which cell, and the
+  // in-flight/create-error state of the picked option.
+  const [createCell, setCreateCell] = useState<{
+    audience: string;
+    topic: string;
+  } | null>(null);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [headerDialog, setHeaderDialog] = useState<
     { kind: "audience" | "topic"; key: string } | null
   >(null);
@@ -251,6 +300,16 @@ export default function MatrixWorkspace() {
     },
   });
 
+  // A failed apply's error shouldn't survive into a new pending action, a
+  // target change, or an edit-mode re-entry. reset() is referentially stable
+  // in react-query v5, so this only fires when those actually change.
+  const resetCopy = copyMutation.reset;
+  const resetMove = moveMutation.reset;
+  useEffect(() => {
+    resetCopy();
+    resetMove();
+  }, [pendingAction, editMode, resetCopy, resetMove]);
+
   const audiencesQ = useQuery({
     queryKey: ["audiences"],
     queryFn: () => fetchJSON<{ audiences: Audience[] }>("/api/audiences"),
@@ -260,8 +319,11 @@ export default function MatrixWorkspace() {
     queryFn: () => fetchJSON<{ topics: Topic[] }>("/api/topics"),
   });
   const messagesQ = useQuery({
-    queryKey: ["messages"],
-    queryFn: () => fetchJSON<{ messages: Message[] }>("/api/messages"),
+    queryKey: ["messages", { showArchived }],
+    queryFn: () =>
+      fetchJSON<{ messages: Message[] }>(
+        showArchived ? "/api/messages?includeArchived=1" : "/api/messages",
+      ),
   });
   const templatesQ = useQuery({
     queryKey: ["templates", "folders"],
@@ -322,6 +384,15 @@ export default function MatrixWorkspace() {
       pendingAction,
       applyPending,
       bulkBusy: copyMutation.isPending || moveMutation.isPending,
+      bulkError: (() => {
+        const err = copyMutation.error ?? moveMutation.error;
+        if (!err) return null;
+        return bulkErrorText(err, (mcLabel) => {
+          for (const m of messagesById.values())
+            if (m.pmmid === mcLabel) return `MC${m.number}${m.variant}`;
+          return mcLabel;
+        });
+      })(),
     }),
     [
       editMode,
@@ -335,6 +406,8 @@ export default function MatrixWorkspace() {
       applyPending,
       copyMutation.isPending,
       moveMutation.isPending,
+      copyMutation.error,
+      moveMutation.error,
     ],
   );
 
@@ -378,6 +451,59 @@ export default function MatrixWorkspace() {
     },
     [messagesById, selection, copyMutation, moveMutation],
   );
+
+  // Create an MC in a cell. mcNumber: undefined = server default (first
+  // number's next variant), a number = that number's next variant or a new
+  // number if globally free, "new" = force a fresh number (global max + 1).
+  const createInCell = useCallback(
+    async (audience: string, topic: string, mcNumber?: number | "new") => {
+      setCreateBusy(true);
+      setCreateError(null);
+      try {
+        const { message } = await postJSON<{ message: Message }>(
+          "/api/messages",
+          {
+            audience,
+            topic,
+            ...(mcNumber !== undefined ? { mc_number: mcNumber } : {}),
+          },
+        );
+        await queryClient.invalidateQueries({ queryKey: ["messages"] });
+        setCreateCell(null);
+        setOpenMessageId(message.id);
+      } catch (e) {
+        // postJSON throws Error("<status>: <json>") — surface the body's
+        // error field when present.
+        const body = (e as Error).message.replace(/^\d+:\s*/, "");
+        try {
+          const j = JSON.parse(body) as { error?: string };
+          setCreateError(typeof j.error === "string" ? j.error : body);
+        } catch {
+          setCreateError(body);
+        }
+      } finally {
+        setCreateBusy(false);
+      }
+    },
+    [queryClient],
+  );
+
+  // Distinct live MC numbers of the chooser's cell, ascending.
+  const createCellNumbers = useMemo(() => {
+    if (!createCell) return [];
+    const nums = new Set<number>();
+    for (const m of messages) {
+      if (
+        m.audience === createCell.audience &&
+        m.topic === createCell.topic &&
+        !m.archivedAt &&
+        m.status !== "deleted"
+      ) {
+        nums.add(m.number);
+      }
+    }
+    return [...nums].sort((a, b) => a - b);
+  }, [createCell, messages]);
 
   const productOptions = useMemo(() => {
     const s = new Set<string>();
@@ -445,6 +571,14 @@ export default function MatrixWorkspace() {
     }
     return { auds, tops, msgs };
   }, [audiences, topics, messages, filters, audienceById, topicById]);
+
+  // Feed export must never see archived rows — the client message list acts
+  // as the allowed set gating carry-forward rows server-side, so toggling
+  // showArchived must not change export content.
+  const feedExportMessages = useMemo(
+    () => filtered.msgs.filter((m) => !m.archivedAt),
+    [filtered.msgs],
+  );
 
   const openMessage = useMemo(
     () => messages.find((m) => m.id === openMessageId) ?? null,
@@ -534,13 +668,23 @@ export default function MatrixWorkspace() {
               onOpenHeader={(kind, key) => setHeaderDialog({ kind, key })}
               editApi={editApi}
               onDndDrop={handleDndDrop}
-              onCreateInCell={async (audience, topic) => {
-                const { message } = await postJSON<{ message: Message }>(
-                  "/api/messages",
-                  { audience, topic },
+              onCreateInCell={(audience, topic) => {
+                // Empty cell: instant create as before. Occupied cell: open
+                // the chooser — the cell may hold (or gain) several MC
+                // numbers, so the user picks a variant target or a new one.
+                const occupied = messages.some(
+                  (m) =>
+                    m.audience === audience &&
+                    m.topic === topic &&
+                    !m.archivedAt &&
+                    m.status !== "deleted",
                 );
-                await queryClient.invalidateQueries({ queryKey: ["messages"] });
-                setOpenMessageId(message.id);
+                if (occupied) {
+                  setCreateError(null);
+                  setCreateCell({ audience, topic });
+                } else {
+                  void createInCell(audience, topic);
+                }
               }}
             />
           ) : view === "tree" ? (
@@ -604,9 +748,15 @@ export default function MatrixWorkspace() {
               {view === "tree" ? (
                 <TreeViewNavigatorControls orientation="vertical" />
               ) : null}
+              <ArchiveToggle
+                showArchived={showArchived}
+                onChange={setShowArchived}
+                collapsed
+                className="mt-auto"
+              />
             </>
           ) : (
-            <div className="flex flex-col gap-3">
+            <div className="flex h-full flex-col gap-3">
               <ViewControls
                 view={view}
                 setView={setView}
@@ -622,10 +772,15 @@ export default function MatrixWorkspace() {
               {view === "feed" ? (
                 <FeedExportPanel
                   filters={filters}
-                  filteredMessages={filtered.msgs}
+                  filteredMessages={feedExportMessages}
                 />
               ) : null}
               {view === "tree" ? <TreeViewNavigator /> : null}
+              <ArchiveToggle
+                showArchived={showArchived}
+                onChange={setShowArchived}
+                className="mt-auto"
+              />
             </div>
           )
         }
@@ -651,6 +806,21 @@ export default function MatrixWorkspace() {
           onClose={() => setHeaderDialog(null)}
         />
       ) : null}
+
+      <CreateMcDialog
+        open={createCell !== null}
+        audience={createCell?.audience ?? ""}
+        topic={createCell?.topic ?? ""}
+        numbers={createCellNumbers}
+        busy={createBusy}
+        error={createError}
+        onPick={(choice) => {
+          if (createCell) {
+            void createInCell(createCell.audience, createCell.topic, choice);
+          }
+        }}
+        onClose={() => setCreateCell(null)}
+      />
     </div>
     </ReactFlowProvider>
   );

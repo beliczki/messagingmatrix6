@@ -3364,3 +3364,101 @@ new `message_previews` table, NOT columns on the row.
 - uploadFile + createAsset lánc (két writeAudit, HTTP-route-paritás); sha256 dedup → file.deduplicated.
 - sanitize → sanitizeFilename export (files.ts); McpTab "Asset upload" prose section.
 - Tests 389/389 (+8 mcp-asset-upload.test.ts). Local live smoke OK (asset létrejött, majd purge-ölve).
+
+**[DONE 2026-07-12] Matrix bulk move/copy — silent 409 surfaced in edit panel:**
+- Bug: bulk-move of ACTIVE MC330a/b/c → 409 row_locked_by_status (by design:
+  BLOCKED_MOVE_STATUSES, PMMID anchors live measurement), de a UI lenyelte —
+  copy/moveMutation-nek csak onSuccess volt, isError-t senki nem olvasta.
+- Fix (MatrixGrid.tsx): bulkErrorText() a bulk-route strukturált hibakódjait
+  (row_locked_by_status / version_conflict / not_found / cross_topic /
+  target_audience_not_found) operátor-olvasható szöveggé mappeli; mc_label
+  (teljes PMMID) → rövid pill-label (MC330a) messagesById-ből. EditApi +=
+  bulkError. Reset-effect: pendingAction/editMode változásra törli a hibát
+  (react-query v5 reset stabil ref).
+- EditModePanel: edit-mode-panel__error rose box a panel alján — Apply ÉS
+  DnD-drop hibát is mutatja (ugyanazok a mutationök).
+- Szándékosan NEM tiltjuk a kijelölést/Move-ot ACTIVE kártyákra (user döntés:
+  érthetőbb a hibaüzenet, mint a némán tiltott kijelölés).
+- Verified E2E localhost:6001-en (élő DB, szerver úgyis elutasít): Apply →
+  "MC330a is ACTIVE — measured cards keep their PMMID and can't be moved",
+  Cancel törli. tsc clean, tests 390/390.
+
+**[TODO] MC editor: Archive gomb (user kérés, 2026-07-12):**
+- Az MC editorban (MessageEditor) nincs archive button. Javaslat: a Naming tab
+  Status mezője mellé, a második oszlopban megjelenő "Archive MC" gomb.
+- Warning dialog KELL hozzá — NEM window.confirm, hanem a meglévő
+  `_components/AlertDialog.tsx` `useAlertDialog().confirm({ title, message,
+  confirmLabel, variant: "warning" | "danger" })` pattern (FeedsView:248 és
+  SharesView:212 a referencia-használat).
+- Backend már kész: DELETE /api/messages/[id] = soft-archive (archivedAt),
+  /api/messages/[id]/restore a visszaút. A Matrix show-archived toggle-lal
+  (most készül) az archivált MC vissza is nézhető.
+- Bónusz takarítás ugyanitt: SnapshotsTab:194, ClientsTab:99,
+  FeedDetailView:154/170, UsersView:87, TemplateEditor:480 még window.confirm-ot
+  használ — érdemes AlertDialogra migrálni (külön slice).
+
+**[DONE 2026-07-12] Multi-number cells (cellaszabály-reform) + Show archived a Matrixon:**
+- Terv: ~/.claude/plans/most-kezelj-nk-deploy-el-tt-async-meerkat.md (jóváhagyva).
+- Pre-check audit a live DB-n: 95 multi-number cella (mind egészséges, pl. 218/219,
+  301/302 párok), 0 duplikált (cella,szám,variáns), 0 topic-átlépő (number,variant)
+  — a findSiblings-invariáns prod-ban áll, nem kellett data-fix.
+- A) numbering.ts: nextMcSlot occupied ága per-szám variánst számol (MC90c, nem
+  MC90d vegyes cellában); új exportok: nextVariantForNumber, nextNewNumber, isLive.
+  createMessage: requestedNumber?: number | "new" — cellában élő szám → annak köv.
+  variánsa; globálisan szabad szám → variant "a" foglalt cellában is; "new" →
+  global max+1; máshol élő (akár archivált) szám → "already in use" (findSiblings-
+  védelem + restore-ütközés ellen az attach csak ÉLŐ in-cell occupantra áll rá).
+  copy/moveMessages ütközés: forrás száma MEGMARAD (soha nem számoz át — ez volt a
+  legcsúnyább known bug), variáns a saját szám szekvenciájában bump-ol.
+- HTTP: POST /api/messages mc_number (szám|"new") — entity-route create 3. body
+  argot kap (backward-kompatibilis). MCP: mc_create + mc_create_batch mc_number
+  union séma + új description (descriptor mapper anyOf-ot már kezelte, McpTab OK).
+- UI: CreateMcDialog — "+ new" foglalt cellán MINDIG dialog (user döntés):
+  per-szám "New variant of MCn" + "New MC number"; üres cella marad azonnali.
+  A számlista a teljes messages-ből jön (nem a szűrtből), élő sorokból.
+- B) Show archived: ArchiveToggle className prop; Matrix right-toolbar ALJÁN
+  (mindkét módban, mt-auto), CL+Assets: view-switcherből az Upload gomb fölé.
+  Matrix query ["messages",{showArchived}] → includeArchived=1;
+  MessageEditor setQueryData → setQueriesData (exact-key no-op fix);
+  feed-exportnak átadott lista archivált-szűrt (carry-forward védelem);
+  archivált chip: row--archived (grid/feed/tree), edit módban nem kijelölhető;
+  listMessages includeArchived ága mostantól szűri a legacy status='deleted'-et.
+- Tesztek: 403/403 zöld (+13: mixed-cell unit x5, create-gate integration x6,
+  copy/move ütközés-megőrzés x2, listMessages includeArchived pin). tsc clean.
+- E2E localhost:6001 (élő DB): dialog 1-számú és vegyes cellán, MC300f (per-szám
+  variáns), MC332a ("new" = global max+1), 400 already-in-use más topic számára,
+  Matrix toggle on/off (MC300f dimmelve/áthúzva jelent meg, off-ra eltűnt),
+  collapsed rail alján ikon, CL+Assets toggle az Upload felett. Teszt-sorok
+  (32891, 32892) hard-delete-tel takarítva.
+- Known follow-upok (tervben dokumentálva, NEM része ennek a slice-nak):
+  unique index (client,topic,audience,number,variant) a konkurencia-rés ellen;
+  restoreMessage ütközés-guard; window.confirm → AlertDialog migráció;
+  MC-editor Archive gomb (külön TODO fentebb).
+
+## Slice: explicit variant on mc_create / mc_create_batch (2026-07-12)
+
+Cél: az MCP tudjon KONKRÉT variánst adni új MC-nek (pl. 316a, 317b, 318c, 319d,
+320e). Ma a variant mindig auto: friss szám → mindig "a"; b,c,d… csak ugyanazon
+szám cellán belüli további MC-kből jön. Számok 316–320 (client 8) most szabadok.
+
+- [ ] createMessage (messages.ts): opts.requestedVariant?: string
+      - validál: pontosan egy a–z betű (különben MessageError)
+      - szám-allokáció VÁLTOZATLAN (requestedNumber logika marad)
+      - végén slot.variant = requestedVariant override
+      - ütközés-guard: ha a cél cellában (topic+audience) ÉLŐ sor van
+        (number, requestedVariant) párral → MessageError "variant … already in use"
+- [ ] mc_create (mcp.ts): inputSchema + variant?: z.string(); handler átadja
+      requestedVariant-ként; tool description bővítés
+- [ ] mc_create_batch (mcp.ts): per-item variant?; description bővítés
+- [ ] HTTP parity: POST /api/messages readVariant → requestedVariant (kicsi)
+- [ ] McpTab.tsx: hardcoded próza ellenőrzés (tool-lista auto-sync, próza kézi)
+- [ ] Tesztek: friss szám+explicit betű (317b), in-cell ütközés → error,
+      variant-only (szám default) — messages.test.ts / mcp-list-mc.test.ts
+- [ ] tsc + npm test zöld
+- [ ] Deploy a boxra (mm6-erste), hogy az ÉLŐ MCP mutassa (agent oda csatlakozik)
+- [ ] Verzió: pre-6.0.0 → nincs commit-szintű bump, todo checkpoint
+
+Invariáns-megjegyzés: 317b 317a nélkül szándékos rés; nextVariantForNumber
+később maxChar+1-et ad (317c), nincs crash. PMMID/trafficking number+variant-ot
+kap, csak átveszi. Uniqueness scope = (client,topic,audience,number,variant),
+egyezik a tervezett unique index follow-uppal.

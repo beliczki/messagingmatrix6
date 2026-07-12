@@ -10,6 +10,8 @@ type Props = {
   archivedCount?: number;
   /** When true, render as a square icon-only button (for the collapsed RightToolbar). */
   collapsed?: boolean;
+  /** Extra classes on the button (e.g. mt-auto to pin it to the toolbar bottom). */
+  className?: string;
 };
 
 // Phase 10a "Show archived" toggle — used in list-view toolbars across surfaces
@@ -21,6 +23,7 @@ export default function ArchiveToggle({
   onChange,
   archivedCount,
   collapsed = false,
+  className,
 }: Props) {
   const title = showArchived ? "Hide archived" : "Show archived";
   const Icon = showArchived ? ArchiveRestore : Archive;
@@ -38,6 +41,7 @@ export default function ArchiveToggle({
           showArchived
             ? "archive-toggle--on bg-amber-50 text-amber-700 hover:bg-amber-100"
             : "archive-toggle--off text-slate-700 hover:bg-slate-100",
+          className,
         )}
       >
         <Icon className="size-4" />
@@ -54,6 +58,7 @@ export default function ArchiveToggle({
         showArchived
           ? "archive-toggle--on border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
           : "archive-toggle--off border-slate-300 bg-white text-slate-600 hover:bg-slate-50",
+        className,
       )}
       title={title}
     >

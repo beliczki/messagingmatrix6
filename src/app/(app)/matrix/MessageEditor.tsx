@@ -340,15 +340,20 @@ export default function MessageEditor({
         // card shows the persisted values immediately — invalidate alone is an
         // async refetch the reopen can outrun, leaving the editor re-seeded
         // from the stale grid row. The server response carries the recomputed
-        // UTM/Final-URL fields too, so they propagate as well.
-        qc.setQueryData<{ messages: Message[] }>(["messages"], (prev) =>
-          prev
-            ? {
-                messages: prev.messages.map((m) =>
-                  m.id === saved.id ? saved : m,
-                ),
-              }
-            : prev,
+        // UTM/Final-URL fields too, so they propagate as well. setQueriesData
+        // (prefix match) because the matrix key is parameterized by its
+        // showArchived toggle — an exact ["messages"] key would silently
+        // no-op there.
+        qc.setQueriesData<{ messages: Message[] }>(
+          { queryKey: ["messages"] },
+          (prev) =>
+            prev
+              ? {
+                  messages: prev.messages.map((m) =>
+                    m.id === saved.id ? saved : m,
+                  ),
+                }
+              : prev,
         );
         // Global edit fans the change out to sibling rows server-side; those
         // updated rows aren't in this response, so refetch to pull them in.

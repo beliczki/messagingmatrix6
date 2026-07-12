@@ -220,6 +220,12 @@ export default function TreeView({
     [expanded, positions, tree.nodes, rf],
   );
 
+  // Archived leaves (visible via the Show archived toggle) render dimmed.
+  const archivedIds = useMemo(
+    () => new Set(messages.filter((m) => m.archivedAt).map((m) => m.id)),
+    [messages],
+  );
+
   const flowNodes = useMemo<Node[]>(
     () =>
       tree.nodes
@@ -227,6 +233,8 @@ export default function TreeView({
         .map((n) => {
           const pos = positions.get(n.id)!;
           const isLeaf = n.messageId !== undefined;
+          const isArchived =
+            n.messageId !== undefined && archivedIds.has(n.messageId);
           const hasChildren = (childrenOf.get(n.id) ?? 0) > 0;
           const isExpanded = effectiveExpanded.has(n.id);
           const lvl = levelOf(n.id) % LEVEL_COLOR_CYCLE;
@@ -240,7 +248,7 @@ export default function TreeView({
             height: NODE_HEIGHT,
             className: `tree-view__node-wrap tree-view__node-wrap--lvl-${lvl}${
               isLeaf ? " tree-view__node-wrap--leaf" : ""
-            }`,
+            }${isArchived ? " tree-view__node-wrap--archived row--archived" : ""}`,
             data: {
               label: (
                 <div
@@ -295,7 +303,7 @@ export default function TreeView({
             targetPosition: Position.Left,
           };
         }),
-    [tree.nodes, positions, visibleIds, effectiveExpanded, childrenOf, onOpenMessage, toggleExpanded],
+    [tree.nodes, positions, visibleIds, effectiveExpanded, childrenOf, onOpenMessage, toggleExpanded, archivedIds],
   );
 
   const flowEdges = useMemo<Edge[]>(

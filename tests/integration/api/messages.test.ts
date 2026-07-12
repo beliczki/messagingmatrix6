@@ -146,16 +146,172 @@ describe("messages — numbering on create", () => {
     expect(b.variant).toBe("b");
   });
 
-  it("requestedNumber differing from an occupied cell's number is rejected", async () => {
+  it("requestedNumber introduces a globally-free number into an occupied cell", async () => {
+    // v6 multi-number cells: a cell may hold several MC numbers (creative
+    // generations), so a free number is welcome even when the cell is taken.
     await seedAudienceAndTopic(erste.id);
+    await createMessage(erste.id, { topic: "top1", audience: "aud1" }); // MC1a
+    const m = await createMessage(
+      erste.id,
+      { topic: "top1", audience: "aud1" },
+      { requestedNumber: 7 },
+    );
+    expect(m.number).toBe(7);
+    expect(m.variant).toBe("a");
+    expect(m.pmmid).toBe("a_aud1-t_top1-m_7-v_a-n_1");
+  });
+
+  it("requestedNumber living in a different topic is rejected even for an occupied cell", async () => {
+    await seedAudienceAndTopic(erste.id, "aud1", "top1");
+    await seedAudienceAndTopic(erste.id, "aud2", "top2");
     await createMessage(erste.id, { topic: "top1", audience: "aud1" }); // MC1
+    await createMessage(erste.id, { topic: "top2", audience: "aud2" }); // MC2
+    await expect(
+      createMessage(
+        erste.id,
+        { topic: "top2", audience: "aud2" },
+        { requestedNumber: 1 },
+      ),
+    ).rejects.toThrow(/already in use/);
+  });
+
+  it("requestedNumber present in a mixed cell adds that number's next variant", async () => {
+    await seedAudienceAndTopic(erste.id);
+    const a = await createMessage(erste.id, { topic: "top1", audience: "aud1" }); // MC1a
+    await createMessage(erste.id, { topic: "top1", audience: "aud1" }); // MC1b
+    const gen2 = await createMessage(
+      erste.id,
+      { topic: "top1", audience: "aud1" },
+      { requestedNumber: 7 },
+    ); // MC7a
+    const m = await createMessage(
+      erste.id,
+      { topic: "top1", audience: "aud1" },
+      { requestedNumber: 7 },
+    );
+    expect(m.number).toBe(7);
+    expect(m.variant).toBe("b");
+    // ...and the first number's sequence is unaffected by MC7's variants.
+    const backOnOne = await createMessage(
+      erste.id,
+      { topic: "top1", audience: "aud1" },
+      { requestedNumber: a.number },
+    );
+    expect(backOnOne.number).toBe(a.number);
+    expect(backOnOne.variant).toBe("c");
+    expect(gen2.variant).toBe("a");
+  });
+
+  it('requestedNumber "new" forces a fresh number in an occupied cell', async () => {
+    await seedAudienceAndTopic(erste.id, "aud1", "top1");
+    await seedAudienceAndTopic(erste.id, "aud2", "top2");
+    await createMessage(erste.id, { topic: "top1", audience: "aud1" }); // MC1a
+    await createMessage(erste.id, { topic: "top2", audience: "aud2" }); // MC2a
+    const m = await createMessage(
+      erste.id,
+      { topic: "top1", audience: "aud1" },
+      { requestedNumber: "new" },
+    );
+    expect(m.number).toBe(3); // global max + 1
+    expect(m.variant).toBe("a");
+  });
+
+  it("default create in a mixed cell bumps the first number's own sequence", async () => {
+    await seedAudienceAndTopic(erste.id);
+    await createMessage(erste.id, { topic: "top1", audience: "aud1" }); // MC1a
+    await createMessage(
+      erste.id,
+      { topic: "top1", audience: "aud1" },
+      { requestedNumber: 7 },
+    ); // MC7a
+    await createMessage(
+      erste.id,
+      { topic: "top1", audience: "aud1" },
+      { requestedNumber: 7 },
+    ); // MC7b
+    // Old bug: variant was max across the whole cell (b -> c) on number 1.
+    const m = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    expect(m.number).toBe(1);
+    expect(m.variant).toBe("b");
+  });
+
+  it("requestedNumber of an archived-only in-cell number is rejected, not attached", async () => {
+    await seedAudienceAndTopic(erste.id);
+    const a = await createMessage(erste.id, { topic: "top1", audience: "aud1" }); // MC1a
+    await archiveMessage(erste.id, a.id, a.version);
+    // A live twin of the archived MC1a would collide on restore.
     await expect(
       createMessage(
         erste.id,
         { topic: "top1", audience: "aud1" },
-        { requestedNumber: 7 },
+        { requestedNumber: 1 },
       ),
-    ).rejects.toThrow(/already holds MC1/);
+    ).rejects.toThrow(/already in use/);
+  });
+
+  it("requestedVariant pins an explicit letter on a fresh number (317b with no 317a)", async () => {
+    await seedAudienceAndTopic(erste.id);
+    const m = await createMessage(
+      erste.id,
+      { topic: "top1", audience: "aud1" },
+      { requestedNumber: 317, requestedVariant: "b" },
+    );
+    expect(m.number).toBe(317);
+    expect(m.variant).toBe("b");
+    expect(m.pmmid).toBe("a_aud1-t_top1-m_317-v_b-n_1");
+  });
+
+  it("requestedVariant overrides the auto letter even without an explicit number", async () => {
+    await seedAudienceAndTopic(erste.id);
+    const m = await createMessage(
+      erste.id,
+      { topic: "top1", audience: "aud1" },
+      { requestedVariant: "e" },
+    );
+    expect(m.number).toBe(1);
+    expect(m.variant).toBe("e");
+  });
+
+  it("requestedVariant colliding with a live twin in the same cell is rejected", async () => {
+    await seedAudienceAndTopic(erste.id);
+    await createMessage(erste.id, { topic: "top1", audience: "aud1" }); // MC1a
+    await expect(
+      createMessage(
+        erste.id,
+        { topic: "top1", audience: "aud1" },
+        { requestedNumber: 1, requestedVariant: "a" },
+      ),
+    ).rejects.toThrow(/already exists in this cell/);
+  });
+
+  it("requestedVariant rejects a non-letter value", async () => {
+    await seedAudienceAndTopic(erste.id);
+    await expect(
+      createMessage(
+        erste.id,
+        { topic: "top1", audience: "aud1" },
+        { requestedVariant: "1" },
+      ),
+    ).rejects.toThrow(/invalid/);
+  });
+
+  it("listMessages includeArchived returns archived rows but never legacy status='deleted'", async () => {
+    await seedAudienceAndTopic(erste.id);
+    const live = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    const arch = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    await archiveMessage(erste.id, arch.id, arch.version);
+    // Legacy pre-Phase-10a soft-delete: status='deleted', archivedAt null.
+    await db
+      .update(messages)
+      .set({ status: "deleted" })
+      .where(eq(messages.id, live.id));
+    const extra = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+
+    const all = await listMessages(erste.id, { includeArchived: true });
+    const ids = all.map((m) => m.id);
+    expect(ids).toContain(arch.id); // archived visible
+    expect(ids).toContain(extra.id);
+    expect(ids).not.toContain(live.id); // legacy deleted stays hidden
   });
 });
 

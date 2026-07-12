@@ -10,7 +10,13 @@ import {
   type Message,
   type Topic,
 } from "@/db/schema";
-import { nextMcSlot, type ExistingMessage } from "@/lib/numbering";
+import {
+  isLive,
+  nextMcSlot,
+  nextNewNumber,
+  nextVariantForNumber,
+  type ExistingMessage,
+} from "@/lib/numbering";
 import { generatePmmid } from "@/lib/pmmid";
 import {
   buildTrafficking,
@@ -134,10 +140,17 @@ export async function listMessages(
   opts: { includeArchived?: boolean } = {},
 ): Promise<Message[]> {
   if (opts.includeArchived) {
+    // Archived rows come back, but legacy status='deleted' soft-deletes
+    // (pre-Phase-10a) stay invisible here too.
     return db
       .select()
       .from(messages)
-      .where(eq(messages.clientId, clientId))
+      .where(
+        and(
+          eq(messages.clientId, clientId),
+          sql`(${messages.status} IS NULL OR ${messages.status} != 'deleted')`,
+        ),
+      )
       .orderBy(messages.number, messages.variant);
   }
   return db
@@ -180,9 +193,12 @@ export async function getMessageByPmmid(
 export async function createMessage(
   clientId: number,
   input: MessageInput,
-  // requestedNumber (MCP mc_number): claim a specific MC number instead of
-  // MAX+1. Kept out of MessageInput so it can't leak into the insert spread.
-  opts: { requestedNumber?: number } = {},
+  // requestedNumber (MCP/HTTP mc_number): claim a specific MC number, or
+  // "new" to force a fresh number (global max + 1) even in an occupied cell.
+  // requestedVariant (MCP/HTTP variant): force a specific variant letter instead
+  // of the auto-assigned one — the caller owns the exact (number, variant) label.
+  // Both kept out of MessageInput so they can't leak into the insert spread.
+  opts: { requestedNumber?: number | "new"; requestedVariant?: string } = {},
 ): Promise<Message> {
   if (!input.audience) throw new MessageError("audience is required");
   if (!input.topic) throw new MessageError("topic is required");
@@ -197,30 +213,63 @@ export async function createMessage(
   }
 
   const live = await listLiveMessages(clientId);
+  // A cell may hold multiple MC numbers (creative generations). Default is
+  // nextMcSlot (first number's next variant); an explicit number attaches to
+  // that number's variant sequence in the cell, or introduces the number when
+  // it's globally free; "new" forces a fresh number.
   const slot = nextMcSlot(live, input.topic, input.audience);
-  if (opts.requestedNumber !== undefined) {
+  if (opts.requestedNumber === "new") {
+    slot.number = nextNewNumber(live);
+    slot.variant = "a";
+  } else if (opts.requestedNumber !== undefined) {
     const n = opts.requestedNumber;
-    const cellOccupied = live.some(
-      (m) => m.topic === input.topic && m.audience === input.audience,
+    // Attach requires a LIVE in-cell occupant of the number — an archived
+    // MC{n}a in the cell must not spawn a live twin that its restore would
+    // collide with. listLiveMessages returns all rows; isLive filters here.
+    const liveInCell = live.filter(
+      (m) =>
+        isLive(m) && m.topic === input.topic && m.audience === input.audience,
     );
-    if (cellOccupied) {
-      // The cell's number is fixed — a matching request is a no-op (next
-      // variant as usual), a different one can't be honored.
-      if (slot.number !== n) {
-        throw new MessageError(
-          `cell (topic '${input.topic}', audience '${input.audience}') already holds MC${slot.number} — requested number ${n} conflicts; omit it to add the next variant`,
-        );
-      }
-    } else {
-      // The number identifies the card across audience copies, so a fresh
-      // cell may only claim a number no live MC uses anywhere.
-      if (live.some((m) => m.number === n)) {
-        throw new MessageError(
-          `MC number ${n} is already in use — pick a free number or omit it for auto-assign`,
-        );
-      }
+    if (liveInCell.some((m) => m.number === n)) {
       slot.number = n;
+      slot.variant = nextVariantForNumber(liveInCell, n);
+    } else if (live.some((m) => m.number === n)) {
+      // The number identifies the card across audience copies (and never
+      // spans topics — findSiblings relies on it), so a number living in any
+      // other cell — even archived — can't be claimed here.
+      throw new MessageError(
+        `MC number ${n} is already in use — pick a free number or omit it for auto-assign`,
+      );
+    } else {
+      slot.number = n;
+      slot.variant = "a";
     }
+  }
+
+  // Explicit variant override: the caller pins the exact letter (e.g. 317b even
+  // when no 317a exists). Number allocation above is unchanged; we only replace
+  // the letter, then guard against colliding with a live twin in the same cell.
+  if (opts.requestedVariant !== undefined) {
+    const v = opts.requestedVariant;
+    if (!/^[a-z]$/.test(v)) {
+      throw new MessageError(
+        `variant '${v}' is invalid — must be a single lowercase letter a–z`,
+      );
+    }
+    const collision = live.some(
+      (m) =>
+        isLive(m) &&
+        m.topic === input.topic &&
+        m.audience === input.audience &&
+        m.number === slot.number &&
+        m.variant === v,
+    );
+    if (collision) {
+      throw new MessageError(
+        `MC ${slot.number}${v} already exists in this cell — pick a free variant`,
+      );
+    }
+    slot.variant = v;
   }
 
   const patterns = await readClientPatterns(clientId);
@@ -584,9 +633,11 @@ export async function copyMessages(
         number = source.number;
         variant = source.variant;
       } else {
-        const slot = nextMcSlot(cellOccupants, topic, targetAud);
-        number = slot.number;
-        variant = slot.variant;
+        // Collision: keep the source's number (a copy never changes card
+        // identity) and bump the variant among that number's occupants only —
+        // a mixed cell's other numbers must not renumber or advance it.
+        number = source.number;
+        variant = nextVariantForNumber(cellOccupants, source.number);
       }
       plan.push({ source, targetAud, number, variant });
     }
@@ -792,11 +843,11 @@ export async function moveMessages(
       number = r.source.number;
       variant = r.source.variant;
     } else {
-      // Bump variant. nextMcSlot for an occupied cell returns same number +
-      // next variant char.
-      const slot = nextMcSlot(cellOccupants, topic, targetAudienceKey);
-      number = slot.number;
-      variant = slot.variant;
+      // Collision: keep the mover's number (a move is a placement change,
+      // never a renumbering) and bump the variant among that number's
+      // occupants only — mixed-cell numbers must not capture the mover.
+      number = r.source.number;
+      variant = nextVariantForNumber(cellOccupants, r.source.number);
     }
 
     plan.push({ ...r, number, variant });

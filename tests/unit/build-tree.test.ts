@@ -96,6 +96,7 @@ function msg(overrides: Partial<Message>): Message {
     utmTerm: null,
     utmCd26: null,
     finalTraffickedUrl: null,
+    archivedAt: null,
     ...overrides,
   };
 }

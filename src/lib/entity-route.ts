@@ -43,7 +43,9 @@ export function makeCollectionRoute<R extends Row, I>(cfg: {
   // List rows are only JSON-serialized in the GET response, so they're
   // decoupled from R (e.g. listAudiences returns Audience & { mcCount }).
   list: (cid: number, opts: { includeArchived: boolean }) => Promise<readonly unknown[]>;
-  create: (cid: number, input: I) => Promise<R>;
+  // The raw request body is passed third so an entity can read fields that
+  // must stay out of its writable input (e.g. messages' mc_number).
+  create: (cid: number, input: I, body?: unknown) => Promise<R>;
   pickWritable: (body: unknown) => I;
   /** Map a known validation error to a 400 message; return null to rethrow. */
   validationError?: (e: unknown) => string | null;
@@ -62,7 +64,7 @@ export function makeCollectionRoute<R extends Row, I>(cfg: {
     const body = await req.json().catch(() => null);
     const input = cfg.pickWritable(body);
     try {
-      const row = await cfg.create(claims.cid, input);
+      const row = await cfg.create(claims.cid, input, body);
       await writeAudit({
         clientId: claims.cid,
         userId: claims.sub,

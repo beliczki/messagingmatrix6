@@ -102,6 +102,7 @@ export type Message = {
   utmTerm: string | null;
   utmCd26: string | null;
   finalTraffickedUrl: string | null;
+  archivedAt: string | null;
 };
 
 export const STATUS_OPTIONS = [

@@ -217,6 +217,42 @@ describe("copyMessages", () => {
     expect(created[0].variant).toBe("b"); // bumped from collision
   });
 
+  it("collision in a mixed cell keeps the source's number (never renumbers)", async () => {
+    await seedAudience(erste.id, "aud1");
+    await seedAudience(erste.id, "aud2");
+    await seedTopic(erste.id, "top1");
+    // Source MC7a in aud1 (created into the occupied cell as a new number).
+    await createMessage(erste.id, { audience: "aud1", topic: "top1" }); // MC1a
+    const src = await createMessage(
+      erste.id,
+      { audience: "aud1", topic: "top1" },
+      { requestedNumber: 7 },
+    ); // MC7a
+    // Target cell aud2 holds MC1a + MC7a — a mixed cell.
+    for (const [n, v] of [
+      [1, "a"],
+      [7, "a"],
+    ] as const) {
+      await db.insert(messages).values({
+        clientId: erste.id,
+        number: n,
+        variant: v,
+        audience: "aud2",
+        topic: "top1",
+        versionNo: 1,
+        pmmid: `seed-aud2-${n}${v}`,
+      });
+    }
+
+    const { created } = await copyMessages(erste.id, [src.pmmid!], ["aud2"]);
+    expect(created).toHaveLength(1);
+    // Old bug: nextMcSlot adopted the cell's first number (1) — the copy was
+    // silently renumbered. It must stay MC7 and bump within MC7's variants.
+    expect(created[0].number).toBe(7);
+    expect(created[0].variant).toBe("b");
+    expect(created[0].pmmid).toContain("m_7");
+  });
+
   it("batch copy into the same empty cell stacks variants without colliding with itself", async () => {
     await seedAudience(erste.id, "aud1");
     await seedAudience(erste.id, "aud2");
@@ -316,6 +352,49 @@ describe("moveMessages", () => {
     const untouched = (await getMessage(erste.id, existingInAud2.id))!;
     expect(untouched.variant).toBe("a");
     expect(untouched.version).toBe(existingInAud2.version);
+  });
+
+  it("collision in a mixed cell keeps the mover's number (never renumbers)", async () => {
+    await seedAudience(erste.id, "aud1");
+    await seedAudience(erste.id, "aud2");
+    await seedTopic(erste.id, "top1");
+    // Mover: MC7a in aud1 (second number in the occupied cell).
+    await createMessage(erste.id, { audience: "aud1", topic: "top1" }); // MC1a
+    const src = await createMessage(
+      erste.id,
+      { audience: "aud1", topic: "top1" },
+      { requestedNumber: 7 },
+    ); // MC7a
+    // Target cell aud2 holds MC1a + MC7a — a mixed cell.
+    for (const [n, v] of [
+      [1, "a"],
+      [7, "a"],
+    ] as const) {
+      await db.insert(messages).values({
+        clientId: erste.id,
+        number: n,
+        variant: v,
+        audience: "aud2",
+        topic: "top1",
+        versionNo: 1,
+        pmmid: `seed-aud2-move-${n}${v}`,
+      });
+    }
+
+    const result = await moveMessages(
+      erste.id,
+      [{ mcLabel: src.pmmid!, expectedVersion: src.version }],
+      "aud2",
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const moved = result.updated[0];
+    // Old bug: nextMcSlot adopted the cell's first number (1) — the mover was
+    // silently renumbered and its PMMID regenerated under the wrong identity.
+    expect(moved.number).toBe(7);
+    expect(moved.variant).toBe("b");
+    expect(moved.pmmid).toContain("m_7");
+    expect(moved.audience).toBe("aud2");
   });
 
   it("returns version_conflict on stale expectedVersion, no row mutated", async () => {

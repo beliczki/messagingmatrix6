@@ -241,7 +241,10 @@ export default function FeedView({
               <tr
                 key={m.id}
                 onClick={() => onOpenMessage(m.id)}
-                className="matrix-feed__row matrix-feed__row--clickable cursor-pointer border-b border-slate-100 hover:bg-slate-50"
+                className={clsx(
+                  "matrix-feed__row matrix-feed__row--clickable cursor-pointer border-b border-slate-100 hover:bg-slate-50",
+                  m.archivedAt && "matrix-feed__row--archived row--archived",
+                )}
               >
                 {columns.map((col, idx) => {
                   const raw = cells[col] ?? "";

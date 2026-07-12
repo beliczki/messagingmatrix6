@@ -879,15 +879,21 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
     "mc_create",
     {
       description:
-        "Create a message (MC). Required: audience_key, topic_key. Optional fields object: status, startDate, endDate, template, templateVariantClasses, name, headline, copy1, copy2, disclaimer, *Style fields, customCss, image1..6, video1, flash, flashStyle, cta, ctaStyle, landingUrl, comment, brief. Number/variant/version/PMMID auto-assigned; pass mc_number to claim a specific MC number instead — allowed when no live MC uses it (or when the target cell already holds exactly that number, which just adds the next variant); errors if taken. Returns the new row including pmmid (a.k.a. mc_label).",
+        "Create a message (MC). Required: audience_key, topic_key. Optional fields object: status, startDate, endDate, template, templateVariantClasses, name, headline, copy1, copy2, disclaimer, *Style fields, customCss, image1..6, video1, flash, flashStyle, cta, ctaStyle, landingUrl, comment, brief. Number/variant/version/PMMID auto-assigned (occupied cell: next variant of the cell's first MC number). A cell may hold multiple MC numbers (creative generations): pass mc_number to claim a specific number — if that number already lives in the target cell it adds its next variant; if no MC uses it anywhere it's created as variant 'a' even in an occupied cell; errors if a MC elsewhere uses it. Pass mc_number: 'new' to force a brand-new number (global max + 1) in the cell. Pass variant (single letter a–z) to pin the exact variant letter instead of the auto-assigned one (e.g. mc_number 317 + variant 'b' → 317b even with no 317a); errors if that (number, variant) already lives in the target cell. Returns the new row including pmmid (a.k.a. mc_label).",
       inputSchema: {
         audience_key: z.string(),
         topic_key: z.string(),
-        mc_number: z.number().int().positive().optional(),
+        mc_number: z
+          .union([z.number().int().positive(), z.literal("new")])
+          .optional(),
+        variant: z
+          .string()
+          .regex(/^[a-z]$/, "single lowercase letter a–z")
+          .optional(),
         fields: fieldsArg,
       },
     },
-    async ({ audience_key, topic_key, mc_number, fields }) => {
+    async ({ audience_key, topic_key, mc_number, variant, fields }) => {
       const limited = await requireRate(ctx);
       if (limited) return limited;
       try {
@@ -898,7 +904,7 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
             topic: topic_key,
             ...pickMessageWritable(fields ?? {}),
           },
-          { requestedNumber: mc_number },
+          { requestedNumber: mc_number, requestedVariant: variant },
         );
         await writeAudit({
           clientId: ctx.clientId,
@@ -1382,13 +1388,19 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
     "mc_create_batch",
     {
       description:
-        "Create many messages atomically. Required: messages (array of { audience_key, topic_key, mc_number?, fields? }). All-or-nothing — rolls back on any failure. Number/variant/version/PMMID auto-assigned per row; mc_number claims a specific MC number for that row (same rules as mc_create: must be free, or match the target cell's existing number).",
+        "Create many messages atomically. Required: messages (array of { audience_key, topic_key, mc_number?, variant?, fields? }). All-or-nothing — rolls back on any failure. Number/variant/version/PMMID auto-assigned per row; mc_number claims a specific MC number for that row (same rules as mc_create: a number already in the target cell adds its next variant, a globally-unused number is created as variant 'a' even in an occupied cell, 'new' forces a brand-new number). variant (single letter a–z) pins the exact variant letter for that row (same rules as mc_create).",
       inputSchema: {
         messages: z.array(
           z.object({
             audience_key: z.string(),
             topic_key: z.string(),
-            mc_number: z.number().int().positive().optional(),
+            mc_number: z
+              .union([z.number().int().positive(), z.literal("new")])
+              .optional(),
+            variant: z
+              .string()
+              .regex(/^[a-z]$/, "single lowercase letter a–z")
+              .optional(),
             fields: fieldsArg,
           }),
         ),
@@ -1409,7 +1421,7 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
                   topic: it.topic_key,
                   ...pickMessageWritable(it.fields ?? {}),
                 },
-                { requestedNumber: it.mc_number },
+                { requestedNumber: it.mc_number, requestedVariant: it.variant },
               ),
             );
           }

@@ -466,16 +466,28 @@ function EditableCell({
           density === "compact" && "gap-1.5",
         )}
       >
-        {messages.map((m) => (
-          <EditableChip
-            key={m.id}
-            message={m}
-            density={density}
-            editApi={editApi}
-            ghostSource={isSourceCellForPendingMove}
-            onClick={() => onOpenMessage(m.id)}
-          />
-        ))}
+        {messages.map((m) =>
+          m.archivedAt ? (
+            // Archived chips (visible via the Show archived toggle) open the
+            // editor but are never selectable/draggable — the server's move
+            // guard checks status only, not archivedAt, so the UI closes it.
+            <PlainChip
+              key={m.id}
+              message={m}
+              density={density}
+              onClick={() => onOpenMessage(m.id)}
+            />
+          ) : (
+            <EditableChip
+              key={m.id}
+              message={m}
+              density={density}
+              editApi={editApi}
+              ghostSource={isSourceCellForPendingMove}
+              onClick={() => onOpenMessage(m.id)}
+            />
+          ),
+        )}
         {ghosts.map((g) => (
           <GhostChip key={`g:${g.id}`} message={g} density={density} />
         ))}
@@ -508,6 +520,7 @@ function PlainChip({
 }) {
   const label = `MC${message.number}${message.variant}`;
   const dot = STATUS_COLOR[message.status ?? ""] ?? "bg-slate-300";
+  const archived = message.archivedAt !== null;
 
   if (density === "dense") {
     return (
@@ -518,6 +531,7 @@ function PlainChip({
         className={clsx(
           "mc-chip mc-chip--dense size-2.5 cursor-pointer rounded-full transition hover:ring-2 hover:ring-border-subtle",
           dot,
+          archived && "mc-chip--archived row--archived",
         )}
       />
     );
@@ -527,10 +541,20 @@ function PlainChip({
       <button
         onClick={onClick}
         title={`${label} · ${message.name ?? "(unnamed)"}`}
-        className="mc-chip mc-chip--compact inline-flex max-w-full cursor-pointer items-center gap-1.5 rounded border border-border bg-surface px-1.5 py-0.5 text-[10px] transition hover:border-border-subtle hover:bg-surface-alt"
+        className={clsx(
+          "mc-chip mc-chip--compact inline-flex max-w-full cursor-pointer items-center gap-1.5 rounded border border-border bg-surface px-1.5 py-0.5 text-[10px] transition hover:border-border-subtle hover:bg-surface-alt",
+          archived && "mc-chip--archived row--archived",
+        )}
       >
         <span className={clsx("mc-chip__dot status-dot size-1.5 rounded-full", dot)} />
-        <span className="mc-chip__label font-mono text-text-primary">{label}</span>
+        <span
+          className={clsx(
+            "mc-chip__label font-mono text-text-primary",
+            archived && "row--archived__title",
+          )}
+        >
+          {label}
+        </span>
       </button>
     );
   }
@@ -538,11 +562,21 @@ function PlainChip({
     <button
       onClick={onClick}
       title={`${label} · ${message.name ?? "(unnamed)"}`}
-      className="mc-chip mc-chip--detailed flex max-w-full cursor-pointer flex-col items-start gap-0.5 rounded border border-border bg-surface px-1.5 py-1 text-xs transition hover:border-border-subtle hover:bg-surface-alt"
+      className={clsx(
+        "mc-chip mc-chip--detailed flex max-w-full cursor-pointer flex-col items-start gap-0.5 rounded border border-border bg-surface px-1.5 py-1 text-xs transition hover:border-border-subtle hover:bg-surface-alt",
+        archived && "mc-chip--archived row--archived",
+      )}
     >
       <span className="mc-chip__line mc-chip__line--label inline-flex items-center gap-1.5">
         <span className={clsx("mc-chip__dot status-dot size-1.5 rounded-full", dot)} />
-        <span className="mc-chip__label font-mono text-text-primary">{label}</span>
+        <span
+          className={clsx(
+            "mc-chip__label font-mono text-text-primary",
+            archived && "row--archived__title",
+          )}
+        >
+          {label}
+        </span>
       </span>
       {message.name ? (
         <span className="mc-chip__line mc-chip__line--name max-w-full truncate text-[10px] text-text-secondary">

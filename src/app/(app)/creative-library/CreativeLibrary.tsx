@@ -724,20 +724,20 @@ export default function CreativeLibrary() {
           const content = (
             <>
               {selectionBlock}
-              <LibraryViewSwitcher view={view} setView={setView} collapsed={collapsed}>
-                <ArchiveToggle
-                  showArchived={showArchived}
-                  onChange={setShowArchived}
-                  collapsed={collapsed}
-                />
-              </LibraryViewSwitcher>
+              <LibraryViewSwitcher view={view} setView={setView} collapsed={collapsed} />
+              <ArchiveToggle
+                showArchived={showArchived}
+                onChange={setShowArchived}
+                collapsed={collapsed}
+                className="mt-auto"
+              />
               <button
                 type="button"
                 onClick={() => setUploadOpen(true)}
                 title="Upload"
                 aria-label="Upload"
                 className={clsx(
-                  "toolbar-btn--primary mt-auto inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-900 font-medium text-white hover:bg-slate-800",
+                  "toolbar-btn--primary inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-900 font-medium text-white hover:bg-slate-800",
                   collapsed ? "size-9" : "px-3 py-1.5 text-xs",
                 )}
               >

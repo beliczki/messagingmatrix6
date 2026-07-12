@@ -132,6 +132,12 @@ export default function EditModePanel({
           )}
         </div>
       ) : null}
+
+      {editApi.editMode && editApi.bulkError ? (
+        <div className="edit-mode-panel__error mt-3 rounded border border-rose-200 bg-rose-50 px-2 py-1.5 text-[10px] text-rose-700">
+          {editApi.bulkError}
+        </div>
+      ) : null}
     </div>
   );
 }

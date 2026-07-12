@@ -1,6 +1,10 @@
-// MC numbering. v5-locked behavior. Spec §14.
+// MC numbering. v5-locked behavior for single-number cells. Spec §14.
 // Cases are golden in tests/fixtures/v5/mc-numbering/cases.json.
 // Source-of-truth: v5 src/hooks/useMatrix.js:377-409.
+// v6 extension: a cell may hold multiple MC numbers (creative generations).
+// The variant sequence is scoped per number, not per cell — nextMcSlot's
+// occupied branch bumps the variant among occupants sharing the chosen
+// number only.
 
 export type ExistingMessage = {
   number?: number | null;
@@ -17,7 +21,7 @@ export type McSlot = {
   version: number; // legacy v5 field name; equivalent to v6's version_no
 };
 
-function isLive(m: ExistingMessage): boolean {
+export function isLive(m: ExistingMessage): boolean {
   return m.status !== "deleted" && (m.archivedAt ?? null) === null;
 }
 
@@ -53,14 +57,38 @@ export function nextMcSlot(
 
   if (inCell.length === 0) {
     // Empty cell — global max.
-    let max = 0;
-    for (const m of live) {
-      if (typeof m.number === "number" && m.number > max) max = m.number;
-    }
-    return { number: max + 1, variant: "a", version: 1 };
+    return { number: nextNewNumber(messages), variant: "a", version: 1 };
   }
 
-  // Occupied — same number, next variant.
+  // Occupied — first occupant's number, next variant among that number's
+  // occupants (a mixed cell's other numbers don't advance this sequence).
   const number = inCell.find((m) => typeof m.number === "number")?.number ?? 1;
-  return { number, variant: maxVariantChar(inCell), version: 1 };
+  return {
+    number,
+    variant: maxVariantChar(inCell.filter((m) => (m.number ?? 1) === number)),
+    version: 1,
+  };
+}
+
+// Next free MC number: MAX(live numbers globally) + 1. Numbers identify a
+// card across audience copies, so allocation is global, never per cell.
+export function nextNewNumber(messages: ExistingMessage[]): number {
+  let max = 0;
+  for (const m of messages.filter(isLive)) {
+    if (typeof m.number === "number" && m.number > max) max = m.number;
+  }
+  return max + 1;
+}
+
+// Next variant for a specific number among a cell's occupants: "a" when no
+// live occupant carries the number, else one past the max variant char of
+// those that do. Copy/move collision handling and explicit-number creates
+// use this so a mixed cell never renumbers or cross-pollutes variants.
+export function nextVariantForNumber(
+  occupants: ExistingMessage[],
+  number: number,
+): string {
+  const matching = occupants.filter((m) => isLive(m) && m.number === number);
+  if (matching.length === 0) return "a";
+  return maxVariantChar(matching);
 }

@@ -233,14 +233,21 @@ export async function createMessage(
     if (liveInCell.some((m) => m.number === n)) {
       slot.number = n;
       slot.variant = nextVariantForNumber(liveInCell, n);
-    } else if (live.some((m) => m.number === n)) {
-      // The number identifies the card across audience copies (and never
-      // spans topics — findSiblings relies on it), so a number living in any
-      // other cell — even archived — can't be claimed here.
-      throw new MessageError(
-        `MC number ${n} is already in use — pick a free number or omit it for auto-assign`,
-      );
     } else {
+      // A number identifies a card WITHIN one topic — same-topic rows in
+      // other audiences are the card's audience copies, so claiming n there
+      // is the normal way to place the card in a new cell (e.g. a batch
+      // creating one card across many audiences). Only a number living in a
+      // DIFFERENT topic — even archived — is off-limits: (number, variant)
+      // never spans topics (findSiblings relies on it).
+      const otherTopic = live.find(
+        (m) => m.number === n && m.topic !== input.topic,
+      );
+      if (otherTopic) {
+        throw new MessageError(
+          `MC number ${n} is already in use in topic '${otherTopic.topic}' — a number never spans topics; pick a free number or omit it for auto-assign`,
+        );
+      }
       slot.number = n;
       slot.variant = "a";
     }
@@ -270,6 +277,26 @@ export async function createMessage(
       );
     }
     slot.variant = v;
+  }
+
+  // Explicit claims must not create a live twin of a dormant (archived /
+  // legacy-deleted) same-cell row — the twin would carry the identical PMMID
+  // and a later restore would resurrect a duplicate. Live collisions are
+  // handled above; the auto-assign path keeps its v5 semantics.
+  if (opts.requestedNumber !== undefined || opts.requestedVariant !== undefined) {
+    const dormantTwin = live.find(
+      (m) =>
+        !isLive(m) &&
+        m.topic === input.topic &&
+        m.audience === input.audience &&
+        m.number === slot.number &&
+        (m.variant ?? "") === slot.variant,
+    );
+    if (dormantTwin) {
+      throw new MessageError(
+        `MC${slot.number}${slot.variant} exists archived in this cell — restore it instead, or pick another variant`,
+      );
+    }
   }
 
   const patterns = await readClientPatterns(clientId);

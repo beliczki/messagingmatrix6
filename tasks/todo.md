@@ -3462,3 +3462,17 @@ Invariáns-megjegyzés: 317b 317a nélkül szándékos rés; nextVariantForNumbe
 később maxChar+1-et ad (317c), nincs crash. PMMID/trafficking number+variant-ot
 kap, csak átveszi. Uniqueness scope = (client,topic,audience,number,variant),
 egyezik a tervezett unique index follow-uppal.
+
+### Checkpoint — explicit variant DONE, deploy deferred (2026-07-12)
+- Kód kész: createMessage requestedVariant (a–z validál, in-cell (number,variant)
+  ütközés-guard, szám-allokáció változatlan); mc_create + mc_create_batch variant?
+  séma+description; HTTP POST /api/messages readVariant parity.
+- Tesztek: +4 (317b friss szám, variant-only default szám, in-cell ütközés error,
+  nem-betű error). Teljes suite 407/407 zöld, tsc clean.
+- Git: a konkurens commit a3dbce5 ("multi-number cells, show-archived toggle…")
+  BEBUNDLE-özte ezt a variant-változást is; már origin/main-en (local==origin, 0/0).
+- Box (mm6-erste) 4d27010-en áll — EGY commit-tal le van maradva, NINCS deploy-olva.
+  Az élő MCP ezért még nem mutatja a variant paramot. Deploy szándékosan HALASZTVA:
+  user szerint valaki épp deploy-ol → a boxhoz nem nyúltam (nincs pull/build/restart).
+- Következő lépés (más csinálja / külön session): box git pull ff→a3dbce5, npm run
+  build, pm2 restart mm6-erste, majd az élő mc_create sémában ellenőrizni a variant-ot.

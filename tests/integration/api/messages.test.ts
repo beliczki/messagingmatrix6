@@ -239,14 +239,55 @@ describe("messages — numbering on create", () => {
     await seedAudienceAndTopic(erste.id);
     const a = await createMessage(erste.id, { topic: "top1", audience: "aud1" }); // MC1a
     await archiveMessage(erste.id, a.id, a.version);
-    // A live twin of the archived MC1a would collide on restore.
+    // A live twin of the archived MC1a would carry its PMMID and collide on
+    // restore — the dormant-twin guard rejects with a restore pointer.
     await expect(
       createMessage(
         erste.id,
         { topic: "top1", audience: "aud1" },
         { requestedNumber: 1 },
       ),
-    ).rejects.toThrow(/already in use/);
+    ).rejects.toThrow(/exists archived in this cell/);
+  });
+
+  it("same number is claimable across audiences within one topic (batch card placement)", async () => {
+    // The mc_create_batch scenario: one card (number) created into several
+    // audience cells of the same topic. The uniqueness rule is topic-scoped,
+    // not global — item 2 must not be blocked by item 1's fresh row.
+    await seedAudienceAndTopic(erste.id, "aud1", "top1");
+    await seedAudienceAndTopic(erste.id, "aud2", "top2"); // aud2 exists; top2 unused here
+    const first = await createMessage(
+      erste.id,
+      { topic: "top1", audience: "aud1" },
+      { requestedNumber: 316 },
+    );
+    const second = await createMessage(
+      erste.id,
+      { topic: "top1", audience: "aud2" },
+      { requestedNumber: 316 },
+    );
+    expect([first.number, first.variant]).toEqual([316, "a"]);
+    expect([second.number, second.variant]).toEqual([316, "a"]);
+    expect(second.pmmid).toContain("aud2");
+  });
+
+  it("archived same-number row in another audience of the topic does not block the claim", async () => {
+    await seedAudienceAndTopic(erste.id, "aud1", "top1");
+    await seedAudienceAndTopic(erste.id, "aud2", "top2");
+    const a = await createMessage(
+      erste.id,
+      { topic: "top1", audience: "aud1" },
+      { requestedNumber: 5 },
+    );
+    await archiveMessage(erste.id, a.id, a.version);
+    // Different cell — restoring aud1's MC5a alongside aud2's is the normal
+    // cross-audience card shape, not a duplicate.
+    const m = await createMessage(
+      erste.id,
+      { topic: "top1", audience: "aud2" },
+      { requestedNumber: 5 },
+    );
+    expect([m.number, m.variant]).toEqual([5, "a"]);
   });
 
   it("requestedVariant pins an explicit letter on a fresh number (317b with no 317a)", async () => {

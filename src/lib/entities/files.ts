@@ -44,7 +44,7 @@ export async function uploadFile(
       .values({
         id: nanoid(),
         clientId,
-        filename: sanitize(input.originalFilename),
+        filename: sanitizeFilename(input.originalFilename),
         originalFilename: input.originalFilename,
         storagePath: dup.storagePath,
         mimeType: input.mimeType,
@@ -67,7 +67,7 @@ export async function uploadFile(
     .values({
       id: nanoid(),
       clientId,
-      filename: sanitize(input.originalFilename),
+      filename: sanitizeFilename(input.originalFilename),
       originalFilename: input.originalFilename,
       storagePath: stored.storagePath,
       mimeType: input.mimeType,
@@ -207,6 +207,6 @@ async function sha256OfBuffer(buf: Buffer): Promise<string> {
   return crypto.createHash("sha256").update(buf).digest("hex");
 }
 
-function sanitize(filename: string): string {
+export function sanitizeFilename(filename: string): string {
   return filename.replace(/[^\w.\-+ ()]/g, "_").slice(0, 240);
 }

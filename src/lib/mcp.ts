@@ -1,4 +1,5 @@
-import { and, eq, inArray, max, sql } from "drizzle-orm";
+import { and, eq, inArray, max, ne, sql } from "drizzle-orm";
+import sharp from "sharp";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/db";
@@ -10,6 +11,7 @@ import {
   messagePreviews,
   messages,
   reporting,
+  uploadedFiles,
   topics,
   type Audience,
   type Message,
@@ -49,6 +51,18 @@ import { isNull } from "drizzle-orm";
 import { listVisibleTemplates, readTemplate } from "@/lib/templates";
 import { collectStalePreviews } from "@/lib/previews";
 import { shootPreviews } from "@/lib/preview-shooter";
+import { createAsset } from "@/lib/entities/assets";
+import {
+  getFileByFilename,
+  sanitizeFilename,
+  uploadFile,
+} from "@/lib/entities/files";
+import { fetchRemoteFile } from "@/lib/fetch-remote-file";
+import {
+  DEFAULT_CREATIVE_PARSING_RULES,
+} from "@/db/defaults";
+import { parseFilename, type ParseRules } from "@/lib/parse-filename";
+import { extFromFilename } from "@/lib/storage";
 import { writeAudit } from "@/lib/audit";
 
 export type McpContext = {
@@ -1072,6 +1086,194 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
   );
 }
 
+// ── Asset write tools ──
+
+const ASSET_BASE64_MAX = 10 * 1024 * 1024; // decoded; MCP JSON is fully buffered
+const ASSET_URL_MAX = 50 * 1024 * 1024; // parity with /api/files/upload MAX_BYTES
+
+// Extension → MIME for the formats assets actually hold. Preferred over the
+// remote server's content-type (which is often octet-stream on file hosts).
+const EXT_MIME: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".mov": "video/quicktime",
+};
+
+async function clientParsingRules(clientId: number): Promise<ParseRules> {
+  const [row] = await db
+    .select()
+    .from(configTable)
+    .where(
+      and(
+        eq(configTable.clientId, clientId),
+        eq(configTable.key, "creativeParsingRules"),
+      ),
+    )
+    .limit(1);
+  if (row) {
+    try {
+      return JSON.parse(row.value) as ParseRules;
+    } catch {
+      // corrupt JSON → defaults, same as /api/config/parsing-rules
+    }
+  }
+  return DEFAULT_CREATIVE_PARSING_RULES as ParseRules;
+}
+
+function registerAssetWriteTools(server: McpServer, ctx: McpContext): void {
+  server.registerTool(
+    "asset_upload",
+    {
+      description:
+        "Upload a media file and create an asset row for it. Provide the file via EXACTLY ONE of: data_base64 (base64-encoded bytes, max 10MB decoded — for small images) or source_url (a public http(s) URL the server downloads, max 50MB — for larger files/videos; private/internal addresses are refused). The filename matters: MCs reference assets by it (image1..6/video1), and template rendering resolves /api/drive/proxy/<filename> newest-first — so a duplicate filename is REJECTED unless replace_existing=true (then the new file wins resolution; the old file stays). brand/product/type/visual_keyword are auto-derived from the filename via the client's parsing rules; explicit values override. Returns { asset, file, parsed_fields, warnings }; file.deduplicated=true means identical bytes already existed (no new object stored). Counts as one write against the rate limit.",
+      inputSchema: {
+        filename: z.string().min(1),
+        data_base64: z.string().optional(),
+        source_url: z.string().optional(),
+        brand: z.string().optional(),
+        product: z.string().optional(),
+        type: z.string().optional(),
+        visual_keyword: z.string().optional(),
+        comment: z.string().optional(),
+        replace_existing: z.boolean().optional(),
+      },
+    },
+    async (args) => {
+      const limited = await requireRate(ctx);
+      if (limited) return limited;
+
+      if (!args.data_base64 === !args.source_url) {
+        return errorResult(
+          "provide exactly one of data_base64 or source_url",
+        );
+      }
+
+      let buffer: Buffer;
+      let remoteContentType: string | null = null;
+      if (args.data_base64) {
+        buffer = Buffer.from(args.data_base64, "base64");
+        if (buffer.length === 0) {
+          return errorResult("data_base64 decoded to zero bytes — not valid base64?");
+        }
+        if (buffer.length > ASSET_BASE64_MAX) {
+          return errorResult(
+            `file too large for base64 transport: ${buffer.length} bytes (max ${ASSET_BASE64_MAX}) — use source_url instead`,
+          );
+        }
+      } else {
+        try {
+          const fetched = await fetchRemoteFile(args.source_url!, {
+            maxBytes: ASSET_URL_MAX,
+          });
+          buffer = fetched.buffer;
+          remoteContentType = fetched.contentType;
+        } catch (e) {
+          return errorResult(`source_url fetch failed: ${(e as Error).message}`);
+        }
+      }
+
+      const sanitized = sanitizeFilename(args.filename);
+      const existing = await getFileByFilename(ctx.clientId, sanitized);
+      if (existing && args.replace_existing !== true) {
+        return errorResult("filename_exists", {
+          existing_file_id: existing.id,
+          hint: "a file with this name already exists and template rendering resolves by filename (newest wins) — pass replace_existing=true to intentionally supersede it, or pick another filename",
+        });
+      }
+
+      const ext = extFromFilename(args.filename).toLowerCase();
+      const mimeType =
+        EXT_MIME[ext] ?? remoteContentType ?? "application/octet-stream";
+
+      let dimensions: string | undefined;
+      if (mimeType.startsWith("image/")) {
+        try {
+          const meta = await sharp(buffer).metadata();
+          if (meta.width && meta.height) {
+            dimensions = `${meta.width}x${meta.height}`;
+          }
+        } catch {
+          // non-image bytes with an image extension — dimensions stay unset
+        }
+      }
+
+      const file = await uploadFile(ctx.clientId, {
+        buffer,
+        originalFilename: args.filename,
+        mimeType,
+        category: "asset",
+        uploadedBy: mcpUserId(ctx),
+        dimensions,
+      });
+      await writeAudit({
+        clientId: ctx.clientId,
+        userId: mcpUserId(ctx),
+        entityType: "uploaded_files",
+        entityId: file.id,
+        action: "create",
+        after: file,
+      });
+
+      const rules = await clientParsingRules(ctx.clientId);
+      const parsed = parseFilename(args.filename, rules);
+      const asset = await createAsset(ctx.clientId, {
+        fileId: file.id,
+        fileName: file.filename,
+        fileFormat: ext.replace(/^\./, "") || null,
+        fileSize: String(file.sizeBytes),
+        fileDimensions: file.dimensions,
+        brand: args.brand ?? parsed.fields.brand ?? null,
+        product: args.product ?? parsed.fields.product ?? null,
+        type: args.type ?? parsed.fields.type ?? null,
+        visualKeyword: args.visual_keyword ?? parsed.fields.visualKeyword ?? null,
+        comment: args.comment ?? null,
+      });
+      await writeAudit({
+        clientId: ctx.clientId,
+        userId: mcpUserId(ctx),
+        entityType: "assets",
+        entityId: asset.id,
+        action: "create",
+        after: asset,
+      });
+
+      // Identical bytes already existed under another row → uploadFile reused
+      // the stored object instead of writing a new one.
+      const [dup] = await db
+        .select({ id: uploadedFiles.id })
+        .from(uploadedFiles)
+        .where(
+          and(
+            eq(uploadedFiles.clientId, ctx.clientId),
+            eq(uploadedFiles.sha256, file.sha256!),
+            ne(uploadedFiles.id, file.id),
+          ),
+        )
+        .limit(1);
+
+      return jsonResult({
+        asset,
+        file: {
+          id: file.id,
+          filename: file.filename,
+          size_bytes: file.sizeBytes,
+          mime_type: file.mimeType,
+          dimensions: file.dimensions,
+          deduplicated: dup !== undefined,
+        },
+        parsed_fields: parsed.fields,
+        warnings: parsed.warnings,
+      });
+    },
+  );
+}
+
 // ── Batch tools ──
 // All batch tools wrap their work in `await db.transaction(async () => …)`. The
 // `db` proxy threads the active transaction through an AsyncLocalStorage context
@@ -1402,6 +1604,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   registerAudienceWriteTools(server, ctx);
   registerTopicWriteTools(server, ctx);
   registerMessageWriteTools(server, ctx);
+  registerAssetWriteTools(server, ctx);
   registerBatchTools(server, ctx);
   return server;
 }

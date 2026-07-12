@@ -3353,3 +3353,14 @@ new `message_previews` table, NOT columns on the row.
 - Tests 381/381 (+12: route contract w/ mocked shooter, status message_id, MCP tool, rate limit).
 - Box deploy needs ONE-TIME: npx playwright install --with-deps chromium (as PM2 user, ~/.cache/
   ms-playwright survives deploys; re-run on playwright version bumps).
+
+**[DONE 2026-07-12] MCP asset_upload — file upload over MCP:**
+- New tool asset_upload: data_base64 (≤10MB decoded) VAGY source_url (≤50MB, szerver tölti le).
+- src/lib/fetch-remote-file.ts: SSRF-guard (http/https only, private/loopback/link-local IP-k +
+  DNS-feloldás tiltva, redirect-hopok újravalidálva, size-capped stream; DNS TOCTOU documented).
+- Filename-ütközés REJECTED by default (drive/proxy "newest wins" élő bannert írhatna át) —
+  replace_existing=true az explicit felülírás. Sub-second replace tie: inherent, dokumentált.
+- Metaadat: parseFilename a kliens creativeParsingRules-szal (server-side), explicit args felülírnak.
+- uploadFile + createAsset lánc (két writeAudit, HTTP-route-paritás); sha256 dedup → file.deduplicated.
+- sanitize → sanitizeFilename export (files.ts); McpTab "Asset upload" prose section.
+- Tests 389/389 (+8 mcp-asset-upload.test.ts). Local live smoke OK (asset létrejött, majd purge-ölve).

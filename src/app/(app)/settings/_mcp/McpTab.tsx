@@ -141,6 +141,23 @@ export function McpTab() {
         </p>
       </Section>
 
+      <Section title="Asset upload">
+        <p className="text-sm text-slate-600">
+          <code className="font-mono text-xs">asset_upload</code> stores a
+          media file and creates the asset row in one call. Small files go
+          inline as <code className="font-mono text-xs">data_base64</code>{" "}
+          (max 10&nbsp;MB decoded); larger ones via{" "}
+          <code className="font-mono text-xs">source_url</code> — a public
+          http(s) URL the server downloads (max 50&nbsp;MB; private/internal
+          addresses are refused). Duplicate filenames are rejected unless{" "}
+          <code className="font-mono text-xs">replace_existing=true</code>,
+          because template rendering resolves images by filename
+          (newest&nbsp;wins). brand/product/type are auto-derived from the
+          filename via the client&apos;s parsing rules; explicit values
+          override.
+        </p>
+      </Section>
+
       <Section title="Audit & broadcast">
         <p className="text-sm text-slate-600">
           Writes go through the same entity layer as the UI: every mutation is

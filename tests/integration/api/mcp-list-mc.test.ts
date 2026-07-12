@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { messages, clients } from "@/db/schema";
+import { messages, messagePreviews, clients } from "@/db/schema";
 import { buildMcpServer } from "@/lib/mcp";
 import { createTestDb, type TestDb } from "../../helpers/test-db";
 
@@ -95,6 +96,74 @@ describe("list_mc via MCP", () => {
     expect(def.json).toHaveLength(100); // default still 100
     const all = await callTool(erste.id, "list_mc", { limit: 5000 });
     expect(all.json).toHaveLength(120);
+  });
+
+  it("carries preview_urls as a {size: url} map, {} when none generated", async () => {
+    await seedMc(erste.id, 1);
+    await seedMc(erste.id, 2);
+    const [mc1] = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(eq(messages.number, 1));
+    const [p300, p970] = await db
+      .insert(messagePreviews)
+      .values([
+        {
+          clientId: erste.id,
+          messageId: mc1!.id,
+          size: "300x250",
+          storageKey: "erste/previews/2026/07/a.png",
+          messageVersion: 1,
+        },
+        {
+          clientId: erste.id,
+          messageId: mc1!.id,
+          size: "970x250",
+          storageKey: "erste/previews/2026/07/b.png",
+          messageVersion: 1,
+        },
+      ])
+      .returning();
+
+    const { json } = await callTool(erste.id, "list_mc", {});
+    const row1 = json.find((r: { number: number }) => r.number === 1);
+    const row2 = json.find((r: { number: number }) => r.number === 2);
+    expect(row1.preview_urls).toEqual({
+      "300x250": `/api/previews/${p300!.id}`,
+      "970x250": `/api/previews/${p970!.id}`,
+    });
+    expect(row2.preview_urls).toEqual({});
+  });
+
+  it("prefixes preview_urls with the ctx origin when present", async () => {
+    await seedMc(erste.id, 1);
+    const [mc1] = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(eq(messages.number, 1));
+    const [p] = await db
+      .insert(messagePreviews)
+      .values({
+        clientId: erste.id,
+        messageId: mc1!.id,
+        size: "300x250",
+        storageKey: "erste/previews/2026/07/a.png",
+        messageVersion: 1,
+      })
+      .returning();
+
+    const server = buildMcpServer({
+      clientId: erste.id,
+      origin: "https://erste.messagingmatrix.ai",
+    });
+    const registry = (server as unknown as {
+      _registeredTools: Record<string, { handler: Handler }>;
+    })._registeredTools;
+    const res = await registry.list_mc!.handler({});
+    const json = JSON.parse(res.content[0]!.text);
+    expect(json[0].preview_urls["300x250"]).toBe(
+      `https://erste.messagingmatrix.ai/api/previews/${p!.id}`,
+    );
   });
 
   it("offset paging is gap-free and reconstructs the full set", async () => {

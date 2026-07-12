@@ -274,6 +274,44 @@ export const messages = pgTable(
   ],
 );
 
+// Auto-generated preview screenshots for dynamic-HTML MCs — one PNG per template
+// size. Regenerable derivative (bytes in the object store under previews/), so this
+// is cache, not source of truth: a row is STALE when message_version != the parent
+// message's `version` (the optimistic-lock int the matrix iframe render-cache also
+// keys on, so any edit invalidates). Populated out-of-band by scripts/gen-previews.ts.
+export const messagePreviews = pgTable(
+  "message_previews",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    clientId: integer("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    messageId: integer("message_id")
+      .notNull()
+      .references(() => messages.id, { onDelete: "cascade" }),
+    // "WIDTHxHEIGHT", matches templates.ts sizes (e.g. "300x250").
+    size: text("size").notNull(),
+    // Relative object-store path / S3 key returned by storage.writeFile.
+    storageKey: text("storage_key").notNull(),
+    // Snapshot of messages.version at capture time → staleness check.
+    messageVersion: integer("message_version").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(nowUtc),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(nowUtc),
+  },
+  (t) => [
+    uniqueIndex("message_previews_message_size_unique").on(
+      t.clientId,
+      t.messageId,
+      t.size,
+    ),
+    index("message_previews_client_message_idx").on(t.clientId, t.messageId),
+  ],
+);
+
 // §3.4
 export const assets = pgTable(
   "assets",

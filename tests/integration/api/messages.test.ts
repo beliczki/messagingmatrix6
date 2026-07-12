@@ -104,6 +104,59 @@ describe("messages — numbering on create", () => {
       createMessage(erste.id, { topic: "ghost", audience: "aud1" }),
     ).rejects.toThrow(MessageError);
   });
+
+  it("requestedNumber claims a free number in an empty cell", async () => {
+    await seedAudienceAndTopic(erste.id);
+    const m = await createMessage(
+      erste.id,
+      { topic: "top1", audience: "aud1" },
+      { requestedNumber: 42 },
+    );
+    expect(m.number).toBe(42);
+    expect(m.variant).toBe("a");
+    expect(m.pmmid).toBe("a_aud1-t_top1-m_42-v_a-n_1");
+    // auto-assign continues from the global max
+    await seedAudienceAndTopic(erste.id, "aud2", "top2");
+    const next = await createMessage(erste.id, { topic: "top2", audience: "aud2" });
+    expect(next.number).toBe(43);
+  });
+
+  it("requestedNumber rejects a number any live MC already uses", async () => {
+    await seedAudienceAndTopic(erste.id, "aud1", "top1");
+    await seedAudienceAndTopic(erste.id, "aud2", "top2");
+    await createMessage(erste.id, { topic: "top1", audience: "aud1" }); // MC1
+    await expect(
+      createMessage(
+        erste.id,
+        { topic: "top2", audience: "aud2" },
+        { requestedNumber: 1 },
+      ),
+    ).rejects.toThrow(/already in use/);
+  });
+
+  it("requestedNumber matching an occupied cell's number adds the next variant", async () => {
+    await seedAudienceAndTopic(erste.id);
+    const a = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    const b = await createMessage(
+      erste.id,
+      { topic: "top1", audience: "aud1" },
+      { requestedNumber: a.number },
+    );
+    expect(b.number).toBe(a.number);
+    expect(b.variant).toBe("b");
+  });
+
+  it("requestedNumber differing from an occupied cell's number is rejected", async () => {
+    await seedAudienceAndTopic(erste.id);
+    await createMessage(erste.id, { topic: "top1", audience: "aud1" }); // MC1
+    await expect(
+      createMessage(
+        erste.id,
+        { topic: "top1", audience: "aud1" },
+        { requestedNumber: 7 },
+      ),
+    ).rejects.toThrow(/already holds MC1/);
+  });
 });
 
 describe("messages — cascade archive + parent-first restore", () => {

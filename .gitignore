@@ -30,3 +30,6 @@ test-results
 # session locks and personal local overrides are not.
 .claude/*.lock
 .claude/settings.local.json
+
+# Codex CLI local state
+.codex/

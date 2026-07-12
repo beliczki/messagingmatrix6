@@ -169,12 +169,17 @@ function injectBaseHref(html: string, href: string): string {
   return tag + html;
 }
 
-// Strips animations + transitions for preview "skip animation" mode.
+// Skips animations + transitions for preview "skip animation" mode by forcing
+// them to complete instantly (duration/delay 0) rather than disabling them —
+// `animation: none` would freeze animate-in elements at their base state
+// (e.g. `.animated #headlineWrapper { opacity: 0 }`), blanking all copy;
+// a zero-duration run lands on the 100% keyframe and `fill-mode: forwards`
+// holds it, so the banner shows its final resting frame.
 // Inserted AFTER inline CSS so it wins on specificity. Cosmetic only —
 // the rendered file shipped to AdForm is unaffected.
 function injectSkipAnimations(html: string): string {
   const block = `<style data-mm6-skip-anim>
-*,*::before,*::after{animation:none !important;transition:none !important;}
+*,*::before,*::after{animation-duration:0s !important;animation-delay:0s !important;transition:none !important;}
 </style>`;
   if (/<\/head>/i.test(html)) {
     return html.replace(/<\/head>/i, `${block}\n</head>`);

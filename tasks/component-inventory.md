@@ -386,6 +386,7 @@ Persisted localStorage kulcsok:
 | Search box | `input-box input-box--with-icon` | 494–503 |
 | Product / Type / Size MultiPill | `multi-pill` | – |
 | Clear gomb | `toolbar-btn` | – |
+| Missing-preview warning pill + offender dropdown | `creative-library__preview-warning` (`-btn`, `-menu`, `-row`) | – |
 | Upload gomb | `toolbar-btn--primary` | – |
 | Scroll area (wrapping a grid/masonry/list) | `creative-library__scroll` | – |
 | Drop overlay | `drop-overlay` (globalis) | 307–313 |

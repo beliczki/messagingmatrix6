@@ -122,6 +122,22 @@ export function McpTab() {
         </p>
       </Section>
 
+      <Section title="Preview images">
+        <p className="text-sm text-slate-600">
+          <code className="font-mono text-xs">list_mc</code> rows carry{" "}
+          <code className="font-mono text-xs">preview_urls</code> — a{" "}
+          <code className="font-mono text-xs">{"{size: url}"}</code> map of
+          generated PNG screenshots of each rendered HTML creative. The URLs
+          point at{" "}
+          <code className="font-mono text-xs">/api/previews/&lt;id&gt;</code>{" "}
+          and accept the same MCP bearer (or an app session) on a plain HTTP
+          GET — they are fetched outside the MCP protocol. Previews are
+          generated per template size by{" "}
+          <code className="font-mono text-xs">npm run gen:previews</code> and
+          regenerate only when the MC has been edited since the last shot.
+        </p>
+      </Section>
+
       <Section title="Audit & broadcast">
         <p className="text-sm text-slate-600">
           Writes go through the same entity layer as the UI: every mutation is

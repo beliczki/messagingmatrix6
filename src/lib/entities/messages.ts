@@ -180,6 +180,9 @@ export async function getMessageByPmmid(
 export async function createMessage(
   clientId: number,
   input: MessageInput,
+  // requestedNumber (MCP mc_number): claim a specific MC number instead of
+  // MAX+1. Kept out of MessageInput so it can't leak into the insert spread.
+  opts: { requestedNumber?: number } = {},
 ): Promise<Message> {
   if (!input.audience) throw new MessageError("audience is required");
   if (!input.topic) throw new MessageError("topic is required");
@@ -193,11 +196,32 @@ export async function createMessage(
     throw new MessageError(`topic '${input.topic}' not found`);
   }
 
-  const slot = nextMcSlot(
-    await listLiveMessages(clientId),
-    input.topic,
-    input.audience,
-  );
+  const live = await listLiveMessages(clientId);
+  const slot = nextMcSlot(live, input.topic, input.audience);
+  if (opts.requestedNumber !== undefined) {
+    const n = opts.requestedNumber;
+    const cellOccupied = live.some(
+      (m) => m.topic === input.topic && m.audience === input.audience,
+    );
+    if (cellOccupied) {
+      // The cell's number is fixed — a matching request is a no-op (next
+      // variant as usual), a different one can't be honored.
+      if (slot.number !== n) {
+        throw new MessageError(
+          `cell (topic '${input.topic}', audience '${input.audience}') already holds MC${slot.number} — requested number ${n} conflicts; omit it to add the next variant`,
+        );
+      }
+    } else {
+      // The number identifies the card across audience copies, so a fresh
+      // cell may only claim a number no live MC uses anywhere.
+      if (live.some((m) => m.number === n)) {
+        throw new MessageError(
+          `MC number ${n} is already in use — pick a free number or omit it for auto-assign`,
+        );
+      }
+      slot.number = n;
+    }
+  }
 
   const patterns = await readClientPatterns(clientId);
   // The Erste pmmid/trafficking patterns look the audience up by key

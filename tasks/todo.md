@@ -3257,3 +3257,81 @@ deployed. Disk: 17G free of 38G. **Backend changed: MinIO on the box** (user re-
 - NOTE: live only began ACTUALLY using S3 at this deploy — before it, the box ran the
   old fs-only storage.ts (so S3 env was inert and live read from disk; never broke).
   Now the S3 driver is live: assets served from bucket, creatives=0/assets=156 (shared DB).
+
+---
+
+## [PLANNED 2026-06-29] Auto-preview images for dynamic-HTML MCs
+
+**Goal.** Generate a static PNG of how each HTML MC renders (skip-animation frame), store
+in MinIO, expose on the message row + in MCP `list_mc`, so agents/3rd-party reports/decks
+can grab "what the banner looked like" without running an iframe. NOT a perf play (user
+confirms grid iframes aren't a pain) — purely making the pixels *available*.
+
+**Locked decisions (grilled):**
+- Trigger = **manual CLI script** (`npm run gen:previews`), run locally on the Mac.
+- Regen policy = **version-keyed**: shoot only messages whose current `versionNo` has no
+  matching preview (honors immutable `-n_x` model; skips unchanged work).
+- Generation runs **locally** against shared DB (Postgres) + shared MinIO over the tunnel,
+  so prod sees images immediately with ZERO new infra on the Hetzner box.
+- Fidelity is WYSIWYG-guaranteed: generator reuses the SAME `POST /api/render`
+  (inline:true, skipAnimations:true) the editor iframe uses → screenshot == editor view.
+
+**RESOLVED — one image PER SIZE (user confirmed).** An MC's template has N sizes
+(`readTemplate(name).sizes`, parsed from `{w}x{h}.css`). Generate one PNG per size →
+new `message_previews` table, NOT columns on the row.
+
+**Plan (per-size):**
+- [ ] 1. Schema: new `message_previews` table — id, client_id, message_id (FK→messages,
+        onDelete cascade), size, storage_key, message_version (mirrors messages.version,
+        the optimistic-lock int the iframe render-cache already keys on → any edit = stale).
+        Unique (client_id, message_id, size). Generate drizzle migration + 1 integration test.
+        Also: add `"preview"` StorageCategory → `previews/` dir in storage.ts.
+- [ ] 2. Generator script `scripts/gen-previews.ts` (run via tsx):
+        - Requires `npm run dev` up (drives a real browser against localhost).
+        - For each non-archived message whose template kind=html: compute the size set via
+          readTemplate(template).sizes; a (message,size) is stale if no row OR
+          row.message_version != messages.version. Paginate the message scan (row-cap rule).
+        - Per stale (message,size): render via the app (inline:true, skipAnimations:true),
+          **wait for `#preloader` to detach** (THE correctness gate — preloader overlay +
+          deferred class restore mean you canNOT snap on load), screenshot at native size.
+        - `storage.writeFile(buf, "preview", ".png")` → upsert row (delete old MinIO object
+          on replace to avoid orphan bytes). Log summary: shot N, skipped M, failed F (mc_label,size).
+- [ ] 3. Playwright as a **devDependency** only (never bundled into the Next app / box build).
+- [ ] 4. Creative-library "missing preview" warning — reuse the matrix feed-warning pattern
+        + amber `message-editor__global-warning` style. Counts html MCs with any stale/absent
+        size preview; click → list offenders. Makes the pull-based model safe (never ship a deck
+        with a missing preview). Semantic class e.g. `creative-library__preview-warning`.
+- [ ] 5. MCP `list_mc`: add `preview_urls` (size→url map, resolved from storage_key) to the
+        projection in mcp.ts. Keep McpTab.tsx prose in sync (feedback_mcp_settings_page_sync).
+- [ ] 6. Tests + version-bump suggestion (minor: new table + MCP field + script + UI warning).
+
+**Known small holes (accepted, not blockers):**
+- THM copy (`.thm` / copy_text_2) rotates by `new Date()`+PMMID without a version bump →
+  preview can drift over time. The warning/regen covers it; flag in docs.
+- Video-background banners → screenshot catches one arbitrary frame. Rare, cosmetic.
+
+**[DONE 2026-07-11] Preview plan shipped — steps 1–6 all landed:**
+- 1. `message_previews` table live in shared PG (migration 0001 applied, structure verified);
+     `"preview"` StorageCategory → `previews/`; 5 integration tests
+     (tests/integration/message-previews-table.test.ts).
+- 2+3. `scripts/gen-previews.ts` + `npm run gen:previews` (+ `-- --force`); playwright as
+     devDependency only. Mints a session JWT via signSession (readSession accepts Bearer),
+     shoots via page.route-fulfilled page ON the app origin (base href + /api/drive/proxy
+     images need the auth cookie), gated on `#preloader` DETACHED. Stale scan shared in
+     src/lib/previews.ts (keyset-paginated, per-call template-size cache).
+- **ROOT-CAUSE FIX in injectSkipAnimations (render.ts):** `animation:none` froze
+     animate-in elements at base state (`.animated #headlineWrapper{opacity:0}`) → first
+     5360-shot run produced photo-only PNGs with NO copy (1028/1439 MCs are `animated`).
+     Now `animation-duration:0s + animation-delay:0s` → lands on 100% keyframe,
+     `fill-mode:forwards` holds → final resting frame. Also fixes the editor/template-editor
+     "skip animation" toggles (same code path). Verified: headlineWrapper opacity 1, full
+     banner (logo+headline+sticker+CTA) in screenshot. Full `--force` reshoot run after fix.
+- `--force` is the documented lever for THM copy drift (rotates by date, no version bump).
+- 4. Creative Library toolbar: amber `creative-library__preview-warning` pill + offender
+     dropdown (MultiPill menu idiom), fed by GET /api/previews/status; inventory updated.
+- 5. MCP list_mc: `preview_urls` {size: url} per row (absolute via ctx.origin from the
+     dialed /mcp URL); GET /api/previews/[id] serves PNG with dual auth (session OR MCP
+     bearer — smoke-tested 200/200/401); McpTab "Preview images" prose section added.
+- 6. Full suite 365/365 green (was 358; +5 table tests +2 list_mc preview tests).
+- Also: thm.json 2026-07-01 THM 44,49% entry ships with this deploy (Adform template
+  already updated); `.codex/` gitignored.

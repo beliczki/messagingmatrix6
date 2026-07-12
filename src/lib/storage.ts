@@ -21,7 +21,12 @@ import { getActiveClient } from "@/lib/active-client";
 // Thumbnails are a derived, regenerable cache and ALWAYS stay on local disk
 // (see resolveStoragePath) — they are never the source of truth.
 
-export type StorageCategory = "asset" | "creative" | "template-file" | "share-file";
+export type StorageCategory =
+  | "asset"
+  | "creative"
+  | "template-file"
+  | "share-file"
+  | "preview";
 
 function storageRoot(): string {
   return process.env.STORAGE_ROOT
@@ -40,6 +45,8 @@ function categoryDir(cat: StorageCategory): string {
       return "template-files";
     case "share-file":
       return "share-files";
+    case "preview":
+      return "previews";
   }
 }
 

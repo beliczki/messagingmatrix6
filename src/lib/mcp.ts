@@ -7,6 +7,7 @@ import {
   audiences,
   clients,
   config as configTable,
+  messagePreviews,
   messages,
   reporting,
   topics,
@@ -50,6 +51,10 @@ import { writeAudit } from "@/lib/audit";
 
 export type McpContext = {
   clientId: number;
+  /** Origin the MCP client dialed (e.g. https://erste.messagingmatrix.ai),
+   *  used to build absolute preview URLs. Absent in the tools-inventory
+   *  route, which only introspects schemas and never runs handlers. */
+  origin?: string;
 };
 
 // ── Rate limit ──
@@ -144,7 +149,7 @@ export async function resolveBearerClient(
 
   if (row.id !== (await activeClientId())) return null;
 
-  return { clientId: row.id };
+  return { clientId: row.id, origin: new URL(req.url).origin };
 }
 
 function jsonResult(value: unknown) {
@@ -196,7 +201,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
     "list_mc",
     {
       description:
-        "List messages (MCs). Returns a LEAN projection by default (id, number, variant, audience, topic, version_no, pmmid, status, start_date, end_date, template, name, headline) — pass verbose=true for the full row (copy/styles/custom_css/images/video). Paging: limit (default 100, MAX 5000 — set this explicitly to fetch more than 100 in one call) and offset (skip N rows; stable order is number,variant, so offset paging is gap-free for a full export). Filters: topic_key, audience_key, product (matches either audience.product or topic.product), status, monitoring_status (matches reporting.adform_status for the MC). Default excludes soft-archived rows; pass include_archived=true to see them.",
+        "List messages (MCs). Returns a LEAN projection by default (id, number, variant, audience, topic, version_no, pmmid, status, start_date, end_date, template, name, headline) — pass verbose=true for the full row (copy/styles/custom_css/images/video). Each row also carries preview_urls: a {size: url} map of generated PNG screenshots of the rendered HTML creative (e.g. \"300x250\") — fetch with the same Authorization bearer; empty {} when no preview has been generated yet. Paging: limit (default 100, MAX 5000 — set this explicitly to fetch more than 100 in one call) and offset (skip N rows; stable order is number,variant, so offset paging is gap-free for a full export). Filters: topic_key, audience_key, product (matches either audience.product or topic.product), status, monitoring_status (matches reporting.adform_status for the MC). Default excludes soft-archived rows; pass include_archived=true to see them.",
       inputSchema: {
         topic_key: z.string().optional(),
         audience_key: z.string().optional(),
@@ -295,7 +300,34 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
             .orderBy(messages.number, messages.variant)
             .limit(limit)
             .offset(offset);
-      return jsonResult(rows);
+      // Generated PNG screenshots (scripts/gen-previews.ts) — {size: url} per MC.
+      const previewRows = rows.length
+        ? await db
+            .select({
+              id: messagePreviews.id,
+              messageId: messagePreviews.messageId,
+              size: messagePreviews.size,
+            })
+            .from(messagePreviews)
+            .where(
+              and(
+                eq(messagePreviews.clientId, ctx.clientId),
+                inArray(
+                  messagePreviews.messageId,
+                  rows.map((r) => r.id),
+                ),
+              ),
+            )
+        : [];
+      const urlsByMessage = new Map<number, Record<string, string>>();
+      for (const p of previewRows) {
+        const urls = urlsByMessage.get(p.messageId) ?? {};
+        urls[p.size] = `${ctx.origin ?? ""}/api/previews/${p.id}`;
+        urlsByMessage.set(p.messageId, urls);
+      }
+      return jsonResult(
+        rows.map((r) => ({ ...r, preview_urls: urlsByMessage.get(r.id) ?? {} })),
+      );
     },
   );
 
@@ -819,22 +851,27 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
     "mc_create",
     {
       description:
-        "Create a message (MC). Required: audience_key, topic_key. Optional fields object: status, startDate, endDate, template, templateVariantClasses, name, headline, copy1, copy2, disclaimer, *Style fields, customCss, image1..6, video1, flash, flashStyle, cta, ctaStyle, landingUrl, comment, brief. Number/variant/version/PMMID auto-assigned. Returns the new row including pmmid (a.k.a. mc_label).",
+        "Create a message (MC). Required: audience_key, topic_key. Optional fields object: status, startDate, endDate, template, templateVariantClasses, name, headline, copy1, copy2, disclaimer, *Style fields, customCss, image1..6, video1, flash, flashStyle, cta, ctaStyle, landingUrl, comment, brief. Number/variant/version/PMMID auto-assigned; pass mc_number to claim a specific MC number instead — allowed when no live MC uses it (or when the target cell already holds exactly that number, which just adds the next variant); errors if taken. Returns the new row including pmmid (a.k.a. mc_label).",
       inputSchema: {
         audience_key: z.string(),
         topic_key: z.string(),
+        mc_number: z.number().int().positive().optional(),
         fields: fieldsArg,
       },
     },
-    async ({ audience_key, topic_key, fields }) => {
+    async ({ audience_key, topic_key, mc_number, fields }) => {
       const limited = await requireRate(ctx);
       if (limited) return limited;
       try {
-        const row = await createMessage(ctx.clientId, {
-          audience: audience_key,
-          topic: topic_key,
-          ...pickMessageWritable(fields ?? {}),
-        });
+        const row = await createMessage(
+          ctx.clientId,
+          {
+            audience: audience_key,
+            topic: topic_key,
+            ...pickMessageWritable(fields ?? {}),
+          },
+          { requestedNumber: mc_number },
+        );
         await writeAudit({
           clientId: ctx.clientId,
           userId: mcpUserId(ctx),
@@ -1060,12 +1097,13 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
     "mc_create_batch",
     {
       description:
-        "Create many messages atomically. Required: messages (array of { audience_key, topic_key, fields? }). All-or-nothing — rolls back on any failure. Number/variant/version/PMMID auto-assigned per row.",
+        "Create many messages atomically. Required: messages (array of { audience_key, topic_key, mc_number?, fields? }). All-or-nothing — rolls back on any failure. Number/variant/version/PMMID auto-assigned per row; mc_number claims a specific MC number for that row (same rules as mc_create: must be free, or match the target cell's existing number).",
       inputSchema: {
         messages: z.array(
           z.object({
             audience_key: z.string(),
             topic_key: z.string(),
+            mc_number: z.number().int().positive().optional(),
             fields: fieldsArg,
           }),
         ),
@@ -1079,11 +1117,15 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
           const out = [];
           for (const it of items) {
             out.push(
-              await createMessage(ctx.clientId, {
-                audience: it.audience_key,
-                topic: it.topic_key,
-                ...pickMessageWritable(it.fields ?? {}),
-              }),
+              await createMessage(
+                ctx.clientId,
+                {
+                  audience: it.audience_key,
+                  topic: it.topic_key,
+                  ...pickMessageWritable(it.fields ?? {}),
+                },
+                { requestedNumber: it.mc_number },
+              ),
             );
           }
           return out;

@@ -108,6 +108,9 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `preview-pane__size-select` | Size `<select>` | PreviewPane.tsx 63–74 | + `custom-dropdown` globalis |
 | `preview-pane__skip-anim` | Skip-animation toggle button | PreviewPane.tsx 75–96 | – |
 | `preview-pane__skip-anim--active` | Aktív (skipAnim=true) | – | – |
+| `preview-pane__image-toggle` (`--active`) | "Image preview" checkbox-toggle (stored PNG mód) | PreviewPane.tsx | skip-anim ikertestvére |
+| `preview-pane__image` / `__image-stale` / `__image-placeholder` | Stored preview PNG natív méretben + amber stale badge / dashed "no preview" placeholder | PreviewPane.tsx | – |
+| `preview-pane__image-footer` (`__image-open`, `__image-generate`, `__image-error`) | Footer sáv image módban: open-in-new-tab link, Generate/Regenerate gomb, inline hiba | PreviewPane.tsx | – |
 | `preview-pane__bg-group` | Rounded segmented container 3 bg btn-nek | PreviewPane.tsx 99–109 | – |
 | `preview-pane__bg-btn` | Egy bg toggle (sun/grid/moon) | PreviewPane.tsx 133–158 | – |
 | `preview-pane__bg-btn--active` | Aktív bg modifier | – | – |

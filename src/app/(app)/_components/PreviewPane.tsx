@@ -14,6 +14,17 @@ import type { TemplatePreviewMeta } from "./MatrixIframeTile";
 
 export type PreviewBg = "light" | "dark" | "checker";
 
+/** Stored-preview-PNG mode state (editor "Image preview" toggle). */
+export type PreviewImageState = {
+  /** PNG URL for the current size; null = no preview generated yet. */
+  url: string | null;
+  /** The MC was edited since this preview was shot. */
+  stale: boolean;
+  generating: boolean;
+  error: string | null;
+  onGenerate: () => void;
+};
+
 type Props = {
   html: string;
   sizes: string[];
@@ -25,6 +36,12 @@ type Props = {
   onSkipAnimChange: (v: boolean) => void;
   onRefresh?: () => void;
   rightExtras?: React.ReactNode;
+  /** "Image preview" mode — show the stored preview PNG instead of the live
+   *  iframe. The toggle renders only when onImagePreviewChange is provided
+   *  (and the template is html-kind). */
+  imagePreview?: boolean;
+  onImagePreviewChange?: (v: boolean) => void;
+  imageState?: PreviewImageState;
   /** When the template kind is non-html, the viewport renders the template
    *  folder's preview image instead of the HTML iframe. `templateName` is
    *  required so the image URL can be constructed. Optional — undefined or
@@ -44,6 +61,9 @@ export default function PreviewPane({
   onSkipAnimChange,
   onRefresh,
   rightExtras,
+  imagePreview,
+  onImagePreviewChange,
+  imageState,
   templateMeta,
   templateName,
 }: Props) {
@@ -108,6 +128,30 @@ export default function PreviewPane({
             </span>
             Skip animation
           </button>
+          {onImagePreviewChange && !showImage ? (
+            <button
+              onClick={() => onImagePreviewChange(!imagePreview)}
+              className={clsx(
+                "preview-pane__image-toggle flex items-center gap-1 rounded border px-2 py-1 text-xs",
+                imagePreview
+                  ? "preview-pane__image-toggle--active border-text-primary bg-text-primary text-background"
+                  : "border-border bg-surface text-text-primary hover:bg-surface-alt",
+              )}
+              title="Show the stored preview PNG instead of the live render"
+            >
+              <span
+                className={clsx(
+                  "flex size-3.5 items-center justify-center rounded-sm border",
+                  imagePreview
+                    ? "border-background bg-background text-text-primary"
+                    : "border-border-subtle",
+                )}
+              >
+                {imagePreview && <Check className="size-2.5" strokeWidth={3} />}
+              </span>
+              Image preview
+            </button>
+          ) : null}
         </div>
         <div className="flex items-center gap-1">
           <div className="preview-pane__bg-group flex overflow-hidden rounded border border-border">
@@ -154,10 +198,111 @@ export default function PreviewPane({
               mode="fit-rect"
             />
           </div>
+        ) : imagePreview && imageState ? (
+          <PreviewImage size={size} box={box} state={imageState} />
         ) : (
           <PreviewIframe key={reloadKey} html={html} size={size} box={box} />
         )}
       </div>
+      {imagePreview && imageState && !showImage ? (
+        <div className="preview-pane__image-footer flex h-9 shrink-0 items-center gap-3 border-t border-border bg-surface px-3 text-xs">
+          {imageState.url ? (
+            <a
+              href={imageState.url}
+              target="_blank"
+              rel="noreferrer"
+              className="preview-pane__image-open text-text-primary underline hover:no-underline"
+            >
+              Open in new tab
+            </a>
+          ) : null}
+          <button
+            onClick={imageState.onGenerate}
+            disabled={imageState.generating}
+            className="preview-pane__image-generate toolbar-btn rounded border border-border bg-surface px-2 py-1 text-text-primary hover:bg-surface-alt disabled:opacity-50"
+          >
+            {imageState.generating
+              ? "Generating…"
+              : imageState.url
+                ? "Regenerate"
+                : "Generate"}
+          </button>
+          {imageState.error ? (
+            <span className="preview-pane__image-error text-red-600">
+              {imageState.error}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// Stored preview PNG at native ad dimensions, scaled to fit like the iframe.
+function PreviewImage({
+  size,
+  box,
+  state,
+}: {
+  size: string | null;
+  box: { w: number; h: number };
+  state: PreviewImageState;
+}) {
+  if (!size) return null;
+  const m = size.match(/^(\d+)x(\d+)$/);
+  if (!m) return null;
+  const adW = parseInt(m[1], 10);
+  const adH = parseInt(m[2], 10);
+  const margin = 16;
+  const availW = Math.max(0, box.w - margin * 2);
+  const availH = Math.max(0, box.h - margin * 2);
+  const scale =
+    box.w === 0 || box.h === 0 ? 1 : Math.min(1, availW / adW, availH / adH);
+
+  if (!state.url) {
+    return (
+      <div
+        className="preview-pane__image-placeholder flex items-center justify-center border border-dashed border-border text-xs text-text-secondary"
+        style={{
+          width: adW,
+          height: adH,
+          transform: scale < 1 ? `scale(${scale})` : undefined,
+          transformOrigin: "center center",
+          flexShrink: 0,
+        }}
+      >
+        No preview generated for {size}
+      </div>
+    );
+  }
+  return (
+    <div
+      className="relative"
+      style={{
+        width: adW,
+        height: adH,
+        transform: scale < 1 ? `scale(${scale})` : undefined,
+        transformOrigin: "center center",
+        flexShrink: 0,
+      }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element -- raw stored PNG at native size */}
+      <img
+        alt={`Preview ${size}`}
+        src={state.url}
+        width={adW}
+        height={adH}
+        className="preview-pane__image"
+        style={{
+          background: "white",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+        }}
+      />
+      {state.stale ? (
+        <span className="preview-pane__image-stale absolute left-1 top-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700">
+          Stale — MC edited since this preview
+        </span>
+      ) : null}
     </div>
   );
 }

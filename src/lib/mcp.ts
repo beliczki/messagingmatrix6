@@ -46,7 +46,9 @@ import {
   updateMessage,
 } from "@/lib/entities/messages";
 import { isNull } from "drizzle-orm";
-import { listVisibleTemplates } from "@/lib/templates";
+import { listVisibleTemplates, readTemplate } from "@/lib/templates";
+import { collectStalePreviews } from "@/lib/previews";
+import { shootPreviews } from "@/lib/preview-shooter";
 import { writeAudit } from "@/lib/audit";
 
 export type McpContext = {
@@ -993,6 +995,67 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
         after: result.row,
       });
       return jsonResult({ ok: true, restored: result.row });
+    },
+  );
+
+  server.registerTool(
+    "preview_generate",
+    {
+      description:
+        "Generate the stored PNG preview screenshots for the given MCs (one per template size — the same pipeline as npm run gen:previews). Default shoots only missing or stale sizes (stale = the MC was edited since the last shot); force=true reshoots every size. Runs synchronously in headless Chromium on the server — expect a few seconds per size, so keep batches small. Returns per-MC results: generated ({size: url}), skipped_fresh (sizes already up to date), and errors ({size: message}). Counts as one write against the rate limit.",
+      inputSchema: {
+        mc_labels: z.array(z.string()).min(1).max(20),
+        force: z.boolean().optional(),
+      },
+    },
+    async ({ mc_labels, force }) => {
+      const limited = await requireRate(ctx);
+      if (limited) return limited;
+
+      const msgByLabel = new Map<string, Message>();
+      const notFound: string[] = [];
+      for (const label of mc_labels) {
+        const row = await findMessageByPmmid(ctx.clientId, label);
+        if (row) msgByLabel.set(label, row);
+        else notFound.push(label);
+      }
+
+      const { stale } = await collectStalePreviews(ctx.clientId, {
+        force: force === true,
+        messageIds: [...msgByLabel.values()].map((m) => m.id),
+      });
+      const shots = await shootPreviews(ctx.clientId, stale);
+      const shotsByMessage = new Map<number, typeof shots>();
+      for (const s of shots) {
+        const list = shotsByMessage.get(s.messageId) ?? [];
+        list.push(s);
+        shotsByMessage.set(s.messageId, list);
+      }
+
+      const results = mc_labels.map((label) => {
+        if (notFound.includes(label)) {
+          return { mc_label: label, error: `message '${label}' not found` };
+        }
+        const msg = msgByLabel.get(label)!;
+        const generated: Record<string, string> = {};
+        const errors: Record<string, string> = {};
+        const shotSizes = new Set<string>();
+        for (const s of shotsByMessage.get(msg.id) ?? []) {
+          shotSizes.add(s.size);
+          if (s.ok) {
+            generated[s.size] = `${ctx.origin ?? ""}/api/previews/${s.previewId}`;
+          } else {
+            errors[s.size] = s.error;
+          }
+        }
+        const template = msg.template ? readTemplate(msg.template) : null;
+        const skipped_fresh =
+          template && template.kind === "html"
+            ? template.sizes.filter((s) => !shotSizes.has(s))
+            : [];
+        return { mc_label: label, generated, skipped_fresh, errors };
+      });
+      return jsonResult(results);
     },
   );
 }

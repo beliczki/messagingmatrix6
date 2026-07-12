@@ -132,9 +132,12 @@ export function McpTab() {
           <code className="font-mono text-xs">/api/previews/&lt;id&gt;</code>{" "}
           and accept the same MCP bearer (or an app session) on a plain HTTP
           GET — they are fetched outside the MCP protocol. Previews are
-          generated per template size by{" "}
-          <code className="font-mono text-xs">npm run gen:previews</code> and
-          regenerate only when the MC has been edited since the last shot.
+          generated per template size by the{" "}
+          <code className="font-mono text-xs">preview_generate</code> tool (max
+          20 labels per call, synchronous headless Chromium — a few seconds per
+          size) or by <code className="font-mono text-xs">npm run gen:previews</code>;
+          both regenerate only sizes where the MC was edited since the last
+          shot, unless <code className="font-mono text-xs">force</code> is set.
         </p>
       </Section>
 

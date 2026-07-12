@@ -1926,7 +1926,72 @@ function MessagePreview({
   const [html, setHtml] = useState<string>("");
   const [bg, setBg] = useState<PreviewBg>("light");
   const [skipAnim, setSkipAnim] = useState<boolean>(true);
+  const [imagePreview, setImagePreview] = useState<boolean>(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Stored-preview-PNG mode (Image preview toggle): per-size status + generate.
+  const qc = useQueryClient();
+  const previewInfoQ = useQuery({
+    queryKey: ["previews", "message", message.id],
+    queryFn: async () => {
+      const r = await fetch(`/api/previews/status?message_id=${message.id}`, {
+        credentials: "include",
+      });
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return r.json() as Promise<{
+        messageId: number;
+        version: number;
+        sizes: {
+          size: string;
+          previewId: number | null;
+          stale: boolean;
+          updatedAt: string | null;
+        }[];
+      }>;
+    },
+    enabled: imagePreview,
+  });
+  const generateM = useMutation({
+    mutationFn: async (force: boolean) => {
+      const r = await fetch("/api/previews/generate", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message_ids: [message.id], force }),
+      });
+      if (!r.ok) throw new Error(`${r.status} ${await r.text()}`);
+      return r.json() as Promise<{
+        results: ({ messageId: number; size: string } & (
+          | { ok: true; previewId: number }
+          | { ok: false; error: string }
+        ))[];
+        freshSkipped: number;
+      }>;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["previews", "message", message.id] });
+      qc.invalidateQueries({ queryKey: ["previews", "status"] });
+    },
+  });
+
+  const sizeEntry = previewInfoQ.data?.sizes.find((s) => s.size === size);
+  // ?v= is load-bearing: /api/previews/[id] is cached (max-age=300) on a
+  // regen-stable id, so the img would show the old PNG after Regenerate.
+  const imageUrl = sizeEntry?.previewId
+    ? `/api/previews/${sizeEntry.previewId}?v=${encodeURIComponent(sizeEntry.updatedAt ?? "")}`
+    : null;
+  const failedForSize = generateM.data?.results.find(
+    (r) => r.size === size && !r.ok,
+  ) as { error: string } | undefined;
+  const otherFailures =
+    generateM.data?.results.filter((r) => !r.ok && r.size !== size).length ?? 0;
+  const imageError = generateM.isError
+    ? (generateM.error as Error).message
+    : failedForSize
+      ? failedForSize.error
+      : otherFailures > 0
+        ? `${otherFailures} other size(s) failed`
+        : null;
 
   function refresh() {
     const merged: Record<string, unknown> = { ...message, ...draft };
@@ -1979,6 +2044,15 @@ function MessagePreview({
       skipAnim={skipAnim}
       onSkipAnimChange={setSkipAnim}
       onRefresh={refresh}
+      imagePreview={imagePreview}
+      onImagePreviewChange={setImagePreview}
+      imageState={{
+        url: imageUrl,
+        stale: sizeEntry?.stale ?? true,
+        generating: generateM.isPending,
+        error: imageError,
+        onGenerate: () => generateM.mutate(Boolean(sizeEntry?.previewId)),
+      }}
       templateName={templateInfo?.name}
       templateMeta={templateMetaFor(templateInfo)}
     />

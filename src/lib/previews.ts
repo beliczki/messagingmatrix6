@@ -22,10 +22,15 @@ export type StalePreview = {
 // `npm run gen:previews -- --force` to reshoot after a render/template change
 // or THM copy drift, neither of which bumps messages.version. Existing rows
 // stay attached so their old objects get replaced, not orphaned.
+// opts.messageIds narrows the scan to specific messages (editor Generate /
+// MCP preview_generate); archived / non-html ids simply yield nothing.
 export async function collectStalePreviews(
   clientId: number,
-  opts: { force?: boolean } = {},
+  opts: { force?: boolean; messageIds?: number[] } = {},
 ): Promise<{ stale: StalePreview[]; fresh: number }> {
+  if (opts.messageIds && opts.messageIds.length === 0) {
+    return { stale: [], fresh: 0 };
+  }
   // Template sizes cached per call, not per module — templates live on the
   // filesystem and can change under a long-running server process.
   const sizeCache = new Map<string, string[] | null>();
@@ -49,6 +54,7 @@ export async function collectStalePreviews(
           eq(messages.clientId, clientId),
           isNull(messages.archivedAt),
           gt(messages.id, lastId),
+          ...(opts.messageIds ? [inArray(messages.id, opts.messageIds)] : []),
         ),
       )
       .orderBy(messages.id)

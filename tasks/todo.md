@@ -3335,3 +3335,21 @@ new `message_previews` table, NOT columns on the row.
 - 6. Full suite 365/365 green (was 358; +5 table tests +2 list_mc preview tests).
 - Also: thm.json 2026-07-01 THM 44,49% entry ships with this deploy (Adform template
   already updated); `.codex/` gitignored.
+
+**[DONE 2026-07-12] On-demand preview generation — editor Image preview + MCP preview_generate:**
+- Shooting extracted to src/lib/preview-shooter.ts (in-process renderTemplate, mutex-serialized
+  chromium runs, ShotResult per pair); scripts/gen-previews.ts is a thin CLI shell (same output).
+- collectStalePreviews gains messageIds filter.
+- POST /api/previews/generate (withSession+denyDemo, 1..20 ids, force) — E2E-verified with REAL
+  chromium inside the Next server process (MC330a 4/4 shot). GET /api/previews/status?message_id=
+  returns per-size {previewId, stale, updatedAt}.
+- PreviewPane: "Image preview" checkbox-toggle (skip-anim ikertestvére), stored-PNG viewport with
+  amber stale badge / dashed placeholder, footer (Open in new tab, Generate/Regenerate, inline error).
+  MessagePreview wiring: ["previews","message",id] query (?v= cache-bust — load-bearing), generate
+  mutation invalidates the CreativeLibrary status pill too.
+- MCP preview_generate (mc_labels 1..20, force) — per-label {generated, skipped_fresh, errors},
+  origin-prefixed URLs; McpTab prose updated.
+- Config: playwright → dependencies; serverExternalPackages += playwright, playwright-core (build ok).
+- Tests 381/381 (+12: route contract w/ mocked shooter, status message_id, MCP tool, rate limit).
+- Box deploy needs ONE-TIME: npx playwright install --with-deps chromium (as PM2 user, ~/.cache/
+  ms-playwright survives deploys; re-run on playwright version bumps).

@@ -234,18 +234,22 @@ export async function createMessage(
       slot.number = n;
       slot.variant = nextVariantForNumber(liveInCell, n);
     } else {
-      // A number identifies a card WITHIN one topic — same-topic rows in
-      // other audiences are the card's audience copies, so claiming n there
-      // is the normal way to place the card in a new cell (e.g. a batch
-      // creating one card across many audiences). Only a number living in a
-      // DIFFERENT topic — even archived — is off-limits: (number, variant)
-      // never spans topics (findSiblings relies on it).
-      const otherTopic = live.find(
-        (m) => m.number === n && m.topic !== input.topic,
-      );
-      if (otherTopic) {
+      // Claiming a number is for numbers not yet in use anywhere. Placing an
+      // existing card into more audiences is copy's job (it clones the
+      // fields, so audience copies can't silently diverge), and a number
+      // never spans topics (findSiblings relies on it). The error names
+      // which case was hit so a caller can pick the right tool.
+      const liveHolder = live.find((m) => isLive(m) && m.number === n);
+      if (liveHolder) {
         throw new MessageError(
-          `MC number ${n} is already in use in topic '${otherTopic.topic}' — a number never spans topics; pick a free number or omit it for auto-assign`,
+          liveHolder.topic === input.topic
+            ? `MC number ${n} already lives in this topic ('${input.topic}') — to place the card into more audiences use copy (it clones the fields); explicit mc_number is for numbers not yet in use`
+            : `MC number ${n} is already in use in topic '${liveHolder.topic}' — a number never spans topics; pick a free number or omit it for auto-assign`,
+        );
+      }
+      if (live.some((m) => m.number === n)) {
+        throw new MessageError(
+          `MC number ${n} is retired — archived rows still hold it; restore the archived card instead, or pick a free number`,
         );
       }
       slot.number = n;

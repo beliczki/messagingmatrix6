@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { audiences, clients, messages, topics } from "@/db/schema";
 import {
   archiveMessage,
+  copyMessages,
   createMessage,
   getMessage,
   listMessages,
@@ -240,38 +241,41 @@ describe("messages — numbering on create", () => {
     const a = await createMessage(erste.id, { topic: "top1", audience: "aud1" }); // MC1a
     await archiveMessage(erste.id, a.id, a.version);
     // A live twin of the archived MC1a would carry its PMMID and collide on
-    // restore — the dormant-twin guard rejects with a restore pointer.
+    // restore — the retired-number guard rejects with a restore pointer.
     await expect(
       createMessage(
         erste.id,
         { topic: "top1", audience: "aud1" },
         { requestedNumber: 1 },
       ),
-    ).rejects.toThrow(/exists archived in this cell/);
+    ).rejects.toThrow(/retired.*restore/);
   });
 
-  it("same number is claimable across audiences within one topic (batch card placement)", async () => {
-    // The mc_create_batch scenario: one card (number) created into several
-    // audience cells of the same topic. The uniqueness rule is topic-scoped,
-    // not global — item 2 must not be blocked by item 1's fresh row.
+  it("re-creating a same-topic number in another audience is rejected with a copy hint", async () => {
+    // Placing an existing card into more audiences is copy's job (it clones
+    // the fields) — mc_number claims are for numbers not yet in use. The
+    // error must steer the caller to copy, not read as a phantom conflict.
     await seedAudienceAndTopic(erste.id, "aud1", "top1");
     await seedAudienceAndTopic(erste.id, "aud2", "top2"); // aud2 exists; top2 unused here
-    const first = await createMessage(
+    await createMessage(
       erste.id,
       { topic: "top1", audience: "aud1" },
       { requestedNumber: 316 },
     );
-    const second = await createMessage(
-      erste.id,
-      { topic: "top1", audience: "aud2" },
-      { requestedNumber: 316 },
-    );
-    expect([first.number, first.variant]).toEqual([316, "a"]);
-    expect([second.number, second.variant]).toEqual([316, "a"]);
-    expect(second.pmmid).toContain("aud2");
+    await expect(
+      createMessage(
+        erste.id,
+        { topic: "top1", audience: "aud2" },
+        { requestedNumber: 316 },
+      ),
+    ).rejects.toThrow(/already lives in this topic.*use copy/);
+    // The canonical path — copy — places the card and clones its fields.
+    const { created } = await copyMessages(erste.id, ["a_aud1-t_top1-m_316-v_a-n_1"], ["aud2"]);
+    expect(created).toHaveLength(1);
+    expect([created[0].number, created[0].variant, created[0].audience]).toEqual([316, "a", "aud2"]);
   });
 
-  it("archived same-number row in another audience of the topic does not block the claim", async () => {
+  it("a number held only by archived rows is retired — claim rejected with a restore hint", async () => {
     await seedAudienceAndTopic(erste.id, "aud1", "top1");
     await seedAudienceAndTopic(erste.id, "aud2", "top2");
     const a = await createMessage(
@@ -280,14 +284,13 @@ describe("messages — numbering on create", () => {
       { requestedNumber: 5 },
     );
     await archiveMessage(erste.id, a.id, a.version);
-    // Different cell — restoring aud1's MC5a alongside aud2's is the normal
-    // cross-audience card shape, not a duplicate.
-    const m = await createMessage(
-      erste.id,
-      { topic: "top1", audience: "aud2" },
-      { requestedNumber: 5 },
-    );
-    expect([m.number, m.variant]).toEqual([5, "a"]);
+    await expect(
+      createMessage(
+        erste.id,
+        { topic: "top1", audience: "aud2" },
+        { requestedNumber: 5 },
+      ),
+    ).rejects.toThrow(/retired.*restore/);
   });
 
   it("requestedVariant pins an explicit letter on a fresh number (317b with no 317a)", async () => {

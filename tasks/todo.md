@@ -3491,3 +3491,18 @@ egyezik a tervezett unique index follow-uppal.
 - MCP mc_create/mc_create_batch description frissítve. Tesztek: 409/409 (+2 az agent-
   forgatókönyvre: cross-audience batch placement; archivált másik-cellás sor nem blokkol).
 - Deploy: box a3dbce5→f59b600, build ok, pm2 restart, Ready 1.2s.
+
+**[DONE 2026-07-13] fix(mc): explicit szám-claim csak szabad számra — kártya-terítés = copy (2fbaaaa, deployolva):**
+- User döntés: a f59b600-as topic-szintű lazítás visszavonva — a batch-create
+  KÜLÖNBÖZŐ MC-kre való; egy kártya több audience-be terítése a copy dolga
+  (mc_copy_batch klónozza a mezőket → az audience-másolatok nem tudnak némán
+  széttartani), áthelyezés = mc_move_batch. Ugyanez a UI-mintázat.
+- Ami az incidensből megmaradt: beszédes, esetnevesítő hibaüzenetek —
+  azonos topic → "use copy (it clones the fields)"; másik topic → "a number
+  never spans topics"; csak archivált sorok → "retired — restore instead".
+  Új MCP tool NEM kellett (copy/move batch már létezett).
+- mc_create/mc_create_batch description: batch = different MCs + copy/move
+  terelés. Multi-number cella, in-cell attach, "new", variant-pinning,
+  dormant-twin guard változatlan. Tesztek: 409/409 (2 pin megfordítva +
+  copy-út bizonyítás ugyanabban a tesztben).
+- Deploy: box @ 2fbaaaa, build ok, pm2 restart, Ready 1.4s.

@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 type ToolField = {
   name: string;
@@ -13,6 +13,23 @@ type ToolDescriptor = {
   name: string;
   description: string;
   inputs: ToolField[];
+};
+
+type McpTokenRow = {
+  id: number;
+  userId: string;
+  userEmail: string;
+  scope: "full" | "read";
+  label: string | null;
+  tokenMasked: string;
+  lastUsedAt: string | null;
+  createdAt: string;
+};
+
+type UserRow = {
+  id: string;
+  email: string;
+  role: string;
 };
 
 const GROUP_ORDER: Array<{ key: string; label: string; match: (n: string) => boolean }> = [
@@ -75,6 +92,8 @@ export function McpTab() {
         </p>
       </header>
 
+      <McpTokensSection />
+
       <Section title="Endpoint">
         <DefRow label="URL">
           <code className="font-mono text-xs">
@@ -87,11 +106,15 @@ export function McpTab() {
 
       <Section title="Authentication">
         <p className="mb-3 text-sm text-slate-600">
-          Each client has its own bearer token, stored in{" "}
-          <code className="font-mono text-xs">clients.mcp_token</code> and
-          rotatable from{" "}
-          <strong className="font-semibold">Settings → Clients</strong>. The
-          deploy is pinned to one client via{" "}
+          Tokens are per-user bearer tokens, stored in{" "}
+          <code className="font-mono text-xs">mcp_tokens</code> and managed in
+          the <strong className="font-semibold">Tokens</strong> section above.
+          Each token belongs to one user and carries a scope:{" "}
+          <code className="font-mono text-xs">full</code> registers every tool,{" "}
+          <code className="font-mono text-xs">read</code> registers only the
+          list/read tools — write tools are not registered at all, so they
+          don&apos;t appear in <code className="font-mono text-xs">tools/list</code>.
+          The deploy is pinned to one client via{" "}
           <code className="font-mono text-xs">ACTIVE_CLIENT_KEY</code>: a token
           that resolves to a different client returns 401, even if the token is
           valid for that other client.
@@ -107,6 +130,10 @@ export function McpTab() {
         </DefRow>
         <DefRow label="Mismatch">
           Bearer resolves to client ≠ active client → <code>401</code>
+        </DefRow>
+        <DefRow label="Revoked">
+          Revoked token, or token whose owner was archived → <code>401</code>{" "}
+          on the next request
         </DefRow>
       </Section>
 
@@ -130,8 +157,10 @@ export function McpTab() {
           generated PNG screenshots of each rendered HTML creative. The URLs
           point at{" "}
           <code className="font-mono text-xs">/api/previews/&lt;id&gt;</code>{" "}
-          and accept the same MCP bearer (or an app session) on a plain HTTP
-          GET — they are fetched outside the MCP protocol. Previews are
+          and are <strong className="font-semibold">public</strong> — a plain
+          unauthenticated HTTP GET works (they are fetched outside the MCP
+          protocol; the deploy still only serves the active client&apos;s
+          previews, and generation stays authenticated). Previews are
           generated per template size by the{" "}
           <code className="font-mono text-xs">preview_generate</code> tool (max
           20 labels per call, synchronous headless Chromium — a few seconds per
@@ -162,8 +191,9 @@ export function McpTab() {
         <p className="text-sm text-slate-600">
           Writes go through the same entity layer as the UI: every mutation is
           audit-logged with{" "}
-          <code className="font-mono text-xs">byUser = &quot;mcp:&lt;client_key&gt;&quot;</code>{" "}
-          and emits an SSE event so connected UIs update live.
+          <code className="font-mono text-xs">byUser</code> set to the token
+          owner&apos;s user id — identical to writes that user makes in the UI
+          — and emits an SSE event so connected UIs update live.
         </p>
       </Section>
 
@@ -194,6 +224,379 @@ export function McpTab() {
           </section>
         ))
       )}
+    </div>
+  );
+}
+
+function McpTokensSection() {
+  const qc = useQueryClient();
+  const [showNew, setShowNew] = useState(false);
+  const [revealed, setRevealed] = useState<{
+    title: string;
+    token: string;
+  } | null>(null);
+
+  const q = useQuery({
+    queryKey: ["mcp-tokens"],
+    queryFn: async (): Promise<McpTokenRow[]> => {
+      const r = await fetch("/api/mcp-tokens");
+      if (!r.ok) throw new Error("tokens fetch failed");
+      const data = (await r.json()) as { tokens: McpTokenRow[] };
+      return data.tokens;
+    },
+  });
+
+  const revealM = useMutation({
+    mutationFn: async (t: McpTokenRow) => {
+      const r = await fetch(`/api/mcp-tokens/${t.id}/reveal`, {
+        method: "POST",
+      });
+      if (!r.ok) throw new Error("reveal failed");
+      const data = (await r.json()) as { token: string };
+      return { row: t, token: data.token };
+    },
+    onSuccess: ({ row, token }) => {
+      setRevealed({ title: `MCP token — ${row.userEmail}`, token });
+    },
+  });
+
+  const revokeM = useMutation({
+    mutationFn: async (t: McpTokenRow) => {
+      const r = await fetch(`/api/mcp-tokens/${t.id}`, { method: "DELETE" });
+      if (!r.ok) throw new Error("revoke failed");
+      return r.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["mcp-tokens"] });
+    },
+  });
+
+  function revoke(t: McpTokenRow) {
+    if (
+      !window.confirm(
+        `Revoke the token for "${t.userEmail}"${t.label ? ` (${t.label})` : ""}? It stops working on its next request.`,
+      )
+    ) {
+      return;
+    }
+    revokeM.mutate(t);
+  }
+
+  return (
+    <section className="mcp-tokens mb-6 rounded-lg border border-slate-200 bg-white p-4">
+      <header className="mcp-tokens__header mb-3 flex items-center justify-between">
+        <h3 className="mcp-tab__section-title text-sm font-semibold uppercase tracking-wide text-slate-700">
+          Tokens
+        </h3>
+        <button
+          type="button"
+          onClick={() => setShowNew(true)}
+          className="toolbar-btn--primary rounded-md bg-brand-button px-3 py-1.5 text-sm font-medium text-white"
+        >
+          New token
+        </button>
+      </header>
+
+      {q.isLoading ? (
+        <p className="text-sm text-slate-500">Loading…</p>
+      ) : q.isError ? (
+        <p className="error-alert rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          Failed to load tokens.
+        </p>
+      ) : (q.data ?? []).length === 0 ? (
+        <p className="empty-state text-sm text-slate-500">
+          No tokens yet. Create one per user (and per agent) — a{" "}
+          <code className="font-mono text-xs">read</code> token can only list,
+          a <code className="font-mono text-xs">full</code> token can write.
+        </p>
+      ) : (
+        <table className="mcp-tokens__table w-full table-auto border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500">
+              <th className="px-2 py-2 font-medium">Label</th>
+              <th className="px-2 py-2 font-medium">User</th>
+              <th className="px-2 py-2 font-medium">Scope</th>
+              <th className="px-2 py-2 font-medium">Token</th>
+              <th className="px-2 py-2 font-medium">Last used</th>
+              <th className="px-2 py-2 font-medium">Created</th>
+              <th className="px-2 py-2"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {(q.data ?? []).map((t) => (
+              <tr key={t.id} className="mcp-tokens__row border-b border-slate-100">
+                <td className="px-2 py-2 text-slate-900">
+                  {t.label ?? <span className="text-slate-400">—</span>}
+                </td>
+                <td className="px-2 py-2 text-xs text-slate-700">
+                  {t.userEmail}
+                </td>
+                <td className="px-2 py-2">
+                  <span
+                    className={
+                      t.scope === "full"
+                        ? "status-badge rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-800"
+                        : "status-badge rounded bg-slate-200 px-1.5 py-0.5 text-xs font-medium text-slate-600"
+                    }
+                  >
+                    {t.scope}
+                  </span>
+                </td>
+                <td className="px-2 py-2 font-mono text-xs text-slate-600">
+                  {t.tokenMasked}
+                </td>
+                <td className="px-2 py-2 text-xs text-slate-500">
+                  {t.lastUsedAt ? t.lastUsedAt.slice(0, 16) : "never"}
+                </td>
+                <td className="px-2 py-2 text-xs text-slate-500">
+                  {t.createdAt.slice(0, 10)}
+                </td>
+                <td className="px-2 py-2 text-right">
+                  <div className="flex justify-end gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => revealM.mutate(t)}
+                      disabled={revealM.isPending}
+                      className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Reveal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => revoke(t)}
+                      disabled={revokeM.isPending}
+                      className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Revoke
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      {showNew ? (
+        <NewTokenModal
+          onClose={() => setShowNew(false)}
+          onCreated={(userEmail, token) => {
+            qc.invalidateQueries({ queryKey: ["mcp-tokens"] });
+            setShowNew(false);
+            setRevealed({ title: `New MCP token — ${userEmail}`, token });
+          }}
+        />
+      ) : null}
+
+      {revealed ? (
+        <TokenRevealModal
+          title={revealed.title}
+          token={revealed.token}
+          onClose={() => setRevealed(null)}
+        />
+      ) : null}
+    </section>
+  );
+}
+
+function NewTokenModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (userEmail: string, token: string) => void;
+}) {
+  const [userId, setUserId] = useState("");
+  const [scope, setScope] = useState<"full" | "read">("read");
+  const [label, setLabel] = useState("");
+
+  const usersQ = useQuery({
+    queryKey: ["users"],
+    queryFn: async (): Promise<UserRow[]> => {
+      const r = await fetch("/api/users");
+      if (!r.ok) throw new Error("users fetch failed");
+      const data = (await r.json()) as { users: UserRow[] };
+      return data.users;
+    },
+  });
+
+  const selectedUser = (usersQ.data ?? []).find((u) => u.id === userId);
+
+  const m = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/mcp-tokens", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, scope, label: label || undefined }),
+      });
+      const data = await r.json();
+      if (!r.ok) throw new Error(data.error ?? "create failed");
+      return data as { token: string; userEmail: string };
+    },
+    onSuccess: (data) => onCreated(data.userEmail, data.token),
+  });
+
+  return (
+    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div className="modal w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
+        <header className="mb-4 flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-slate-900">
+            New MCP token
+          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className="modal__close rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-700"
+            aria-label="Close"
+          >
+            ×
+          </button>
+        </header>
+
+        <form
+          className="space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            m.mutate();
+          }}
+        >
+          <label className="form-field block">
+            <span className="form-field__label mb-1 block text-sm font-medium text-slate-700">
+              User
+            </span>
+            <select
+              value={userId}
+              onChange={(e) => setUserId(e.target.value)}
+              required
+              className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+            >
+              <option value="">Select a user…</option>
+              {(usersQ.data ?? []).map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.email} ({u.role})
+                </option>
+              ))}
+            </select>
+            <span className="form-field__hint mt-1 block text-xs text-slate-500">
+              MCP writes made with this token are audit-logged as this user.
+            </span>
+          </label>
+
+          <label className="form-field block">
+            <span className="form-field__label mb-1 block text-sm font-medium text-slate-700">
+              Scope
+            </span>
+            <select
+              value={scope}
+              onChange={(e) => setScope(e.target.value as "full" | "read")}
+              className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+            >
+              <option value="read">read — list/read tools only</option>
+              <option value="full" disabled={selectedUser?.role === "demo"}>
+                full — every tool, including writes
+              </option>
+            </select>
+            <span className="form-field__hint mt-1 block text-xs text-slate-500">
+              Demo users can only hold read tokens.
+            </span>
+          </label>
+
+          <label className="form-field block">
+            <span className="form-field__label mb-1 block text-sm font-medium text-slate-700">
+              Label (optional)
+            </span>
+            <input
+              type="text"
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="claude.ai connector, reporting agent, …"
+              className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+            />
+          </label>
+
+          {m.isError ? (
+            <p className="error-alert rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {(m.error as Error).message}
+            </p>
+          ) : null}
+
+          <div className="mt-2 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={m.isPending || !userId}
+              className="toolbar-btn--primary rounded-md bg-brand-button px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {m.isPending ? "Creating…" : "Create"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function TokenRevealModal({
+  title,
+  token,
+  onClose,
+}: {
+  title: string;
+  token: string;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(token);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* noop */
+    }
+  }
+
+  return (
+    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+      <div className="modal w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl">
+        <header className="mb-4">
+          <h3 className="text-lg font-semibold text-slate-900">{title}</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Copy the token now. You can reveal it again later from the Tokens
+            table (each reveal is audit-logged).
+          </p>
+        </header>
+
+        <div className="token-reveal__box mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
+          <code className="token-reveal__token block break-all font-mono text-xs text-slate-900">
+            {token}
+          </code>
+        </div>
+
+        <div className="mt-2 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={copy}
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            {copied ? "Copied ✓" : "Copy to clipboard"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="toolbar-btn--primary rounded-md bg-brand-button px-4 py-2 text-sm font-medium text-white"
+          >
+            Done
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

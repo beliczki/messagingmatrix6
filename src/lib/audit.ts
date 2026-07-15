@@ -9,6 +9,7 @@ export type AuditAction =
   | "delete"
   | "archive"
   | "restore"
+  | "reveal"
   | "snapshot_restore"
   | "bulk_move"
   | "bulk_copy"

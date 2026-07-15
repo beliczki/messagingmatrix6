@@ -8,20 +8,9 @@ import { defaultConfigSeed } from "@/db/defaults";
 
 const KEY_RE = /^[a-z][a-z0-9_-]{0,30}$/;
 
-function maskToken(token: string | null): string | null {
-  if (!token) return null;
-  if (token.length <= 8) return "••••";
-  return `${token.slice(0, 4)}…${token.slice(-4)}`;
-}
-
 export const GET = withAdmin(async () => {
   const rows = await db.select().from(clients);
-  // Mask tokens — never return raw bearer tokens to the UI.
-  const masked = rows.map(({ mcpToken, ...rest }) => ({
-    ...rest,
-    mcpTokenMasked: maskToken(mcpToken),
-  }));
-  return NextResponse.json({ clients: masked });
+  return NextResponse.json({ clients: rows });
 });
 
 export const POST = withAdmin(async ({ req, claims }) => {

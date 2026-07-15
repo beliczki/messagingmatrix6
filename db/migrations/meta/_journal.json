@@ -15,6 +15,13 @@
       "when": 1782733001849,
       "tag": "0001_chubby_scrambler",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1784131666623,
+      "tag": "0002_serious_shriek",
+      "breakpoints": true
     }
   ]
 }

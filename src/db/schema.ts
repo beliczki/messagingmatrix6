@@ -25,7 +25,6 @@ export const clients = pgTable(
     key: text("key").notNull().unique(),
     name: text("name").notNull(),
     status: text("status").notNull().default("active"),
-    mcpToken: text("mcp_token"),
     createdAt: text("created_at")
       .notNull()
       .default(nowUtc),
@@ -69,6 +68,37 @@ export const users = pgTable(
   (t) => [
     uniqueIndex("users_client_email_unique").on(t.clientId, t.email),
     index("users_client_idx").on(t.clientId),
+  ],
+);
+
+// Per-user MCP bearer tokens, many per client. Scope 'read' registers only
+// the read/meta tools; 'full' registers everything. Revocation = archivedAt.
+export const mcpTokens = pgTable(
+  "mcp_tokens",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    clientId: integer("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    token: text("token").notNull(),
+    scope: text("scope").notNull().default("full"),
+    label: text("label"),
+    lastUsedAt: text("last_used_at"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(nowUtc),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(nowUtc),
+    archivedAt: text("archived_at"),
+  },
+  (t) => [
+    uniqueIndex("mcp_tokens_token_unique").on(t.token),
+    index("mcp_tokens_client_idx").on(t.clientId),
+    index("mcp_tokens_client_user_idx").on(t.clientId, t.userId),
   ],
 );
 
@@ -731,6 +761,8 @@ export type Client = typeof clients.$inferSelect;
 export type NewClient = typeof clients.$inferInsert;
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
+export type McpToken = typeof mcpTokens.$inferSelect;
+export type NewMcpToken = typeof mcpTokens.$inferInsert;
 export type Audience = typeof audiences.$inferSelect;
 export type Topic = typeof topics.$inferSelect;
 export type Message = typeof messages.$inferSelect;

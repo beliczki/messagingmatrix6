@@ -3,8 +3,7 @@
 // detours. For every key listed below it:
 //   1. Ensures the clients row exists (auto-creates with default config)
 //   2. Ensures an admin user exists with the same email/password for easy login
-//   3. Prints the resulting (id, key, mcp_token) so you can paste tokens into
-//      the smoke checklist
+//   3. Prints the resulting (id, key) per deploy for the smoke checklist
 import { config as loadEnv } from "dotenv";
 loadEnv({ path: ".env.local" });
 loadEnv({ path: ".env" });
@@ -52,14 +51,11 @@ async function main() {
 
   console.log("Bootstrapping multi-deploy clients + admin users…\n");
   console.log(
-    `id  | key       | mcp_token (masked)            | port | admin\n` +
-      `----+-----------+-------------------------------+------+--------------`,
+    `id  | key       | port | admin\n` +
+      `----+-----------+------+--------------`,
   );
   for (const key of KEYS) {
     const c = await ensureClientAndAdmin(key, adminEmail, adminPassword);
-    const masked = c.mcpToken
-      ? `${c.mcpToken.slice(0, 8)}…${c.mcpToken.slice(-4)}`
-      : "(none)";
     const port =
       key === "erste"
         ? 6001
@@ -69,7 +65,7 @@ async function main() {
             ? 6003
             : 6000;
     console.log(
-      `${String(c.id).padStart(3)} | ${key.padEnd(9)} | ${masked.padEnd(29)} | ${port}  | ${adminEmail}`,
+      `${String(c.id).padStart(3)} | ${key.padEnd(9)} | ${port} | ${adminEmail}`,
     );
   }
   console.log(
@@ -79,7 +75,7 @@ async function main() {
       `  npm run dev:proficio  # http://localhost:6003\n` +
       `  npm run dev:demo      # http://localhost:6000\n` +
       `\nAdmin login on each: ${adminEmail} / ${adminPassword}` +
-      `\nMCP tokens (full) live in clients.mcp_token — Settings → Clients tab to reveal.`,
+      `\nMCP tokens are per-user (mcp_tokens) — Settings → MCP tab to create/reveal.`,
   );
 }
 

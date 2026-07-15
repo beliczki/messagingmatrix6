@@ -8,11 +8,14 @@ import {
   audiences,
   clients,
   config as configTable,
+  mcpTokens,
   messagePreviews,
   messages,
+  nowUtc,
   reporting,
   uploadedFiles,
   topics,
+  users,
   type Audience,
   type Message,
   type Topic,
@@ -67,6 +70,14 @@ import { writeAudit } from "@/lib/audit";
 
 export type McpContext = {
   clientId: number;
+  /** Token owner (users.id) — audit rows are attributed to this user,
+   *  identical to writes made in the UI by the same person. */
+  userId: string;
+  /** 'read' registers only the read/meta tools; 'full' registers everything. */
+  scope: "full" | "read";
+  /** mcp_tokens.id — absent in the tools-inventory route, which only
+   *  introspects schemas and never runs handlers. */
+  tokenId?: number;
   /** Origin the MCP client dialed (e.g. https://erste.messagingmatrix.ai),
    *  used to build absolute preview URLs. Absent in the tools-inventory
    *  route, which only introspects schemas and never runs handlers. */
@@ -138,10 +149,12 @@ export function _resetMcpRateLimitForTests() {
   rateState.clear();
 }
 
-// Spec §5 + master plan D8. Per-client bearer:
+// Spec §5 + master plan D8. Per-user bearer tokens (mcp_tokens):
 //   Authorization: Bearer <token>     (standard)
 //   ?secret=<token>                   (claude.ai connector compat)
 // Deploy-pinned: bearer's resolved client must match ACTIVE_CLIENT_KEY.
+// Revoked tokens (archived_at) and archived owners 401 on the next request —
+// same live re-check the web session does in session.ts.
 export async function resolveBearerClient(
   req: Request,
 ): Promise<McpContext | null> {
@@ -157,15 +170,33 @@ export async function resolveBearerClient(
   if (!token) return null;
 
   const [row] = await db
-    .select()
-    .from(clients)
-    .where(eq(clients.mcpToken, token))
+    .select({ tok: mcpTokens })
+    .from(mcpTokens)
+    .innerJoin(users, eq(users.id, mcpTokens.userId))
+    .where(
+      and(
+        eq(mcpTokens.token, token),
+        isNull(mcpTokens.archivedAt),
+        isNull(users.archivedAt),
+      ),
+    )
     .limit(1);
   if (!row) return null;
 
-  if (row.id !== (await activeClientId())) return null;
+  if (row.tok.clientId !== (await activeClientId())) return null;
 
-  return { clientId: row.id, origin: requestOrigin(req) };
+  await db
+    .update(mcpTokens)
+    .set({ lastUsedAt: nowUtc })
+    .where(eq(mcpTokens.id, row.tok.id));
+
+  return {
+    clientId: row.tok.clientId,
+    userId: row.tok.userId,
+    scope: row.tok.scope === "read" ? "read" : "full",
+    tokenId: row.tok.id,
+    origin: requestOrigin(req),
+  };
 }
 
 // The origin the client actually dialed. `req.url` is unreliable behind the
@@ -533,13 +564,14 @@ function registerMetaTools(server: McpServer, ctx: McpContext): void {
 }
 
 // ── Write tools ──
-// Audit byUser is "mcp:<cid>" (Spec §5.3 + master plan D8). Optimistic-lock
-// failures bubble up as `isError: true` results carrying the current row so
-// the agent can refetch + retry. The lib functions already do all schema
-// validation and slot allocation; we just thread inputs through.
+// Audit byUser is the token owner's user id — identical to writes made in the
+// UI by that user (Spec §5.3 + master plan D8). Optimistic-lock failures
+// bubble up as `isError: true` results carrying the current row so the agent
+// can refetch + retry. The lib functions already do all schema validation and
+// slot allocation; we just thread inputs through.
 
 function mcpUserId(ctx: McpContext): string {
-  return `mcp:${ctx.clientId}`;
+  return ctx.userId;
 }
 
 function errorResult(message: string, extra?: unknown) {
@@ -1621,10 +1653,14 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   );
   registerReadTools(server, ctx);
   registerMetaTools(server, ctx);
-  registerAudienceWriteTools(server, ctx);
-  registerTopicWriteTools(server, ctx);
-  registerMessageWriteTools(server, ctx);
-  registerAssetWriteTools(server, ctx);
-  registerBatchTools(server, ctx);
+  // Read-scoped tokens never see the write tools: unregistered tools are
+  // invisible to tools/list and rejected at the protocol layer.
+  if (ctx.scope === "full") {
+    registerAudienceWriteTools(server, ctx);
+    registerTopicWriteTools(server, ctx);
+    registerMessageWriteTools(server, ctx);
+    registerAssetWriteTools(server, ctx);
+    registerBatchTools(server, ctx);
+  }
   return server;
 }

@@ -3506,3 +3506,19 @@ egyezik a tervezett unique index follow-uppal.
   dormant-twin guard változatlan. Tesztek: 409/409 (2 pin megfordítva +
   copy-út bizonyítás ugyanabban a tesztben).
 - Deploy: box @ 2fbaaaa, build ok, pm2 restart, Ready 1.4s.
+
+**[DONE 2026-07-15] feat(mcp): per-user MCP tokenek full/read scope-pal (NEM deployolva — migráció a deployjal együtt fut!):**
+- [x] Új `mcp_tokens` tábla (user-bound, plaintext, `scope: full|read`, label, lastUsedAt, archivedAt=revoke) — `clients.mcp_token` oszlop TÖRÖLVE
+- [x] Migráció `0002_serious_shriek.sql` kézi backfill INSERT-tel: meglévő client-token → full-scope token, owner = legkorábbi élő admin (fallback: bármely élő user); ERSTE connector secretje változatlanul él tovább
+- [x] `resolveBearerClient`: mcp_tokens⋈users lookup, revoked token / archivált owner → 401 (session.ts-mintájú élő re-check), deploy-pin marad, lastUsedAt stamp
+- [x] `buildMcpServer`: read scope → csak a 9 read/meta tool regisztrálódik (write toolok tools/list-ben sem látszanak)
+- [x] Audit: `mcpUserId` → a token-tulajdonos user id-ja (= UI-írásokkal azonos formátum); `uploaded_files.uploadedBy` is
+- [x] Új API: `/api/mcp-tokens` GET/POST + `[id]` DELETE (revoke) + `[id]/reveal` POST (auditált, `"reveal"` AuditAction) — mind withAdmin; demo user csak read tokent kaphat
+- [x] Régi rotate route + scripts/rotate-mcp-token.ts törölve; clients GET nem maszkol többé; seed-multi.ts token-printout kivéve
+- [x] UI: Settings → MCP "Tokens" szekció (tábla + New token modal + áthozott TokenRevealModal, re-reveal szöveggel); ClientsTab token-oszlop/rotate törölve; McpTab Authentication+Audit próza szinkron; component-inventory frissítve
+- [x] Tesztek: 45 fájl / 423 zöld — új: mcp-tokens-table (defaults/uniqueness/cascade + a LESZÁLLÍTOTT backfill SQL tesztje admin-preferencia/fallback/skip esetekkel), mcp-auth (full/read/unknown/revoked/archived-owner/deploy-pin/?secret= + scope gating + audit-attribúció); mcp-asset-upload elvárás frissítve (uploadedBy = user id)
+- [ ] **DEPLOY (kritikus sorrend):** local `db:migrate` TILOS külön — a DATABASE_URL a tunnelen át az ÉLES DB! A boxon: új kód kirakása → `npm run db:migrate` → pm2 restart EGY menetben (a migrate és a restart közti másodpercekben a régi kód 500-azna a /mcp-n). Utána: ERSTE claude.ai connector ellenőrzés (régi secret működik, scope=full, owner=első admin), majd opcionálisan új per-user tokenek kiosztása + a migrált token visszavonása.
+
+**[DONE 2026-07-15] previews: GET /api/previews/[id] publikus (user döntés):**
+- Auth-ellenőrzés kivéve a preview-kép GET-ből — az MCP agentek/toolok auth nélkül töltik a preview_urls képeit. A sor-lookup deploy-pinnelt marad (activeClientId) → az erste deploy csak erste previewt ad ki; generate/status route-ok védettek maradnak. Cache-Control private→public.
+- McpTab "Preview images" próza szinkronban. +3 teszt (404 nem 401 auth nélkül; 410-ig eljut létező sorra; másik kliens previewja 404). 426 teszt zöld.

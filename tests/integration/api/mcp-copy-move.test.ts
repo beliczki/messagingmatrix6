@@ -46,7 +46,7 @@ type Handler = (args: Record<string, unknown>) => Promise<{
 }>;
 
 function getHandler(clientId: number, toolName: string): Handler {
-  const server = buildMcpServer({ clientId });
+  const server = buildMcpServer({ clientId, userId: "test-user", scope: "full" });
   const registry = (server as unknown as {
     _registeredTools: Record<string, { handler: Handler }>;
   })._registeredTools;

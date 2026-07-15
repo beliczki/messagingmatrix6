@@ -31,7 +31,7 @@ function getHandler(
   toolName: string,
   origin?: string,
 ): Handler {
-  const server = buildMcpServer({ clientId, origin });
+  const server = buildMcpServer({ clientId, userId: "test-user", scope: "full", origin });
   const registry = (server as unknown as {
     _registeredTools: Record<string, { handler: Handler }>;
   })._registeredTools;

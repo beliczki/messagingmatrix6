@@ -11,7 +11,6 @@ type Client = {
   status: string;
   createdAt: string;
   updatedAt: string;
-  mcpTokenMasked: string | null;
 };
 
 type ActiveClient = { key: string; name: string };
@@ -21,10 +20,6 @@ export function ClientsTab({ activeClient }: { activeClient: ActiveClient }) {
   const [showNew, setShowNew] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
-  const [revealedToken, setRevealedToken] = useState<{
-    clientName: string;
-    token: string;
-  } | null>(null);
 
   const q = useQuery({
     queryKey: ["clients"],
@@ -78,33 +73,6 @@ export function ClientsTab({ activeClient }: { activeClient: ActiveClient }) {
     });
   }
 
-  const rotateM = useMutation({
-    mutationFn: async (c: Client) => {
-      const r = await fetch(`/api/clients/${c.id}/rotate-mcp-token`, {
-        method: "POST",
-      });
-      if (!r.ok) throw new Error("rotate failed");
-      const data = (await r.json()) as { token: string };
-      return { client: c, token: data.token };
-    },
-    onSuccess: ({ client, token }) => {
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      setRevealedToken({ clientName: client.name, token });
-    },
-  });
-
-  function rotateToken(c: Client) {
-    const action = c.mcpTokenMasked ? "rotate the MCP token" : "generate an MCP token";
-    if (
-      !window.confirm(
-        `${action} for "${c.name}"? The previous token (if any) will stop working immediately.`,
-      )
-    ) {
-      return;
-    }
-    rotateM.mutate(c);
-  }
-
   return (
     <div className="clients-tab max-w-4xl">
       <div className="clients-tab__banner mb-6 flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3">
@@ -150,7 +118,6 @@ export function ClientsTab({ activeClient }: { activeClient: ActiveClient }) {
               <th className="px-2 py-2 font-medium">Key</th>
               <th className="px-2 py-2 font-medium">Name</th>
               <th className="px-2 py-2 font-medium">Status</th>
-              <th className="px-2 py-2 font-medium">MCP token</th>
               <th className="px-2 py-2 font-medium">Created</th>
               <th className="px-2 py-2"></th>
             </tr>
@@ -211,29 +178,11 @@ export function ClientsTab({ activeClient }: { activeClient: ActiveClient }) {
                       {c.status}
                     </span>
                   </td>
-                  <td className="px-2 py-2 font-mono text-xs text-slate-600">
-                    {c.mcpTokenMasked ?? (
-                      <span className="text-slate-400">(not set)</span>
-                    )}
-                  </td>
                   <td className="px-2 py-2 text-xs text-slate-500">
                     {c.createdAt.slice(0, 10)}
                   </td>
                   <td className="px-2 py-2 text-right">
                     <div className="flex justify-end gap-1.5">
-                      <button
-                        type="button"
-                        onClick={() => rotateToken(c)}
-                        disabled={rotateM.isPending}
-                        className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                        title={
-                          c.mcpTokenMasked
-                            ? "Generate a new MCP token (invalidates the previous one)"
-                            : "Generate an MCP token for this client"
-                        }
-                      >
-                        {c.mcpTokenMasked ? "Rotate token" : "Generate token"}
-                      </button>
                       <button
                         type="button"
                         onClick={() => toggleArchive(c)}
@@ -262,74 +211,6 @@ export function ClientsTab({ activeClient }: { activeClient: ActiveClient }) {
         />
       ) : null}
 
-      {revealedToken ? (
-        <TokenRevealModal
-          clientName={revealedToken.clientName}
-          token={revealedToken.token}
-          onClose={() => setRevealedToken(null)}
-        />
-      ) : null}
-    </div>
-  );
-}
-
-function TokenRevealModal({
-  clientName,
-  token,
-  onClose,
-}: {
-  clientName: string;
-  token: string;
-  onClose: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(token);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* noop */
-    }
-  }
-
-  return (
-    <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
-      <div className="modal w-full max-w-lg rounded-xl bg-white p-6 shadow-2xl">
-        <header className="mb-4">
-          <h3 className="text-lg font-semibold text-slate-900">
-            New MCP token for {clientName}
-          </h3>
-          <p className="mt-1 text-xs text-slate-500">
-            This is the only time the token will be shown. Copy it now and store
-            it somewhere safe — there&apos;s no way to retrieve it later.
-          </p>
-        </header>
-
-        <div className="token-reveal__box mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3">
-          <code className="token-reveal__token block break-all font-mono text-xs text-slate-900">
-            {token}
-          </code>
-        </div>
-
-        <div className="mt-2 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={copy}
-            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            {copied ? "Copied ✓" : "Copy to clipboard"}
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="toolbar-btn--primary rounded-md bg-brand-button px-4 py-2 text-sm font-medium text-white"
-          >
-            I&apos;ve stored it
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

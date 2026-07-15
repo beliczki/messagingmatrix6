@@ -26,7 +26,7 @@ type Handler = (args: Record<string, unknown>) => Promise<{
 }>;
 
 function getHandler(clientId: number): Handler {
-  const server = buildMcpServer({ clientId });
+  const server = buildMcpServer({ clientId, userId: "test-user", scope: "full" });
   const registry = (server as unknown as {
     _registeredTools: Record<string, { handler: Handler }>;
   })._registeredTools;
@@ -80,7 +80,8 @@ describe("asset_upload via MCP", () => {
       .select()
       .from(uploadedFiles)
       .where(eq(uploadedFiles.id, json.file.id));
-    expect(fileRow).toMatchObject({ category: "asset", uploadedBy: `mcp:${erste.id}` });
+    // MCP uploads are attributed to the token owner's user id, like UI uploads.
+    expect(fileRow).toMatchObject({ category: "asset", uploadedBy: "test-user" });
     const [assetRow] = await db
       .select()
       .from(assets)

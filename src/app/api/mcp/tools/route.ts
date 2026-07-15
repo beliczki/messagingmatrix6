@@ -76,7 +76,13 @@ function describeTool(name: string, raw: unknown): ToolDescriptor {
 }
 
 export const GET = withAdmin(async () => {
-  const server = buildMcpServer({ clientId: await activeClientId() });
+  // Introspection only — handlers never run, so a synthetic full-scope
+  // context keeps the docs listing complete.
+  const server = buildMcpServer({
+    clientId: await activeClientId(),
+    userId: "system",
+    scope: "full",
+  });
   const registered = (server as unknown as {
     _registeredTools: Record<string, unknown>;
   })._registeredTools;

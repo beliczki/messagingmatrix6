@@ -26,6 +26,7 @@ vi.mock("@/lib/preview-shooter", () => ({
 import { shootPreviews } from "@/lib/preview-shooter";
 import { POST as generatePOST } from "@/app/api/previews/generate/route";
 import { GET as statusGET } from "@/app/api/previews/status/route";
+import { GET as previewGET } from "@/app/api/previews/[id]/route";
 
 let h: TestDb;
 let erste: { id: number };
@@ -92,6 +93,76 @@ beforeEach(async () => {
 
 afterEach(async () => {
   await h.cleanup();
+});
+
+describe("GET /api/previews/[id] (public)", () => {
+  function publicReq(id: number | string) {
+    const url = `http://localhost/api/previews/${id}`;
+    return [
+      {
+        url,
+        nextUrl: new URL(url),
+        headers: new Headers(),
+        cookies: { get: () => undefined },
+      } as unknown as NextRequest,
+      { params: Promise.resolve({ id: String(id) }) },
+    ] as const;
+  }
+
+  it("serves without any auth: unknown id is 404, never 401", async () => {
+    const [req, ctx] = publicReq(12345);
+    const res = await previewGET(req, ctx);
+    expect(res.status).toBe(404);
+  });
+
+  it("runs past auth to storage for an existing row (410 on missing bytes)", async () => {
+    const m = await seedHtmlMessage(1);
+    const [p] = await db
+      .insert(messagePreviews)
+      .values({
+        clientId: erste.id,
+        messageId: m.id,
+        size: "300x250",
+        storageKey: "previews/does-not-exist.png",
+        messageVersion: 1,
+      })
+      .returning();
+    const [req, ctx] = publicReq(p.id);
+    const res = await previewGET(req, ctx);
+    expect(res.status).toBe(410);
+  });
+
+  it("stays scoped to the active client (other client's preview is 404)", async () => {
+    const [telekom] = await db
+      .insert(clients)
+      .values({ key: "telekom", name: "Telekom" })
+      .returning();
+    const [m] = await db
+      .insert(messages)
+      .values({
+        clientId: telekom.id,
+        number: 1,
+        variant: "a",
+        audience: "aud1",
+        topic: "top1",
+        template: "html",
+      })
+      .returning();
+    const [p] = await db
+      .insert(messagePreviews)
+      .values({
+        clientId: telekom.id,
+        messageId: m.id,
+        size: "300x250",
+        storageKey: "previews/telekom.png",
+        messageVersion: 1,
+      })
+      .returning();
+    // Active client is erste — telekom's preview must not be served here.
+    const [req, ctx] = publicReq(p.id);
+    const res = await previewGET(req, ctx);
+    expect(res.status).toBe(404);
+  });
 });
 
 describe("POST /api/previews/generate", () => {

@@ -3548,3 +3548,10 @@ egyezik a tervezett unique index follow-uppal.
 - [x] MC-scope a szűrt audience/topic kulcskészletből, nem a produkt-fülekből → null-produktú audience-en futó kártya is bekerül az MCs fülre szűretlen exportnál
 - [x] 4 új integrációs teszt (sibling-dedupe, oszlop-kizárás, produkt/státusz scope, üres eredmény) — 437/437 zöld, tsc clean; élő adaton ellenőrizve: 7 produkt-fül + Audiences(180)/Topics(82)/MCs(268), SZK+ACTIVE,INACTIVE scope stimmel
 - [x] **DEPLOYOLVA 2026-07-16:** box 98df45c→7cac7b3, build ok (51/51 oldal, /api/export/matrix-xlsx a route-manifestben), pm2 restart; /matrix 307, export route auth nélkül 401 — healthy.
+
+**[DONE 2026-07-16] fix(monitoring): /api/monitoring 500 — hiányzó await a rows query-n (9f0299e, deployolva):**
+- [x] Élő hibakép: /monitoring "Application error", konzolban `api/monitoring 500` + `r.map is not a function` — a kliens a hiányzó rows-on mappelt
+- [x] Root cause: a `rows` drizzle query builder await nélkül ment a `NextResponse.json`-ba → circular JSON.stringify → 500 (box error.log megerősítette: "property 'id' closes the circle"). Ugyanaz a SQLite→PG bug-osztály, mint a korábbi route-fixek (unawaited async)
+- [x] Fix: egy soros `await` a route.ts:35-ön; grep-sweep az `= db$` mintára a src/app alatt — nincs több előfordulás
+- [x] Verifikálva lokálisan (dev:erste, 837/837 sor renderel) és élesben screenshot-tal
+- [x] **DEPLOYOLVA 2026-07-16:** box 7cac7b3→9f0299e (/var/www/mm6-erste), build ok, pm2 restart, Ready 1.4s, élő /monitoring rendben.

@@ -3523,3 +3523,18 @@ egyezik a tervezett unique index follow-uppal.
 - Auth-ellenőrzés kivéve a preview-kép GET-ből — az MCP agentek/toolok auth nélkül töltik a preview_urls képeit. A sor-lookup deploy-pinnelt marad (activeClientId) → az erste deploy csak erste previewt ad ki; generate/status route-ok védettek maradnak. Cache-Control private→public.
 - McpTab "Preview images" próza szinkronban. +3 teszt (404 nem 401 auth nélkül; 410-ig eljut létező sorra; másik kliens previewja 404). 426 teszt zöld.
 - [x] **DEPLOYOLVA 2026-07-15:** box 2fbaaaa→9c3dc24, build ok, `db:migrate` (0002) + pm2 restart egy menetben. Verifikálva élesben: unauth /mcp→401; migrált token (owner: admin@local, full) → tools/list 29 tool, last_used_at stampelve; clients.mcp_token oszlop törölve; publikus preview GET auth nélkül → 200 image/png. Következő lépés (user): Settings → MCP → per-user tokenek kiosztása, majd opcionálisan a migrált token revoke.
+
+**[DONE 2026-07-16] creative library: Codex-gyűjtemény bulk import (DB+MinIO szinten, UI nélkül):**
+- [x] `scripts/import-codex-creatives.ts` — egyszeri, additív+idempotens import a `~/ERSTE Addressable AI Agent/creatives/` mappából (a Codex által normalizált nevű, eredeti mtime-ú gyűjtemény); scan-creatives minta async PG drizzle-re portolva, meglévő libek (parseCreativeFilename, uploadFile, getActiveClient) újrahasznosítva
+- [x] 3.035 fájl importálva élesbe (client=erste): 2.886 kép + 93 videó + 56 html zip; a 26 `.htmlFolder` könyvtár kihagyva (user döntés); 0 hiba, 0 parse-olhatatlan
+- [x] Dátumok megőrizve: `creatives.created_at/updated_at` = eredeti fájl-mtime (UTC, app-formátum) — 5 random sor egyezik a `creatives_manifest.csv` source_mtime-mal
+- [x] sha-dedup működött: 3.035 uploaded_files sor → 3.001 distinct MinIO objektum (34 byte-azonos duplikátum közös storage_path-on)
+- [x] "Üríteni kell a régi library-t" kérés ellenőrizve: a creatives tábla ÜRES volt az egész DB-ben (a 1000+ régi nevű creative a régi Leadas Lib Google Sheetben él, nem az mm6-ban) → wipe no-op, friss import elég
+- [x] Idempotencia verifikálva: újrafuttatás → 0 inserted / 3.035 skipped-existing
+
+**[DONE 2026-07-16] creative library: verzió-család csoportosítás + Versions oszlop + verzió-stepper:**
+- [x] Új pure helper `src/lib/group-creative-versions.ts` (+7 unit teszt): fileName-ből számolt kulcs (`familyKey|declaredSize`, kisbetűsítve, extension-agnosztikus) — a tárolt `family_key` (UI-uploadnál null) és a `file_dimensions` (retina/off-by-one eltérések) szándékosan NEM kulcs; a `creatives.version` oszlop concurrency-counter, a banner-verzió a `bannerVersion`/fileName `_nN`-ből jön
+- [x] Minden nézetben (masonry/grid/list) egy verzió-család = EGY elem, mindig a legújabb verzióval (3.035 sor → 2.663 library item, 254 multi-verziós család); Masonry itemKey = groupKey (stale-iframe invariáns)
+- [x] List view: új "Versions" oszlop (Size és Created között, sortolható, `withVersions` opt-in prop — assets lista változatlan 8 oszlopos); "N versions" vagy "—" (matrix soroknál is "—")
+- [x] Detail dialog: `nav-stepper` verzió-stepper a fejlécben (label pl. "n3 · 1/2"), default = legújabb; verzióváltásnál preview/file-info/draft/archive mind a kiválasztott sort követi (entity-csere, nem remount); family prev/next (`navId` fix) resetel a legújabbra; egy-verziós családnál nincs stepper
+- [x] Verifikálva: 433/433 teszt zöld, tsc clean, élő UI-ban MC296 150e család (n3/n4) steppelve, assets lista érintetlen. Mellékes: a júl. 12. óta futó dev:erste 503-as beragadt állapotban volt → restart

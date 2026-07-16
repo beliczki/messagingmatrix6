@@ -3555,3 +3555,8 @@ egyezik a tervezett unique index follow-uppal.
 - [x] Fix: egy soros `await` a route.ts:35-ön; grep-sweep az `= db$` mintára a src/app alatt — nincs több előfordulás
 - [x] Verifikálva lokálisan (dev:erste, 837/837 sor renderel) és élesben screenshot-tal
 - [x] **DEPLOYOLVA 2026-07-16:** box 7cac7b3→9f0299e (/var/www/mm6-erste), build ok, pm2 restart, Ready 1.4s, élő /monitoring rendben.
+
+**[DONE 2026-07-16] monitoring: Matched a default match-filter (605aaba, deployolva):**
+- [x] `MonitoringTable.tsx` match useState default: "all" → "matched"; a Clear gomb emiatt betöltéskor is látszik (Clear = minden szűrő le, "all" nézet) — szemantikailag rendben
+- [x] Verifikálva lokálisan (763/936 sor, Matched chip aktív) és élesben screenshot-tal
+- [x] **DEPLOYOLVA 2026-07-16:** box 9f0299e→605aaba, build ok, pm2 restart, Ready 1.4s.

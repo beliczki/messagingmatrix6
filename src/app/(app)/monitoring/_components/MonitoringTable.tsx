@@ -123,7 +123,7 @@ export default function MonitoringTable({
   const [fromFilter, setFromFilter] = useState<string | null>(null);
   const [platforms, setPlatforms] = useState<Set<string>>(new Set());
   const [products, setProducts] = useState<Set<string>>(new Set());
-  const [match, setMatch] = useState<MatchFilter>("all");
+  const [match, setMatch] = useState<MatchFilter>("matched");
   const [sort, setSort] = useState<Sort>({ key: "impressions", dir: "desc" });
   const [detailRowId, setDetailRowId] = useState<number | null>(null);
 

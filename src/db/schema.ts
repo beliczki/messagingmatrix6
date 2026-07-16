@@ -496,6 +496,11 @@ export const monitoring = pgTable(
     messageId: integer("message_id").references(() => messages.id, {
       onDelete: "set null",
     }),
+    // how the message link was resolved: "exact" (full 4-part key),
+    // "family" (number+variant resolved to exactly one message),
+    // "family_known" (number+variant exists but fans out to several cells —
+    // messageId stays null), or null (no match at all).
+    matchLevel: text("match_level"),
     // resolved product code. Matched rows: from the matrix (audience→product);
     // unmatched: from the keyword→product rules in Settings → Structure →
     // Monitoring (matched against topic + pmmid). Null when neither resolves.

@@ -775,3 +775,6 @@ Added an 11th workflow status `ARCHIVED`, sitting next to `INACTIVE` semanticall
 - `mcp-tokens` — Settings → MCP tab "Tokens" szekció (a `mcp-tab__section` kártya-shellben): `__header` (cím + `toolbar-btn--primary` "New token"), `__table` / `__row` (a `clients-tab__table` mintát követő `w-full table-auto border-collapse text-sm`; oszlopok: Label / User / Scope / Token / Last used / Created / akciók). Scope badge = újrahasznált `status-badge` (emerald=full, slate=read).
 - `TokenRevealModal` a ClientsTab-ból ide költözött (általánosított `title` + `token` prop, copy szövege "re-revealable"-re enyhítve); a ClientsTab MCP-token oszlopa/rotate gombja megszűnt (tokenek mostantól per-user, `mcp_tokens` tábla).
 - Új token modal: `modal` + `form-field` konvenció (NewClientModal-minta) — user select + scope select + label input.
+
+**Monitoring tiered match (2026-07-16):**
+- `status-badge--family` — sky badge a Message oszlopban a family-szinten (egyedi MC szám+variáns) linkelt sorokra, a messageName mellett; `status-badge--family-known` — sky badge a messageId nélküli, de a mátrixban létező (több cellára fan-outolt) MC-family sorokra, az amber `status-badge--unmatched` helyén. Mindkettő a `status-badge--unmatched` geometriáját követi (`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase`), title-tooltippel.

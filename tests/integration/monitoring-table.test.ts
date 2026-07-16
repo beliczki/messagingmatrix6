@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, messages, monitoring } from "@/db/schema";
+import { buildMessageResolver } from "@/lib/adform-report";
 import { createTestDb, type TestDb } from "../helpers/test-db";
 
 let h: TestDb;
@@ -83,5 +84,53 @@ describe("monitoring table (migration 0017)", () => {
     await db.delete(clients).where(eq(clients.id, erste.id));
     const rows = await db.select().from(monitoring);
     expect(rows).toHaveLength(0);
+  });
+
+  it("stores the match level (migration 0003)", async () => {
+    await db.insert(monitoring).values(baseRow({ matchLevel: "family_known" }));
+    const [row] = await db
+      .select()
+      .from(monitoring)
+      .where(eq(monitoring.clientId, erste.id))
+      .limit(1);
+    expect(row!.matchLevel).toBe("family_known");
+  });
+
+  // The import route's match decision end-to-end: messages read back from the
+  // DB feed buildMessageResolver exactly as /api/monitoring/import does.
+  it("resolves report keys against DB messages via the tiered resolver", async () => {
+    await db.insert(messages).values([
+      { clientId: erste.id, number: 290, variant: "a", audience: "SZK_INCOMING", topic: "SZK_kerdoiv_NA_hiteltinder" },
+      { clientId: erste.id, number: 316, variant: "a", audience: "SZK_wla_auto", topic: "SZK_felhaszcelja" },
+      { clientId: erste.id, number: 316, variant: "a", audience: "SZK_wlc_auto", topic: "SZK_felhaszcelja" },
+    ]);
+    const msgRows = await db
+      .select({
+        id: messages.id,
+        number: messages.number,
+        variant: messages.variant,
+        audience: messages.audience,
+        topic: messages.topic,
+      })
+      .from(messages)
+      .where(eq(messages.clientId, erste.id));
+    const resolve = buildMessageResolver(msgRows);
+
+    const exact = resolve(290, "a", "szk_incoming", "szk_kerdoiv_na_hiteltinder");
+    expect(exact.matchLevel).toBe("exact");
+    expect(exact.messageId).not.toBeNull();
+
+    const family = resolve(290, "hitelvalaszto_a", "wid", "szk_q2");
+    expect(family.matchLevel).toBe("family");
+    expect(family.messageId).toBe(exact.messageId);
+
+    expect(resolve(316, "a_calc_auto", "wid", "szk_q2")).toEqual({
+      messageId: null,
+      matchLevel: "family_known",
+    });
+    expect(resolve(999, "a", "wid", "szk_q2")).toEqual({
+      messageId: null,
+      matchLevel: null,
+    });
   });
 });

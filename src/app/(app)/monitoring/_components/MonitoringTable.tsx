@@ -31,6 +31,7 @@ type Row = {
   size: string;
   pmmid: string | null;
   messageId: number | null;
+  matchLevel: "exact" | "family" | "family_known" | null;
   audienceKey: string;
   topicKey: string;
   mcNumber: number;
@@ -499,12 +500,29 @@ export default function MonitoringTable({
                     </td>
                     <td className="truncate px-3 py-1.5 text-xs">
                       {r.messageId === null ? (
-                        <span className="status-badge--unmatched rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">
-                          unmatched
-                        </span>
+                        r.matchLevel === "family_known" ? (
+                          <span
+                            className="status-badge--family-known rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-sky-800"
+                            title="MC family exists in the matrix but spans several cells — no single message to link"
+                          >
+                            family known
+                          </span>
+                        ) : (
+                          <span className="status-badge--unmatched rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-amber-800">
+                            unmatched
+                          </span>
+                        )
                       ) : (
                         <span className="text-slate-700">
                           {r.messageName ?? `#${r.messageId}`}
+                          {r.matchLevel === "family" ? (
+                            <span
+                              className="status-badge--family ml-1.5 rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-sky-800"
+                              title="Linked via unique MC number + variant — the trafficked audience/topic named a different cell"
+                            >
+                              family
+                            </span>
+                          ) : null}
                           {r.messageStatus ? (
                             <span className="ml-1.5 text-[10px] uppercase tracking-wide text-slate-400">
                               {r.messageStatus}

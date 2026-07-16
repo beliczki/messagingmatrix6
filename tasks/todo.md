@@ -3560,3 +3560,13 @@ egyezik a tervezett unique index follow-uppal.
 - [x] `MonitoringTable.tsx` match useState default: "all" → "matched"; a Clear gomb emiatt betöltéskor is látszik (Clear = minden szűrő le, "all" nézet) — szemantikailag rendben
 - [x] Verifikálva lokálisan (763/936 sor, Matched chip aktív) és élesben screenshot-tal
 - [x] **DEPLOYOLVA 2026-07-16:** box 9f0299e→605aaba, build ok, pm2 restart, Ready 1.4s.
+
+**[DONE 2026-07-16] monitoring: tiered match (exact → family → family_known) + match_level oszlop:**
+- [x] Kiváltó: codex 2026Q2 creative match study (~/ERSTE Addressable AI Agent) vs Monitoring júniusi report összevetés — study family-szinten 99,3% Matrix-coverage, Monitoring exact 4-kulcson 86,8% sor / 77,7% impr; a 443 unmatched sor SQL-kategorizálva: 368 kulcsalak-eltérés (wid/generikus trafficking kulcs, variáns-suffix, INCOMING-cella), 12 valódi hiány (MC321), 63 m_0 szemétsor
+- [x] `variantLetter()` + `buildMessageResolver()` az adform-report.ts-ben: (1) exact 4-kulcs case-insensitive, (2) family = number+variantLetter pontosan EGY message → messageId + "family", (3) family_known = fan-out család, messageId null; product/size-only fallback tudatosan kizárva (study-tanulság)
+- [x] `monitoring.match_level` oszlop (migráció 0003_lovely_sumo, additív nullable text); import route a resolvert használja, audit+response `familyKnown` counttal
+- [x] UI: `status-badge--family` (sky, messageName mellett) + `status-badge--family-known` (sky, az amber unmatched helyén) title-tooltippel; GET /api/monitoring visszaadja a matchLevelt; component-inventory frissítve
+- [x] Tesztek: +5 unit (variantLetter), +4 unit (resolver tierek), +2 integráció (match_level oszlop, DB→resolver varrat — a korábban teszteletlen msgByKey join kiváltása); 448/448 zöld, tsc clean
+- [x] Éles júniusi adaton SQL-szimuláció (read-only): exact 2 921 (változatlan, nincs regresszió) + family 339 sor/2,24M impr → 96,9% sor / 96,2% impr linkelve; +29 family_known; 75 unmatched marad (MC321+szemét)
+- [ ] **User teendő:** MC321 family (a/b/c, hiteltinder Q2) felvétele a matrixba explicit számfoglalással (MCP mc_create nem tud explicit számot) → utána a maradék unmatched gyakorlatilag csak az m_0 szemét
+- [ ] **Deploy:** git pull + `npm run db:migrate` + pm2 restart mm6-erste EGY menetben a boxon (0003 additív, de a szabály szabály); utána a júniusi és májusi XLSX újratöltése a Monitoring UI-n, hogy a match_level visszamenőleg is feltöltődjön

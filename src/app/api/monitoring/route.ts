@@ -40,6 +40,7 @@ export const GET = withSession(async ({ req, claims }) => {
       size: monitoring.size,
       pmmid: monitoring.pmmid,
       messageId: monitoring.messageId,
+      matchLevel: monitoring.matchLevel,
       audienceKey: monitoring.audienceKey,
       topicKey: monitoring.topicKey,
       mcNumber: monitoring.mcNumber,

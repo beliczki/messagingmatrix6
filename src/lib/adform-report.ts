@@ -136,6 +136,80 @@ export function parsePmmid(pmmid: string): ParsedPmmid | null {
   return { scope, audienceKey, topicKey, mcNumber, mcVariant: variant };
 }
 
+// Reduce a trafficked variant to its single-letter creative variant when it
+// carries a descriptive token (e.g. "hitelvalaszto_a" → "a", "a_calc_auto" →
+// "a") — the matrix stores the bare letter while campaigns are often trafficked
+// with a labelled variant. Only a leading or trailing underscore-separated
+// single-letter segment qualifies; anything else is returned lowercased but
+// otherwise unchanged, so multi-letter variants like "na" never collapse.
+export function variantLetter(variant: string): string {
+  const v = variant.toLowerCase();
+  const parts = v.split("_");
+  if (parts.length > 1) {
+    if (/^[a-z]$/.test(parts[0])) return parts[0];
+    const last = parts[parts.length - 1];
+    if (/^[a-z]$/.test(last)) return last;
+  }
+  return v;
+}
+
+export type MessageKeyRow = {
+  id: number;
+  number: number;
+  variant: string;
+  audience: string;
+  topic: string;
+};
+
+export type MatchLevel = "exact" | "family" | "family_known";
+
+export type MessageMatch = {
+  messageId: number | null;
+  matchLevel: MatchLevel | null;
+};
+
+// Tiered, conservative resolver from a parsed report key to a matrix message:
+//   1. "exact"        — case-insensitive equality on (number, variant,
+//                       audience, topic);
+//   2. "family"       — (number, variantLetter) resolves to exactly ONE
+//                       message, so the link is unambiguous even though the
+//                       trafficked audience/topic named a different cell;
+//   3. "family_known" — the family exists but fans out to several cells; no
+//                       single message can be linked, messageId stays null.
+// Product-only or size-only fallbacks are deliberately excluded — the 2026Q2
+// creative match study showed evidence-free associations must not count.
+export function buildMessageResolver(
+  rows: MessageKeyRow[],
+): (
+  number: number,
+  variant: string,
+  audience: string,
+  topic: string,
+) => MessageMatch {
+  const exact = new Map<string, number>();
+  const family = new Map<string, number[]>();
+  for (const m of rows) {
+    exact.set(
+      `${m.number}|${m.variant}|${m.audience}|${m.topic}`.toLowerCase(),
+      m.id,
+    );
+    const fk = `${m.number}|${variantLetter(m.variant)}`;
+    const ids = family.get(fk);
+    if (ids) ids.push(m.id);
+    else family.set(fk, [m.id]);
+  }
+  return (number, variant, audience, topic) => {
+    const ex = exact.get(
+      `${number}|${variant}|${audience}|${topic}`.toLowerCase(),
+    );
+    if (ex !== undefined) return { messageId: ex, matchLevel: "exact" };
+    const fam = family.get(`${number}|${variantLetter(variant)}`);
+    if (!fam) return { messageId: null, matchLevel: null };
+    if (fam.length === 1) return { messageId: fam[0], matchLevel: "family" };
+    return { messageId: null, matchLevel: "family_known" };
+  };
+}
+
 export type ProductRule = { keyword: string; product: string };
 
 // Resolve a product code for a monitoring row. Priority:

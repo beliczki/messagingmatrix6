@@ -7,6 +7,8 @@ import {
   normalizePlatform,
   resolveProduct,
   extractSize,
+  variantLetter,
+  buildMessageResolver,
 } from "@/lib/adform-report";
 
 // Build a tiny report mirroring the real AdForm "Creative custom report" shape:
@@ -114,6 +116,70 @@ describe("extractSize", () => {
   });
   it("returns empty string when there is no size token", () => {
     expect(extractSize("Campaign - Banner - p_adform-s_pro-a_x-m_1-t_y-v_a")).toBe("");
+  });
+});
+
+describe("variantLetter", () => {
+  it("keeps a bare letter", () => {
+    expect(variantLetter("a")).toBe("a");
+  });
+  it("extracts a trailing single-letter token", () => {
+    expect(variantLetter("hitelvalaszto_a")).toBe("a");
+  });
+  it("extracts a leading single-letter token", () => {
+    expect(variantLetter("a_calc_auto")).toBe("a");
+  });
+  it("lowercases but never collapses multi-letter variants", () => {
+    expect(variantLetter("NA")).toBe("na");
+    expect(variantLetter("calc_na")).toBe("calc_na");
+  });
+  it("leaves digit variants unchanged", () => {
+    expect(variantLetter("0")).toBe("0");
+  });
+});
+
+describe("buildMessageResolver", () => {
+  // Mirrors real June-report shapes: MC290 lives once per variant in an
+  // INCOMING cell; MC316 variant "a" fans out across many cells.
+  const resolve = buildMessageResolver([
+    { id: 1, number: 290, variant: "a", audience: "SZK_INCOMING", topic: "SZK_kerdoiv_NA_hiteltinder" },
+    { id: 2, number: 290, variant: "b", audience: "SZK_INCOMING", topic: "SZK_kerdoiv_NA_hiteltinder" },
+    { id: 3, number: 316, variant: "a", audience: "SZK_wla_auto", topic: "SZK_felhaszcelja" },
+    { id: 4, number: 316, variant: "a", audience: "SZK_wlc_auto", topic: "SZK_felhaszcelja" },
+  ]);
+
+  it("tier 1 — exact 4-part key, case-insensitive", () => {
+    expect(
+      resolve(290, "a", "SZK_INCOMING", "SZK_kerdoiv_NA_hiteltinder"),
+    ).toEqual({ messageId: 1, matchLevel: "exact" });
+    expect(
+      resolve(290, "A", "szk_incoming", "szk_kerdoiv_na_hiteltinder"),
+    ).toEqual({ messageId: 1, matchLevel: "exact" });
+  });
+
+  it("tier 2 — unique family via the variant letter", () => {
+    expect(resolve(290, "hitelvalaszto_a", "wid", "szk_q2")).toEqual({
+      messageId: 1,
+      matchLevel: "family",
+    });
+  });
+
+  it("tier 3 — fan-out family stays unlinked but flagged", () => {
+    expect(resolve(316, "a_calc_auto", "wid", "szk_q2")).toEqual({
+      messageId: null,
+      matchLevel: "family_known",
+    });
+  });
+
+  it("no match for an absent MC number or variant letter", () => {
+    expect(resolve(999, "a", "wid", "szk_q2")).toEqual({
+      messageId: null,
+      matchLevel: null,
+    });
+    expect(resolve(290, "c", "wid", "szk_q2")).toEqual({
+      messageId: null,
+      matchLevel: null,
+    });
   });
 });
 

@@ -4,7 +4,11 @@ import { db } from "@/db";
 import { monitoring, messages as messagesTable } from "@/db/schema";
 import { withSession, denyDemo } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
-import { parseAdformReport, resolveProduct } from "@/lib/adform-report";
+import {
+  buildMessageResolver,
+  parseAdformReport,
+  resolveProduct,
+} from "@/lib/adform-report";
 import { loadProductContext } from "@/lib/monitoring-products";
 
 // POST /api/monitoring/import — multipart upload of a standalone AdForm
@@ -39,7 +43,8 @@ export const POST = withSession(async ({ req, claims }) => {
     );
   }
 
-  // Resolve each aggregated row to a matrix message via the exact message key.
+  // Resolve each aggregated row to a matrix message via the tiered resolver
+  // (exact 4-part key → unique number+variant family → family_known).
   const msgRows = await db
     .select({
       id: messagesTable.id,
@@ -50,50 +55,44 @@ export const POST = withSession(async ({ req, claims }) => {
     })
     .from(messagesTable)
     .where(eq(messagesTable.clientId, claims.cid));
-  const msgByKey = new Map<string, number>();
-  for (const m of msgRows) {
-    msgByKey.set(`${m.number}|${m.variant}|${m.audience}|${m.topic}`, m.id);
-  }
-  const resolve = (
-    number: number,
-    variant: string,
-    audience: string,
-    topic: string,
-  ): number | null =>
-    msgByKey.get(`${number}|${variant}|${audience}|${topic}`) ?? null;
+  const resolve = buildMessageResolver(msgRows);
 
   // Product resolution inputs: audience→product (matrix-authoritative) + the
   // keyword→product rules from Settings → Structure → Monitoring.
   const { audienceProduct, rules: productRules } =
     await loadProductContext(claims.cid);
 
-  const values = parsed.rows.map((r) => ({
-    clientId: claims.cid,
-    platform: r.platform,
-    scope: r.scope,
-    pmmid: r.pmmid,
-    messageId: resolve(r.mcNumber, r.mcVariant, r.audienceKey, r.topicKey),
-    product: resolveProduct(
-      r.audienceKey,
-      r.topicKey,
-      r.pmmid,
-      audienceProduct,
-      productRules,
-    ),
-    size: r.size,
-    audienceKey: r.audienceKey,
-    topicKey: r.topicKey,
-    mcNumber: r.mcNumber,
-    mcVariant: r.mcVariant,
-    impressions: Math.round(r.impressions),
-    clicks: Math.round(r.clicks),
-    cost: r.cost,
-    conversions: Math.round(r.conversions),
-    ctr: r.ctr,
-    periodFrom: parsed.periodFrom,
-    periodTo: parsed.periodTo,
-    sourceFilename: file.name,
-  }));
+  const values = parsed.rows.map((r) => {
+    const match = resolve(r.mcNumber, r.mcVariant, r.audienceKey, r.topicKey);
+    return {
+      clientId: claims.cid,
+      platform: r.platform,
+      scope: r.scope,
+      pmmid: r.pmmid,
+      messageId: match.messageId,
+      matchLevel: match.matchLevel,
+      product: resolveProduct(
+        r.audienceKey,
+        r.topicKey,
+        r.pmmid,
+        audienceProduct,
+        productRules,
+      ),
+      size: r.size,
+      audienceKey: r.audienceKey,
+      topicKey: r.topicKey,
+      mcNumber: r.mcNumber,
+      mcVariant: r.mcVariant,
+      impressions: Math.round(r.impressions),
+      clicks: Math.round(r.clicks),
+      cost: r.cost,
+      conversions: Math.round(r.conversions),
+      ctr: r.ctr,
+      periodFrom: parsed.periodFrom,
+      periodTo: parsed.periodTo,
+      sourceFilename: file.name,
+    };
+  });
 
   // One report file = the full snapshot for its period. Re-uploading the same
   // period replaces every row for it (all platforms), so totals never double.
@@ -113,6 +112,9 @@ export const POST = withSession(async ({ req, claims }) => {
   });
 
   const matched = values.filter((v) => v.messageId !== null).length;
+  const familyKnown = values.filter(
+    (v) => v.matchLevel === "family_known",
+  ).length;
   const platforms = [...new Set(values.map((v) => v.platform))].sort();
 
   await writeAudit({
@@ -127,6 +129,7 @@ export const POST = withSession(async ({ req, claims }) => {
       periodTo: parsed.periodTo,
       imported: values.length,
       matched,
+      familyKnown,
       unmatched: values.length - matched,
       skipped: parsed.skipped,
       totalDataRows: parsed.totalDataRows,
@@ -137,6 +140,7 @@ export const POST = withSession(async ({ req, claims }) => {
   return NextResponse.json({
     imported: values.length,
     matched,
+    familyKnown,
     unmatched: values.length - matched,
     skipped: parsed.skipped,
     totalDataRows: parsed.totalDataRows,

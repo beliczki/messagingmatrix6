@@ -1,0 +1,1 @@
+ALTER TABLE "monitoring" ADD COLUMN "match_level" text;

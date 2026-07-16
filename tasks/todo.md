@@ -3569,4 +3569,5 @@ egyezik a tervezett unique index follow-uppal.
 - [x] Tesztek: +5 unit (variantLetter), +4 unit (resolver tierek), +2 integráció (match_level oszlop, DB→resolver varrat — a korábban teszteletlen msgByKey join kiváltása); 448/448 zöld, tsc clean
 - [x] Éles júniusi adaton SQL-szimuláció (read-only): exact 2 921 (változatlan, nincs regresszió) + family 339 sor/2,24M impr → 96,9% sor / 96,2% impr linkelve; +29 family_known; 75 unmatched marad (MC321+szemét)
 - [ ] **User teendő:** MC321 family (a/b/c, hiteltinder Q2) felvétele a matrixba explicit számfoglalással (MCP mc_create nem tud explicit számot) → utána a maradék unmatched gyakorlatilag csak az m_0 szemét
-- [ ] **Deploy:** git pull + `npm run db:migrate` + pm2 restart mm6-erste EGY menetben a boxon (0003 additív, de a szabály szabály); utána a júniusi és májusi XLSX újratöltése a Monitoring UI-n, hogy a match_level visszamenőleg is feltöltődjön
+- [x] **DEPLOYOLVA 2026-07-16:** box 605aaba→3d0aa0c (/var/www/mm6-erste), db:migrate ok (match_level oszlop élesben ellenőrizve), build ok, pm2 restart, Ready 1.3s; /monitoring 307, /api/monitoring auth nélkül 401 — healthy
+- [ ] **User teendő:** a júniusi és májusi XLSX újratöltése a Monitoring UI-n, hogy a match_level (family linkek) a meglévő sorokra is feltöltődjön

@@ -32,7 +32,7 @@ export const GET = withSession(async ({ req, claims }) => {
   const selected =
     periods.find((p) => p.periodFrom === requested) ?? periods[0];
 
-  const rows = db
+  const rows = await db
     .select({
       id: monitoring.id,
       platform: monitoring.platform,

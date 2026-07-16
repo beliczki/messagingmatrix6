@@ -3547,3 +3547,4 @@ egyezik a tervezett unique index follow-uppal.
 - [x] Új `MatrixExportPanel` (matrix-export-panel, filter-chip + toolbar-btn--primary reuse) a grid nézet kinyitott toolbarjában az EditModePanel alatt; a matrix oldal aktuális produkt+státusz szűrőit viszi (search szándékosan nem)
 - [x] MC-scope a szűrt audience/topic kulcskészletből, nem a produkt-fülekből → null-produktú audience-en futó kártya is bekerül az MCs fülre szűretlen exportnál
 - [x] 4 új integrációs teszt (sibling-dedupe, oszlop-kizárás, produkt/státusz scope, üres eredmény) — 437/437 zöld, tsc clean; élő adaton ellenőrizve: 7 produkt-fül + Audiences(180)/Topics(82)/MCs(268), SZK+ACTIVE,INACTIVE scope stimmel
+- [x] **DEPLOYOLVA 2026-07-16:** box 98df45c→7cac7b3, build ok (51/51 oldal, /api/export/matrix-xlsx a route-manifestben), pm2 restart; /matrix 307, export route auth nélkül 401 — healthy.

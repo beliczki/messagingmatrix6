@@ -605,6 +605,7 @@ The Edit toggle and the entire selection-actions block moved out of the top `mat
 - `edit-mode-panel__pending` — stacked Apply (N) / Cancel shown while a target picker is open.
 - `edit-mode-panel__error` — rose box (`border-rose-200 bg-rose-50 text-[10px] text-rose-700`) at the panel bottom showing the last failed bulk copy/move (Apply or DnD), e.g. "MC330a is ACTIVE — measured cards keep their PMMID and can't be moved". Clears on pending-action change or edit-mode toggle.
 - `edit-mode-toggle`, `edit-mode-toggle--active` — collapsed-mode icon-only Edit button, rendered in the right toolbar's narrow column below the density CycleIconButton.
+- `matrix-export-panel` (2026-07-16) — third visual twin of `edit-mode-panel`/`feed-export-panel`, right toolbar expanded body directly under the Edit mode panel (`view === "grid"`). `__title` ("Matrix export"), `__filters` chip row reusing `filter-chip` (selected products/statuses vagy "All products"/"All statuses"); Download gomb = `toolbar-btn--primary` a FeedExportPanel mintájára. GET `/api/export/matrix-xlsx?products=&statuses=`.
 
 **Reuse:**
 - `selection-actions__btn--copy`, `--move`, `--delete`, `--cancel`, `--apply`, `selection-actions__pending` — kept verbatim inside the new panel (same buttons, new container).

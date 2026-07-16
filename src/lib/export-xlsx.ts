@@ -1,6 +1,9 @@
 import { eq } from "drizzle-orm";
 import xlsx from "node-xlsx";
 import { db } from "@/db";
+import { listAudiences } from "@/lib/entities/audiences";
+import { listTopics } from "@/lib/entities/topics";
+import { listMessages } from "@/lib/entities/messages";
 import {
   audiences,
   assets,
@@ -226,4 +229,159 @@ export async function exportClientXlsx(
       reporting: reportingRows.length,
     },
   };
+}
+
+// ── Matrix export (filtered, per-product tabs + Audiences/Topics/MCs) ──────
+//
+// The MCs sheet lists each unique card (number, variant) once. Per-audience
+// trafficking fields are dropped: siblings share content via
+// propagateToSiblings, but PMMID / UTM_* / Final_Trafficked_URL differ per
+// audience copy, so a single row can't represent them.
+const MC_EXCLUDED_HEADERS = new Set([
+  "Audience_Key",
+  "PMMID",
+  "Final_Trafficked_URL",
+  "UTM_Campaign",
+  "UTM_Source",
+  "UTM_Medium",
+  "UTM_Content",
+  "UTM_Term",
+  "UTM_CD26",
+]);
+
+// Excel sheet names: max 31 chars, no []:*?/\ — and must be unique within the
+// workbook (a product could collide after truncation or with a fixed sheet).
+function sanitizeSheetName(name: string, used: Set<string>): string {
+  const base = (name.replace(/[[\]:*?/\\]/g, "").trim() || "Product").slice(0, 31);
+  let candidate = base;
+  for (let i = 2; used.has(candidate); i++) {
+    const suffix = ` (${i})`;
+    candidate = base.slice(0, 31 - suffix.length) + suffix;
+  }
+  used.add(candidate);
+  return candidate;
+}
+
+export async function exportMatrixXlsx(
+  clientId: number,
+  opts: { products: string[]; statuses: string[] },
+): Promise<Buffer> {
+  const [allAuds, allTops, allMsgs] = await Promise.all([
+    listAudiences(clientId),
+    listTopics(clientId),
+    listMessages(clientId),
+  ]);
+
+  const productSel = new Set(opts.products);
+  const statusSel = new Set(opts.statuses);
+
+  const auds = productSel.size
+    ? allAuds.filter((a) => a.product && productSel.has(a.product))
+    : allAuds;
+  const tops = productSel.size
+    ? allTops.filter((t) => t.product && productSel.has(t.product))
+    : allTops;
+  // Grid parity (MatrixGrid filter): active status filter drops null-status rows.
+  const msgs = statusSel.size
+    ? allMsgs.filter((m) => m.status && statusSel.has(m.status))
+    : allMsgs;
+
+  // Tab list = products actually present in the scoped rows (guards stale
+  // filter values from localStorage producing empty junk sheets).
+  const productNames = [
+    ...new Set(
+      [...auds, ...tops].map((r) => r.product).filter((p): p is string => !!p),
+    ),
+  ].sort();
+
+  const usedNames = new Set(["Audiences", "Topics", "MCs"]);
+  const audOrder = new Map(auds.map((a, i) => [a.key, i]));
+
+  // A message is in scope when BOTH its audience and topic survive product
+  // scoping (same AND rule as the grid and the feed export). Computed from
+  // the scoped key sets — not from the product tabs — so cards on
+  // null-product audiences still reach the MCs sheet in an unfiltered export.
+  const audKeysAll = new Set(auds.map((a) => a.key));
+  const topKeysAll = new Set(tops.map((t) => t.key));
+  const scopedMsgs = msgs.filter(
+    (m) => audKeysAll.has(m.audience) && topKeysAll.has(m.topic),
+  );
+
+  const productSheets = productNames.map((product) => {
+    const audsP = auds.filter((a) => a.product === product);
+    const topsP = tops.filter((t) => t.product === product);
+    const audKeys = new Set(audsP.map((a) => a.key));
+    const topKeys = new Set(topsP.map((t) => t.key));
+
+    const buckets = new Map<string, Message[]>();
+    for (const m of msgs) {
+      if (!audKeys.has(m.audience) || !topKeys.has(m.topic)) continue;
+      const key = `${m.topic} ${m.audience}`;
+      const bucket = buckets.get(key);
+      if (bucket) bucket.push(m);
+      else buckets.set(key, [m]);
+    }
+
+    const header: Cell[] = ["Topic", "Name", ...audsP.map((a) => a.key)];
+    const rows: Cell[][] = topsP.map((t) => [
+      t.key,
+      t.name,
+      ...audsP.map((a) => {
+        const bucket = buckets.get(`${t.key} ${a.key}`);
+        if (!bucket) return null;
+        bucket.sort(
+          (x, y) => x.number - y.number || x.variant.localeCompare(y.variant),
+        );
+        return bucket.map((m) => `MC${m.number}${m.variant}`).join(", ");
+      }),
+    ]);
+
+    return {
+      name: sanitizeSheetName(product, usedNames),
+      data: [header, ...rows],
+      options: {},
+    };
+  });
+
+  // MCs sheet: one row per unique (number, variant); representative = the
+  // sibling on the first audience in matrix order (content fields are synced
+  // across siblings, so the pick only needs to be deterministic).
+  const byCard = new Map<string, Message[]>();
+  for (const m of scopedMsgs) {
+    const key = `${m.number}|${m.variant}`;
+    const group = byCard.get(key);
+    if (group) group.push(m);
+    else byCard.set(key, [m]);
+  }
+  const mcRows = [...byCard.values()]
+    .map((group) => {
+      group.sort(
+        (x, y) =>
+          (audOrder.get(x.audience) ?? 0) - (audOrder.get(y.audience) ?? 0) ||
+          x.id - y.id,
+      );
+      return {
+        m: group[0]!,
+        audiences: group.map((g) => g.audience).join(", "),
+      };
+    })
+    .sort(
+      (x, y) =>
+        x.m.number - y.m.number || x.m.variant.localeCompare(y.m.variant),
+    );
+
+  type McRow = (typeof mcRows)[number];
+  const mcCols: Col<McRow>[] = messageCols
+    .filter((c) => !MC_EXCLUDED_HEADERS.has(c.header))
+    .map((c) => ({ header: c.header, get: (r: McRow) => c.get(r.m) }));
+  mcCols.splice(2, 0, { header: "Audiences", get: (r) => r.audiences });
+
+  const sheets = [
+    ...productSheets,
+    buildSheet("Audiences", audienceCols, auds),
+    buildSheet("Topics", topicCols, tops),
+    buildSheet("MCs", mcCols, mcRows),
+  ];
+
+  return xlsx.build(sheets);
 }

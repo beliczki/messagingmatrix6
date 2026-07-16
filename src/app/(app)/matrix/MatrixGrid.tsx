@@ -13,6 +13,7 @@ import TreeViewNavigator, {
 } from "./_views/TreeViewNavigator";
 import FeedExportPanel from "./FeedExportPanel";
 import EditModePanel from "./EditModePanel";
+import MatrixExportPanel from "./MatrixExportPanel";
 import MatrixToolbar from "./MatrixToolbar";
 import MessageEditor from "./MessageEditor";
 import CreateMcDialog from "./CreateMcDialog";
@@ -769,6 +770,7 @@ export default function MatrixWorkspace() {
                   topicNameByKey={topicById}
                 />
               ) : null}
+              {view === "grid" ? <MatrixExportPanel filters={filters} /> : null}
               {view === "feed" ? (
                 <FeedExportPanel
                   filters={filters}

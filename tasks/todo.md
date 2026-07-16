@@ -3539,3 +3539,11 @@ egyezik a tervezett unique index follow-uppal.
 - [x] Detail dialog: `nav-stepper` verzió-stepper a fejlécben (label pl. "n3 · 1/2"), default = legújabb; verzióváltásnál preview/file-info/draft/archive mind a kiválasztott sort követi (entity-csere, nem remount); family prev/next (`navId` fix) resetel a legújabbra; egy-verziós családnál nincs stepper
 - [x] Verifikálva: 433/433 teszt zöld, tsc clean, élő UI-ban MC296 150e család (n3/n4) steppelve, assets lista érintetlen. Mellékes: a júl. 12. óta futó dev:erste 503-as beragadt állapotban volt → restart
 - [x] **DEPLOYOLVA 2026-07-16:** box 9c3dc24→98df45c (/var/www/mm6-erste), build ok, pm2 restart, /creative-library 307 (auth redirect, healthy). Verzió-csoportosítás + Versions oszlop + stepper élesben.
+
+**[DONE 2026-07-16] matrix: XLSX export a jobb toolbarba (Edit mode alá):**
+- [x] `exportMatrixXlsx(clientId, {products, statuses})` az export-xlsx.ts-ben: produktonként egy mátrix-fül (sor=topic key+name, oszlop=audience key, cella="MC12a, MC13b"), + Audiences/Topics fülek (meglévő oszlopspecek, scope-olva), + MCs fül — egyedi (number, variant) kártyánként egy sor, aggregált "Audiences" oszloppal (audience key-k matrix-sorrendben)
+- [x] Per-audience trafficking mezők kihagyva az MCs fülről (user döntés): PMMID, UTM_* mind, Final_Trafficked_URL — Landing_URL marad; reprezentáns = első audience siblingje (propagateToSiblings miatt a tartalom szinkronban van)
+- [x] Új route: GET `/api/export/matrix-xlsx?products=SZA,SZK&statuses=ACTIVE` (withSession, üres param = mind); fájlnév `<clientKey>-matrix-<date>.xlsx`
+- [x] Új `MatrixExportPanel` (matrix-export-panel, filter-chip + toolbar-btn--primary reuse) a grid nézet kinyitott toolbarjában az EditModePanel alatt; a matrix oldal aktuális produkt+státusz szűrőit viszi (search szándékosan nem)
+- [x] MC-scope a szűrt audience/topic kulcskészletből, nem a produkt-fülekből → null-produktú audience-en futó kártya is bekerül az MCs fülre szűretlen exportnál
+- [x] 4 új integrációs teszt (sibling-dedupe, oszlop-kizárás, produkt/státusz scope, üres eredmény) — 437/437 zöld, tsc clean; élő adaton ellenőrizve: 7 produkt-fül + Audiences(180)/Topics(82)/MCs(268), SZK+ACTIVE,INACTIVE scope stimmel

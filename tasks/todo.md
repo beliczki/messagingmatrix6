@@ -3538,3 +3538,4 @@ egyezik a tervezett unique index follow-uppal.
 - [x] List view: új "Versions" oszlop (Size és Created között, sortolható, `withVersions` opt-in prop — assets lista változatlan 8 oszlopos); "N versions" vagy "—" (matrix soroknál is "—")
 - [x] Detail dialog: `nav-stepper` verzió-stepper a fejlécben (label pl. "n3 · 1/2"), default = legújabb; verzióváltásnál preview/file-info/draft/archive mind a kiválasztott sort követi (entity-csere, nem remount); family prev/next (`navId` fix) resetel a legújabbra; egy-verziós családnál nincs stepper
 - [x] Verifikálva: 433/433 teszt zöld, tsc clean, élő UI-ban MC296 150e család (n3/n4) steppelve, assets lista érintetlen. Mellékes: a júl. 12. óta futó dev:erste 503-as beragadt állapotban volt → restart
+- [x] **DEPLOYOLVA 2026-07-16:** box 9c3dc24→98df45c (/var/www/mm6-erste), build ok, pm2 restart, /creative-library 307 (auth redirect, healthy). Verzió-csoportosítás + Versions oszlop + stepper élesben.

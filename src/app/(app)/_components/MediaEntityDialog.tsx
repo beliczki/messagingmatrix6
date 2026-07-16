@@ -86,6 +86,18 @@ export type MediaEntityDialogProps<E extends MediaEntity, D> = {
   renderForm: (draft: D, setDraft: (d: D) => void) => ReactNode;
   /** Extra static metadata rows shown beneath the form. */
   fileInfoRows?: Array<[string, string | null]>;
+  /**
+   * Id used to locate this dialog within `entities` for prev/next nav. Needed
+   * when `entity` is a version sibling that isn't in the grouped list itself
+   * (defaults to entity.id).
+   */
+  navId?: number;
+  /** Optional version stepper rendered in the header (creative version families). */
+  versionNav?: {
+    versions: { id: number; label: string }[];
+    currentId: number;
+    onSelect: (id: number) => void;
+  };
 };
 
 export default function MediaEntityDialog<E extends MediaEntity, D>({
@@ -102,6 +114,8 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
   diffPayload,
   renderForm,
   fileInfoRows,
+  navId,
+  versionNav,
 }: MediaEntityDialogProps<E, D>) {
   const [draft, setDraft] = useState<D>(() => toDraft(entity));
   const [snapshot, setSnapshot] = useState<E>(entity);
@@ -129,8 +143,8 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
   }, [entity.id]);
 
   const navIndex = useMemo(
-    () => entities.findIndex((e) => e.id === entity.id),
-    [entities, entity.id],
+    () => entities.findIndex((e) => e.id === (navId ?? entity.id)),
+    [entities, navId, entity.id],
   );
   function navigatePrev() {
     if (navIndex > 0) onJump(entities[navIndex - 1].id);
@@ -356,6 +370,38 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
           >
             {archived ? "Archived" : "Active"}
           </span>
+          {versionNav && versionNav.versions.length > 1
+            ? (() => {
+                const vIdx = versionNav.versions.findIndex(
+                  (v) => v.id === versionNav.currentId,
+                );
+                return (
+                  <div className="nav-stepper ml-2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => versionNav.onSelect(versionNav.versions[vIdx - 1]!.id)}
+                      disabled={vIdx <= 0}
+                      aria-label="Previous version"
+                      className="nav-stepper__btn nav-stepper__btn--prev rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+                    >
+                      <ChevronLeft className="size-3.5" />
+                    </button>
+                    <span className="nav-stepper__counter text-xs text-slate-500">
+                      {versionNav.versions[vIdx]?.label} · {vIdx + 1}/{versionNav.versions.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => versionNav.onSelect(versionNav.versions[vIdx + 1]!.id)}
+                      disabled={vIdx < 0 || vIdx >= versionNav.versions.length - 1}
+                      aria-label="Next version"
+                      className="nav-stepper__btn nav-stepper__btn--next rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+                    >
+                      <ChevronRight className="size-3.5" />
+                    </button>
+                  </div>
+                );
+              })()
+            : null}
           <SaveIndicator state={saveState} />
 
           <div className="media-entity-dialog__header-actions ml-auto flex items-center gap-2">

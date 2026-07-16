@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import MediaEntityDialog, {
   formatBytes,
   type UploadedFile,
 } from "../_components/MediaEntityDialog";
+import { parseCreativeFilename } from "@/lib/parse-creative-filename";
 
 type Creative = {
   id: number;
@@ -79,42 +81,75 @@ function diffPayload(snapshot: Creative, draft: Draft): Record<string, unknown> 
   return out;
 }
 
+function versionLabel(c: Creative): string {
+  const banner = c.bannerVersion?.trim();
+  if (banner) return banner;
+  return `n${parseCreativeFilename(c.fileName ?? "").version}`;
+}
+
 export default function CreativeDetailDialog({
   creative,
   creatives,
-  file,
+  versions,
+  filesById,
   onJump,
   onClose,
 }: {
   creative: Creative;
   creatives: Creative[];
-  file: UploadedFile | undefined;
+  /** Version family (oldest → newest), the representative included as last. */
+  versions?: Creative[];
+  filesById: Map<string, UploadedFile>;
   onJump: (id: number) => void;
   onClose: () => void;
 }) {
+  // null = the representative (latest). Reset when group prev/next jumps to
+  // another family — deliberately without remounting, so the autosave toggle
+  // and split position survive navigation.
+  const [selectedVersionId, setSelectedVersionId] = useState<number | null>(null);
+  useEffect(() => {
+    setSelectedVersionId(null);
+  }, [creative.id]);
+
+  const current =
+    (selectedVersionId !== null
+      ? versions?.find((v) => v.id === selectedVersionId)
+      : undefined) ?? creative;
+  const file = current.fileId ? filesById.get(current.fileId) : undefined;
+
   const mcLabel =
-    creative.mcNumber !== null
-      ? `MC${creative.mcNumber}${creative.mcVariant ?? ""}`
+    current.mcNumber !== null
+      ? `MC${current.mcNumber}${current.mcVariant ?? ""}`
       : null;
   const fileInfoRows: Array<[string, string | null]> = [
-    ["File", creative.fileName],
-    ["Format", creative.fileFormat ?? file?.mimeType ?? null],
-    ["Dimensions", creative.fileDimensions ?? file?.dimensions ?? null],
-    ["Size", creative.fileSize ? formatBytes(Number(creative.fileSize)) : null],
-    ["Created", new Date(creative.createdAt).toLocaleString()],
+    ["File", current.fileName],
+    ["Format", current.fileFormat ?? file?.mimeType ?? null],
+    ["Dimensions", current.fileDimensions ?? file?.dimensions ?? null],
+    ["Size", current.fileSize ? formatBytes(Number(current.fileSize)) : null],
+    ["Created", new Date(current.createdAt).toLocaleString()],
   ];
-  if (creative.archivedAt) {
-    fileInfoRows.push(["Archived", new Date(creative.archivedAt).toLocaleString()]);
+  if (current.archivedAt) {
+    fileInfoRows.push(["Archived", new Date(current.archivedAt).toLocaleString()]);
   }
 
   return (
     <MediaEntityDialog<Creative, Draft>
-      entity={creative}
+      entity={current}
       entities={creatives}
+      navId={creative.id}
+      versionNav={
+        versions && versions.length > 1
+          ? {
+              versions: versions.map((v) => ({ id: v.id, label: versionLabel(v) })),
+              currentId: current.id,
+              onSelect: setSelectedVersionId,
+            }
+          : undefined
+      }
       onJump={onJump}
       onClose={onClose}
       file={file}
-      title={creative.fileName ?? "(no file)"}
+      title={current.fileName ?? "(no file)"}
       subtitle={mcLabel ?? undefined}
       endpoint="/api/creatives"
       queryKey="creatives"

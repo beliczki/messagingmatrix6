@@ -142,9 +142,9 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `media-tile__filename` | Filename a meta-ban | – | – |
 | `media-tile__tags` | Tag-chip-ek konténere | – | – |
 | `creative-card` / `asset-card` | Grid-view card (`<button>` 2026-05-02-től, click-to-open dialog) | CL `Card`, Assets `Card` | hover archive overlay megszűnt |
-| `creative-row` / `asset-row` | List-view row (`<button>` 2026-05-02-től, 2026-05-17 óta 7-cellás CSS grid: thumb / name / product / type / size / created / updated) | CL `ListRow`, Assets `ListRow`, `MatrixIframeListRow` | `LIST_GRID_TEMPLATE` constans tartja egyben a column width-eket |
-| `creative-row__name` / `__product` / `__type` / `__size` / `__created` / `__updated` (és `asset-row__*`) | Egy-egy oszlop cella a list-row gridben | CL/Assets `ListRow`, `MatrixIframeListRow` | – |
-| `list-sort-header` | Sticky sortable column header a list-view tetején; 6 kattintható oszlop (Name/Product/Type/Size/Created/Updated) ArrowUp/ArrowDown indikátorral | `_components/ListSortHeader.tsx`, CL + Assets list view | grid template egyezik a row-okkal |
+| `creative-row` / `asset-row` | List-view row (`<button>` 2026-05-02-től, 2026-05-17 óta CSS grid: thumb / name / product / type / size / created / updated; CL-ben 2026-07-16 óta +versions cella) | CL `ListRow`, Assets `ListRow`, `MatrixIframeListRow` | `LIST_GRID_TEMPLATE` (assets) / `LIST_GRID_TEMPLATE_VERSIONS` (CL) constans tartja egyben a column width-eket |
+| `creative-row__name` / `__product` / `__type` / `__size` / `__versions` / `__created` / `__updated` (és `asset-row__*`) | Egy-egy oszlop cella a list-row gridben; `__versions` = "N versions" vagy "—" (CL only) | CL/Assets `ListRow`, `MatrixIframeListRow` | – |
+| `list-sort-header` | Sticky sortable column header a list-view tetején; 6 kattintható oszlop (Name/Product/Type/Size/Created/Updated), CL-ben `withVersions` prop +Versions oszloppal | `_components/ListSortHeader.tsx`, CL + Assets list view | grid template egyezik a row-okkal |
 | `list-sort-header__cell` / `--active` | Egy header gomb; `--active` az aktuálisan rendezett oszlop | ListSortHeader | – |
 | `media-field` | MC-editor Content-tab image/video mező (thumbnail + autocomplete input + clear gomb) | MessageEditor `MediaField`, 7× (image1-6 + video1) | `__control` / `__thumb` / `__input-wrap` / `__clear` |
 | `asset-autocomplete` | Asset-Library typeahead dropdown a `media-field` input alatt (≥2 karakter után nyílik) | MessageEditor `MediaField` | `__item` / `__thumb` / `__name`, `--empty` no-match állapot |
@@ -163,7 +163,7 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `tab-bar` | Vízszintes tab nav | MessageEditor 5 tab | – |
 | `tab-bar__tab` | Egy tab gomb | MessageEditor `TabBtn` 583–608 | – |
 | `tab-bar__tab--active` | Aktív tab | – | – |
-| `nav-stepper` | "Prev / N / Next" navigátor | MessageEditor header, TemplateEditor MC stepper | inline duplikátum |
+| `nav-stepper` | "Prev / N / Next" navigátor | MessageEditor header, TemplateEditor MC stepper, MediaEntityDialog version stepper (`versionNav` prop, 2026-07-16) | inline duplikátum |
 | `nav-stepper__btn` | Bal/jobb chevron gomb | – | – |
 | `nav-stepper__counter` | "3 / 27" szöveg | – | – |
 | `divider-handle` | Húzható elválasztó pane-ek között | MessageEditor + TemplateEditor | inline duplikátum, ugyanaz a logika |

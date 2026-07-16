@@ -5,6 +5,9 @@ import clsx from "clsx";
 import type { Codec } from "./usePersistent";
 
 export const LIST_GRID_TEMPLATE = "48px 80px minmax(0,1fr) 120px 80px 100px 88px 88px";
+// Variant with the opt-in Versions column between Size and Created (creative library).
+export const LIST_GRID_TEMPLATE_VERSIONS =
+  "48px 80px minmax(0,1fr) 120px 80px 100px 90px 88px 88px";
 
 export type ListSortKey =
   | "mc"
@@ -12,6 +15,7 @@ export type ListSortKey =
   | "product"
   | "type"
   | "size"
+  | "versions"
   | "createdAt"
   | "updatedAt";
 
@@ -27,7 +31,12 @@ const HEADER_COLS: ReadonlyArray<{ key: ListSortKey; label: string }> = [
   { key: "updatedAt", label: "Updated" },
 ];
 
-const VALID_KEYS: ReadonlyArray<ListSortKey> = HEADER_COLS.map((c) => c.key);
+const VERSIONS_COL = { key: "versions", label: "Versions" } as const;
+
+const VALID_KEYS: ReadonlyArray<ListSortKey> = [
+  ...HEADER_COLS.map((c) => c.key),
+  VERSIONS_COL.key,
+];
 
 export const DEFAULT_SORT: SortState = { key: "createdAt", dir: "desc" };
 
@@ -59,19 +68,26 @@ export function toggleSort(prev: SortState, key: ListSortKey): SortState {
 export function ListSortHeader({
   sort,
   onChange,
+  withVersions,
 }: {
   sort: SortState;
   onChange: (next: SortState) => void;
+  withVersions?: boolean;
 }) {
+  const cols = withVersions
+    ? [...HEADER_COLS.slice(0, 5), VERSIONS_COL, ...HEADER_COLS.slice(5)]
+    : HEADER_COLS;
   return (
     <div
       className="list-sort-header sticky top-0 z-[5] grid h-8 items-center border-b border-slate-200 bg-slate-50 text-[11px] font-medium uppercase tracking-wider text-slate-600"
-      style={{ gridTemplateColumns: LIST_GRID_TEMPLATE }}
+      style={{
+        gridTemplateColumns: withVersions ? LIST_GRID_TEMPLATE_VERSIONS : LIST_GRID_TEMPLATE,
+      }}
     >
       <div aria-hidden className="border-r border-slate-200" />
-      {HEADER_COLS.map((c, i) => {
+      {cols.map((c, i) => {
         const active = sort.key === c.key;
-        const isLast = i === HEADER_COLS.length - 1;
+        const isLast = i === cols.length - 1;
         return (
           <button
             key={c.key}
@@ -109,6 +125,7 @@ type Sortable = {
   fileDimensions: string | null;
   mcNumber?: number | null;
   mcVariant?: string | null;
+  versionCount?: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -132,6 +149,8 @@ function isMissing(row: Sortable, key: ListSortKey): boolean {
       return !row.type;
     case "size":
       return parseArea(row.fileDimensions) < 0;
+    case "versions":
+      return row.versionCount == null;
     case "createdAt":
       return !row.createdAt || Number.isNaN(Date.parse(row.createdAt));
     case "updatedAt":
@@ -162,6 +181,8 @@ function compareValues(a: Sortable, b: Sortable, key: ListSortKey): number {
     }
     case "size":
       return parseArea(a.fileDimensions) - parseArea(b.fileDimensions);
+    case "versions":
+      return (a.versionCount ?? 0) - (b.versionCount ?? 0);
     case "createdAt":
     case "updatedAt":
       return Date.parse(a[key]) - Date.parse(b[key]);

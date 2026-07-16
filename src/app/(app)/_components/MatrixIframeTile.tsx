@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Code2 } from "lucide-react";
 import type { Message } from "../matrix/types";
-import { LIST_GRID_TEMPLATE, formatListDate } from "./ListSortHeader";
+import { LIST_GRID_TEMPLATE_VERSIONS, formatListDate } from "./ListSortHeader";
 import {
   TemplatePreviewImage,
   type TemplateImageKind,
@@ -373,7 +373,7 @@ export function MatrixIframeListRow({
       type="button"
       onClick={onOpen}
       className="creative-row matrix-iframe-row group grid w-full items-center border-b border-slate-100 bg-white text-left text-xs transition hover:bg-slate-50 [content-visibility:auto] [contain-intrinsic-size:auto_52px]"
-      style={{ gridTemplateColumns: LIST_GRID_TEMPLATE }}
+      style={{ gridTemplateColumns: LIST_GRID_TEMPLATE_VERSIONS }}
     >
       <div className="creative-row__thumb my-1 ml-2 mr-0 size-10 shrink-0 overflow-hidden rounded border border-slate-200">
         <MatrixIframePreview
@@ -403,6 +403,9 @@ export function MatrixIframeListRow({
       </div>
       <div className="creative-row__size truncate border-r border-slate-100 px-3 py-2 font-mono text-[11px] text-slate-600">
         {size}
+      </div>
+      <div className="creative-row__versions truncate border-r border-slate-100 px-3 py-2 text-slate-600">
+        —
       </div>
       <div
         className="creative-row__created truncate border-r border-slate-100 px-3 py-2 text-slate-500"

@@ -52,7 +52,7 @@ import {
 } from "../_components/usePersistent";
 import {
   ListSortHeader,
-  LIST_GRID_TEMPLATE,
+  LIST_GRID_TEMPLATE_VERSIONS,
   LIST_SORT_CODEC,
   DEFAULT_SORT,
   formatListDate,
@@ -60,6 +60,7 @@ import {
   type SortState,
 } from "../_components/ListSortHeader";
 import type { ParseRules } from "@/lib/parse-filename";
+import { groupCreativeVersions } from "@/lib/group-creative-versions";
 import type { Message, Audience, Topic } from "../matrix/types";
 import { parseSearchQuery } from "@/lib/search-query";
 
@@ -111,7 +112,14 @@ type Creative = {
 // (kind: "matrix"). Matrix items carry the underlying Message + size +
 // templateName so the tile and detail dialog can render the iframe.
 type LibraryItem =
-  | (Creative & { kind: "uploaded" })
+  | (Creative & {
+      kind: "uploaded";
+      // Version family (filenames differing only in _nN): the item spreads the
+      // LATEST version's row; siblings ride along for the dialog's stepper.
+      groupKey: string;
+      versions: Creative[];
+      versionCount: number;
+    })
   | (Creative & {
       kind: "matrix";
       message: Message;
@@ -387,7 +395,13 @@ export default function CreativeLibrary() {
   }, [messages, templates, audienceProductMap, templateMap, showArchived]);
 
   const items: LibraryItem[] = useMemo(() => {
-    const uploaded: LibraryItem[] = creatives.map((c) => ({ ...c, kind: "uploaded" }));
+    const uploaded: LibraryItem[] = groupCreativeVersions(creatives).map((g) => ({
+      ...g.latest,
+      kind: "uploaded",
+      groupKey: g.groupKey,
+      versions: g.versions,
+      versionCount: g.versions.length,
+    }));
     return [...uploaded, ...matrixItems];
   }, [creatives, matrixItems]);
 
@@ -555,7 +569,7 @@ export default function CreativeLibrary() {
                 <div className="creative-library__view creative-library__view--masonry">
                   <Masonry
                     items={visible}
-                    itemKey={(c) => c.id}
+                    itemKey={(c) => (c.kind === "uploaded" ? c.groupKey : c.id)}
                     render={(c) => (
                       <SelectableItem
                         id={c.id}
@@ -615,7 +629,7 @@ export default function CreativeLibrary() {
                 </div>
               ) : (
                 <div className="creative-library__view creative-library__view--list flex flex-col">
-                  <ListSortHeader sort={sort} onChange={setSort} />
+                  <ListSortHeader sort={sort} onChange={setSort} withVersions />
                   {visible.map((c) => (
                     <SelectableItem
                       key={c.id}
@@ -702,7 +716,8 @@ export default function CreativeLibrary() {
                 <CreativeDetailDialog
                   creative={c}
                   creatives={sorted}
-                  file={c.fileId ? filesById.get(c.fileId) : undefined}
+                  versions={c.versions}
+                  filesById={filesById}
                   onJump={(id) => setDetailId(id)}
                   onClose={() => setDetailId(null)}
                 />
@@ -1006,7 +1021,7 @@ function ListRow({
   file,
   onOpen,
 }: {
-  creative: Creative;
+  creative: Creative & { versionCount?: number };
   file: UploadedFile | undefined;
   onOpen: () => void;
 }) {
@@ -1027,7 +1042,7 @@ function ListRow({
         "creative-row group grid w-full items-center border-b border-slate-100 bg-white text-left text-xs transition hover:bg-slate-50 [content-visibility:auto] [contain-intrinsic-size:auto_52px]",
         archived && "row--archived",
       )}
-      style={{ gridTemplateColumns: LIST_GRID_TEMPLATE }}
+      style={{ gridTemplateColumns: LIST_GRID_TEMPLATE_VERSIONS }}
     >
       <div className="creative-row__thumb thumb-checker my-1 ml-2 mr-0 size-10 shrink-0 overflow-hidden rounded border border-slate-200">
         {isImage && creative.fileId ? (
@@ -1074,6 +1089,11 @@ function ListRow({
       </div>
       <div className="creative-row__size truncate border-r border-slate-100 px-3 py-2 font-mono text-[11px] text-slate-600">
         {creative.fileDimensions ?? "—"}
+      </div>
+      <div className="creative-row__versions truncate border-r border-slate-100 px-3 py-2 text-slate-600">
+        {creative.versionCount != null && creative.versionCount > 1
+          ? `${creative.versionCount} versions`
+          : "—"}
       </div>
       <div
         className="creative-row__created truncate border-r border-slate-100 px-3 py-2 text-slate-500"

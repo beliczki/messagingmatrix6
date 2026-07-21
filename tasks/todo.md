@@ -3629,3 +3629,7 @@ Megoldás (user választás: "cseréld creative_upload-ra"):
 - [x] Tesztek: `mcp-creatives.test.ts` bővítve (`creative_upload` bájt+`category:"creative"` tárolás, `list_creatives`-ben megjelenik, exactly-one guard; a CRUD round-trip most `seedCreative`-ből indul). `mcp-auth.test.ts` read-scope negatív check `creative_create`→`creative_upload`. `tsc` tiszta, **integráció 283/283** (lokális teszt-PG :55432).
 - [x] `CHANGELOG.md` `[Unreleased] → Changed`: creative_create→creative_upload indoklással.
 - [ ] **Nem deployolva** — csak lokális kód/teszt/changelog. Ez viselkedésváltozás a `6.1.0`-ban kiadott MCP toolon → **bump-javaslat: `6.1.0` → `6.2.0` (minor)**, user dönt. Deploy külön lépés.
+
+## 2026-07-21 — DEPLOYOLVA (6.2.0)
+
+- [x] **DEPLOYOLVA 2026-07-21:** box `bdf9cfa`→`f65291c` (/var/www/mm6-erste), 2 commit (creative_create→creative_upload csere + 6.2.0 release). Séma-migráció nincs. Tiszta fast-forward pull (thm.json most nem volt piszkos), `npm run build` ok, `pm2 restart mm6-erste` → **Ready 1337ms**, üres error.log. Health: /matrix 307, /mcp 401. Box `package.json` `6.2.0`. Az élesben addig futó törött `creative_create` lecserélve `creative_upload`-ra.

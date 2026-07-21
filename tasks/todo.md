@@ -3611,3 +3611,8 @@ A fenti verzióterv-note "Nincs bump most" állítását a user **felülírta** 
 - [x] `CHANGELOG.md`: `[Unreleased]` promotálva `[6.0.0] — 2026-07-21`-re (launch baseline: SQLite→PG migráció + entity-route factory + AsyncLocalStorage tx, stb.). Új `[6.1.0] — 2026-07-21` szekció a Creative Library MCP toolokra. Intro-ból törölve a "pre-launch at 6.0.0-pre" szöveg. Üres `[Unreleased]` marad a tetején.
 - [x] **KÉSZ (2026-07-21):** `CLAUDE.md` verziózás-szekció átírva post-graduationre — intro `6.1.0`/"base daily use in place", bump-heurisztikából kivéve a "Pre-6.0.0 (current state)" blokk, post-6.0.0 semver az egyetlen élő szabály. A punch list header `tasks/todo.md`-ben "🚧 BLOCKING" → "⭐ TOP-PRIORITY BACKLOG" (nem launch-blokkoló, top-prio backlog).
 - [ ] **Nem deployolva** — csak lokális verzió/changelog + a 6.1.0 MCP kód. Deploy a box-on külön lépés.
+
+## 2026-07-21 — DEPLOYOLVA (6.1.0)
+
+- [x] **DEPLOYOLVA 2026-07-21:** box `3d0aa0c`→`bdf9cfa` (/var/www/mm6-erste), 4 commit (mcp creative library toolok, sidebar verzió, 6.0.0/6.1.0 release, THM 2026-06-04 ráta). Séma-migráció **nincs** (creatives tábla már létezett). `npm run build` ok (route-manifest teljes), `pm2 restart mm6-erste` → **Ready 1287ms**, üres error.log. Health: /matrix 307, /mcp auth nélkül 401 — healthy. Box `package.json` `6.1.0`.
+- Megjegyzés: a box-on a `thm.json` helyben (commitolatlanul) módosítva volt, **bájtra azonos** blob (`958754a`) a pusholt verzióval → `git checkout -- thm.json` + pull, adatvesztés nincs. (A THM-szerkesztés láthatóan a boxon keletkezik; ha ez rendszeres, érdemes lehet a `thm.json`-t a deploy-flow-ban külön kezelni / gitignore + perzisztens tárolás — de ez külön kérdés, most nem nyúltam hozzá.)

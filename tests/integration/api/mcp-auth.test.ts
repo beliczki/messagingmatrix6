@@ -29,6 +29,8 @@ const READ_TOOLS = [
   "list_report_periods",
   "report_performance",
   "mc_get",
+  "get_mc_preview_files",
+  "get_media_file",
   "list_templates",
   "list_products",
   "matrix_status",

@@ -75,7 +75,7 @@ import {
   DEFAULT_CREATIVE_PARSING_RULES,
 } from "@/db/defaults";
 import { parseFilename, type ParseRules } from "@/lib/parse-filename";
-import { extFromFilename } from "@/lib/storage";
+import { extFromFilename, readFileBytes } from "@/lib/storage";
 import { writeAudit } from "@/lib/audit";
 
 export type McpContext = {
@@ -225,6 +225,16 @@ function jsonResult(value: unknown) {
   return {
     content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
   };
+}
+
+// Guards for the image-content tools: keep a single tool result from ballooning
+// (base64 inflates ~33%). Individual files over the cap, or more than N previews,
+// are skipped with a note rather than returned.
+const MAX_INLINE_IMAGE_BYTES = 8 * 1024 * 1024;
+const MAX_PREVIEW_IMAGES = 16;
+
+function imageContent(bytes: Buffer, mimeType: string) {
+  return { type: "image" as const, data: bytes.toString("base64"), mimeType };
 }
 
 function registerReadTools(server: McpServer, ctx: McpContext): void {
@@ -686,6 +696,170 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
       return jsonResult(
         rows.map((r) => ({ ...r, preview_urls: urlsByMessage.get(r.id) ?? {} })),
       );
+    },
+  );
+
+  server.registerTool(
+    "get_mc_preview_files",
+    {
+      description:
+        "Fetch rendered MC preview screenshots as NATIVE MCP image content (image/png bytes inline) — use this, not the preview_urls, when you need to actually LOOK AT the creative (vision analysis). The client receives real image blocks, no auth-token URL to dereference. Identify the MC by EXACTLY ONE of mc_label (PMMID) or mc_number (optionally narrowed by variant and/or audience_key). sizes: optional list (e.g. [\"300x250\",\"970x250\"]) — omit for every generated size of the matched MC(s). Each returned image is preceded by a text line naming it (mc_label + size). Only sizes that already have a generated preview are returned (run preview_generate first if empty). Caps: up to " + MAX_PREVIEW_IMAGES + " images per call; individual files over 8MB skipped with a note.",
+      inputSchema: {
+        mc_label: z.string().optional(),
+        mc_number: z.number().int().optional(),
+        variant: z.string().optional(),
+        audience_key: z.string().optional(),
+        sizes: z.array(z.string()).optional(),
+        include_archived: z.boolean().optional(),
+      },
+    },
+    async (args) => {
+      const hasLabel = args.mc_label !== undefined;
+      const hasNumber = args.mc_number !== undefined;
+      if (hasLabel === hasNumber) {
+        return errorResult("provide exactly one of mc_label or mc_number");
+      }
+      if (args.variant !== undefined && !hasNumber) {
+        return errorResult("variant can only be used together with mc_number");
+      }
+      const conds = [eq(messages.clientId, ctx.clientId)];
+      if (hasLabel) conds.push(eq(messages.pmmid, args.mc_label!));
+      if (hasNumber) conds.push(eq(messages.number, args.mc_number!));
+      if (args.variant !== undefined) conds.push(eq(messages.variant, args.variant));
+      if (args.audience_key !== undefined)
+        conds.push(eq(messages.audience, args.audience_key));
+      if (!args.include_archived) conds.push(isNull(messages.archivedAt));
+      const mcs = await db
+        .select({ id: messages.id, pmmid: messages.pmmid })
+        .from(messages)
+        .where(and(...conds))
+        .orderBy(messages.number, messages.variant);
+      if (mcs.length === 0) return errorResult("no MC matched the query");
+
+      const pconds = [
+        eq(messagePreviews.clientId, ctx.clientId),
+        inArray(
+          messagePreviews.messageId,
+          mcs.map((m) => m.id),
+        ),
+      ];
+      if (args.sizes && args.sizes.length > 0) {
+        pconds.push(inArray(messagePreviews.size, args.sizes));
+      }
+      const previews = await db
+        .select({
+          id: messagePreviews.id,
+          messageId: messagePreviews.messageId,
+          size: messagePreviews.size,
+          storageKey: messagePreviews.storageKey,
+        })
+        .from(messagePreviews)
+        .where(and(...pconds))
+        .orderBy(messagePreviews.messageId, messagePreviews.size);
+      if (previews.length === 0) {
+        return errorResult(
+          "no generated previews for the matched MC" +
+            (args.sizes ? " at the requested size(s)" : "") +
+            " — run preview_generate first",
+        );
+      }
+
+      const pmmidById = new Map(mcs.map((m) => [m.id, m.pmmid]));
+      const content: Array<
+        | { type: "text"; text: string }
+        | { type: "image"; data: string; mimeType: string }
+      > = [];
+      let count = 0;
+      for (const p of previews) {
+        if (count >= MAX_PREVIEW_IMAGES) {
+          content.push({
+            type: "text",
+            text: `… ${previews.length - count} more preview(s) omitted (cap ${MAX_PREVIEW_IMAGES}) — narrow with sizes=[...] or a specific variant/audience_key.`,
+          });
+          break;
+        }
+        const label = pmmidById.get(p.messageId) ?? `msg${p.messageId}`;
+        const fileName = `${label}_${p.size}.png`;
+        let bytes: Buffer;
+        try {
+          bytes = await readFileBytes(p.storageKey);
+        } catch {
+          content.push({ type: "text", text: `${fileName}: storage missing` });
+          continue;
+        }
+        if (bytes.length > MAX_INLINE_IMAGE_BYTES) {
+          content.push({
+            type: "text",
+            text: `${fileName}: ${bytes.length} bytes — too large to inline, skipped`,
+          });
+          continue;
+        }
+        content.push({
+          type: "text",
+          text: `${fileName} (mc_label=${label}, size=${p.size})`,
+        });
+        content.push(imageContent(bytes, "image/png"));
+        count++;
+      }
+      return { content };
+    },
+  );
+
+  server.registerTool(
+    "get_media_file",
+    {
+      description:
+        "Fetch an uploaded asset or creative file as NATIVE MCP image content (real image bytes inline for vision analysis, not an auth-token URL). Identify by file_name (the name MCs/creatives reference, e.g. image1..6 / a creative's fileName); pass category ('asset' or 'creative') to disambiguate when the same name exists in both. Newest file wins when a name was replaced. Returns image content only for image/* files; for non-images (video, HTML5 zip, PDF) it returns an error naming the mime type — use get_mc_preview_files for rendered HTML creatives. Files over 8MB are refused (too large to inline). Excludes soft-archived files.",
+      inputSchema: {
+        file_name: z.string().min(1),
+        category: z.enum(["asset", "creative"]).optional(),
+      },
+    },
+    async (args) => {
+      const conds = [
+        eq(uploadedFiles.clientId, ctx.clientId),
+        eq(uploadedFiles.filename, args.file_name),
+        isNull(uploadedFiles.archivedAt),
+      ];
+      if (args.category) conds.push(eq(uploadedFiles.category, args.category));
+      const [file] = await db
+        .select()
+        .from(uploadedFiles)
+        .where(and(...conds))
+        .orderBy(desc(uploadedFiles.createdAt))
+        .limit(1);
+      if (!file) {
+        return errorResult(
+          `no file named '${args.file_name}'` +
+            (args.category ? ` in category '${args.category}'` : ""),
+        );
+      }
+      const mime = file.mimeType ?? "application/octet-stream";
+      if (!mime.startsWith("image/")) {
+        return errorResult(
+          `'${file.filename}' is ${mime}, not an image — this tool returns image content for vision analysis. For rendered HTML creatives use get_mc_preview_files.`,
+        );
+      }
+      if ((file.sizeBytes ?? 0) > MAX_INLINE_IMAGE_BYTES) {
+        return errorResult(
+          `'${file.filename}' is ${file.sizeBytes} bytes — too large to inline (max ${MAX_INLINE_IMAGE_BYTES})`,
+        );
+      }
+      let bytes: Buffer;
+      try {
+        bytes = await readFileBytes(file.storagePath);
+      } catch {
+        return errorResult("storage_missing");
+      }
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `${file.filename} (${mime}, category=${file.category})`,
+          },
+          imageContent(bytes, mime),
+        ],
+      };
     },
   );
 }

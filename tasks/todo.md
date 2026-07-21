@@ -3647,3 +3647,8 @@ Megoldás (user választás: "cseréld creative_upload-ra"):
 - [x] Tesztek: új `mcp-report-performance.test.ts` (6: period-lista tenant-scope, product×platform matched/unmatched+ctr, from period-váltás, product+platform szűrő, ismeretlen from hiba, filter-üres). `mcp-auth` READ_TOOLS +2. `tsc` tiszta, **integráció 289/289**.
 - [x] `CHANGELOG.md` `[Unreleased] → Added`.
 - [ ] **Nem deployolva** — csak lokális. Új MCP toolok → **bump-javaslat 6.2.0 → 6.3.0 (minor)**, user dönt. Deploy külön lépés.
+
+## 2026-07-21 — DEPLOYOLVA (6.3.0)
+
+- [x] **DEPLOYOLVA 2026-07-21:** box `bdf9cfa`… → `cf07e03` (/var/www/mm6-erste), 2 commit (report_performance + list_report_periods read toolok + 6.3.0 release). Séma-migráció nincs. `npm run build` ok, `pm2 restart mm6-erste` → **Ready 1560ms**. Health: /monitoring 307, /mcp 401. Box `6.3.0`.
+- Megj.: ez a deploy megint új chunk-hasheket adott → a user böngészőjében hard refresh kell a /monitoring-on (a korábban diagnosztizált stale-bundle jelenség elkerülésére).

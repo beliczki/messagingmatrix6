@@ -5,6 +5,20 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.6.0] — 2026-07-21
+
+### Added
+- **MCP: `show_mc_previews` OpenAI Apps SDK render widget.** A read-only tool that
+  returns `structuredContent { name, previews:[{size,url}] }` (absolute, public
+  preview URLs) plus a registered UI resource (`ui://widget/mc-previews.html`,
+  `text/html;profile=mcp-app`) so ChatGPT / MCP Inspector render the previews as an
+  inline `<img>` gallery. Wired via `_meta.ui.resourceUri` +
+  `openai/outputTemplate`; the widget CSP `resourceDomains` is set to the deploy
+  origin. Non-widget clients (e.g. Claude) still get the structuredContent + a text
+  summary. Declared the server `resources` capability. Complements
+  `get_mc_preview_files` (raw bytes for model vision) — this one is the human-facing
+  visual card.
+
 ## [6.5.0] — 2026-07-21
 
 ### Added

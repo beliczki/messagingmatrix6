@@ -3678,3 +3678,13 @@ Kiváltó: user kérés — direkt file-get, amivel az agent asset/creative/MC-p
 ## 2026-07-21 — DEPLOYOLVA (6.5.0)
 
 - [x] **DEPLOYOLVA 2026-07-21:** box `96a70ba`→`de9d42b` (/var/www/mm6-erste), 2 commit (get_mc_preview_files + get_media_file natív image-content read toolok + 6.5.0 release). Séma-migráció nincs. `npm run build` ok, `pm2 restart mm6-erste` → **Ready 1406ms**. Health: /mcp 401. Box `6.5.0`.
+
+## 2026-07-21 — MCP show_mc_previews (OpenAI Apps SDK render widget)
+
+Kiváltó: user kérés — ChatGPT-ben inline preview-galéria (Apps SDK widget), a tool eredményéből renderelt UI-komponens.
+- [x] `show_mc_previews` (read-only tool, `src/lib/mcp.ts` registerPreviewWidget): `structuredContent { name, previews:[{size,url}] }` (abszolút, publikus /api/previews URL-ek ctx.origin-ból) + `content` text fallback. `_meta.ui.resourceUri` + `openai/outputTemplate` + invoking/invoked üzenetek. `outputSchema` (SDK validálja a structuredContent-et; hiba-ág `isError`→kihagyja). Lekérés mc_label VAGY mc_number(+variant/+audience_key).
+- [x] UI resource: `ui://widget/mc-previews.html` (`src/lib/mcp-widget.ts`), `text/html;profile=mcp-app`, vanilla JS galéria (`window.openai.toolOutput` + `openai:set_globals`). `_meta.ui.csp.resourceDomains = [ctx.origin]` (a preview-képek domainje). `resources: {}` capability hozzáadva a buildMcpServer-hez.
+- Caveat: a widget ChatGPT Apps SDK / MCP Inspector-specifikus; Claude-kliens csak a structuredContent+szöveget kapja (galéria nem renderel). Additív, meglévő Claude-használatot nem töri.
+- [x] Tesztek: új `mcp-show-previews.test.ts` (3, **valódi MCP protokollon** InMemoryTransport Client↔Server: outputSchema-validált structuredContent abszolút URL-ekkel, resource lista+olvasás mcp-app mime+CSP, hiba-ág nem bukik az outputSchema-n). `mcp-auth` READ_TOOLS +1. `tsc` tiszta, **integráció 308/308**.
+- [x] `CHANGELOG.md` `[Unreleased] → Added`.
+- [ ] **Nem deployolva** — új MCP tool + resource capability → **bump-javaslat 6.5.0 → 6.6.0 (minor)**. Deploy külön lépés.

@@ -3730,3 +3730,8 @@ Kiváltó: user ChatGPT-ben — nem tudott 300x250-re szűrni, sem b/c/d variant
 - [x] `CHANGELOG.md` `[Unreleased] → Added`.
 - **Cache/padding megjegyzés (nem kód-bug):** a user 3. képe a 6.6.1 deploy ELŐTTI widget-render, cache-elt régi URL-ekkel. A box tárolt preview-ja már helyes ("Igényeld", 4. kép). Friss ChatGPT-beszélgetés + friss show_mc_previews hívás a `?v=` cache-bustolt (helyes) képet adja. Ha a padding sem látszik friss beszélgetésben, a ChatGPT a widget-template-et cache-eli a URI szerint → akkor URI-verziózás kellhet (későbbi, ha valóban ez).
 - [ ] **Nem deployolva** — új tool-paramok (sizes/variants) + dedup fix → **bump 6.6.1 → 6.7.0 (minor)**. Deploy külön.
+
+## 2026-07-21 — DEPLOYOLVA (6.7.0)
+
+- [x] **DEPLOYOLVA 2026-07-21:** box `7eefeaa`→`65f5aeb` (/var/www/mm6-erste), 2 commit (show_mc_previews sizes/variants + (variant,size) dedup + widget label + 6.7.0 release). Séma-migráció nincs. `npm run build` ok, `pm2 restart mm6-erste` → **Ready 1332ms**. Health: /mcp 401. Box `6.7.0`.
+- User teendő: ÚJ ChatGPT-beszélgetés + friss show_mc_previews hívás (pl. {mc_number:244, variants:["b","c","d"], sizes:["300x250"]}) → helyes "Igényeld" képek, padding, masonry. Ha friss beszélgetésben is stale a widget-template → URI-verziózás a köv. lépés.

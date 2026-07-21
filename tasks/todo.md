@@ -3688,3 +3688,7 @@ Kiváltó: user kérés — ChatGPT-ben inline preview-galéria (Apps SDK widget
 - [x] Tesztek: új `mcp-show-previews.test.ts` (3, **valódi MCP protokollon** InMemoryTransport Client↔Server: outputSchema-validált structuredContent abszolút URL-ekkel, resource lista+olvasás mcp-app mime+CSP, hiba-ág nem bukik az outputSchema-n). `mcp-auth` READ_TOOLS +1. `tsc` tiszta, **integráció 308/308**.
 - [x] `CHANGELOG.md` `[Unreleased] → Added`.
 - [ ] **Nem deployolva** — új MCP tool + resource capability → **bump-javaslat 6.5.0 → 6.6.0 (minor)**. Deploy külön lépés.
+
+## 2026-07-21 — DEPLOYOLVA (6.6.0)
+
+- [x] **DEPLOYOLVA 2026-07-21:** box `de9d42b`→`11b8761` (/var/www/mm6-erste), 2 commit (show_mc_previews Apps SDK widget + resource capability + 6.6.0 release). Séma-migráció nincs. `npm run build` ok, `pm2 restart mm6-erste` → **Ready 1499ms**. Health: /mcp 401. Box `6.6.0`.

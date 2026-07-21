@@ -146,6 +146,11 @@ export default function MatrixWorkspace() {
   } | null>(null);
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  // Header-level edit action (duplicate an audience/topic). Surfaced through the
+  // same edit-mode error banner as the bulk copy/move ops (editApi.bulkError).
+  const [headerActionError, setHeaderActionError] = useState<string | null>(
+    null,
+  );
   const [headerDialog, setHeaderDialog] = useState<
     { kind: "audience" | "topic"; key: string } | null
   >(null);
@@ -274,6 +279,7 @@ export default function MatrixWorkspace() {
     if (!editMode) {
       setSelection({ topic: null, mcIds: new Set() });
       setPendingAction(null);
+      setHeaderActionError(null);
     }
   }, [editMode]);
 
@@ -386,6 +392,7 @@ export default function MatrixWorkspace() {
       applyPending,
       bulkBusy: copyMutation.isPending || moveMutation.isPending,
       bulkError: (() => {
+        if (headerActionError) return headerActionError;
         const err = copyMutation.error ?? moveMutation.error;
         if (!err) return null;
         return bulkErrorText(err, (mcLabel) => {
@@ -409,6 +416,7 @@ export default function MatrixWorkspace() {
       moveMutation.isPending,
       copyMutation.error,
       moveMutation.error,
+      headerActionError,
     ],
   );
 
@@ -484,6 +492,58 @@ export default function MatrixWorkspace() {
         }
       } finally {
         setCreateBusy(false);
+      }
+    },
+    [queryClient],
+  );
+
+  // Duplicate an audience/topic header (edit mode). Server clones the row only —
+  // suffixed key + name, no cells — matching the header-only default. On success
+  // the audiences/topics query is refetched so the new column/row appears.
+  const duplicateHeader = useCallback(
+    async (kind: "audience" | "topic", id: number) => {
+      const entity = kind === "audience" ? "audiences" : "topics";
+      setHeaderActionError(null);
+      try {
+        await postJSON(`/api/${entity}/${id}/duplicate`, {});
+        await queryClient.invalidateQueries({ queryKey: [entity] });
+      } catch (e) {
+        const body = (e as Error).message.replace(/^\d+:\s*/, "");
+        try {
+          const j = JSON.parse(body) as { error?: string };
+          setHeaderActionError(typeof j.error === "string" ? j.error : body);
+        } catch {
+          setHeaderActionError(body);
+        }
+      }
+    },
+    [queryClient],
+  );
+
+  // Add a new audience/topic header (edit mode). Creates with a default name —
+  // the key auto-generates server-side — then refetches and opens the header
+  // dialog so the user renames right away (mirrors New-MC opening the editor).
+  const addHeader = useCallback(
+    async (kind: "audience" | "topic") => {
+      const entity = kind === "audience" ? "audiences" : "topics";
+      const name = kind === "audience" ? "New audience" : "New topic";
+      setHeaderActionError(null);
+      try {
+        const res = await postJSON<Record<string, { key: string }>>(
+          `/api/${entity}`,
+          { name },
+        );
+        await queryClient.invalidateQueries({ queryKey: [entity] });
+        const created = res[kind];
+        if (created?.key) setHeaderDialog({ kind, key: created.key });
+      } catch (e) {
+        const body = (e as Error).message.replace(/^\d+:\s*/, "");
+        try {
+          const j = JSON.parse(body) as { error?: string };
+          setHeaderActionError(typeof j.error === "string" ? j.error : body);
+        } catch {
+          setHeaderActionError(body);
+        }
       }
     },
     [queryClient],
@@ -669,6 +729,8 @@ export default function MatrixWorkspace() {
               onOpenHeader={(kind, key) => setHeaderDialog({ kind, key })}
               editApi={editApi}
               onDndDrop={handleDndDrop}
+              onDuplicateHeader={duplicateHeader}
+              onAddHeader={addHeader}
               onCreateInCell={(audience, topic) => {
                 // Empty cell: instant create as before. Occupied cell: open
                 // the chooser — the cell may hold (or gain) several MC

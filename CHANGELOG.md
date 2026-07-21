@@ -5,6 +5,35 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.9.0] — 2026-07-21
+
+### Added
+- **Add an audience/topic straight from the matrix (W1.3).** In edit mode the
+  grid grows an MM5-style trailing add cell at the end of each axis — a wide
+  whole-cell `+` column for the column axis and a tall `+` row for the row axis;
+  clicking it creates a header with a default name (key auto-generates
+  server-side) via the existing `POST /api/{audiences,topics}` route, refetches,
+  and opens the header dialog for an immediate rename.
+- **Duplicate an audience/topic straight from the matrix headers (W1.4).** In edit
+  mode, hovering an audience or topic header shows a Duplicate button that clones
+  the header (suffixed key + name, no cells) via the existing
+  `/api/{audiences,topics}/[id]/duplicate` route and refetches the grid. Failures
+  surface in the edit-mode error banner.
+
+### Changed
+- **The in-cell "New MC" affordance now shows in dense view too (W1.2).** Dense
+  cells are too narrow for the `+ new` pill, so they get a small round `+` icon
+  button (revealed on cell hover) — consistent with the wider densities.
+
+### Fixed
+- **Matrix status dots now follow the Design-tab colour tokens (W0.1).** The
+  matrix grid, feed, message editor, header dialog and status-filter swatches
+  read `STATUS_COLOR`, which mapped each status to a hardcoded Tailwind `bg-*`
+  class — so editing status colours in Settings → Design had no effect on the
+  matrix. `STATUS_COLOR` now points at the CSS-var-backed `.status-dot--*`
+  classes (single source of truth). Also fixed a latent gap: `lookAndFeelToCssVars`
+  never emitted `--status-archived`, so ARCHIVED dots were unstyled on first paint.
+
 ## [6.8.0] — 2026-07-21
 
 ### Fixed

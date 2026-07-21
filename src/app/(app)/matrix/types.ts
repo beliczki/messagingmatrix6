@@ -119,18 +119,21 @@ export const STATUS_OPTIONS = [
   "MEMORY",
 ] as const;
 
+// Values are CSS-var-backed dot-modifier classes (globals.css `.status-dot--*`),
+// so every consumer inherits the `lookAndFeel` status colours the Design tab
+// writes — single source of truth, not hardcoded Tailwind `bg-*` classes.
 export const STATUS_COLOR: Record<string, string> = {
-  INCOMING: "bg-slate-300",
-  NAMING: "bg-amber-400",
-  CONTENT: "bg-blue-500",
-  PREVIEW: "bg-purple-500",
-  APPROVED: "bg-emerald-500",
-  ACTIVE: "bg-green-500",
-  INACTIVE: "bg-slate-400",
-  ARCHIVED: "bg-slate-500",
-  ERROR: "bg-rose-500",
-  DEAD: "bg-slate-900",
-  MEMORY: "bg-pink-500",
+  INCOMING: "status-dot--incoming",
+  NAMING: "status-dot--naming",
+  CONTENT: "status-dot--content",
+  PREVIEW: "status-dot--preview",
+  APPROVED: "status-dot--approved",
+  ACTIVE: "status-dot--active",
+  INACTIVE: "status-dot--inactive",
+  ARCHIVED: "status-dot--archived",
+  ERROR: "status-dot--error",
+  DEAD: "status-dot--dead",
+  MEMORY: "status-dot--memory",
 };
 
 export type View = "grid" | "feed" | "tree";

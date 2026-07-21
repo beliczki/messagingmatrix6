@@ -1445,6 +1445,39 @@ The "Still uncommitted in working tree" list at the EOD checkpoint (themes #1–
 
 **Status change (2026-07-21):** we graduated to `6.0.0`/`6.1.0`. Everything needed for base daily use is in place, so these items are **no longer launch blockers** — they are the **top-priority backlog** (platform expansion, reporting ingest, creative↔cell matching, smoke tests). Still commit-sized and still user-green-lit per item; just not gating the release. Original "must-be-handled before real use" framing kept below for history.
 
+---
+
+### ⭐ 0. MCP `2026-07-28` spec compatibility — SDK v2 migration (added 2026-07-21, TOP of backlog)
+
+Full plan: `~/.claude/plans/rippling-sparking-patterson.md`. Spec RC: https://blog.modelcontextprotocol.io/posts/2026-07-28-release-candidate/ · Beta SDKs: https://blog.modelcontextprotocol.io/posts/sdk-betas-2026-07-28/ · TS SDK v2: https://ts.sdk.modelcontextprotocol.io/v2/
+
+**Why:** MCP spec RC `2026-07-28` (final ~2026-07-28) is a major revision of `2025-11-25`. Our MCP server (`src/lib/mcp.ts` + `src/app/mcp/route.ts`) runs on `@modelcontextprotocol/sdk ^1.29.0` (v1). Get ready so ChatGPT/Claude keep working and we can adopt new capabilities (esp. standardized **MCP Apps**).
+
+**Timing / trigger:** NOT now. SDK **v2** implements `2026-07-28` (beta now, **stable ~2026-07-28**) and serves old+new clients side by side; **v1.x stays supported ≥6 months after v2 ships**. → **Wait for SDK v2 stable, then migrate on a branch.** This backlog item makes no prod code change now (just this pointer + optional local v2-beta smoke-test).
+
+**RC changes that matter to us:** stateless core (initialize handshake + `Mcp-Session-Id` removed; clientInfo/caps → `_meta`); Streamable HTTP requires `Mcp-Method`/`Mcp-Name` headers; SSE → Multi Round-Trip (`InputRequiredResult`); tool schemas → JSON Schema 2020-12 (`structuredContent` any JSON); **MCP Apps** first-class (sandboxed-iframe HTML); `roots`/`sampling`/`logging` deprecated; missing-resource error `-32002`→`-32602`; six OAuth/OIDC auth SEPs; extensions framework + Tasks extension; `ttlMs`/`cacheScope` on list/resource results.
+
+**Our exposure (inventoried 2026-07-21) — small, mostly SDK-driven:**
+- Transport already **stateless** (`sessionIdGenerator: undefined`, `enableJsonResponse: true`); app never touches session/`Mcp-Method`/`Mcp-Name` headers → SDK-driven.
+- Auth = **custom bearer** (`mcp_tokens`; `Authorization: Bearer` or `?secret=` claude.ai-connector compat). **No OAuth/OIDC/`.well-known`** → the 6 auth SEPs N/A to our server.
+- **No** `roots`/`sampling`/`logging`/`elicitation` usage → nothing to remove.
+- Never emit raw JSON-RPC codes (all `errorResult()`→isError text) → `-32002`→`-32602` N/A.
+- Only `show_mc_previews` uses `outputSchema` (object-root, still valid) + `structuredContent`; others return text-JSON via `jsonResult()`. Settings tools-list route uses `z.toJSONSchema()` — recheck under v2.
+- Capabilities declared: `{ tools, resources }` only.
+- **The one real app-level item:** the `show_mc_previews` widget + `ui://widget/mc-previews.html` resource use the **OpenAI Apps SDK** contract (`text/html;profile=mcp-app`, `window.openai.toolOutput`, `openai:set_globals`, `_meta.openai/*`/`_meta.ui.*`) — distinct from the RC's standard **MCP Apps**; likely needs adaptation (highest-value new capability).
+
+**Migration checklist (when v2 stable lands):**
+- [ ] Branch + bump `@modelcontextprotocol/sdk` → v2 stable; read migration guide.
+- [ ] Port transport (`src/app/mcp/route.ts`): v2 Streamable HTTP API; ensure nginx+Next pass `Mcp-Method`/`Mcp-Name`; keep stateless + JSON response.
+- [ ] Port `buildMcpServer` (`src/lib/mcp.ts`): v2 `McpServer` ctor + capabilities; verify `registerTool`/`registerResource` signatures (outputSchema, `_meta`, annotations).
+- [ ] Auth: confirm `resolveBearerClient` bearer flow works under v2; ChatGPT Dev-Mode + Claude connectors still authenticate.
+- [ ] Tools/output: re-run every tool; `structuredContent` + object-root `outputSchema` validate; optionally use 2020-12 composition.
+- [ ] **MCP Apps decision:** evaluate moving `show_mc_previews` to the standard MCP Apps contract (keep `openai/*` during transition if ChatGPT still needs it).
+- [ ] Deprecations: none used — no action.
+- [ ] Verify: MCP conformance suite + `--project integration` + live ChatGPT/Claude smoke; then deploy (box, pm2 mm6-erste) + version bump.
+
+---
+
 Items the user flagged as **must-be-handled before v6 goes into real day-to-day use**. Each item is now expanded against the actual schema + code surface. Steps are commit-sized; **do not start work** until the user picks one and green-lights it.
 
 ### Anchor facts (from current-state survey)
@@ -3810,3 +3843,38 @@ Kiváltó: user — get_mc_reporting mindenre {label:null, banners:[]}. Root cau
 
 - [x] **DEPLOYOLVA 2026-07-21:** box `506e4a6`→`3f1d5f4`, get_mc_reporting monitoring-backed + number/variant + 6.8.0. Build ok, Ready 1490ms, /mcp 401.
 - [x] **Force preview regen KÉSZ:** 5968/5968 preview újralőve — minden stale "Igényled" → "Igényeld" frissült.
+
+## 2026-07-21 — Wave 0/1 re-audit (kód ellen) + W0.1 megvalósítva
+
+A májusi "Merged priority list" (Wave 0–5, ~2518. sor) Wave 0/1 pontjait a kód ellen újraellenőriztük. Verdiktek:
+
+- **W0.2 (filter dropdown swatch) → KÉSZ.** Már megvan: `MatrixToolbar.tsx:56` `optionColors={STATUS_COLOR}` → `MultiPill.tsx:78` swatch opciónként. A backlog-pont zárható.
+- **W1.2 (dense "New MC" gomb) → MEGVALÓSÍTVA (lásd lent).** User kérte dense-ben is: kis kör + SVG-plusz (a `+ new` pill nem fér a 28px cellába).
+- **W1.3 (záró "+" audience/topic hozzáadás) → MEGVALÓSÍTVA (lásd lent).** Záró kis kör "+" cella/sor a header-tengelyek végén, edit-módban.
+- **W1.4 (hover Duplicate a headeren) → MEGVALÓSÍTVA (lásd lent).** A duplicate backend + Dimensions-UI már megvolt (`api/audiences/[id]/duplicate`, `api/topics/[id]/duplicate`, `DimensionEditPanel.tsx`, `(n)` suffix); most a matrix-header hover-hook is bekötve.
+- **W1.1/W1.5/W1.6** = smoke-teszt feladatok (manuális UI / MCP / prodlist-agent), nem kód — továbbra sem elvégezve.
+
+### W0.1 — Status colors single source of truth → MEGVALÓSÍTVA (deploy még nem)
+Gyökér-ok: `STATUS_COLOR` (`matrix/types.ts:122`) hardkódolt Tailwind `bg-*` osztályokra mutatott → a Design-tab `lookAndFeel` tokenjei (CSS-varok) nem hatottak a matrix dot-okra. A single-source lánc mindenhol megvolt (`defaults.ts` → `DesignTab` → `branding.ts` → `globals.css .status-dot--*`), csak a matrix render path nem volt rákötve.
+- [x] `matrix/types.ts` — `STATUS_COLOR` értékei `.status-dot--<status>` CSS-var-alapú osztályokra (11 státusz). Minden fogyasztó (GridView dot-ok, FeedView, MessageEditor, HeaderDetailDialog, MatrixToolbar filter-swatch) automatikusan a tokeneket kapja — nincs consumer-edit, nincs új absztrakció.
+- [x] `branding.ts` — hiányzó `--status-archived` var pótolva (latens hiba: kezdeti betöltéskor az ARCHIVED dot szín nélkül maradt; DesignTab kliens-oldalon már beállította, az SSR-emitter kihagyta).
+- [x] Új `tests/unit/status-colors.test.ts` (2 teszt): minden státusz `.status-dot--*`, minden `--status-*` var kibocsátódik (archived is). `tsc` tiszta. **Unit 176/176 zöld.**
+- [~] **Integráció nem futott le lokálisan:** teszt-Postgres nem elérhető (`ECONNREFUSED 127.0.0.1:55432`) — környezeti, a változás egyetlen DB-utat sem érint. Integrációt futtatni, ha a DB fent van.
+- [ ] ~~Deploy + bump `6.8.0` → `6.8.1`~~ — a W1.4 miatt a bump minor lett (lásd lent).
+
+### W1.4 — Duplicate hover az audience/topic header-eken → MEGVALÓSÍTVA (deploy még nem)
+A duplicate szerver-oldal (`duplicateAudience`/`duplicateTopic` → header-only, suffixelt key+name, cellák nélkül) + a `/api/{audiences,topics}/[id]/duplicate` route + integrációs tesztek (`audiences-duplicate-delete.test.ts`, `topics-duplicate-delete.test.ts`) MÁR megvoltak. Csak a matrix-UI hook hiányzott.
+- [x] `MatrixGrid.tsx` — `duplicateHeader(kind, id)` handler (POST + `invalidateQueries`), a `createInCell` mintájára. Hiba a meglévő edit-mód rose-bannerbe (`editApi.bulkError`) folyik `headerActionError` state-en át; edit-mód elhagyáskor törlődik. Új prop `onDuplicateHeader` a GridView-nak.
+- [x] `GridView.tsx` — edit-módban hover Duplicate gomb (`matrix-grid__header-dup-btn`, Copy ikon, `group-hover:inline-flex`) a col- ÉS row-header-en; `group` a header `<th>`-ken (a `sticky` adja a containing block-ot az abszolút gombnak). `e.stopPropagation()` hogy ne nyissa a header-dialógust.
+- [x] `component-inventory.md` + `CHANGELOG.md [Unreleased] → Added` frissítve.
+- [x] `tsc` tiszta. **Nincs új teszt:** a backend duplicate már fedve (2 integrációs teszt), a változás tisztán kliens-bekötés, és nincs bevett komponens-teszt minta (nincs @testing-library). Vizuális ellenőrzés prodon.
+- [ ] ~~Deploy + bump `6.9.0`~~ — W1.3 is beszáll ugyanebbe a release-be (lásd lent).
+
+### W1.3 — Add audience/topic a matrixból → MEGVALÓSÍTVA (deploy még nem)
+User kérés: "kis pötty plusz jellel new funkciónak, edit modeban" — konzisztens kör "+" gomb. A create-végpontok (`POST /api/audiences`, `POST /api/topics` → `createAudience`/`createTopic`, csak `name` kötelező, kulcs auto-generál) MÁR megvoltak; csak a matrix-UI hiányzott.
+- [x] `MatrixGrid.tsx` — `addHeader(kind)` handler: POST `{name:"New audience|topic"}` → `invalidateQueries` → a visszakapott kulccsal megnyitja a `HeaderDetailDialog`-ot azonnali átnevezésre (mint a New MC az editort). Hiba a közös `headerActionError` → rose-banner. Új prop `onAddHeader`.
+- [x] `GridView.tsx` — edit-módban záró `<th>` a fejlécsor végén (`matrix-grid__col-add`) ÉS záró `<tr>` a body végén (`matrix-grid__row-add`). **User-kérésre MM5-mintára átdolgozva** (`messagingmatrix/src/components/MatrixGridView.jsx:651` add-audience oszlop / `:1050` add-topic sor): NEM kis kör, hanem **széles cella** (audience/oszlop, `min-w-[160px]`) és **magas cella** (topic/sor, `min-h-16` + spanning `matrix-grid__row-add-fill` sáv), teljes-cellás + gomb (`matrix-grid__header-add-btn`, `size-full`, Plus size-5). Csak edit-módban.
+- [x] **W1.2 dense New MC** — a `EditableCell` add-gomb dense-ben kis kör + SVG-plusz (`cell-add-btn--dense`, `size-4 rounded-full`, Plus `size-2.5`), cell-hoverre; a `+ new` pill marad detailed/compact-ban. (User: "kis pötty kis plusz jellel, svg-vel character helyett" — a lucide `Plus` SVG.)
+- [x] `component-inventory.md` (col-add/row-add/row-add-fill/header-add-btn/cell-add-btn--dense) + `CHANGELOG.md [Unreleased] → Added (W1.3) + Changed (W1.2)`.
+- [x] `tsc` tiszta, **unit 176/176**. **Nincs új teszt:** a create-végpontok már fedve, a változás kliens-bekötés. Vizuális ellenőrzés prodon.
+- [ ] **Deploy + bump:** `6.8.0` → `6.9.0` (minor — W0.1 fix + W1.2 + W1.3 + W1.4 matrix edit-akciók egy release-ben). CHANGELOG `[Unreleased]` kész.

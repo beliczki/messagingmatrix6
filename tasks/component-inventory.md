@@ -272,6 +272,11 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | Sticky bal oszlop (row header) | `matrix-grid__row-header` | 91–99 |
 | Row header címke | `matrix-grid__row-header-label` | 95 |
 | Row header kulcs | `matrix-grid__row-header-key` | 96–98 |
+| Hover Duplicate gomb az audience/topic header-en (edit mode) | `matrix-grid__header-dup-btn` | – |
+| Trailing "add column" cella a fejlécsor végén, MM5-stílus széles cella (edit mode) | `matrix-grid__col-add` | – |
+| Trailing "add row" sor a body végén, MM5-stílus magas cella (edit mode) | `matrix-grid__row-add` | – |
+| Kitöltő sáv az add-row sorban (spanning td) | `matrix-grid__row-add-fill` | – |
+| Teljes-cellás + gomb az audience/topic hozzáadáshoz (col-add / row-add) | `matrix-grid__header-add-btn` | – |
 | Body row | `matrix-grid__row` | – |
 | Cell (intersection) | `matrix-grid__cell` | 123–162 |
 | Cell with messages modifier | `matrix-grid__cell--has-messages` | – |
@@ -580,7 +585,7 @@ Ezeket NEM most refaktoráljuk, de jelölöm hogy ne felejtsük el:
 - `mc-chip--selected` — visible ring when the chip is in the current selection.
 - `mc-chip--ghost` — preview chip rendered in target cells during the toolbar Copy/Move picker (dashed border, no DB write).
 - `mc-chip--ghost-source` — dimmed source-cell chip during a pending move.
-- `cell-add-btn` — `+ new` quick-create button rendered in every cell while edit mode is on.
+- `cell-add-btn` — `+ new` quick-create button rendered in every cell while edit mode is on. `cell-add-btn--dense` is the dense-view variant: a small round `+` (SVG icon only, no label) since the `new` text pill doesn't fit a 28px cell.
 - `toolbar-btn--toggle`, `toolbar-btn--toggle--active` — generic on/off toolbar button (used by the matrix `Edit` toggle; pattern can be reused elsewhere).
 - `matrix-grid__col-header--target`, `matrix-grid__col-header--target-disabled` — column-header states while a Copy/Move target picker is open.
 - `matrix-grid__cell--drop-target`, `matrix-grid__cell--drop-rejected` — drop-zone affordances during DnD.

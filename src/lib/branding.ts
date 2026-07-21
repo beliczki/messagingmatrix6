@@ -58,6 +58,7 @@ export function lookAndFeelToCssVars(laf: LookAndFeel): Record<string, string> {
     "--status-approved": sc.APPROVED,
     "--status-active": sc.ACTIVE,
     "--status-inactive": sc.INACTIVE,
+    "--status-archived": sc.ARCHIVED,
     "--status-error": sc.ERROR,
     "--status-dead": sc.DEAD,
     "--status-memory": sc.MEMORY,

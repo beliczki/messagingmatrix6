@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import clsx from "clsx";
-import { Plus } from "lucide-react";
+import { Copy, Plus } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -35,6 +35,8 @@ export default function GridView({
   onOpenHeader,
   editApi,
   onDndDrop,
+  onDuplicateHeader,
+  onAddHeader,
   onCreateInCell,
 }: {
   audiences: Audience[];
@@ -52,6 +54,8 @@ export default function GridView({
     targetTopic: string;
     copy: boolean;
   }) => void;
+  onDuplicateHeader: (kind: "audience" | "topic", id: number) => void;
+  onAddHeader: (kind: "audience" | "topic") => void;
   onCreateInCell: (audience: string, topic: string) => void;
 }) {
   const editMode = editApi.editMode;
@@ -204,7 +208,7 @@ export default function GridView({
                 <th
                   key={c.id}
                   className={clsx(
-                    "matrix-grid__col-header sticky top-0 z-20 border-b border-r border-border bg-surface-alt align-top text-left font-medium text-text-primary",
+                    "matrix-grid__col-header group sticky top-0 z-20 border-b border-r border-border bg-surface-alt align-top text-left font-medium text-text-primary",
                     density === "dense"
                       ? "matrix-grid__col-header--dense h-40 min-h-40 w-7 min-w-7 max-w-7 p-0"
                       : "h-20 min-h-20 min-w-[160px] p-0",
@@ -255,9 +259,38 @@ export default function GridView({
                       </>
                     )}
                   </button>
+                  {editMode ? (
+                    <button
+                      type="button"
+                      title={`Duplicate ${colKind} — ${c.name}`}
+                      aria-label={`Duplicate ${colKind} ${c.name}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDuplicateHeader(colKind, c.id);
+                      }}
+                      className="matrix-grid__header-dup-btn absolute right-0.5 top-0.5 z-10 hidden rounded border border-slate-300 bg-surface-alt p-0.5 text-text-tertiary shadow-sm hover:border-slate-500 hover:text-text-primary group-hover:inline-flex focus-visible:inline-flex"
+                    >
+                      <Copy className="size-3" />
+                    </button>
+                  ) : null}
                 </th>
               );
             })}
+            {editMode ? (
+              // MM5-style: a wide trailing column whose whole cell is the add
+              // button (audiences are columns by default).
+              <th className="matrix-grid__col-add sticky top-0 z-20 min-w-[160px] border-b border-r border-border bg-surface-alt p-0">
+                <button
+                  type="button"
+                  title={`Add ${colKind}`}
+                  aria-label={`Add ${colKind}`}
+                  onClick={() => onAddHeader(colKind)}
+                  className="matrix-grid__header-add-btn flex size-full min-h-20 items-center justify-center p-2 text-text-tertiary transition hover:bg-black/5 hover:text-text-primary dark:hover:bg-white/10"
+                >
+                  <Plus className="size-5" />
+                </button>
+              </th>
+            ) : null}
           </tr>
         </thead>
         <tbody>
@@ -265,7 +298,7 @@ export default function GridView({
             <tr key={r.id} className="matrix-grid__row">
               <th
                 className={clsx(
-                  "matrix-grid__row-header sticky left-0 z-10 border-b border-r border-border bg-surface-alt text-left font-medium text-text-primary",
+                  "matrix-grid__row-header group sticky left-0 z-10 border-b border-r border-border bg-surface-alt text-left font-medium text-text-primary",
                   density === "dense" ? "min-w-[140px] p-0" : "min-w-[180px] p-0",
                 )}
                 title={r.key}
@@ -293,6 +326,20 @@ export default function GridView({
                     </div>
                   ) : null}
                 </button>
+                {editMode ? (
+                  <button
+                    type="button"
+                    title={`Duplicate ${rowKind} — ${r.name}`}
+                    aria-label={`Duplicate ${rowKind} ${r.name}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDuplicateHeader(rowKind, r.id);
+                    }}
+                    className="matrix-grid__header-dup-btn absolute right-0.5 top-0.5 z-10 hidden rounded border border-slate-300 bg-surface-alt p-0.5 text-text-tertiary shadow-sm hover:border-slate-500 hover:text-text-primary group-hover:inline-flex focus-visible:inline-flex"
+                  >
+                    <Copy className="size-3" />
+                  </button>
+                ) : null}
               </th>
               {cols.map((c) => {
                 const audKey = transposed ? c.key : r.key;
@@ -340,6 +387,34 @@ export default function GridView({
               })}
             </tr>
           ))}
+          {editMode ? (
+            // MM5-style: a tall trailing row whose sticky header cell is the add
+            // button (topics are rows by default); a spanning fill completes the
+            // band across the columns.
+            <tr className="matrix-grid__row-add">
+              <th
+                className={clsx(
+                  "sticky left-0 z-10 border-b border-r border-border bg-surface-alt p-0",
+                  density === "dense" ? "min-w-[140px]" : "min-w-[180px]",
+                )}
+              >
+                <button
+                  type="button"
+                  title={`Add ${rowKind}`}
+                  aria-label={`Add ${rowKind}`}
+                  onClick={() => onAddHeader(rowKind)}
+                  className="matrix-grid__header-add-btn flex size-full min-h-16 items-center justify-center p-2 text-text-tertiary transition hover:bg-black/5 hover:text-text-primary dark:hover:bg-white/10"
+                >
+                  <Plus className="size-5" />
+                </button>
+              </th>
+              <td
+                colSpan={cols.length + 1}
+                className="matrix-grid__row-add-fill border-b border-border bg-slate-50/50 dark:bg-white/[0.03]"
+                aria-hidden="true"
+              />
+            </tr>
+          ) : null}
         </tbody>
       </table>
     </div>
@@ -501,7 +576,19 @@ function EditableCell({
             <Plus className="size-3" />
             new
           </button>
-        ) : null}
+        ) : (
+          // Dense: no room for the "new" pill — a small round +, revealed on
+          // cell hover, keeps the affordance consistent with the wider views.
+          <button
+            type="button"
+            title="New MC in this cell"
+            aria-label="New MC in this cell"
+            onClick={() => onCreateInCell(audience, topic)}
+            className="cell-add-btn cell-add-btn--dense hidden size-4 items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-500 hover:border-slate-500 hover:text-slate-700 group-hover:inline-flex focus-visible:inline-flex"
+          >
+            <Plus className="size-2.5" />
+          </button>
+        )}
       </div>
     </td>
   );

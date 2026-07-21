@@ -11,7 +11,7 @@ vi.mock("@/lib/preview-shooter", () => ({
       size: it.size,
       ok: true as const,
       previewId: 100 + i,
-      storageKey: `erste/previews/mock-${i}.png`,
+      updatedAt: `2026-07-21 10:0:00`,
     })),
   ),
 }));
@@ -87,7 +87,7 @@ describe("preview_generate via MCP", () => {
     expect(Object.keys(json[0].generated)).toHaveLength(4);
     for (const url of Object.values(json[0].generated)) {
       expect(url).toMatch(
-        /^https:\/\/erste\.messagingmatrix\.ai\/api\/previews\/\d+\?v=[0-9a-f]{10}$/,
+        /^https:\/\/erste\.messagingmatrix\.ai\/api\/previews\/\d+\?v=.+$/,
       );
     }
     expect(json[0].skipped_fresh).toEqual([]);
@@ -126,7 +126,7 @@ describe("preview_generate via MCP", () => {
                 size: it.size,
                 ok: true as const,
                 previewId: 200 + i,
-                storageKey: `erste/previews/mock-${i}.png`,
+                updatedAt: `2026-07-21 10:0:00`,
               },
         ),
     );

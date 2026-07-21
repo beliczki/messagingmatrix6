@@ -85,7 +85,7 @@ describe("mc_get via MCP", () => {
     expect(json).toHaveLength(1);
     expect(json[0].pmmid).toBe("PMM-1a");
     expect(json[0].preview_urls["300x250"]).toMatch(
-      new RegExp(`^/api/previews/${p!.id}\\?v=[0-9a-f]{10}$`),
+      new RegExp(`^/api/previews/${p!.id}\\?v=.+$`),
     );
   });
 

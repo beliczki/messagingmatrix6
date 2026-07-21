@@ -24,7 +24,7 @@ import { writeFile as writeStorageFile, deleteStorageFile } from "@/lib/storage"
 const PRELOADER_TIMEOUT_MS = 15_000;
 
 export type ShotResult = { messageId: number; size: string } & (
-  | { ok: true; previewId: number; storageKey: string }
+  | { ok: true; previewId: number; updatedAt: string }
   | { ok: false; error: string }
 );
 
@@ -108,18 +108,21 @@ async function shootRun(
 
         const stored = await writeStorageFile(buf, "preview", ".png");
         let previewId: number;
+        let previewUpdatedAt: string;
         if (item.existing) {
-          await db
+          const [updated] = await db
             .update(messagePreviews)
             .set({
               storageKey: stored.storagePath,
               messageVersion: item.message.version,
               updatedAt: nowUtc,
             })
-            .where(eq(messagePreviews.id, item.existing.id));
+            .where(eq(messagePreviews.id, item.existing.id))
+            .returning({ updatedAt: messagePreviews.updatedAt });
           // Old object only after the row points at the new one — no orphan risk.
           await deleteStorageFile(item.existing.storageKey);
           previewId = item.existing.id;
+          previewUpdatedAt = updated!.updatedAt;
         } else {
           const [row] = await db
             .insert(messagePreviews)
@@ -132,8 +135,9 @@ async function shootRun(
             })
             .returning();
           previewId = row!.id;
+          previewUpdatedAt = row!.updatedAt;
         }
-        const r: ShotResult = { messageId: item.message.id, size: item.size, ok: true, previewId, storageKey: stored.storagePath };
+        const r: ShotResult = { messageId: item.message.id, size: item.size, ok: true, previewId, updatedAt: previewUpdatedAt };
         results.push(r);
         opts.onShot?.(r);
       } catch (e) {

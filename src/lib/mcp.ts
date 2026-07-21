@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { and, desc, eq, inArray, max, ne, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { z } from "zod";
@@ -232,14 +231,17 @@ function jsonResult(value: unknown) {
   };
 }
 
-// Preview URLs use a STABLE row id but the bytes change on every regenerate
-// (the shooter rewrites storage_key + deletes the old object). Without a
-// cache-buster the same URL keeps serving the pre-regen image from the browser /
-// CDN / ChatGPT image proxy cache. storage_key is unique per shot, so a short
-// hash of it flips the URL exactly when the image changes.
-function previewUrl(origin: string, id: number, storageKey: string): string {
-  const v = createHash("sha1").update(storageKey).digest("hex").slice(0, 10);
-  return `${origin}/api/previews/${id}?v=${v}`;
+// Preview URLs use a STABLE row id but the bytes change on every regenerate.
+// Without a cache-buster the same URL keeps serving the pre-regen image from the
+// browser / CDN / ChatGPT image-proxy cache. We key ?v on the preview row's
+// updated_at (set to now() on every (re)shot) — identical to how the matrix
+// editor builds these URLs (MessageEditor.tsx), so both share one cache entry.
+function previewUrl(
+  origin: string,
+  id: number,
+  updatedAt: string | null,
+): string {
+  return `${origin}/api/previews/${id}?v=${encodeURIComponent(updatedAt ?? "")}`;
 }
 
 // Guards for the image-content tools: keep a single tool result from ballooning
@@ -401,7 +403,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
               id: messagePreviews.id,
               messageId: messagePreviews.messageId,
               size: messagePreviews.size,
-              storageKey: messagePreviews.storageKey,
+              updatedAt: messagePreviews.updatedAt,
             })
             .from(messagePreviews)
             .where(
@@ -417,7 +419,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
       const urlsByMessage = new Map<number, Record<string, string>>();
       for (const p of previewRows) {
         const urls = urlsByMessage.get(p.messageId) ?? {};
-        urls[p.size] = previewUrl(ctx.origin ?? "", p.id, p.storageKey);
+        urls[p.size] = previewUrl(ctx.origin ?? "", p.id, p.updatedAt);
         urlsByMessage.set(p.messageId, urls);
       }
       return jsonResult(
@@ -691,7 +693,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
               id: messagePreviews.id,
               messageId: messagePreviews.messageId,
               size: messagePreviews.size,
-              storageKey: messagePreviews.storageKey,
+              updatedAt: messagePreviews.updatedAt,
             })
             .from(messagePreviews)
             .where(
@@ -707,7 +709,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
       const urlsByMessage = new Map<number, Record<string, string>>();
       for (const p of previewRows) {
         const urls = urlsByMessage.get(p.messageId) ?? {};
-        urls[p.size] = previewUrl(ctx.origin ?? "", p.id, p.storageKey);
+        urls[p.size] = previewUrl(ctx.origin ?? "", p.id, p.updatedAt);
         urlsByMessage.set(p.messageId, urls);
       }
       return jsonResult(
@@ -1552,7 +1554,7 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
         for (const s of shotsByMessage.get(msg.id) ?? []) {
           shotSizes.add(s.size);
           if (s.ok) {
-            generated[s.size] = previewUrl(ctx.origin ?? "", s.previewId, s.storageKey);
+            generated[s.size] = previewUrl(ctx.origin ?? "", s.previewId, s.updatedAt);
           } else {
             errors[s.size] = s.error;
           }
@@ -2451,7 +2453,7 @@ function registerPreviewWidget(server: McpServer, ctx: McpContext): void {
           id: messagePreviews.id,
           messageId: messagePreviews.messageId,
           size: messagePreviews.size,
-          storageKey: messagePreviews.storageKey,
+          updatedAt: messagePreviews.updatedAt,
         })
         .from(messagePreviews)
         .where(and(...pconds))
@@ -2470,7 +2472,7 @@ function registerPreviewWidget(server: McpServer, ctx: McpContext): void {
         previews.push({
           label: `MC${meta.number}${meta.variant}`,
           size: p.size,
-          url: previewUrl(origin, p.id, p.storageKey),
+          url: previewUrl(origin, p.id, p.updatedAt),
           _v: meta.variant,
         });
       }

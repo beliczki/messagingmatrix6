@@ -30,7 +30,8 @@ export const MC_PREVIEWS_WIDGET_HTML = `<!doctype html>
         font-family: system-ui, sans-serif;
         color: var(--mc-fg);
       }
-      .mc-previews__name { font-size: 14px; font-weight: 700; margin: 0 0 16px; color: var(--mc-fg); }
+      /* Match the gallery's 1rem margin so the title lines up with the cards. */
+      .mc-previews__name { font-size: 14px; font-weight: 700; margin: 1rem 1rem 0; color: var(--mc-fg); }
       /* Masonry via CSS multi-column: banners of different aspect ratios
          (300x250 / 300x600 / 970x250 / 640x360) pack without row gaps. */
       .mc-previews__gallery { column-width: 220px; column-gap: 16px; margin: 1rem; }

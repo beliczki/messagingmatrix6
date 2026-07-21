@@ -7,6 +7,7 @@ import {
   assets,
   audiences,
   clients,
+  creatives,
   config as configTable,
   mcpTokens,
   messagePreviews,
@@ -55,6 +56,14 @@ import { listVisibleTemplates, readTemplate } from "@/lib/templates";
 import { collectStalePreviews } from "@/lib/previews";
 import { shootPreviews } from "@/lib/preview-shooter";
 import { createAsset } from "@/lib/entities/assets";
+import {
+  archiveCreative,
+  createCreative,
+  getCreative,
+  pickWritable as pickCreativeWritable,
+  restoreCreative,
+  updateCreative,
+} from "@/lib/entities/creatives";
 import {
   getFileByFilename,
   sanitizeFilename,
@@ -427,6 +436,51 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
         .from(assets)
         .where(and(...conds))
         .orderBy(assets.fileName)
+        .limit(limit);
+      return jsonResult(rows);
+    },
+  );
+
+  server.registerTool(
+    "list_creatives",
+    {
+      description:
+        "List creative-library rows (rendered banner/HTML5 files, keyed to an MC number+variant) for the active client. Distinct from list_assets (raw media the MCs reference) and list_mc (the message rows themselves): a creative is a produced deliverable file with its own brand/product/type/mc_number/mc_variant metadata. Each row carries id and version — pass those to creative_update / creative_remove / creative_restore. Filters are AND-combined: file_name_contains and visual_keyword_contains are case-insensitive LIKE matches; brand/product/type are exact matches; mc_number is an exact integer match. Default excludes soft-archived rows; pass include_archived=true to see them. Default limit 100, max 1000.",
+      inputSchema: {
+        file_name_contains: z.string().optional(),
+        visual_keyword_contains: z.string().optional(),
+        brand: z.string().optional(),
+        product: z.string().optional(),
+        type: z.string().optional(),
+        mc_number: z.number().int().optional(),
+        include_archived: z.boolean().optional(),
+        limit: z.number().int().positive().max(1000).optional(),
+      },
+    },
+    async (args) => {
+      const conds = [eq(creatives.clientId, ctx.clientId)];
+      if (!args.include_archived) conds.push(isNull(creatives.archivedAt));
+      if (args.file_name_contains) {
+        conds.push(
+          sql`LOWER(${creatives.fileName}) LIKE ${"%" + args.file_name_contains.toLowerCase() + "%"}`,
+        );
+      }
+      if (args.visual_keyword_contains) {
+        conds.push(
+          sql`LOWER(${creatives.visualKeyword}) LIKE ${"%" + args.visual_keyword_contains.toLowerCase() + "%"}`,
+        );
+      }
+      if (args.brand) conds.push(eq(creatives.brand, args.brand));
+      if (args.product) conds.push(eq(creatives.product, args.product));
+      if (args.type) conds.push(eq(creatives.type, args.type));
+      if (args.mc_number !== undefined)
+        conds.push(eq(creatives.mcNumber, args.mc_number));
+      const limit = args.limit ?? 100;
+      const rows = await db
+        .select()
+        .from(creatives)
+        .where(and(...conds))
+        .orderBy(creatives.id)
         .limit(limit);
       return jsonResult(rows);
     },
@@ -1320,6 +1374,136 @@ function registerAssetWriteTools(server: McpServer, ctx: McpContext): void {
   );
 }
 
+function registerCreativeWriteTools(server: McpServer, ctx: McpContext): void {
+  server.registerTool(
+    "creative_create",
+    {
+      description:
+        "Create a creative-library row (a produced banner/HTML5 deliverable file). All fields optional via the fields object: brand, product, type, visualKeyword, copyKeyword, template, bannerVersion, mcNumber, mcVariant, fileId, fileName, fileFormat, fileSize, fileDimensions, comment. Returns the new row including id and version. NOTE: this records a library entry only — it does not upload bytes; use asset_upload for the actual file.",
+      inputSchema: { fields: fieldsArg },
+    },
+    async ({ fields }) => {
+      const limited = await requireRate(ctx);
+      if (limited) return limited;
+      const row = await createCreative(
+        ctx.clientId,
+        pickCreativeWritable(fields ?? {}),
+      );
+      await writeAudit({
+        clientId: ctx.clientId,
+        userId: mcpUserId(ctx),
+        entityType: "creatives",
+        entityId: row.id,
+        action: "create",
+        after: row,
+      });
+      return jsonResult(row);
+    },
+  );
+
+  server.registerTool(
+    "creative_update",
+    {
+      description:
+        "Update a creative-library row by id. Required: id, version (current optimistic-lock version from list_creatives). Optional fields object with any writable column. Returns version_conflict with the current row if version is stale.",
+      inputSchema: {
+        id: z.number().int(),
+        version: z.number().int(),
+        fields: fieldsArg,
+      },
+    },
+    async ({ id, version, fields }) => {
+      const limited = await requireRate(ctx);
+      if (limited) return limited;
+      const existing = await getCreative(ctx.clientId, id);
+      if (!existing) return errorResult(`creative ${id} not found`);
+      const result = await updateCreative(
+        ctx.clientId,
+        id,
+        version,
+        pickCreativeWritable(fields ?? {}),
+      );
+      if (!result.ok) {
+        return errorResult("version_conflict", { current: result.current });
+      }
+      await writeAudit({
+        clientId: ctx.clientId,
+        userId: mcpUserId(ctx),
+        entityType: "creatives",
+        entityId: result.row.id,
+        action: "update",
+        before: existing,
+        after: result.row,
+      });
+      return jsonResult(result.row);
+    },
+  );
+
+  server.registerTool(
+    "creative_remove",
+    {
+      description:
+        "Archive a creative-library row by id (soft-delete via archived_at). Required: id, version. Restore via creative_restore.",
+      inputSchema: {
+        id: z.number().int(),
+        version: z.number().int(),
+      },
+    },
+    async ({ id, version }) => {
+      const limited = await requireRate(ctx);
+      if (limited) return limited;
+      const existing = await getCreative(ctx.clientId, id);
+      if (!existing) return errorResult(`creative ${id} not found`);
+      const result = await archiveCreative(ctx.clientId, id, version);
+      if (!result.ok) {
+        return errorResult("version_conflict", { current: result.current });
+      }
+      await writeAudit({
+        clientId: ctx.clientId,
+        userId: mcpUserId(ctx),
+        entityType: "creatives",
+        entityId: result.row.id,
+        action: "archive",
+        before: existing,
+        after: result.row,
+      });
+      return jsonResult({ ok: true, archived: result.row });
+    },
+  );
+
+  server.registerTool(
+    "creative_restore",
+    {
+      description:
+        "Restore an archived creative-library row by id. Required: id, version (the current archived row's version).",
+      inputSchema: {
+        id: z.number().int(),
+        version: z.number().int(),
+      },
+    },
+    async ({ id, version }) => {
+      const limited = await requireRate(ctx);
+      if (limited) return limited;
+      const existing = await getCreative(ctx.clientId, id);
+      if (!existing) return errorResult(`creative ${id} not found`);
+      const result = await restoreCreative(ctx.clientId, id, version);
+      if (!result.ok) {
+        return errorResult("version_conflict", { current: result.current });
+      }
+      await writeAudit({
+        clientId: ctx.clientId,
+        userId: mcpUserId(ctx),
+        entityType: "creatives",
+        entityId: result.row.id,
+        action: "restore",
+        before: existing,
+        after: result.row,
+      });
+      return jsonResult({ ok: true, restored: result.row });
+    },
+  );
+}
+
 // ── Batch tools ──
 // All batch tools wrap their work in `await db.transaction(async () => …)`. The
 // `db` proxy threads the active transaction through an AsyncLocalStorage context
@@ -1660,6 +1844,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     registerTopicWriteTools(server, ctx);
     registerMessageWriteTools(server, ctx);
     registerAssetWriteTools(server, ctx);
+    registerCreativeWriteTools(server, ctx);
     registerBatchTools(server, ctx);
   }
   return server;

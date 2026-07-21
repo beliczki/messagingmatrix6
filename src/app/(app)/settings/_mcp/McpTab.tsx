@@ -37,6 +37,7 @@ const GROUP_ORDER: Array<{ key: string; label: string; match: (n: string) => boo
   { key: "audience", label: "Audiences", match: (n) => /audience/.test(n) && !n.startsWith("list_") && !n.startsWith("get_") },
   { key: "topic", label: "Topics", match: (n) => /topic/.test(n) && !n.startsWith("list_") && !n.startsWith("get_") },
   { key: "message", label: "Messages (MCs)", match: (n) => /(^|_)mc(_|$)|message/.test(n) && !n.startsWith("list_") && !n.startsWith("get_") && !/batch/.test(n) },
+  { key: "creative", label: "Creative library", match: (n) => /creative/.test(n) && !n.startsWith("list_") },
   { key: "batch", label: "Batch", match: (n) => /batch/.test(n) },
 ];
 

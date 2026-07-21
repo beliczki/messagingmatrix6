@@ -25,6 +25,7 @@ const READ_TOOLS = [
   "list_topics",
   "list_mc",
   "list_assets",
+  "list_creatives",
   "mc_get",
   "list_templates",
   "list_products",
@@ -163,6 +164,7 @@ describe("buildMcpServer scope gating", () => {
       "mc_create",
       "preview_generate",
       "asset_upload",
+      "creative_create",
       "mc_create_batch",
     ]) {
       expect(names).not.toContain(writeTool);

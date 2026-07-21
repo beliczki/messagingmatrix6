@@ -1376,28 +1376,137 @@ function registerAssetWriteTools(server: McpServer, ctx: McpContext): void {
 
 function registerCreativeWriteTools(server: McpServer, ctx: McpContext): void {
   server.registerTool(
-    "creative_create",
+    "creative_upload",
     {
       description:
-        "Create a creative-library row (a produced banner/HTML5 deliverable file). All fields optional via the fields object: brand, product, type, visualKeyword, copyKeyword, template, bannerVersion, mcNumber, mcVariant, fileId, fileName, fileFormat, fileSize, fileDimensions, comment. Returns the new row including id and version. NOTE: this records a library entry only — it does not upload bytes; use asset_upload for the actual file.",
-      inputSchema: { fields: fieldsArg },
+        "Upload a rendered creative file (banner / HTML5 export / static image) and create a Creative Library row for it — the creatives-table analog of asset_upload (which targets the SEPARATE Assets library, not this one). Provide the file via EXACTLY ONE of: data_base64 (base64 bytes, max 10MB decoded — small images) or source_url (a public http(s) URL the server downloads, max 50MB — larger files/videos; private/internal addresses are refused). The library tile renders from the stored file by fileId, so a row without an uploaded file would be blank — that's why this uploads bytes rather than taking a bare fileId. brand/product/type/visual_keyword are auto-derived from the filename via the client's parsing rules; explicit values override. Link the creative to a matrix cell by passing mc_number + mc_variant. Returns { creative, file, parsed_fields }. Counts as one write against the rate limit. To edit an existing creative's metadata (re-link, tag, comment) use creative_update instead.",
+      inputSchema: {
+        filename: z.string().min(1),
+        data_base64: z.string().optional(),
+        source_url: z.string().optional(),
+        brand: z.string().optional(),
+        product: z.string().optional(),
+        type: z.string().optional(),
+        visual_keyword: z.string().optional(),
+        copy_keyword: z.string().optional(),
+        template: z.string().optional(),
+        banner_version: z.string().optional(),
+        mc_number: z.number().int().optional(),
+        mc_variant: z.string().optional(),
+        comment: z.string().optional(),
+      },
     },
-    async ({ fields }) => {
+    async (args) => {
       const limited = await requireRate(ctx);
       if (limited) return limited;
-      const row = await createCreative(
-        ctx.clientId,
-        pickCreativeWritable(fields ?? {}),
-      );
+
+      if (!args.data_base64 === !args.source_url) {
+        return errorResult("provide exactly one of data_base64 or source_url");
+      }
+
+      let buffer: Buffer;
+      let remoteContentType: string | null = null;
+      if (args.data_base64) {
+        buffer = Buffer.from(args.data_base64, "base64");
+        if (buffer.length === 0) {
+          return errorResult("data_base64 decoded to zero bytes — not valid base64?");
+        }
+        if (buffer.length > ASSET_BASE64_MAX) {
+          return errorResult(
+            `file too large for base64 transport: ${buffer.length} bytes (max ${ASSET_BASE64_MAX}) — use source_url instead`,
+          );
+        }
+      } else {
+        try {
+          const fetched = await fetchRemoteFile(args.source_url!, {
+            maxBytes: ASSET_URL_MAX,
+          });
+          buffer = fetched.buffer;
+          remoteContentType = fetched.contentType;
+        } catch (e) {
+          return errorResult(`source_url fetch failed: ${(e as Error).message}`);
+        }
+      }
+
+      const ext = extFromFilename(args.filename).toLowerCase();
+      const mimeType =
+        EXT_MIME[ext] ?? remoteContentType ?? "application/octet-stream";
+
+      let dimensions: string | undefined;
+      if (mimeType.startsWith("image/")) {
+        // Full decode (stats), not just metadata(): the header parses fine on a
+        // TRUNCATED file, which is exactly how a clipped base64 payload stores a
+        // broken image.
+        try {
+          const img = sharp(buffer);
+          const meta = await img.metadata();
+          await img.stats();
+          if (meta.width && meta.height) {
+            dimensions = `${meta.width}x${meta.height}`;
+          }
+        } catch (e) {
+          return errorResult(
+            `image data is corrupt or truncated (${(e as Error).message}) — nothing was stored. If you sent data_base64, the payload was likely clipped in transit; re-encode and retry, or use source_url instead`,
+          );
+        }
+      }
+
+      const file = await uploadFile(ctx.clientId, {
+        buffer,
+        originalFilename: args.filename,
+        mimeType,
+        category: "creative",
+        uploadedBy: mcpUserId(ctx),
+        dimensions,
+      });
+      await writeAudit({
+        clientId: ctx.clientId,
+        userId: mcpUserId(ctx),
+        entityType: "uploaded_files",
+        entityId: file.id,
+        action: "create",
+        after: file,
+      });
+
+      const rules = await clientParsingRules(ctx.clientId);
+      const parsed = parseFilename(args.filename, rules);
+      const creative = await createCreative(ctx.clientId, {
+        fileId: file.id,
+        fileName: file.filename,
+        fileFormat: ext.replace(/^\./, "") || null,
+        fileSize: String(file.sizeBytes),
+        fileDimensions: file.dimensions,
+        brand: args.brand ?? parsed.fields.brand ?? null,
+        product: args.product ?? parsed.fields.product ?? null,
+        type: args.type ?? parsed.fields.type ?? null,
+        visualKeyword: args.visual_keyword ?? parsed.fields.visualKeyword ?? null,
+        copyKeyword: args.copy_keyword ?? null,
+        template: args.template ?? null,
+        bannerVersion: args.banner_version ?? null,
+        mcNumber: args.mc_number ?? null,
+        mcVariant: args.mc_variant ?? null,
+        comment: args.comment ?? null,
+      });
       await writeAudit({
         clientId: ctx.clientId,
         userId: mcpUserId(ctx),
         entityType: "creatives",
-        entityId: row.id,
+        entityId: creative.id,
         action: "create",
-        after: row,
+        after: creative,
       });
-      return jsonResult(row);
+
+      return jsonResult({
+        creative,
+        file: {
+          id: file.id,
+          filename: file.filename,
+          size_bytes: file.sizeBytes,
+          mime_type: file.mimeType,
+          dimensions: file.dimensions,
+        },
+        parsed_fields: parsed.fields,
+      });
     },
   );
 

@@ -1,12 +1,24 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { creatives, clients } from "@/db/schema";
-import { buildMcpServer } from "@/lib/mcp";
-import { createTestDb, type TestDb } from "../../helpers/test-db";
+import { creatives, clients, uploadedFiles } from "@/db/schema";
+import { buildMcpServer, _resetMcpRateLimitForTests } from "@/lib/mcp";
+import { _setStorageRootForTests } from "@/lib/storage";
+import {
+  createTestDb,
+  withActiveClientKey,
+  type TestDb,
+} from "../../helpers/test-db";
 
 let h: TestDb;
 let erste: { id: number };
 let telekom: { id: number };
+
+const TINY_PNG_B64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgAAIAAAUAAeImBZsAAAAASUVORK5CYII=";
 
 type Handler = (args: Record<string, unknown>) => Promise<{
   content: { type: string; text: string }[];
@@ -53,7 +65,9 @@ async function seedCreative(
 }
 
 beforeEach(async () => {
+  _resetMcpRateLimitForTests();
   h = await createTestDb();
+  _setStorageRootForTests(fs.mkdtempSync(path.join(os.tmpdir(), "mm6-storage-")));
   [erste] = await db
     .insert(clients)
     .values({ key: "erste", name: "Erste" })
@@ -62,6 +76,7 @@ beforeEach(async () => {
     .insert(clients)
     .values({ key: "telekom", name: "Telekom" })
     .returning();
+  withActiveClientKey("erste");
 });
 
 afterEach(async () => {
@@ -146,14 +161,44 @@ describe("list_creatives via MCP", () => {
 });
 
 describe("creative write tools via MCP", () => {
-  it("create → update → remove → restore round-trip", async () => {
-    const created = await callTool(erste.id, "creative_create", {
-      fields: { fileName: "new_creative.html", product: "SZA", mcNumber: 400 },
+  it("creative_upload stores bytes (category creative) + creates a creatives row", async () => {
+    const res = await callTool(erste.id, "creative_upload", {
+      filename: "erste_pl_fitzone_300x250.png",
+      data_base64: TINY_PNG_B64,
+      mc_number: 400,
+      mc_variant: "a",
     });
-    expect(created.isError).toBe(false);
-    expect(created.json.fileName).toBe("new_creative.html");
-    expect(created.json.version).toBe(1);
-    const id = created.json.id;
+    expect(res.isError).toBe(false);
+    expect(res.json.creative.fileName).toBe("erste_pl_fitzone_300x250.png");
+    expect(res.json.creative.fileId).toBe(res.json.file.id);
+    expect(res.json.creative.mcNumber).toBe(400);
+    expect(res.json.creative.mcVariant).toBe("a");
+    expect(res.json.creative.version).toBe(1);
+
+    // the stored file is a creative-category uploaded_files row (NOT asset)
+    const [uf] = await db
+      .select()
+      .from(uploadedFiles)
+      .where(eq(uploadedFiles.id, res.json.file.id));
+    expect(uf.category).toBe("creative");
+
+    // and it surfaces through list_creatives, linked by fileId
+    const listed = await callTool(erste.id, "list_creatives", {});
+    expect(listed.json).toHaveLength(1);
+    expect(listed.json[0].fileId).toBe(res.json.file.id);
+  });
+
+  it("creative_upload requires exactly one of data_base64 / source_url", async () => {
+    const neither = await callTool(erste.id, "creative_upload", {
+      filename: "x.png",
+    });
+    expect(neither.isError).toBe(true);
+    expect(neither.text).toContain("exactly one");
+  });
+
+  it("update → remove → restore round-trip on an existing row", async () => {
+    const seeded = await seedCreative(erste.id, { fileName: "seed.html" });
+    const id = seeded.id;
 
     const updated = await callTool(erste.id, "creative_update", {
       id,
@@ -186,13 +231,10 @@ describe("creative write tools via MCP", () => {
   });
 
   it("creative_update returns version_conflict on stale version", async () => {
-    const created = await callTool(erste.id, "creative_create", {
-      fields: { fileName: "conflict.html" },
-    });
-    const id = created.json.id;
+    const seeded = await seedCreative(erste.id, { fileName: "conflict.html" });
 
     const stale = await callTool(erste.id, "creative_update", {
-      id,
+      id: seeded.id,
       version: 99,
       fields: { comment: "x" },
     });
@@ -201,7 +243,7 @@ describe("creative write tools via MCP", () => {
   });
 
   it("write tools are not registered for read-scoped tokens", () => {
-    expect(() => getHandler(erste.id, "creative_create", "read")).toThrow(
+    expect(() => getHandler(erste.id, "creative_upload", "read")).toThrow(
       /not registered/,
     );
     expect(() => getHandler(erste.id, "list_creatives", "read")).not.toThrow();

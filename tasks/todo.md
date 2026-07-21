@@ -3652,3 +3652,11 @@ Megoldás (user választás: "cseréld creative_upload-ra"):
 
 - [x] **DEPLOYOLVA 2026-07-21:** box `bdf9cfa`… → `cf07e03` (/var/www/mm6-erste), 2 commit (report_performance + list_report_periods read toolok + 6.3.0 release). Séma-migráció nincs. `npm run build` ok, `pm2 restart mm6-erste` → **Ready 1560ms**. Health: /monitoring 307, /mcp 401. Box `6.3.0`.
 - Megj.: ez a deploy megint új chunk-hasheket adott → a user böngészőjében hard refresh kell a /monitoring-on (a korábban diagnosztizált stale-bundle jelenség elkerülésére).
+
+## 2026-07-21 — MCP mc_get bővítés (preview_urls + szám/variant lookup)
+
+Kiváltó: user kérés — preview URL a mc_get-be, és lekérés MC-szám ill. szám+variant alapján is (ne csak PMMID).
+- [x] `mc_get` (src/lib/mcp.ts): lekérés EGY közülük — `mc_label` (PMMID) VAGY `mc_number` (opcionális `variant`-tal). Mivel egy szám több cellában/variantban élhet (copy fan-out), a válasz **mindig tömb** (volt: egy objektum/null). Minden sor `preview_urls`-szel (list_mc-mintára, messagePreviews join). `include_archived` hozzáadva, alapból archiváltak kihagyva. Rendezés number,variant.
+- [x] Tesztek: új `mcp-mc-get.test.ts` (7: pmmid→1 elemű tömb+preview_urls, szám→minden variant/cella, szám+variant szűkítés, archived default/include, no-match üres tömb, tenant-izoláció, validáció). `tsc` tiszta, **integráció 296/296**.
+- [x] `CHANGELOG.md` `[Unreleased] → Changed`. McpTab nem igényel prózát (tool-kártya auto-syncol).
+- [ ] **Nem deployolva** — viselkedésváltozás egy meglévő MCP toolon → **bump-javaslat 6.3.0 → 6.4.0 (minor)**. Deploy külön lépés.

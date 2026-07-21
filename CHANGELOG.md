@@ -5,6 +5,16 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.4.0] — 2026-07-21
+
+### Changed
+- **MCP `mc_get`: preview_urls + number/variant lookup.** Now returns each MC
+  with its `preview_urls` map (same shape as `list_mc`), and looks up by EXACTLY
+  ONE of `mc_label` (PMMID) or `mc_number` (optionally narrowed by `variant`).
+  Since a number can span several cells/variants (card fan-out is a copy), the
+  result is now **always an array** (was a single object/null); `include_archived`
+  added, archived rows excluded by default.
+
 ## [6.3.0] — 2026-07-21
 
 ### Added

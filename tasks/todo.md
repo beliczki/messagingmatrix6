@@ -3805,3 +3805,8 @@ Kiváltó: user — get_mc_reporting mindenre {label:null, banners:[]}. Root cau
 - [x] Teszt: új `mcp-mc-reporting.test.ts` (7). tsc tiszta, **integráció 320/320**. CHANGELOG 6.8.0.
 - **Külön follow-up (NEM ebben):** a list_mc `monitoring_status` szűrő (reporting.adform_status) és matrix_status.last_reporting_sync szintén az üres reporting táblát olvassa → gyakorlatilag no-op. A monitoring_status NEM repointolható (az ACTIVE/INACTIVE státusz nincs a monitoringban).
 - [ ] Deploy 6.7.5 → 6.8.0.
+
+## 2026-07-21 — DEPLOYOLVA (6.8.0) + force regen KÉSZ
+
+- [x] **DEPLOYOLVA 2026-07-21:** box `506e4a6`→`3f1d5f4`, get_mc_reporting monitoring-backed + number/variant + 6.8.0. Build ok, Ready 1490ms, /mcp 401.
+- [x] **Force preview regen KÉSZ:** 5968/5968 preview újralőve — minden stale "Igényled" → "Igényeld" frissült.

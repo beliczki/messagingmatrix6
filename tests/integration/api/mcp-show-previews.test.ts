@@ -75,9 +75,9 @@ describe("show_mc_previews (Apps SDK widget) via real MCP protocol", () => {
     const client = await connect(erste.id);
     const res = (await client.callTool({
       name: "show_mc_previews",
-      arguments: { mc_number: 244, variant: "d", audience_key: "HK_wlfin" },
+      arguments: { mc_number: 244, variant: "d", audience_key: "HK_wlfin", sizes: ["all"] },
     })) as {
-      structuredContent?: { name: string; previews: { size: string; url: string }[] };
+      structuredContent?: { name: string; previews: { label: string; size: string; url: string }[] };
       content: { type: string; text?: string }[];
     };
 
@@ -100,15 +100,25 @@ describe("show_mc_previews (Apps SDK widget) via real MCP protocol", () => {
 
   it("dedupes same-variant audience copies but keeps distinct variants", async () => {
     const client = await connect(erste.id);
-    // variant d only → two audience copies collapse to 2 sizes (not 4)
+    // variant d only, all sizes → two audience copies collapse to 2 sizes (not 4)
     const dOnly = (await client.callTool({
       name: "show_mc_previews",
-      arguments: { mc_number: 244, variant: "d" },
+      arguments: { mc_number: 244, variant: "d", sizes: ["all"] },
     })) as { structuredContent?: { previews: { label: string; size: string }[] } };
     expect(dOnly.structuredContent!.previews.map((p) => p.size).sort()).toEqual([
       "300x250",
       "970x250",
     ]);
+    await client.close();
+  });
+
+  it("defaults to 300x250 only when sizes is omitted", async () => {
+    const client = await connect(erste.id);
+    const res = (await client.callTool({
+      name: "show_mc_previews",
+      arguments: { mc_number: 244, variant: "d" },
+    })) as { structuredContent?: { previews: { size: string }[] } };
+    expect(res.structuredContent!.previews.map((p) => p.size)).toEqual(["300x250"]);
     await client.close();
   });
 

@@ -33,9 +33,10 @@ export const MC_PREVIEWS_WIDGET_HTML = `<!doctype html>
       .mc-previews__name { font-size: 14px; font-weight: 700; margin: 0 0 16px; color: var(--mc-fg); }
       /* Masonry via CSS multi-column: banners of different aspect ratios
          (300x250 / 300x600 / 970x250 / 640x360) pack without row gaps. */
-      .mc-previews__gallery { column-width: 220px; column-gap: 16px; }
+      .mc-previews__gallery { column-width: 220px; column-gap: 16px; margin: 1rem; }
       .mc-previews__figure { break-inside: avoid; margin: 0 0 16px; }
       .mc-previews__cap { margin: 0 0 6px; font-size: 11px; font-weight: 600; color: var(--mc-muted); }
+      .mc-previews__link { display: block; cursor: pointer; }
       .mc-previews__img { display: block; width: 100%; height: auto; border-radius: 6px; }
       .mc-previews__empty { font-size: 13px; color: var(--mc-muted); }
     </style>
@@ -62,11 +63,14 @@ export const MC_PREVIEWS_WIDGET_HTML = `<!doctype html>
           previews
             .map(function (p) {
               var cap = (p.label ? p.label + " · " : "") + p.size;
+              var alt = esc((p.label || d.name || "MC") + " " + p.size);
               return (
                 '<figure class="mc-previews__figure">' +
                 '<figcaption class="mc-previews__cap">' + esc(cap) + "</figcaption>" +
-                '<img class="mc-previews__img" src="' + esc(p.url) + '" ' +
-                'alt="' + esc((p.label || d.name || "MC") + " " + p.size) + '" />' +
+                '<a class="mc-previews__link" href="' + esc(p.url) + '" ' +
+                'target="_blank" rel="noopener noreferrer" title="Open full size in a new tab">' +
+                '<img class="mc-previews__img" src="' + esc(p.url) + '" alt="' + alt + '" />' +
+                "</a>" +
                 "</figure>"
               );
             })

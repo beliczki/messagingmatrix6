@@ -2367,7 +2367,7 @@ function registerPreviewWidget(server: McpServer, ctx: McpContext): void {
     {
       title: "Show MC previews",
       description:
-        "Render MC preview screenshots as an inline image GALLERY (OpenAI Apps SDK widget) in ChatGPT / MCP Inspector — a visual card, distinct from get_mc_preview_files (which hands raw image bytes to the model). Identify by EXACTLY ONE of mc_label (PMMID) or mc_number. Narrow with: variant (single) OR variants (a list, e.g. [\"b\",\"c\",\"d\"] to show several cards side by side); audience_key; and sizes (a list, e.g. [\"300x250\"] to show ONE size only — omit for every generated size). Distinct variants are each shown; the same variant fanned out across audiences is collapsed to one (identical creative). Returns structuredContent { name, previews:[{label,size,url}] } with absolute, public preview URLs; non-widget clients still get that data + a text summary.",
+        "Render MC preview screenshots as an inline image GALLERY (OpenAI Apps SDK widget) in ChatGPT / MCP Inspector — a visual card, distinct from get_mc_preview_files (which hands raw image bytes to the model). Identify by EXACTLY ONE of mc_label (PMMID) or mc_number. Narrow with: variant (single) OR variants (a list, e.g. [\"b\",\"c\",\"d\"] to show several cards side by side); audience_key; and sizes. sizes DEFAULTS to [\"300x250\"] (the one shown when omitted) — pass other sizes explicitly (e.g. [\"970x250\",\"300x600\"]) or [\"all\"] for every generated size. Distinct variants are each shown; the same variant fanned out across audiences is collapsed to one (identical creative). Returns structuredContent { name, previews:[{label,size,url}] } with absolute, public preview URLs; non-widget clients still get that data + a text summary.",
       inputSchema: {
         mc_label: z.string().optional(),
         mc_number: z.number().int().optional(),
@@ -2439,8 +2439,13 @@ function registerPreviewWidget(server: McpServer, ctx: McpContext): void {
           mcs.map((m) => m.id),
         ),
       ];
-      if (args.sizes && args.sizes.length > 0)
-        pconds.push(inArray(messagePreviews.size, args.sizes));
+      // Default to 300x250 only; pass explicit sizes for others, or ["all"] for
+      // every generated size.
+      let sizeFilter: string[] | null;
+      if (!args.sizes || args.sizes.length === 0) sizeFilter = ["300x250"];
+      else if (args.sizes.includes("all")) sizeFilter = null;
+      else sizeFilter = args.sizes;
+      if (sizeFilter) pconds.push(inArray(messagePreviews.size, sizeFilter));
       const previewRows = await db
         .select({
           id: messagePreviews.id,
@@ -2474,9 +2479,16 @@ function registerPreviewWidget(server: McpServer, ctx: McpContext): void {
       );
       const clean = previews.map(({ label, size, url }) => ({ label, size, url }));
 
-      const num = mcs[0]!.number;
+      // Title: a single variant keeps its campaign name; multiple distinct
+      // variants have different names, so list their labels instead (no em-dash).
+      const distinctLabels = [...new Set(clean.map((p) => p.label))];
       const nm = mcs[0]!.name;
-      const name = nm ? `MC${num} — ${nm}` : `MC${num}`;
+      const name =
+        distinctLabels.length === 1
+          ? nm
+            ? `${distinctLabels[0]} · ${nm}`
+            : distinctLabels[0]!
+          : distinctLabels.join(", ");
 
       return {
         structuredContent: { name, previews: clean },

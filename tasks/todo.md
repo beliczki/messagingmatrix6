@@ -3761,3 +3761,7 @@ Kiváltó: user clue — a jó preview URL `?v=<updatedAt timestamp>` (UI/Messag
 - [x] `CHANGELOG.md` `[Unreleased] → 6.7.2 Fixed/Changed`.
 - Megj.: a stale bájtok (Igényled) attól még csak force-regennel frissülnek — a boxon fut a teljes reshoot. A cache-bust átállás azt oldja meg, hogy a friss bájtok tuti átjöjjenek (nem cache-eli meg a régit UI-eltérő URL miatt).
 - [ ] **Deploy** 6.7.1 → 6.7.2. A box pm2 restart 1-2 regen-shotot megszakíthat (elhanyagolható).
+
+## 2026-07-21 — DEPLOYOLVA (6.7.2)
+
+- [x] **DEPLOYOLVA 2026-07-21:** box `be69049`→`e848dca` (/var/www/mm6-erste), 2 commit (cache-bust=updatedAt UI-egyezés + title 1rem margin + 6.7.2). Build ok, `pm2 restart` → **Ready 1440ms**. Health: /mcp 401. Box `6.7.2`. A force regen túlélte a restartot (1027/5968 fut tovább).

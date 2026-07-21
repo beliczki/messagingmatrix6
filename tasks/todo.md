@@ -3719,3 +3719,14 @@ Fixek (mind cache-bust + widget, bugfix bundle):
 
 - [x] **DEPLOYOLVA 2026-07-21:** box `11b8761`→`7eefeaa` (/var/www/mm6-erste), 2 commit (preview cache-bust + widget dedup/dark-mode/masonry/padding + 6.6.1 release). Séma-migráció nincs. `npm run build` ok, `pm2 restart mm6-erste` → **Ready 1441ms**. Health: /mcp 401. Box `6.6.1`.
 - User teendő: ChatGPT hard-reload a widget új HTML-jéhez; a stale preview-k eltűnnek a cache-bust miatt (a következő MCP-lekéréstől). Template/copy-változás után továbbra is `force:true` a preview_generate-ben.
+
+## 2026-07-21 — show_mc_previews: size + multi-variant szűrő, dedup fix
+
+Kiváltó: user ChatGPT-ben — nem tudott 300x250-re szűrni, sem b/c/d variantokat egyszerre megjeleníteni; a dedup a különböző variantokat is összevonta; padding/Igényled panasz.
+- [x] `show_mc_previews`: új `sizes` (pl. ["300x250"] → egy méret) és `variants` (pl. ["b","c","d"] → több kártya egymás mellett) param. A preview-k `label`-t kapnak (MC244b), így a variantok megkülönböztethetők. Dedup mostantól **(variant, size)** szerint — az audience-copy-k összevonódnak, a különböző variantok megmaradnak. outputSchema previews: {label,size,url}.
+- [x] `get_mc_preview_files`: ugyanaz a (variant, size) dedup (eddig csak size → variantokat is összevont).
+- [x] Widget: a felirat `label · size` (variant + méret). (2rem padding + masonry a 6.6.1-ből.)
+- [x] Tesztek: `mcp-show-previews` +2 (variants+sizes szűrő → 3 kártya MC244b/c/d 300x250; same-variant dedup marad 2). `tsc` tiszta, **integráció 311/311**.
+- [x] `CHANGELOG.md` `[Unreleased] → Added`.
+- **Cache/padding megjegyzés (nem kód-bug):** a user 3. képe a 6.6.1 deploy ELŐTTI widget-render, cache-elt régi URL-ekkel. A box tárolt preview-ja már helyes ("Igényeld", 4. kép). Friss ChatGPT-beszélgetés + friss show_mc_previews hívás a `?v=` cache-bustolt (helyes) képet adja. Ha a padding sem látszik friss beszélgetésben, a ChatGPT a widget-template-et cache-eli a URI szerint → akkor URI-verziózás kellhet (későbbi, ha valóban ez).
+- [ ] **Nem deployolva** — új tool-paramok (sizes/variants) + dedup fix → **bump 6.6.1 → 6.7.0 (minor)**. Deploy külön.

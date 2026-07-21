@@ -5,6 +5,17 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.7.0] — 2026-07-21
+
+### Added
+- **`show_mc_previews`: size + multi-variant selection.** New optional inputs
+  `sizes` (e.g. `["300x250"]` to show ONE size), `variants` (e.g. `["b","c","d"]`
+  to show several distinct cards side by side). Preview items now carry a `label`
+  (`MC244b`) so variants are distinguishable in the gallery. Dedup is now by
+  `(variant, size)` — a variant fanned out across audiences collapses to one, but
+  distinct variants each stay (previously same-size distinct variants were wrongly
+  collapsed). Same `(variant, size)` dedup applied to `get_mc_preview_files`.
+
 ## [6.6.1] — 2026-07-21
 
 ### Fixed

@@ -3714,3 +3714,8 @@ Fixek (mind cache-bust + widget, bugfix bundle):
 - [x] Tesztek: URL-asszertálások frissítve `?v=[0-9a-f]{10}` mintára (mcp-list-mc, mc-get, preview-generate mock+regex, show-previews startsWith OK). `tsc` tiszta, **integráció 310/310**.
 - [x] `CHANGELOG.md` `[Unreleased] → Fixed` bővítve.
 - [ ] **Nem deployolva** — bugfix + CSS → **bump 6.6.0 → 6.6.1 (patch)**. Deploy külön.
+
+## 2026-07-21 — DEPLOYOLVA (6.6.1)
+
+- [x] **DEPLOYOLVA 2026-07-21:** box `11b8761`→`7eefeaa` (/var/www/mm6-erste), 2 commit (preview cache-bust + widget dedup/dark-mode/masonry/padding + 6.6.1 release). Séma-migráció nincs. `npm run build` ok, `pm2 restart mm6-erste` → **Ready 1441ms**. Health: /mcp 401. Box `6.6.1`.
+- User teendő: ChatGPT hard-reload a widget új HTML-jéhez; a stale preview-k eltűnnek a cache-bust miatt (a következő MCP-lekéréstől). Template/copy-változás után továbbra is `force:true` a preview_generate-ben.

@@ -3616,3 +3616,16 @@ A fenti verzióterv-note "Nincs bump most" állítását a user **felülírta** 
 
 - [x] **DEPLOYOLVA 2026-07-21:** box `3d0aa0c`→`bdf9cfa` (/var/www/mm6-erste), 4 commit (mcp creative library toolok, sidebar verzió, 6.0.0/6.1.0 release, THM 2026-06-04 ráta). Séma-migráció **nincs** (creatives tábla már létezett). `npm run build` ok (route-manifest teljes), `pm2 restart mm6-erste` → **Ready 1287ms**, üres error.log. Health: /matrix 307, /mcp auth nélkül 401 — healthy. Box `package.json` `6.1.0`.
 - Megjegyzés: a box-on a `thm.json` helyben (commitolatlanul) módosítva volt, **bájtra azonos** blob (`958754a`) a pusholt verzióval → `git checkout -- thm.json` + pull, adatvesztés nincs. (A THM-szerkesztés láthatóan a boxon keletkezik; ha ez rendszeres, érdemes lehet a `thm.json`-t a deploy-flow-ban külön kezelni / gitignore + perzisztens tárolás — de ez külön kérdés, most nem nyúltam hozzá.)
+
+## 2026-07-21 — MCP: creative_create → creative_upload (user elemzés nyomán)
+
+Kiváltó: user észrevétele, hogy a `creative_create` "összeakadhat" az `asset_upload`-dal / fölösleges. Elemzés eredménye:
+- **Nincs ütközés** — `asset_upload` az `assets` táblába ír (`uploadedFiles` `category:"asset"`), `creative_create` a `creatives`-be. Külön könyvtár; az `asset_upload` NEM tölt a Creative Library-be.
+- **DE a `creative_create` fájl nélkül haszontalan volt:** a Creative Library tile a `fileId`-ből renderel (`/api/files/<fileId>/thumbnail`), a UI feltöltés kétlépcsős (bájt `category:"creative"` → `POST /api/creatives` a `fileId`-vel; `CreativeLibrary.tsx:285-306`). A `creative_create` nem tudott `fileId`-t gyártani → üres/törött kártya. Az `asset_upload` `category:"asset"` fájlt csinál, amit a Library `/api/files?category=creative` be sem listáz.
+
+Megoldás (user választás: "cseréld creative_upload-ra"):
+- [x] `creative_create` **törölve**, helyette **`creative_upload`** (`src/lib/mcp.ts`) — az `asset_upload` mintája: `data_base64`/`source_url`, `category:"creative"` tárolás, majd `createCreative` a linkelt sorral. Extra mezők: `mc_number`/`mc_variant` (mátrix-cellához kötés), `copy_keyword`/`template`/`banner_version`. Kép esetén sharp dimenzió + korrupt/csonka védelem. Audit `uploaded_files` + `creatives`.
+- [x] `creative_update`/`remove`/`restore` **változatlan** (meglévő sorok linkelése/tagelése/archiválása — valós érték).
+- [x] Tesztek: `mcp-creatives.test.ts` bővítve (`creative_upload` bájt+`category:"creative"` tárolás, `list_creatives`-ben megjelenik, exactly-one guard; a CRUD round-trip most `seedCreative`-ből indul). `mcp-auth.test.ts` read-scope negatív check `creative_create`→`creative_upload`. `tsc` tiszta, **integráció 283/283** (lokális teszt-PG :55432).
+- [x] `CHANGELOG.md` `[Unreleased] → Changed`: creative_create→creative_upload indoklással.
+- [ ] **Nem deployolva** — csak lokális kód/teszt/changelog. Ez viselkedésváltozás a `6.1.0`-ban kiadott MCP toolon → **bump-javaslat: `6.1.0` → `6.2.0` (minor)**, user dönt. Deploy külön lépés.

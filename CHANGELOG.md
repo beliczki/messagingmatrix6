@@ -5,6 +5,18 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.2.0] — 2026-07-21
+
+### Changed
+- **MCP: replaced `creative_create` with `creative_upload`.** The `6.1.0`
+  `creative_create` only wrote a metadata row and could not attach a file, so it
+  produced blank Creative Library tiles (the tile renders from the uploaded file by
+  `fileId`; `asset_upload` stores `category:"asset"` files, which the Creative Library
+  does not list). `creative_upload` mirrors `asset_upload` — accepts `data_base64` /
+  `source_url`, stores bytes as `category:"creative"`, then creates the linked
+  `creatives` row (with optional `mc_number` / `mc_variant` to bind it to a matrix
+  cell). `creative_update` / `creative_remove` / `creative_restore` are unchanged.
+
 ## [6.1.0] — 2026-07-21
 
 ### Added

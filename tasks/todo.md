@@ -3765,3 +3765,12 @@ Kiváltó: user clue — a jó preview URL `?v=<updatedAt timestamp>` (UI/Messag
 ## 2026-07-21 — DEPLOYOLVA (6.7.2)
 
 - [x] **DEPLOYOLVA 2026-07-21:** box `be69049`→`e848dca` (/var/www/mm6-erste), 2 commit (cache-bust=updatedAt UI-egyezés + title 1rem margin + 6.7.2). Build ok, `pm2 restart` → **Ready 1440ms**. Health: /mcp 401. Box `6.7.2`. A force regen túlélte a restartot (1027/5968 fut tovább).
+
+## 2026-07-21 — VALÓDI fix: dedup a legfrissebb copy-t tartja + widget height
+
+Kiváltó: user clue — MC244d 300x250-hez KÉT preview (fan-out cellák): 2457 (updatedAt 2026-07-12, régi) és 2537 (2026-07-21, friss). A `(variant,size)` dedup az elsőt (messageId szerint) tartotta → a RÉGIT (2457) választotta.
+- [x] **Dedup a legfrissebb `updatedAt`-ú copy-t tartja** (`show_mc_previews` + `get_mc_preview_files`): `orderBy(desc(updatedAt), desc(id))`, a dedup az elsőt = legfrissebbet tartja. Semmi hardkód a productionban — valódi updatedAt-ből rendez.
+- [x] Widget height: külső margin (title/gallery) eltávolítva — a bottom margin nem számít bele az Apps SDK height-mérésébe → fekete sáv alul. Csak body padding ad keretet, a title így a galériával is egy vonalban.
+- [x] Teszt: "legfrissebb reshot copy nyer" (izolált MC999, régi vs friss updatedAt fixture — a user pontos dátumaival, csak tesztben). `tsc` tiszta, **integráció 313/313**.
+- [x] `CHANGELOG.md` `[Unreleased] → 6.7.3 Fixed`.
+- [ ] Deploy 6.7.2 → 6.7.3.

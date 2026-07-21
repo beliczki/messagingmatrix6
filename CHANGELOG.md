@@ -5,6 +5,21 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.7.3] — 2026-07-21
+
+### Fixed
+- **Preview dedup now keeps the NEWEST reshot copy of a fan-out variant.** The
+  same MC number+variant lives in several audience cells, each with its own
+  preview row regenerated at different times. The `(variant, size)` dedup picked
+  the first by message id, which could be a stale copy while a fresher one exists
+  (e.g. MC244d 300x250 served the 2026-07-12 render instead of 2026-07-21).
+  `show_mc_previews` and `get_mc_preview_files` now order by `updated_at` desc, so
+  the most recently reshot copy wins.
+- **`show_mc_previews` widget height.** Removed the outer 1rem margins on the
+  title/gallery — a bottom margin is not counted in the height the Apps SDK
+  reports, which left dead space under the widget. Spacing now comes only from the
+  body padding, which also lines the title up with the cards.
+
 ## [6.7.2] — 2026-07-21
 
 ### Fixed

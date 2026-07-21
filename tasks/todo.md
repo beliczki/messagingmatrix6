@@ -3660,3 +3660,7 @@ Kiváltó: user kérés — preview URL a mc_get-be, és lekérés MC-szám ill.
 - [x] Tesztek: új `mcp-mc-get.test.ts` (7: pmmid→1 elemű tömb+preview_urls, szám→minden variant/cella, szám+variant szűkítés, archived default/include, no-match üres tömb, tenant-izoláció, validáció). `tsc` tiszta, **integráció 296/296**.
 - [x] `CHANGELOG.md` `[Unreleased] → Changed`. McpTab nem igényel prózát (tool-kártya auto-syncol).
 - [ ] **Nem deployolva** — viselkedésváltozás egy meglévő MCP toolon → **bump-javaslat 6.3.0 → 6.4.0 (minor)**. Deploy külön lépés.
+
+## 2026-07-21 — DEPLOYOLVA (6.4.0)
+
+- [x] **DEPLOYOLVA 2026-07-21:** box `cf07e03`→`96a70ba` (/var/www/mm6-erste), 2 commit (mc_get preview_urls + szám/variant lookup + 6.4.0 release). Séma-migráció nincs. `npm run build` ok, `pm2 restart mm6-erste` → **Ready 1441ms**. Health: /mcp 401, /monitoring 307. Box `6.4.0`.

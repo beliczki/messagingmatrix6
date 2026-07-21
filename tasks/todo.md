@@ -3745,3 +3745,8 @@ Kiváltó: user ChatGPT-ben — nem tudott 300x250-re szűrni, sem b/c/d variant
 - [x] `CHANGELOG.md` `[Unreleased] → Changed`.
 - **Preview image "régi" (2459, 970x250) — NEM cache-bug:** a cache-bust működik (URL friss `?v=`), de a tárolt preview bájtjai régiek → az adott méret nem lett force-újragenerálva. LIVE render helyes (`igenyeldonline.svg`). Fix = **force regen MINDEN méretre** (preview_generate force:true, vagy `npm run gen:previews -- --force` a boxon). Stale-detektálás nem fogja el template/copy-változásnál (message.version nem bumpol).
 - [ ] **Nem deployolva** → **bump 6.7.0 → 6.7.1 (patch)**. Deploy külön.
+
+## 2026-07-21 — DEPLOYOLVA (6.7.1) + force preview regen (fut)
+
+- [x] **DEPLOYOLVA 2026-07-21:** box `65f5aeb`→`be69049` (/var/www/mm6-erste), 2 commit (show_mc_previews default 300x250 + mdash-mentes cím + 1rem margin + kattintható képek + 6.7.1). Build ok, `pm2 restart` → **Ready 1420ms**. Health: /mcp 401. Box `6.7.1`.
+- [~] **Force preview regen fut a boxon:** `npm run gen:previews -- --force` (nohup, /tmp/genprev.log) — teljes erste, minden MC × méret újralövése (a stale "Igényled" preview-k, pl. 2459, frissülnek). Headless Chromium, több perc.

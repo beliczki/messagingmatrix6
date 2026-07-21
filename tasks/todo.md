@@ -3774,3 +3774,8 @@ Kiváltó: user clue — MC244d 300x250-hez KÉT preview (fan-out cellák): 2457
 - [x] Teszt: "legfrissebb reshot copy nyer" (izolált MC999, régi vs friss updatedAt fixture — a user pontos dátumaival, csak tesztben). `tsc` tiszta, **integráció 313/313**.
 - [x] `CHANGELOG.md` `[Unreleased] → 6.7.3 Fixed`.
 - [ ] Deploy 6.7.2 → 6.7.3.
+
+## 2026-07-21 — DEPLOYOLVA (6.7.3)
+
+- [x] **DEPLOYOLVA 2026-07-21:** box `e848dca`→`f6eda43` (/var/www/mm6-erste), 2 commit (dedup=legfrissebb copy + widget height margin-fix + 6.7.3). Build ok, `pm2 restart` → **Ready 1494ms**. Health: /mcp 401. Box `6.7.3`. Regen fut tovább (1557/5968).
+- Következmény: mostantól NEM kell megvárni a teljes regent — ha egy adott (variant,size)-hoz akár EGY cellát is újralőttek (friss updatedAt, pl. 2537), a widget azt választja. MC244d 300x250 → helyes "Igényeld".

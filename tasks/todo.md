@@ -3750,3 +3750,14 @@ Kiváltó: user ChatGPT-ben — nem tudott 300x250-re szűrni, sem b/c/d variant
 
 - [x] **DEPLOYOLVA 2026-07-21:** box `65f5aeb`→`be69049` (/var/www/mm6-erste), 2 commit (show_mc_previews default 300x250 + mdash-mentes cím + 1rem margin + kattintható képek + 6.7.1). Build ok, `pm2 restart` → **Ready 1420ms**. Health: /mcp 401. Box `6.7.1`.
 - [~] **Force preview regen fut a boxon:** `npm run gen:previews -- --force` (nohup, /tmp/genprev.log) — teljes erste, minden MC × méret újralövése (a stale "Igényled" preview-k, pl. 2459, frissülnek). Headless Chromium, több perc.
+
+## 2026-07-21 — cache-bust átállítva updatedAt-re (UI-egyezés) + title margin
+
+Kiváltó: user clue — a jó preview URL `?v=<updatedAt timestamp>` (UI/MessageEditor), a rossz `?v=<hash>` (az én kódom) → két külön URL/cache ugyanarra a preview-ra. A hash elvileg jó volt, de a UI-val nem egyezett.
+- [x] `previewUrl` mostantól `?v=${encodeURIComponent(updatedAt)}` — pont mint `MessageEditor.tsx:1986`. Egy cache-entry a UI-jal, regenkor (updatedAt=nowUtc) garantáltan változik. `createHash` import törölve.
+- [x] Query-k `updatedAt`-et olvasnak: list_mc, mc_get, show_mc_previews. `preview_generate`: `ShotResult` most `updatedAt`-et visz (preview-shooter update/insert `.returning({updatedAt})`).
+- [x] Title 1rem margin a galériához igazítva (widget).
+- [x] Tesztek: URL-regexek `?v=.+`-ra, shooter-mock updatedAt. `tsc` tiszta, **integráció 312/312**.
+- [x] `CHANGELOG.md` `[Unreleased] → 6.7.2 Fixed/Changed`.
+- Megj.: a stale bájtok (Igényled) attól még csak force-regennel frissülnek — a boxon fut a teljes reshoot. A cache-bust átállás azt oldja meg, hogy a friss bájtok tuti átjöjjenek (nem cache-eli meg a régit UI-eltérő URL miatt).
+- [ ] **Deploy** 6.7.1 → 6.7.2. A box pm2 restart 1-2 regen-shotot megszakíthat (elhanyagolható).

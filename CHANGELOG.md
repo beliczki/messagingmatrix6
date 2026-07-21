@@ -5,6 +5,21 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.7.2] — 2026-07-21
+
+### Fixed
+- **Preview URL cache-buster now uses `updated_at`, matching the matrix editor.**
+  The MCP tools previously keyed `?v` on a hash of the storage key, a different
+  scheme from the UI's `?v=<updated_at>` — so the same preview had two URLs and
+  two cache entries. All preview URLs (`list_mc`, `mc_get`, `show_mc_previews`,
+  `preview_generate`) now use the row's `updated_at` (bumped on every reshoot),
+  identical to `MessageEditor.tsx`, so one cache entry is shared and a regenerate
+  reliably invalidates it.
+
+### Changed
+- `show_mc_previews` widget: the title gets the same 1rem margin as the gallery so
+  it lines up with the cards.
+
 ## [6.7.1] — 2026-07-21
 
 ### Changed

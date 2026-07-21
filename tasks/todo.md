@@ -3674,3 +3674,7 @@ Kiváltó: user kérés — direkt file-get, amivel az agent asset/creative/MC-p
 - [x] Tesztek: új `mcp-image-files.test.ts` (9: image content per size, sizes szűrő, no-preview/no-match/validáció hibák; get_media_file image asset, nem-kép hiba, unknown, tenant-izoláció). `mcp-auth` READ_TOOLS +2. `tsc` tiszta, **integráció 305/305**.
 - [x] `CHANGELOG.md` `[Unreleased] → Added`. McpTab: mindkettő `get_`-tel kezdődik → auto "List & read" csoport.
 - [ ] **Nem deployolva** — két új MCP read-tool → **bump-javaslat 6.4.0 → 6.5.0 (minor)**. Deploy külön lépés.
+
+## 2026-07-21 — DEPLOYOLVA (6.5.0)
+
+- [x] **DEPLOYOLVA 2026-07-21:** box `96a70ba`→`de9d42b` (/var/www/mm6-erste), 2 commit (get_mc_preview_files + get_media_file natív image-content read toolok + 6.5.0 release). Séma-migráció nincs. `npm run build` ok, `pm2 restart mm6-erste` → **Ready 1406ms**. Health: /mcp 401. Box `6.5.0`.

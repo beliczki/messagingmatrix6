@@ -3633,3 +3633,17 @@ Megoldás (user választás: "cseréld creative_upload-ra"):
 ## 2026-07-21 — DEPLOYOLVA (6.2.0)
 
 - [x] **DEPLOYOLVA 2026-07-21:** box `bdf9cfa`→`f65291c` (/var/www/mm6-erste), 2 commit (creative_create→creative_upload csere + 6.2.0 release). Séma-migráció nincs. Tiszta fast-forward pull (thm.json most nem volt piszkos), `npm run build` ok, `pm2 restart mm6-erste` → **Ready 1337ms**, üres error.log. Health: /matrix 307, /mcp 401. Box `package.json` `6.2.0`. Az élesben addig futó törött `creative_create` lecserélve `creative_upload`-ra.
+
+## 2026-07-21 — Monitoring crash diagnózis (NINCS kódhiba) + MCP performance toolok
+
+**Monitoring crash (user: "megint elszáll"):** root cause = **stale/mismatch böngésző-bundle a deploy-ablakban**, NEM kódhiba.
+- Bizonyíték: a user hibája a `page-e8155b5ed8a6de1b.js` chunkban volt (`r.map is not a function` egy useMemo-ban); ez a hash a jelenlegi buildben nem létezik (most `page-7678b07239b512c6.js`), a stackben szereplő *shared* chunkok (`4bd1b696`, `1255`) viszont egyeznek → régi page-chunk + új shared chunk mismatch. A user képe 12:33-kor, épp a 6.1.0→6.2.0 build+restart alatt.
+- Reprodukció: dev (6001, minted admin@local session cookie a JWT_SECRET-tel — lokális debug) ÉS a pontos prod build is **hibátlanul** rendereli a /monitoring-ot, minden interakcióval (június/május period, detail dialog, All/Matched/Unmatched), ugyanazon az élő adaton.
+- **Teendő user oldalon:** hard refresh (Cmd+Shift+R). Kód nem változott (band-aid lenne nem-létező bugra). Recurrence oka: minden deploy változtatja a chunk-hasheket; stale böngésző-cache mismatchelhet a következő deployig — ez általános SPA-deploy higiénia, nem monitoring-bug.
+
+**MCP performance toolok (user kérés):**
+- [x] `report_performance` (read) — `monitoring` tábla aggregálva **product × platform**-onként, matched/unmatched bontással (matched = `message_id IS NOT NULL`), metrikák impressions/clicks/cost/ctr (ctr=clicks/impr, null ha impr=0) + per-cella total + grand totals. Default a legfrissebb period; `from` param (list_report_periods-ből) másikat választ; opcionális `product`/`platform` szűrő. `::int`/`::float8` cast (postgres-js bigint), GROUP BY product,platform,(message_id IS NOT NULL).
+- [x] `list_report_periods` (read) — elérhető riport-periódusok newest-first, per-period rows/impressions/clicks/cost.
+- [x] Tesztek: új `mcp-report-performance.test.ts` (6: period-lista tenant-scope, product×platform matched/unmatched+ctr, from period-váltás, product+platform szűrő, ismeretlen from hiba, filter-üres). `mcp-auth` READ_TOOLS +2. `tsc` tiszta, **integráció 289/289**.
+- [x] `CHANGELOG.md` `[Unreleased] → Added`.
+- [ ] **Nem deployolva** — csak lokális. Új MCP toolok → **bump-javaslat 6.2.0 → 6.3.0 (minor)**, user dönt. Deploy külön lépés.

@@ -5,6 +5,18 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.3.0] — 2026-07-21
+
+### Added
+- **MCP: monitoring performance read tools.** `report_performance` aggregates
+  imported monitoring reports by **product × platform**, each split into matched
+  vs unmatched (matched = report row resolved to a matrix message), with
+  impressions / clicks / cost / ctr per bucket plus per-cell and grand totals.
+  Defaults to the newest report period; `from` selects another; optional
+  `product` / `platform` filters. `list_report_periods` lists the available
+  report periods (newest first, with per-period totals) so an agent can discover
+  which `from` values exist. Both are read-scope tools.
+
 ## [6.2.0] — 2026-07-21
 
 ### Changed

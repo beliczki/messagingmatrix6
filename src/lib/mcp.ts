@@ -992,22 +992,120 @@ function registerMetaTools(server: McpServer, ctx: McpContext): void {
     "get_mc_reporting",
     {
       description:
-        "Reporting data for an MC label: rolled-up MC-level row + per-banner rows.",
-      inputSchema: { mc_label: z.string() },
+        "Aggregated performance for ONE MC from the imported monitoring reports (the monitoring table — same source as report_performance; the older Reporting-sheet `reporting` table is not populated by the current AdForm pipeline). Look up by EXACTLY ONE of: mc_number (optionally narrowed by variant) — the RELIABLE key, matched against monitoring.mc_number/mc_variant — OR mc_label. mc_label may be a message PMMID (resolved to its number+variant, since the monitoring PMMID carries an extra -l_<lineitem> suffix the message PMMID lacks) or a full monitoring PMMID (matched exactly). A number+variant spans several audience cells, summed together across all imported report periods unless `from` (a period_from from list_report_periods) is given. Returns { mc, matched_rows, totals, by_variant, by_size, by_audience }, each metric block = { impressions, clicks, cost, conversions, ctr }. Empty when nothing matched.",
+      inputSchema: {
+        mc_label: z.string().optional(),
+        mc_number: z.number().int().optional(),
+        variant: z.string().optional(),
+        from: z.string().optional(),
+      },
     },
-    async ({ mc_label }) => {
+    async (args) => {
+      const hasLabel = args.mc_label !== undefined;
+      const hasNumber = args.mc_number !== undefined;
+      if (hasLabel === hasNumber) {
+        return errorResult("provide exactly one of mc_label or mc_number");
+      }
+      if (args.variant !== undefined && !hasNumber) {
+        return errorResult("variant can only be used together with mc_number");
+      }
+
+      const conds = [eq(monitoring.clientId, ctx.clientId)];
+      if (hasNumber) {
+        conds.push(eq(monitoring.mcNumber, args.mc_number!));
+        if (args.variant !== undefined)
+          conds.push(eq(monitoring.mcVariant, args.variant));
+      } else {
+        // A message PMMID (no -l_ suffix) resolves to its number+variant;
+        // anything else is treated as an exact monitoring PMMID.
+        const [msg] = await db
+          .select({ number: messages.number, variant: messages.variant })
+          .from(messages)
+          .where(
+            and(
+              eq(messages.clientId, ctx.clientId),
+              eq(messages.pmmid, args.mc_label!),
+            ),
+          )
+          .limit(1);
+        if (msg) {
+          conds.push(eq(monitoring.mcNumber, msg.number));
+          conds.push(eq(monitoring.mcVariant, msg.variant));
+        } else {
+          conds.push(eq(monitoring.pmmid, args.mc_label!));
+        }
+      }
+      if (args.from !== undefined)
+        conds.push(eq(monitoring.periodFrom, args.from));
+
       const rows = await db
-        .select()
-        .from(reporting)
-        .where(
-          and(
-            eq(reporting.clientId, ctx.clientId),
-            eq(reporting.mcLabel, mc_label),
-          ),
-        );
-      const label = rows.find((r) => r.level === "MC") ?? null;
-      const banners = rows.filter((r) => r.level !== "MC");
-      return jsonResult({ label, banners });
+        .select({
+          pmmid: monitoring.pmmid,
+          size: monitoring.size,
+          audienceKey: monitoring.audienceKey,
+          mcNumber: monitoring.mcNumber,
+          mcVariant: monitoring.mcVariant,
+          impressions: monitoring.impressions,
+          clicks: monitoring.clicks,
+          cost: monitoring.cost,
+          conversions: monitoring.conversions,
+        })
+        .from(monitoring)
+        .where(and(...conds));
+
+      type Agg = { impressions: number; clicks: number; cost: number; conversions: number };
+      const zero = (): Agg => ({ impressions: 0, clicks: 0, cost: 0, conversions: 0 });
+      const bump = (a: Agg, r: (typeof rows)[number]) => {
+        a.impressions += r.impressions;
+        a.clicks += r.clicks;
+        a.cost += r.cost;
+        a.conversions += r.conversions;
+      };
+      const withCtr = (a: Agg) => ({
+        ...a,
+        ctr: a.impressions > 0 ? a.clicks / a.impressions : null,
+      });
+      const bucket = (m: Map<string, Agg>, key: string, r: (typeof rows)[number]) => {
+        const a = m.get(key) ?? zero();
+        bump(a, r);
+        m.set(key, a);
+      };
+
+      const totals = zero();
+      const byVariant = new Map<string, Agg>();
+      const bySize = new Map<string, Agg>();
+      const byAud = new Map<string, Agg>();
+      const audPmmid = new Map<string, string>();
+      for (const r of rows) {
+        bump(totals, r);
+        bucket(byVariant, r.mcVariant, r);
+        bucket(bySize, r.size, r);
+        bucket(byAud, r.audienceKey, r);
+        if (r.pmmid) audPmmid.set(r.audienceKey, r.pmmid);
+      }
+      const bySales = (x: { impressions: number }, y: { impressions: number }) =>
+        y.impressions - x.impressions;
+
+      return jsonResult({
+        mc: rows[0]
+          ? { number: rows[0].mcNumber, variant: args.variant ?? (hasNumber ? null : rows[0].mcVariant) }
+          : null,
+        matched_rows: rows.length,
+        totals: withCtr(totals),
+        by_variant: [...byVariant.entries()]
+          .map(([variant, a]) => ({ variant, ...withCtr(a) }))
+          .sort((x, y) => x.variant.localeCompare(y.variant)),
+        by_size: [...bySize.entries()]
+          .map(([size, a]) => ({ size, ...withCtr(a) }))
+          .sort(bySales),
+        by_audience: [...byAud.entries()]
+          .map(([audience_key, a]) => ({
+            audience_key,
+            pmmid: audPmmid.get(audience_key) ?? null,
+            ...withCtr(a),
+          }))
+          .sort(bySales),
+      });
     },
   );
 }

@@ -3877,4 +3877,9 @@ User kérés: "kis pötty plusz jellel new funkciónak, edit modeban" — konzis
 - [x] **W1.2 dense New MC** — a `EditableCell` add-gomb dense-ben kis kör + SVG-plusz (`cell-add-btn--dense`, `size-4 rounded-full`, Plus `size-2.5`), cell-hoverre; a `+ new` pill marad detailed/compact-ban. (User: "kis pötty kis plusz jellel, svg-vel character helyett" — a lucide `Plus` SVG.)
 - [x] `component-inventory.md` (col-add/row-add/row-add-fill/header-add-btn/cell-add-btn--dense) + `CHANGELOG.md [Unreleased] → Added (W1.3) + Changed (W1.2)`.
 - [x] `tsc` tiszta, **unit 176/176**. **Nincs új teszt:** a create-végpontok már fedve, a változás kliens-bekötés. Vizuális ellenőrzés prodon.
-- [ ] **Deploy + bump:** `6.8.0` → `6.9.0` (minor — W0.1 fix + W1.2 + W1.3 + W1.4 matrix edit-akciók egy release-ben). CHANGELOG `[Unreleased]` kész.
+- [x] **Bump `6.8.0` → `6.9.0`** (minor — W0.1 fix + W1.2 + W1.3 + W1.4 matrix edit-akciók). CHANGELOG `[6.9.0]` lezárva.
+
+## 2026-07-21 — DEPLOYOLVA (6.9.0)
+
+- [x] **DEPLOYOLVA 2026-07-21:** box `3f1d5f4`→`164dfd0` (/var/www/mm6-erste), 1 commit (W0.1 státusz-szín + W1.2 dense New MC + W1.3 add audience/topic MM5-stílus + W1.4 duplicate hover + 6.9.0). Séma-migráció nincs. `npm run build` ok, `pm2 restart mm6-erste` → **Ready 1377ms**. Health: `/` 307, `/mcp` 401. Box `6.9.0`.
+- User teendő: prod vizuális ellenőrzés edit-módban — (1) status dot színek a Design-tab tokenekből (Design → színváltás → matrix követi), (2) dense New MC kis kör +, (3) add audience/topic záró széles/magas cella + gomb, (4) header hover Duplicate.

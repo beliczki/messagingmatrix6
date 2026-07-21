@@ -122,6 +122,34 @@ describe("show_mc_previews (Apps SDK widget) via real MCP protocol", () => {
     await client.close();
   });
 
+  it("keeps the newest reshot copy of a fan-out variant (by updated_at)", async () => {
+    // Same MC number+variant in two audience cells; only one was reshot today.
+    const mk = async (aud: string, pmmid: string) => {
+      const [m] = await db
+        .insert(messages)
+        .values({ clientId: erste.id, number: 999, variant: "d", audience: aud, topic: "top1", versionNo: 1, pmmid })
+        .returning({ id: messages.id });
+      return m.id;
+    };
+    const oldId = await mk("OLD", "P999-old");
+    const newId = await mk("NEW", "P999-new");
+    await db.insert(messagePreviews).values([
+      { clientId: erste.id, messageId: oldId, size: "300x250", storageKey: "old.png", messageVersion: 1, updatedAt: "2026-07-12 08:24:09" },
+      { clientId: erste.id, messageId: newId, size: "300x250", storageKey: "new.png", messageVersion: 1, updatedAt: "2026-07-21 10:06:10" },
+    ]);
+
+    const client = await connect(erste.id);
+    const res = (await client.callTool({
+      name: "show_mc_previews",
+      arguments: { mc_number: 999, variant: "d" },
+    })) as { structuredContent?: { previews: { size: string; url: string }[] } };
+    expect(res.structuredContent!.previews).toHaveLength(1);
+    const url = res.structuredContent!.previews[0]!.url;
+    expect(url).toContain(encodeURIComponent("2026-07-21 10:06:10"));
+    expect(url).not.toContain(encodeURIComponent("2026-07-12 08:24:09"));
+    await client.close();
+  });
+
   it("variants + sizes filter shows each variant once at the requested size", async () => {
     const client = await connect(erste.id);
     const res = (await client.callTool({

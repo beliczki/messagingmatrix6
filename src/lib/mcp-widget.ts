@@ -30,11 +30,14 @@ export const MC_PREVIEWS_WIDGET_HTML = `<!doctype html>
         font-family: system-ui, sans-serif;
         color: var(--mc-fg);
       }
-      /* Match the gallery's 1rem margin so the title lines up with the cards. */
-      .mc-previews__name { font-size: 14px; font-weight: 700; margin: 1rem 1rem 0; color: var(--mc-fg); }
+      /* Spacing comes only from the body padding (below) — NO outer margins on
+         the title/gallery, because a bottom margin here is not counted in the
+         height the Apps SDK reports, leaving dead space under the widget. Both
+         title and gallery therefore align at the body's padding edge. */
+      .mc-previews__name { font-size: 14px; font-weight: 700; margin: 0 0 16px; color: var(--mc-fg); }
       /* Masonry via CSS multi-column: banners of different aspect ratios
          (300x250 / 300x600 / 970x250 / 640x360) pack without row gaps. */
-      .mc-previews__gallery { column-width: 220px; column-gap: 16px; margin: 1rem; }
+      .mc-previews__gallery { column-width: 220px; column-gap: 16px; }
       .mc-previews__figure { break-inside: avoid; margin: 0 0 16px; }
       .mc-previews__cap { margin: 0 0 6px; font-size: 11px; font-weight: 600; color: var(--mc-muted); }
       .mc-previews__link { display: block; cursor: pointer; }

@@ -775,7 +775,9 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
         })
         .from(messagePreviews)
         .where(and(...pconds))
-        .orderBy(messagePreviews.messageId, messagePreviews.size);
+        // Newest first, so the (variant,size) dedup keeps the most recently reshot
+        // fan-out copy rather than an arbitrary (possibly stale) one.
+        .orderBy(desc(messagePreviews.updatedAt), desc(messagePreviews.id));
       if (previews.length === 0) {
         return errorResult(
           "no generated previews for the matched MC" +
@@ -2457,11 +2459,15 @@ function registerPreviewWidget(server: McpServer, ctx: McpContext): void {
         })
         .from(messagePreviews)
         .where(and(...pconds))
-        .orderBy(messagePreviews.messageId, messagePreviews.size, messagePreviews.id);
+        // Newest first, so the (variant,size) dedup below keeps the most recently
+        // reshot copy. Fan-out cells have separate preview rows regenerated at
+        // different times — picking the first-by-id could keep a stale copy while
+        // a fresher one (higher updated_at) exists.
+        .orderBy(desc(messagePreviews.updatedAt), desc(messagePreviews.id));
 
       // Dedup by (variant, size): the same variant fanned out across audience
-      // cells renders the identical creative, so collapse it — but keep DISTINCT
-      // variants (b/c/d are different creatives) each showing.
+      // cells renders the identical creative, so collapse it (keeping the newest
+      // per above) — but keep DISTINCT variants (b/c/d are different creatives).
       const seen = new Set<string>();
       const previews: { label: string; size: string; url: string; _v: string }[] = [];
       for (const p of previewRows) {

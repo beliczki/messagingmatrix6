@@ -76,6 +76,10 @@ import {
 } from "@/db/defaults";
 import { parseFilename, type ParseRules } from "@/lib/parse-filename";
 import { extFromFilename, readFileBytes } from "@/lib/storage";
+import {
+  MC_PREVIEWS_TEMPLATE_URI,
+  MC_PREVIEWS_WIDGET_HTML,
+} from "@/lib/mcp-widget";
 import { writeAudit } from "@/lib/audit";
 
 export type McpContext = {
@@ -2297,13 +2301,137 @@ class BatchError extends Error {
   }
 }
 
+// OpenAI Apps SDK render widget: a resource holding the gallery HTML + a tool
+// (show_mc_previews) whose structuredContent the widget renders inline. ChatGPT /
+// MCP Inspector interpret the _meta.ui / openai/* fields; other clients just get
+// the structuredContent + text.
+function registerPreviewWidget(server: McpServer, ctx: McpContext): void {
+  const origin = ctx.origin ?? "";
+  server.registerResource(
+    "mc-preview-widget",
+    MC_PREVIEWS_TEMPLATE_URI,
+    {
+      title: "MC previews gallery",
+      description:
+        "Inline gallery that renders MC preview images from show_mc_previews output.",
+    },
+    async () => ({
+      contents: [
+        {
+          uri: MC_PREVIEWS_TEMPLATE_URI,
+          mimeType: "text/html;profile=mcp-app",
+          text: MC_PREVIEWS_WIDGET_HTML,
+          _meta: {
+            ui: {
+              prefersBorder: true,
+              // The widget loads preview PNGs from this deploy's own origin.
+              csp: { resourceDomains: origin ? [origin] : [] },
+            },
+          },
+        },
+      ],
+    }),
+  );
+
+  server.registerTool(
+    "show_mc_previews",
+    {
+      title: "Show MC previews",
+      description:
+        "Render an MC's preview screenshots as an inline image GALLERY (OpenAI Apps SDK widget) in ChatGPT / MCP Inspector — a visual card, distinct from get_mc_preview_files (which hands raw image bytes to the model for analysis). Identify the MC by EXACTLY ONE of mc_label (PMMID) or mc_number (optionally narrowed by variant and/or audience_key). Returns structuredContent { name, previews:[{size,url}] } with absolute, publicly-fetchable preview URLs; clients without widget support still get that data plus a text summary.",
+      inputSchema: {
+        mc_label: z.string().optional(),
+        mc_number: z.number().int().optional(),
+        variant: z.string().optional(),
+        audience_key: z.string().optional(),
+      },
+      outputSchema: {
+        name: z.string(),
+        previews: z.array(z.object({ size: z.string(), url: z.string() })),
+      },
+      annotations: { readOnlyHint: true },
+      _meta: {
+        ui: { resourceUri: MC_PREVIEWS_TEMPLATE_URI },
+        "openai/outputTemplate": MC_PREVIEWS_TEMPLATE_URI,
+        "openai/toolInvocation/invoking": "Loading previews…",
+        "openai/toolInvocation/invoked": "Previews loaded.",
+      },
+    },
+    async (args) => {
+      const hasLabel = args.mc_label !== undefined;
+      const hasNumber = args.mc_number !== undefined;
+      if (hasLabel === hasNumber) {
+        return errorResult("provide exactly one of mc_label or mc_number");
+      }
+      if (args.variant !== undefined && !hasNumber) {
+        return errorResult("variant can only be used together with mc_number");
+      }
+      const conds = [
+        eq(messages.clientId, ctx.clientId),
+        isNull(messages.archivedAt),
+      ];
+      if (hasLabel) conds.push(eq(messages.pmmid, args.mc_label!));
+      if (hasNumber) conds.push(eq(messages.number, args.mc_number!));
+      if (args.variant !== undefined)
+        conds.push(eq(messages.variant, args.variant));
+      if (args.audience_key !== undefined)
+        conds.push(eq(messages.audience, args.audience_key));
+      const mcs = await db
+        .select({ id: messages.id, pmmid: messages.pmmid, name: messages.name })
+        .from(messages)
+        .where(and(...conds))
+        .orderBy(messages.number, messages.variant);
+      if (mcs.length === 0) return errorResult("no MC matched the query");
+
+      const previewRows = await db
+        .select({
+          id: messagePreviews.id,
+          size: messagePreviews.size,
+        })
+        .from(messagePreviews)
+        .where(
+          and(
+            eq(messagePreviews.clientId, ctx.clientId),
+            inArray(
+              messagePreviews.messageId,
+              mcs.map((m) => m.id),
+            ),
+          ),
+        )
+        .orderBy(messagePreviews.size);
+      const previews = previewRows.map((p) => ({
+        size: p.size,
+        url: `${origin}/api/previews/${p.id}`,
+      }));
+      const first = mcs[0]!;
+      const label = first.pmmid ?? `MC${args.mc_number ?? ""}`;
+      const name = first.name ? `${label} — ${first.name}` : label;
+
+      return {
+        structuredContent: { name, previews },
+        content: [
+          {
+            type: "text" as const,
+            text: previews.length
+              ? `${previews.length} preview(s) for ${name}: ${previews
+                  .map((p) => p.size)
+                  .join(", ")}.`
+              : `No generated previews for ${name} yet — run preview_generate first.`,
+          },
+        ],
+      };
+    },
+  );
+}
+
 export function buildMcpServer(ctx: McpContext): McpServer {
   const server = new McpServer(
     { name: "messagingmatrix", version: "6.0.0-pre" },
-    { capabilities: { tools: {} } },
+    { capabilities: { tools: {}, resources: {} } },
   );
   registerReadTools(server, ctx);
   registerMetaTools(server, ctx);
+  registerPreviewWidget(server, ctx);
   // Read-scoped tokens never see the write tools: unregistered tools are
   // invisible to tools/list and rejected at the protocol layer.
   if (ctx.scope === "full") {

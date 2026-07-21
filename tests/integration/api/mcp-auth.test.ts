@@ -31,6 +31,7 @@ const READ_TOOLS = [
   "mc_get",
   "get_mc_preview_files",
   "get_media_file",
+  "show_mc_previews",
   "list_templates",
   "list_products",
   "matrix_status",

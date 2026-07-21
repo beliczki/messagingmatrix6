@@ -3735,3 +3735,13 @@ Kiváltó: user ChatGPT-ben — nem tudott 300x250-re szűrni, sem b/c/d variant
 
 - [x] **DEPLOYOLVA 2026-07-21:** box `7eefeaa`→`65f5aeb` (/var/www/mm6-erste), 2 commit (show_mc_previews sizes/variants + (variant,size) dedup + widget label + 6.7.0 release). Séma-migráció nincs. `npm run build` ok, `pm2 restart mm6-erste` → **Ready 1332ms**. Health: /mcp 401. Box `6.7.0`.
 - User teendő: ÚJ ChatGPT-beszélgetés + friss show_mc_previews hívás (pl. {mc_number:244, variants:["b","c","d"], sizes:["300x250"]}) → helyes "Igényeld" képek, padding, masonry. Ha friss beszélgetésben is stale a widget-template → URI-verziózás a köv. lépés.
+
+## 2026-07-21 — show_mc_previews polish (default size, title, margin, kattintható)
+
+- [x] `sizes` **default = ["300x250"]** (explicit méret vagy ["all"] a többihez).
+- [x] Cím: **nincs mdash**. Egy variant → `MC244d · <név>`; több distinct variant → labelek vesszővel (`MC244b, MC244c, MC244d`), mert a nevük eltér.
+- [x] Widget: `.mc-previews__gallery` **1rem margin**; a képek **kattinthatók** (`<a target="_blank">`) → teljes méret új tabon.
+- [x] Tesztek: default-300x250 teszt, sizes:["all"] a korábbi tesztekben. `tsc` tiszta, **integráció 312/312**.
+- [x] `CHANGELOG.md` `[Unreleased] → Changed`.
+- **Preview image "régi" (2459, 970x250) — NEM cache-bug:** a cache-bust működik (URL friss `?v=`), de a tárolt preview bájtjai régiek → az adott méret nem lett force-újragenerálva. LIVE render helyes (`igenyeldonline.svg`). Fix = **force regen MINDEN méretre** (preview_generate force:true, vagy `npm run gen:previews -- --force` a boxon). Stale-detektálás nem fogja el template/copy-változásnál (message.version nem bumpol).
+- [ ] **Nem deployolva** → **bump 6.7.0 → 6.7.1 (patch)**. Deploy külön.

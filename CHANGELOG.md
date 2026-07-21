@@ -5,6 +5,16 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.7.1] — 2026-07-21
+
+### Changed
+- **`show_mc_previews` polish.** `sizes` now DEFAULTS to `["300x250"]` (pass other
+  sizes explicitly, or `["all"]` for every size). Title no longer uses an em-dash:
+  a single variant shows `MC244d · <name>`, multiple distinct variants list their
+  labels (`MC244b, MC244c, MC244d`) since their names differ. Widget: 1rem gallery
+  margin, and each preview is now a link that opens the full-size image in a new
+  tab.
+
 ## [6.7.0] — 2026-07-21
 
 ### Added

@@ -44,6 +44,17 @@ beforeEach(async () => {
     { clientId: erste.id, messageId: msgId, size: "300x250", storageKey: "k1", messageVersion: 1 },
     { clientId: erste.id, messageId: msgId, size: "970x250", storageKey: "k2", messageVersion: 1 },
   ]);
+
+  // Same MC number+variant fanned out to a second audience cell (a copy),
+  // with its own preview rows at the same sizes — must be deduped, not doubled.
+  const [m2] = await db
+    .insert(messages)
+    .values({ clientId: erste.id, number: 244, variant: "d", audience: "SZK_wlfin", topic: "top1", versionNo: 1, pmmid: "PMM-244d-szk", name: "Rózsaszínhaj zene" })
+    .returning({ id: messages.id });
+  await db.insert(messagePreviews).values([
+    { clientId: erste.id, messageId: m2.id, size: "300x250", storageKey: "k3", messageVersion: 1 },
+    { clientId: erste.id, messageId: m2.id, size: "970x250", storageKey: "k4", messageVersion: 1 },
+  ]);
 });
 
 afterEach(async () => {
@@ -74,6 +85,18 @@ describe("show_mc_previews (Apps SDK widget) via real MCP protocol", () => {
     ]);
     // text fallback for non-widget clients
     expect(res.content[0]!.text).toContain("preview");
+    await client.close();
+  });
+
+  it("dedupes to one preview per size across audience copies (no 6x repeat)", async () => {
+    const client = await connect(erste.id);
+    // no audience_key → matches both cells of MC 244 d, each with the same sizes
+    const res = (await client.callTool({
+      name: "show_mc_previews",
+      arguments: { mc_number: 244, variant: "d" },
+    })) as { structuredContent?: { previews: { size: string }[] } };
+    const sizes = res.structuredContent!.previews.map((p) => p.size).sort();
+    expect(sizes).toEqual(["300x250", "970x250"]); // 2, not 4
     await client.close();
   });
 

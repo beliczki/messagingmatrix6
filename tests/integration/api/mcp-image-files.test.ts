@@ -102,6 +102,22 @@ describe("get_mc_preview_files via MCP", () => {
     expect(texts.some((t) => t.includes("300x250"))).toBe(false);
   });
 
+  it("dedupes preview sizes across audience copies (one image per size)", async () => {
+    const key = await storePng(erste.id);
+    const [m2] = await db
+      .insert(messages)
+      .values({ clientId: erste.id, number: 244, variant: "d", audience: "SZK_x", topic: "top1", versionNo: 1, pmmid: "PMM-244d-2" })
+      .returning({ id: messages.id });
+    await db.insert(messagePreviews).values([
+      { clientId: erste.id, messageId: msgId, size: "300x250", storageKey: key, messageVersion: 1 },
+      { clientId: erste.id, messageId: m2.id, size: "300x250", storageKey: key, messageVersion: 1 },
+    ]);
+
+    const { content } = await call(erste.id, "get_mc_preview_files", { mc_number: 244, variant: "d" });
+    const images = content.filter((b) => b.type === "image");
+    expect(images).toHaveLength(1); // one 300x250, not two
+  });
+
   it("no generated previews → error", async () => {
     const res = await call(erste.id, "get_mc_preview_files", { mc_label: "PMM-244d" });
     expect(res.isError).toBe(true);

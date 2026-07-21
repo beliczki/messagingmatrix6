@@ -24,7 +24,7 @@ import { writeFile as writeStorageFile, deleteStorageFile } from "@/lib/storage"
 const PRELOADER_TIMEOUT_MS = 15_000;
 
 export type ShotResult = { messageId: number; size: string } & (
-  | { ok: true; previewId: number }
+  | { ok: true; previewId: number; storageKey: string }
   | { ok: false; error: string }
 );
 
@@ -133,7 +133,7 @@ async function shootRun(
             .returning();
           previewId = row!.id;
         }
-        const r: ShotResult = { messageId: item.message.id, size: item.size, ok: true, previewId };
+        const r: ShotResult = { messageId: item.message.id, size: item.size, ok: true, previewId, storageKey: stored.storagePath };
         results.push(r);
         opts.onShot?.(r);
       } catch (e) {

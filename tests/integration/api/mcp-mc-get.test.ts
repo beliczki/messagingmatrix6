@@ -84,7 +84,9 @@ describe("mc_get via MCP", () => {
     expect(Array.isArray(json)).toBe(true);
     expect(json).toHaveLength(1);
     expect(json[0].pmmid).toBe("PMM-1a");
-    expect(json[0].preview_urls).toEqual({ "300x250": `/api/previews/${p!.id}` });
+    expect(json[0].preview_urls["300x250"]).toMatch(
+      new RegExp(`^/api/previews/${p!.id}\\?v=[0-9a-f]{10}$`),
+    );
   });
 
   it("mc_number returns every variant/cell of that number, ordered by number,variant", async () => {

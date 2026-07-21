@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, desc, eq, inArray, max, ne, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { z } from "zod";
@@ -231,6 +232,16 @@ function jsonResult(value: unknown) {
   };
 }
 
+// Preview URLs use a STABLE row id but the bytes change on every regenerate
+// (the shooter rewrites storage_key + deletes the old object). Without a
+// cache-buster the same URL keeps serving the pre-regen image from the browser /
+// CDN / ChatGPT image proxy cache. storage_key is unique per shot, so a short
+// hash of it flips the URL exactly when the image changes.
+function previewUrl(origin: string, id: number, storageKey: string): string {
+  const v = createHash("sha1").update(storageKey).digest("hex").slice(0, 10);
+  return `${origin}/api/previews/${id}?v=${v}`;
+}
+
 // Guards for the image-content tools: keep a single tool result from ballooning
 // (base64 inflates ~33%). Individual files over the cap, or more than N previews,
 // are skipped with a note rather than returned.
@@ -390,6 +401,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
               id: messagePreviews.id,
               messageId: messagePreviews.messageId,
               size: messagePreviews.size,
+              storageKey: messagePreviews.storageKey,
             })
             .from(messagePreviews)
             .where(
@@ -405,7 +417,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
       const urlsByMessage = new Map<number, Record<string, string>>();
       for (const p of previewRows) {
         const urls = urlsByMessage.get(p.messageId) ?? {};
-        urls[p.size] = `${ctx.origin ?? ""}/api/previews/${p.id}`;
+        urls[p.size] = previewUrl(ctx.origin ?? "", p.id, p.storageKey);
         urlsByMessage.set(p.messageId, urls);
       }
       return jsonResult(
@@ -679,6 +691,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
               id: messagePreviews.id,
               messageId: messagePreviews.messageId,
               size: messagePreviews.size,
+              storageKey: messagePreviews.storageKey,
             })
             .from(messagePreviews)
             .where(
@@ -694,7 +707,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
       const urlsByMessage = new Map<number, Record<string, string>>();
       for (const p of previewRows) {
         const urls = urlsByMessage.get(p.messageId) ?? {};
-        urls[p.size] = `${ctx.origin ?? ""}/api/previews/${p.id}`;
+        urls[p.size] = previewUrl(ctx.origin ?? "", p.id, p.storageKey);
         urlsByMessage.set(p.messageId, urls);
       }
       return jsonResult(
@@ -768,17 +781,26 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
         );
       }
 
+      // The same MC number+variant can live in several audience cells (card
+      // fan-out is a copy) rendering the identical creative — collapse to one
+      // preview per size so vision analysis isn't handed 6 copies of each size.
+      const bySize = new Map<string, (typeof previews)[number]>();
+      for (const p of previews) if (!bySize.has(p.size)) bySize.set(p.size, p);
+      const uniquePreviews = [...bySize.values()].sort((a, b) =>
+        a.size.localeCompare(b.size),
+      );
+
       const pmmidById = new Map(mcs.map((m) => [m.id, m.pmmid]));
       const content: Array<
         | { type: "text"; text: string }
         | { type: "image"; data: string; mimeType: string }
       > = [];
       let count = 0;
-      for (const p of previews) {
+      for (const p of uniquePreviews) {
         if (count >= MAX_PREVIEW_IMAGES) {
           content.push({
             type: "text",
-            text: `… ${previews.length - count} more preview(s) omitted (cap ${MAX_PREVIEW_IMAGES}) — narrow with sizes=[...] or a specific variant/audience_key.`,
+            text: `… ${uniquePreviews.length - count} more preview(s) omitted (cap ${MAX_PREVIEW_IMAGES}) — narrow with sizes=[...] or a specific variant/audience_key.`,
           });
           break;
         }
@@ -1523,7 +1545,7 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
         for (const s of shotsByMessage.get(msg.id) ?? []) {
           shotSizes.add(s.size);
           if (s.ok) {
-            generated[s.size] = `${ctx.origin ?? ""}/api/previews/${s.previewId}`;
+            generated[s.size] = previewUrl(ctx.origin ?? "", s.previewId, s.storageKey);
           } else {
             errors[s.size] = s.error;
           }
@@ -2387,6 +2409,7 @@ function registerPreviewWidget(server: McpServer, ctx: McpContext): void {
         .select({
           id: messagePreviews.id,
           size: messagePreviews.size,
+          storageKey: messagePreviews.storageKey,
         })
         .from(messagePreviews)
         .where(
@@ -2398,11 +2421,18 @@ function registerPreviewWidget(server: McpServer, ctx: McpContext): void {
             ),
           ),
         )
-        .orderBy(messagePreviews.size);
-      const previews = previewRows.map((p) => ({
-        size: p.size,
-        url: `${origin}/api/previews/${p.id}`,
-      }));
+        .orderBy(messagePreviews.size, messagePreviews.id);
+      // The same MC number+variant can live in several audience cells (card
+      // fan-out is a copy) — every copy renders the identical creative, so
+      // collapse to ONE preview per size instead of repeating each size once per
+      // cell (which showed e.g. 300x250 six times).
+      const seenSizes = new Set<string>();
+      const previews: { size: string; url: string }[] = [];
+      for (const p of previewRows) {
+        if (seenSizes.has(p.size)) continue;
+        seenSizes.add(p.size);
+        previews.push({ size: p.size, url: previewUrl(origin, p.id, p.storageKey) });
+      }
       const first = mcs[0]!;
       const label = first.pmmid ?? `MC${args.mc_number ?? ""}`;
       const name = first.name ? `${label} — ${first.name}` : label;

@@ -14,17 +14,30 @@ export const MC_PREVIEWS_WIDGET_HTML = `<!doctype html>
   <head>
     <meta charset="utf-8" />
     <style>
-      body { margin: 0; font-family: system-ui, sans-serif; color: #0f172a; }
-      .mc-previews__name { font-size: 14px; font-weight: 700; margin: 0 0 12px; }
-      .mc-previews__gallery {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-        gap: 16px;
+      /* Theme-aware: the Apps SDK host sets the iframe color-scheme to match its
+         light/dark theme, so prefers-color-scheme tracks the ChatGPT theme. */
+      :root { color-scheme: light dark; --mc-fg: #0f172a; --mc-muted: #64748b; }
+      @media (prefers-color-scheme: dark) {
+        :root { --mc-fg: #f1f5f9; --mc-muted: #94a3b8; }
       }
-      .mc-previews__figure { margin: 0; }
-      .mc-previews__cap { margin: 0 0 6px; font-size: 11px; font-weight: 600; color: #64748b; }
-      .mc-previews__img { display: block; max-width: 100%; height: auto; border-radius: 6px; }
-      .mc-previews__empty { font-size: 13px; color: #64748b; }
+      /* No reserved scrollbar gutter: the widget grows to its content height,
+         so there is nothing to scroll and no band is kept for a scrollbar. */
+      html { scrollbar-gutter: auto; }
+      body {
+        margin: 0;
+        padding: 2rem;
+        overflow-x: hidden;
+        font-family: system-ui, sans-serif;
+        color: var(--mc-fg);
+      }
+      .mc-previews__name { font-size: 14px; font-weight: 700; margin: 0 0 16px; color: var(--mc-fg); }
+      /* Masonry via CSS multi-column: banners of different aspect ratios
+         (300x250 / 300x600 / 970x250 / 640x360) pack without row gaps. */
+      .mc-previews__gallery { column-width: 220px; column-gap: 16px; }
+      .mc-previews__figure { break-inside: avoid; margin: 0 0 16px; }
+      .mc-previews__cap { margin: 0 0 6px; font-size: 11px; font-weight: 600; color: var(--mc-muted); }
+      .mc-previews__img { display: block; width: 100%; height: auto; border-radius: 6px; }
+      .mc-previews__empty { font-size: 13px; color: var(--mc-muted); }
     </style>
   </head>
   <body>

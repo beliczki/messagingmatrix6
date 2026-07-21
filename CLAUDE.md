@@ -9,27 +9,23 @@ Project-level guidance for Claude Code working in this repo. The user's global r
 
 ## Versioning
 
-Semver (`major.minor.patch`), tracked in the single `package.json` at repo root. Currently `6.0.0-pre` (pre-launch). Once the pre-active-use punch list at the bottom of `tasks/todo.md` is cleared and the system enters real daily use, bump to `6.0.0` and switch to regular semver from there.
+Semver (`major.minor.patch`), tracked in the single `package.json` at repo root. **Graduated to `6.0.0` on 2026-07-21; currently `6.1.0`.** Everything needed for base daily use is in place — the system is live. The former "pre-active-use punch list" at the bottom of `tasks/todo.md` is **no longer a launch blocker**; it is now the **top-priority backlog** (platform expansion — Meta/DV360/Direct Display, reporting ingest, creative↔cell matching, smoke tests). Regular post-`6.0.0` semver is the live rule from here.
 
 **After finishing any shipped work — a completed plan, a bug fix, a new route/page/MCP tool, a schema migration, a dependency upgrade — remind the user to bump the version before wrapping up.** Don't bump silently. Surface a suggestion in the form:
 
-> Suggested bump: `6.0.0` → `6.0.1` (patch). Reason: <one sentence>.
+> Suggested bump: `6.1.0` → `6.1.1` (patch). Reason: <one sentence>.
 
 ### Bump heuristic
 
-Pre-`6.0.0` (current state, `6.0.0-pre`):
-- Don't bump on individual commits — we're shipping toward the `6.0.0` graduation event. Track work in `tasks/todo.md` instead.
-- The next bump is `6.0.0-pre` → `6.0.0`, decided by the user when the pre-active-use punch list is fully checked.
-
-Post-`6.0.0` (regular semver):
-- **patch** (`6.0.0` → `6.0.1`): bug fix, doc-only change, internal refactor with no behaviour change, copy or CSS-only tweak, env-var rename with backwards-compatible fallback.
-- **minor** (`6.0.0` → `6.1.0`): new feature or page, new MCP tool, new HTTP route, new DB column / index / table, new dimension-grid column, schema migration, new pattern-token, or any user-visible behaviour change. Breaking changes still allowed on minor bumps until the API stabilizes.
+Regular semver is live (we are post-`6.0.0`). Bump on finished work, per category:
+- **patch** (e.g. `6.1.0` → `6.1.1`): bug fix, doc-only change, internal refactor with no behaviour change, copy or CSS-only tweak, env-var rename with backwards-compatible fallback.
+- **minor** (e.g. `6.1.0` → `6.2.0`): new feature or page, new MCP tool, new HTTP route, new DB column / index / table, new dimension-grid column, schema migration, new pattern-token, or any user-visible behaviour change. Breaking changes still allowed on minor bumps until the API stabilizes.
 - **major** (`6.x.y` → `7.0.0`): incompatible schema/API break that needs explicit migration steps. **User decides — never auto-suggest a major bump.**
 
 If the finished work is ambiguous (e.g. touches multiple categories), propose the higher bump and explain both options in one line — let the user decide.
 
 ### Changelog
-- Log every bump in `CHANGELOG.md` at the repo root (create the file on the first bump if it doesn't exist yet, with a "Keep a Changelog"-style structure: `## [6.0.1] — 2026-MM-DD` then bullets).
+- Log every bump in `CHANGELOG.md` at the repo root (already exists, "Keep a Changelog"-style: prepend a `## [6.1.1] — 2026-MM-DD` section then bullets, newest on top under `[Unreleased]`).
 - One line per shipped change, grouped under `Added` / `Changed` / `Fixed` / `Removed`.
 - The changelog is the user-facing record; commit messages are the developer-facing record. Don't duplicate — summarize.
 

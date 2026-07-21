@@ -1441,7 +1441,9 @@ The "Still uncommitted in working tree" list at the EOD checkpoint (themes #1–
 
 ---
 
-## 🚧 BLOCKING — pre-active-use punch list (added 2026-05-03)
+## ⭐ TOP-PRIORITY BACKLOG — former pre-active-use punch list (added 2026-05-03; reclassified 2026-07-21)
+
+**Status change (2026-07-21):** we graduated to `6.0.0`/`6.1.0`. Everything needed for base daily use is in place, so these items are **no longer launch blockers** — they are the **top-priority backlog** (platform expansion, reporting ingest, creative↔cell matching, smoke tests). Still commit-sized and still user-green-lit per item; just not gating the release. Original "must-be-handled before real use" framing kept below for history.
 
 Items the user flagged as **must-be-handled before v6 goes into real day-to-day use**. Each item is now expanded against the actual schema + code surface. Steps are commit-sized; **do not start work** until the user picks one and green-lights it.
 
@@ -3571,3 +3573,41 @@ egyezik a tervezett unique index follow-uppal.
 - [ ] **User teendő:** MC321 family (a/b/c, hiteltinder Q2) felvétele a matrixba explicit számfoglalással (MCP mc_create nem tud explicit számot) → utána a maradék unmatched gyakorlatilag csak az m_0 szemét
 - [x] **DEPLOYOLVA 2026-07-16:** box 605aaba→3d0aa0c (/var/www/mm6-erste), db:migrate ok (match_level oszlop élesben ellenőrizve), build ok, pm2 restart, Ready 1.3s; /monitoring 307, /api/monitoring auth nélkül 401 — healthy
 - [ ] **User teendő:** a júniusi és májusi XLSX újratöltése a Monitoring UI-n, hogy a match_level (family linkek) a meglévő sorokra is feltöltődjön
+
+## 2026-07-21 — MCP: Creative Library tools (list + write)
+
+Trigger: user testing MCP noticed only Messaging Cards + Assets listable; Creative Library returned nothing.
+Root cause (not a bug): the `creatives` table has a full entity layer (`src/lib/entities/creatives.ts`) and REST route (`/api/creatives`), but **no MCP tool was ever registered** for it. `list_assets`/`list_mc` exist; creatives had zero MCP surface.
+
+Scope chosen by user: **list + write.**
+
+- [x] `list_creatives` reader in `registerReadTools` — mirrors `list_assets` (LIKE file_name/visual_keyword, exact brand/product/type, exact mc_number, include_archived, limit≤1000, order by id). Returns id+version for optimistic-lock writes.
+- [x] `registerCreativeWriteTools` (gated by scope==='full'): `creative_create` / `creative_update` / `creative_remove` (archive) / `creative_restore` — keyed by **id**+version (creatives have no business key like audience.key / mc pmmid). Uses existing entity fns + `pickWritable`; audit via `writeAudit(entityType:'creatives')`; rate-limited like other writes.
+- [x] Settings MCP tab: added "Creative library" group to `GROUP_ORDER` in `McpTab.tsx` so the 4 CRUD tools group together (tool cards auto-render from `/api/mcp/tools`; `list_creatives` auto-lands in List & read).
+- [x] Tests: new `tests/integration/api/mcp-creatives.test.ts` (7: list filters, tenant isolation, archived visibility, CRUD round-trip, version_conflict, read-scope gating). Updated `mcp-auth.test.ts` READ_TOOLS (+list_creatives) and read-scope negative check (+creative_create).
+- [x] `tsc` clean; full integration suite **281/281 green** (ran against throwaway local test PG on :55432, removed after).
+- [ ] **Not deployed** — code only. Deploy = migrate n/a (no schema change) + build + pm2 restart on box when ready.
+
+Suggested version bump: `6.0.0-pre` unchanged (pre-launch; tracked here per CLAUDE.md — new MCP tools would be a **minor** post-6.0.0).
+
+## 2026-07-21 — VERZIÓTERV rögzítés (user kérésére: "jegyezd fel")
+
+**Nincs bump most.** A `package.json` marad `6.0.0-pre`.
+
+Indok: a pre-active-use punch list (1444. sortól) **teljesen kipipálatlan** — az 1.1-től 9.5-ig minden item `[ ]`, köztük a creative-library→matrix matching (3.x/W2.x). A `CLAUDE.md` szerint a `6.0.0` graduation feltétele, hogy ez a lista teljesen kész legyen. Az feltétel jelenleg NEM teljesül.
+
+**Rögzített terv graduationkor:**
+1. `6.0.0-pre` → `6.0.0` = launch baseline (a punch list kipipálása után, user dönt).
+2. Közvetlenül utána `6.0.0` → **`6.1.0`** (minor) = **MCP Creative Library toolok** (`list_creatives` + `creative_create/update/remove/restore`, ld. a 2026-07-21-i MCP checkpointot fent). Új MCP toolok = minor a post-6.0.0 heurisztika szerint.
+3. Ugyanígy queue-ban a korábban "post-6.0.0 minor"-nak jelölt, még nem bumpolt munkák (pl. `list_assets` tool — 2295. sor, monitoring nézet — 2401. sor). Graduationkor ezek összefolynak a `6.0.0` baseline-ba; a `6.1.0` az első ELKÜLÖNÍTETT minor a launch után.
+
+**User override lehetőség:** a graduation explicit user-döntés a `CLAUDE.md` szerint — ha a user most azonnal flippelni akar (punch list ellenére), az megtehető, de az a projekt saját szabályával megy szembe.
+
+## 2026-07-21 — BUMP VÉGREHAJTVA (user override)
+
+A fenti verzióterv-note "Nincs bump most" állítását a user **felülírta** (AskUserQuestion → "Flippelj most"). Végrehajtva a punch list kipipálatlansága ellenére — a graduation explicit user-döntés a `CLAUDE.md` szerint.
+
+- [x] `package.json`: `6.0.0-pre` → **`6.1.0`**.
+- [x] `CHANGELOG.md`: `[Unreleased]` promotálva `[6.0.0] — 2026-07-21`-re (launch baseline: SQLite→PG migráció + entity-route factory + AsyncLocalStorage tx, stb.). Új `[6.1.0] — 2026-07-21` szekció a Creative Library MCP toolokra. Intro-ból törölve a "pre-launch at 6.0.0-pre" szöveg. Üres `[Unreleased]` marad a tetején.
+- [x] **KÉSZ (2026-07-21):** `CLAUDE.md` verziózás-szekció átírva post-graduationre — intro `6.1.0`/"base daily use in place", bump-heurisztikából kivéve a "Pre-6.0.0 (current state)" blokk, post-6.0.0 semver az egyetlen élő szabály. A punch list header `tasks/todo.md`-ben "🚧 BLOCKING" → "⭐ TOP-PRIORITY BACKLOG" (nem launch-blokkoló, top-prio backlog).
+- [ ] **Nem deployolva** — csak lokális verzió/changelog + a 6.1.0 MCP kód. Deploy a box-on külön lépés.

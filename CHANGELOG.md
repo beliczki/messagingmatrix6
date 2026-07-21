@@ -1,11 +1,27 @@
 # Changelog
 
 All notable changes to MessagingMatrix v6 are recorded here. Format follows
-[Keep a Changelog](https://keepachangelog.com/). The project is pre-launch at
-`6.0.0-pre`; the first numbered release will be `6.0.0`, at which point the
-`[Unreleased]` section below is promoted.
+[Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
+
+## [6.1.0] — 2026-07-21
+
+### Added
+- **MCP: Creative Library tools.** `list_creatives` (read; case-insensitive
+  `file_name_contains` / `visual_keyword_contains` LIKE search, exact
+  `brand`/`product`/`type`/`mc_number` filters, `include_archived`, `limit` ≤ 1000;
+  each row returns `id` + `version`) plus the write set `creative_create` /
+  `creative_update` / `creative_remove` (archive) / `creative_restore` (scope `full`
+  only, `id` + `version` optimistic lock, rate-limited, audited). Closes the gap where
+  the `creatives` table had a full entity layer and REST route but no MCP surface —
+  unlike assets (`list_assets`) and messaging cards (`list_mc`).
+- Settings → MCP tab: a "Creative library" group in the tool listing so the four CRUD
+  tools render together (`list_creatives` lands under "List & read").
+
+## [6.0.0] — 2026-07-21
+
+_First numbered release — graduation from `6.0.0-pre`._
 
 ### Changed
 - **Database: migrated from SQLite to a self-hosted Supabase Postgres on Hetzner.**

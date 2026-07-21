@@ -3785,3 +3785,8 @@ Kiváltó: user clue — MC244d 300x250-hez KÉT preview (fan-out cellák): 2457
 Kiváltó: user — a 6.7.3 margin-eltávolítás után eltűnt a térköz a kártyák (mc-previews__link) és a title körül. Konfliktus: margin = szép térköz DE kilóg az Apps SDK height-méréséből.
 - [x] `body { display: flow-root }` — BFC, ami BESZÁMÍTJA a gyerek-margókat a magasságba (a bottom margin eddig "kiszökött" a body-ból → dead space). Így visszaadható a térköz ÉS a height is jó. body padding 1.5rem keret, title 1rem alsó, kártyák közt 1rem, column-gap 1rem. CSS-only, logikát/teszteket nem érint.
 - [ ] Deploy 6.7.3 → 6.7.4.
+
+## 2026-07-21 — DEPLOYOLVA (6.7.4)
+
+- [x] **DEPLOYOLVA 2026-07-21:** box `f6eda43`→`e47573c`, widget flow-root (térköz+height együtt) + 6.7.4. Ready 1496ms, /mcp 401. Regen 3283/5968.
+- User teendő: FRISS ChatGPT-üzenet a widget új HTML-jéhez. Ha a flow-root nem oldaná meg a ChatGPT height-mérését (nem tudom náluk tesztelni), szólj — akkor a padding-only varianthoz nyúlok.

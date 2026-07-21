@@ -5,6 +5,15 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.7.4] — 2026-07-21
+
+### Fixed
+- **`show_mc_previews` widget spacing + height, together.** `display: flow-root`
+  on the body makes it a block-formatting context, so inner margins are contained
+  and counted in the height the Apps SDK reports (a bottom margin previously
+  escaped the body, causing dead space). Restored the 1rem spacing around the
+  title and between cards, with a 1.5rem body-padding frame.
+
 ## [6.7.3] — 2026-07-21
 
 ### Fixed

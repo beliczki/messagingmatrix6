@@ -23,22 +23,24 @@ export const MC_PREVIEWS_WIDGET_HTML = `<!doctype html>
       /* No reserved scrollbar gutter: the widget grows to its content height,
          so there is nothing to scroll and no band is kept for a scrollbar. */
       html { scrollbar-gutter: auto; }
+      /* display:flow-root makes the body a block-formatting context so child
+         margins are CONTAINED and counted in its height. Without it a child's
+         bottom margin escapes the body and the Apps SDK under-/over-reports the
+         height, leaving dead space. With it we can use padding for the frame AND
+         margins for inner spacing, and the reported height stays correct. */
       body {
         margin: 0;
-        padding: 2rem;
+        padding: 1.5rem;
         overflow-x: hidden;
+        display: flow-root;
         font-family: system-ui, sans-serif;
         color: var(--mc-fg);
       }
-      /* Spacing comes only from the body padding (below) — NO outer margins on
-         the title/gallery, because a bottom margin here is not counted in the
-         height the Apps SDK reports, leaving dead space under the widget. Both
-         title and gallery therefore align at the body's padding edge. */
-      .mc-previews__name { font-size: 14px; font-weight: 700; margin: 0 0 16px; color: var(--mc-fg); }
+      .mc-previews__name { font-size: 14px; font-weight: 700; margin: 0 0 1rem; color: var(--mc-fg); }
       /* Masonry via CSS multi-column: banners of different aspect ratios
          (300x250 / 300x600 / 970x250 / 640x360) pack without row gaps. */
-      .mc-previews__gallery { column-width: 220px; column-gap: 16px; }
-      .mc-previews__figure { break-inside: avoid; margin: 0 0 16px; }
+      .mc-previews__gallery { column-width: 220px; column-gap: 1rem; }
+      .mc-previews__figure { break-inside: avoid; margin: 0 0 1rem; }
       .mc-previews__cap { margin: 0 0 6px; font-size: 11px; font-weight: 600; color: var(--mc-muted); }
       .mc-previews__link { display: block; cursor: pointer; }
       .mc-previews__img { display: block; width: 100%; height: auto; border-radius: 6px; }

@@ -3779,3 +3779,9 @@ Kiváltó: user clue — MC244d 300x250-hez KÉT preview (fan-out cellák): 2457
 
 - [x] **DEPLOYOLVA 2026-07-21:** box `e848dca`→`f6eda43` (/var/www/mm6-erste), 2 commit (dedup=legfrissebb copy + widget height margin-fix + 6.7.3). Build ok, `pm2 restart` → **Ready 1494ms**. Health: /mcp 401. Box `6.7.3`. Regen fut tovább (1557/5968).
 - Következmény: mostantól NEM kell megvárni a teljes regent — ha egy adott (variant,size)-hoz akár EGY cellát is újralőttek (friss updatedAt, pl. 2537), a widget azt választja. MC244d 300x250 → helyes "Igényeld".
+
+## 2026-07-21 — widget térköz + height EGYÜTT (flow-root)
+
+Kiváltó: user — a 6.7.3 margin-eltávolítás után eltűnt a térköz a kártyák (mc-previews__link) és a title körül. Konfliktus: margin = szép térköz DE kilóg az Apps SDK height-méréséből.
+- [x] `body { display: flow-root }` — BFC, ami BESZÁMÍTJA a gyerek-margókat a magasságba (a bottom margin eddig "kiszökött" a body-ból → dead space). Így visszaadható a térköz ÉS a height is jó. body padding 1.5rem keret, title 1rem alsó, kártyák közt 1rem, column-gap 1rem. CSS-only, logikát/teszteket nem érint.
+- [ ] Deploy 6.7.3 → 6.7.4.

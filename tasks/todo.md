@@ -3796,3 +3796,12 @@ Kiváltó: user — a 6.7.3 margin-eltávolítás után eltűnt a térköz a ká
 Kiváltó: user pontosítás — a ChatGPT a #root magasságát méri, a KÜLSŐ (body) padding nem számít; a BELSŐ margóknak kell kifeszíteniük a #root-ot. A user mintát adott (name margin 1rem 16px, gallery margin 1rem).
 - [x] body: nincs padding. `#root { display: flow-root }` (belső margók konténerezve → kifeszítik). `.mc-previews__name { margin: 1rem 16px }`, `.mc-previews__gallery { margin: 1rem }` — pont a user mintája szerint. CSS-only.
 - [ ] Deploy 6.7.4 → 6.7.5.
+
+## 2026-07-21 — get_mc_reporting fix: üres reporting → monitoring + number/variant
+
+Kiváltó: user — get_mc_reporting mindenre {label:null, banners:[]}. Root cause: a `reporting` tábla ÜRES (0 sor), a valós adat a `monitoring`-ban (6366 sor). PMMID-eltérés: message pmmid (`…-v_b-n_2`) csak PREFIXE a monitoring pmmid-nek (`…-v_b-n_2-l_<lineitem>`) → exact nem egyezik; megbízható kulcs a mc_number+variant.
+- [x] `get_mc_reporting` átírva `monitoring`-ra: lookup mc_number(+variant) exact, VAGY mc_label (message pmmid → number+variant feloldás, vagy exact monitoring pmmid). Opcionális `from` period. Output: {mc, matched_rows, totals, by_variant, by_size, by_audience} — mind {impr,clicks,cost,conv,ctr}, cellák közt összegezve. Élő sanity: MC244b → 50700 impr/63 klikk/4 méret.
+- [x] Description pontosítva (nem "legacy/unused", hanem "older Reporting-sheet table, not populated by current AdForm pipeline").
+- [x] Teszt: új `mcp-mc-reporting.test.ts` (7). tsc tiszta, **integráció 320/320**. CHANGELOG 6.8.0.
+- **Külön follow-up (NEM ebben):** a list_mc `monitoring_status` szűrő (reporting.adform_status) és matrix_status.last_reporting_sync szintén az üres reporting táblát olvassa → gyakorlatilag no-op. A monitoring_status NEM repointolható (az ACTIVE/INACTIVE státusz nincs a monitoringban).
+- [ ] Deploy 6.7.5 → 6.8.0.

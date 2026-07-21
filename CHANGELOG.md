@@ -5,6 +5,22 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.8.0] — 2026-07-21
+
+### Fixed
+- **`get_mc_reporting` was querying the empty `reporting` table** and returned
+  `{label:null, banners:[]}` for every input. It now reads the `monitoring` table
+  (the live report source), so it actually returns data.
+
+### Changed
+- **`get_mc_reporting` gains MC number/variant lookup + richer output.** Look up by
+  `mc_number` (+ optional `variant`, the reliable key) or `mc_label` (a message
+  PMMID is resolved to its number+variant, since the monitoring PMMID carries an
+  extra `-l_<lineitem>` suffix; a full monitoring PMMID matches exactly). Optional
+  `from` scopes to one report period. Returns `{ mc, matched_rows, totals,
+  by_variant, by_size, by_audience }`, each a `{impressions,clicks,cost,
+  conversions,ctr}` block, summed across the audience cells a number+variant spans.
+
 ## [6.7.5] — 2026-07-21
 
 ### Fixed

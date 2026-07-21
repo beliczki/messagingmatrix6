@@ -36,6 +36,7 @@ export default function AppShell({ user, client, aboutInfo, children }: Props) {
       <Sidebar
         user={{ email: user.email, role: user.role }}
         client={client}
+        version={aboutInfo.appVersion}
         onOpenUsers={isAdmin ? () => setUsersOpen(true) : undefined}
         onOpenSettings={isAdmin ? () => setSettingsOpen(true) : undefined}
       />

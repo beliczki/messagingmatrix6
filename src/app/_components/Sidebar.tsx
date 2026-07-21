@@ -39,13 +39,15 @@ const ITEMS: Array<{ href: string; label: string; Icon: IconType }> = [
 type Props = {
   user: NavUser;
   client: NavClient;
+  /** App version (package.json), shown dimmed under the last nav item. */
+  version: string;
   /** Provided when current user is admin; opens the Users dialog. */
   onOpenUsers?: () => void;
   /** Provided when current user is admin; opens the Settings dialog. */
   onOpenSettings?: () => void;
 };
 
-export function Sidebar({ user, client, onOpenUsers, onOpenSettings }: Props) {
+export function Sidebar({ user, client, version, onOpenUsers, onOpenSettings }: Props) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -107,6 +109,15 @@ export function Sidebar({ user, client, onOpenUsers, onOpenSettings }: Props) {
             </Link>
           );
         })}
+        <p
+          className={clsx(
+            "app-sidebar__version mt-1.5 select-none text-[10px] font-medium text-slate-400",
+            collapsed ? "text-center" : "px-2.5",
+          )}
+          title={`Version ${version}`}
+        >
+          v{version}
+        </p>
       </nav>
 
       <div

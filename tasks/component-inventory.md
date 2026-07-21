@@ -200,6 +200,7 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | Nav link aktív | `app-sidebar__nav-link--active` | – |
 | Nav link ikon | `app-sidebar__nav-icon` | – |
 | Nav link címke | `app-sidebar__nav-label` | – |
+| Verziószám (halvány, utolsó nav item alatt) | `app-sidebar__version` | nav alja |
 | Footer (user profile + logout) | `app-sidebar__footer` | alja |
 | User név + email | `app-sidebar__user` | – |
 | Logout gomb | `app-sidebar__logout` | – |

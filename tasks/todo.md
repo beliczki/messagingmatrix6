@@ -3692,3 +3692,25 @@ Kiváltó: user kérés — ChatGPT-ben inline preview-galéria (Apps SDK widget
 ## 2026-07-21 — DEPLOYOLVA (6.6.0)
 
 - [x] **DEPLOYOLVA 2026-07-21:** box `de9d42b`→`11b8761` (/var/www/mm6-erste), 2 commit (show_mc_previews Apps SDK widget + resource capability + 6.6.0 release). Séma-migráció nincs. `npm run build` ok, `pm2 restart mm6-erste` → **Ready 1499ms**. Health: /mcp 401. Box `6.6.0`.
+
+## 2026-07-21 — show_mc_previews widget fixek (dark mode + dedup)
+
+Kiváltó: user ChatGPT-ben tesztelte — (1) a fejléc sötét módban láthatatlan, (2) azonos MC 6 audience-cellában → 6× ugyanaz a preview.
+- [x] Dark mode: `mcp-widget.ts` theme-aware CSS változók (`prefers-color-scheme` → `--mc-fg`/`--mc-muted`), a hardcode `#0f172a` helyett. A ChatGPT téma szerint vált.
+- [x] Dedup: `show_mc_previews` ÉS `get_mc_preview_files` — a fan-out copy-k (azonos number+variant több audience-cellában) azonos kreatívot renderelnek, ezért **méret szerint dedup** (egy preview/kép per méret), nem cellánként ismételve.
+- [x] Tesztek: `mcp-show-previews` +1 (dedup 2 méret, nem 4), `mcp-image-files` +1 (get_mc_preview_files 1 kép/méret). `tsc` tiszta, **integráció 310/310**.
+- [x] `CHANGELOG.md` `[Unreleased] → Fixed`.
+- [ ] **Nem deployolva** — bugfix (viselkedés + CSS) → **bump-javaslat 6.6.0 → 6.6.1 (patch)**. Deploy külön lépés.
+
+## 2026-07-21 — preview staleness root-cause + cache-bust + widget layout
+
+**A "regeneráltam de a régi (Igényled) jött vissza MCP-ben" root-cause = KÉT ok:**
+1. Stale-detektálás (`previews.ts:78`): stale = `messageVersion !== message.version`. Template/THM/copy-változás NEM bumpolja a message.version-t → default `preview_generate`/`gen:previews` frissnek hiszi, kihagyja. → csak `force:true`-val generálódik újra. (Nem kód-hiba, dokumentált korlát; a preview_generate tool tud `force`-ot.)
+2. **URL-cache (a tényleges bug):** `/api/previews/[id]` stabil id + `max-age=300` + ChatGPT képproxi. Regen után a bájtok cserélődnek, de az URL ugyanaz → cache a régit adja.
+
+Fixek (mind cache-bust + widget, bugfix bundle):
+- [x] **Cache-bust**: `previewUrl(origin,id,storageKey)` helper → `/api/previews/<id>?v=<sha1(storageKey)[0:10]>`. A storageKey minden shotnál új (writeFile új objektum), így a hash regenkor flippel → cache-miss → friss kép. Alkalmazva: `list_mc`, `mc_get`, `show_mc_previews`, `preview_generate`. `ShotResult` bővítve `storageKey`-vel (preview-shooter).
+- [x] Widget layout (user kérés menet közben): 2rem padding, **masonry** (CSS multi-column, `column-width:220px`) grid helyett, nincs fenntartott scrollbar-gutter (`scrollbar-gutter:auto` + tartalom-magasság). + a korábbi dark-mode és dedup fixek.
+- [x] Tesztek: URL-asszertálások frissítve `?v=[0-9a-f]{10}` mintára (mcp-list-mc, mc-get, preview-generate mock+regex, show-previews startsWith OK). `tsc` tiszta, **integráció 310/310**.
+- [x] `CHANGELOG.md` `[Unreleased] → Fixed` bővítve.
+- [ ] **Nem deployolva** — bugfix + CSS → **bump 6.6.0 → 6.6.1 (patch)**. Deploy külön.

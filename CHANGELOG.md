@@ -5,6 +5,24 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.6.1] — 2026-07-21
+
+### Fixed
+- **Preview URLs are cache-busted** (`?v=<hash-of-storage-key>`) in `list_mc`,
+  `mc_get`, `show_mc_previews` and `preview_generate`. The preview row id is stable
+  across regenerates while the bytes change, so the old URL kept serving the
+  pre-fix image from the browser / CDN / ChatGPT image-proxy cache — regenerating
+  "didn't take". The hash flips exactly when the stored image changes. (Note:
+  template / THM / copy edits don't bump `messages.version`, so a plain
+  `preview_generate` treats those sizes as fresh — pass `force: true` to reshoot.)
+- **`show_mc_previews` widget: dark-mode header + duplicate previews + layout.** The
+  gallery name/labels track the ChatGPT theme (theme-aware CSS vars via
+  `prefers-color-scheme`) instead of a hardcoded dark color invisible on dark
+  backgrounds. Previews are deduped to one per size — a card fanned out across N
+  audience cells no longer shows each size N times (same size-dedup applied to
+  `get_mc_preview_files`). Layout: 2rem padding, masonry (CSS multi-column) instead
+  of a fixed grid, and no reserved scrollbar gutter (grows to content height).
+
 ## [6.6.0] — 2026-07-21
 
 ### Added

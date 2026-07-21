@@ -1,4 +1,4 @@
-import { and, eq, inArray, max, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, max, ne, sql } from "drizzle-orm";
 import sharp from "sharp";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -12,6 +12,7 @@ import {
   mcpTokens,
   messagePreviews,
   messages,
+  monitoring,
   nowUtc,
   reporting,
   uploadedFiles,
@@ -483,6 +484,144 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
         .orderBy(creatives.id)
         .limit(limit);
       return jsonResult(rows);
+    },
+  );
+
+  server.registerTool(
+    "list_report_periods",
+    {
+      description:
+        "List the imported monitoring report periods for the active client, newest first. Each entry: from (period_from, the value to pass as `from` to report_performance), to (period_to), rows (row count), impressions/clicks/cost (period totals). Use this to discover which periods exist before calling report_performance for a specific one.",
+      inputSchema: {},
+    },
+    async () => {
+      const periods = await db
+        .select({
+          from: monitoring.periodFrom,
+          to: monitoring.periodTo,
+          rows: sql<number>`count(*)::int`,
+          impressions: sql<number>`coalesce(sum(${monitoring.impressions}), 0)::int`,
+          clicks: sql<number>`coalesce(sum(${monitoring.clicks}), 0)::int`,
+          cost: sql<number>`coalesce(sum(${monitoring.cost}), 0)::float8`,
+        })
+        .from(monitoring)
+        .where(eq(monitoring.clientId, ctx.clientId))
+        .groupBy(monitoring.periodFrom, monitoring.periodTo)
+        .orderBy(desc(monitoring.periodFrom));
+      return jsonResult(periods);
+    },
+  );
+
+  server.registerTool(
+    "report_performance",
+    {
+      description:
+        "Aggregated creative performance from imported monitoring reports, broken down by product × platform, each split into matched vs unmatched. Matched = the report row resolved to a matrix message (message_id not null); unmatched = it did not. Metrics per bucket: impressions, clicks, cost, ctr (clicks/impressions, null when impressions=0). Defaults to the NEWEST report period; pass from (a period_from value from list_report_periods) to pick another. Optional exact filters: product, platform. Returns { period: {from,to}, rows: [{product, platform, matched, unmatched, total}], totals: {matched, unmatched, total} }. Rows sorted by total impressions desc. Empty rows + null period when no reports are imported.",
+      inputSchema: {
+        from: z.string().optional(),
+        product: z.string().optional(),
+        platform: z.string().optional(),
+      },
+    },
+    async (args) => {
+      const periods = await db
+        .selectDistinct({
+          from: monitoring.periodFrom,
+          to: monitoring.periodTo,
+        })
+        .from(monitoring)
+        .where(eq(monitoring.clientId, ctx.clientId))
+        .orderBy(desc(monitoring.periodFrom));
+      if (periods.length === 0) {
+        const z = { impressions: 0, clicks: 0, cost: 0, ctr: null };
+        return jsonResult({
+          period: null,
+          rows: [],
+          totals: { matched: z, unmatched: z, total: z },
+        });
+      }
+      const sel = args.from
+        ? periods.find((p) => p.from === args.from)
+        : periods[0];
+      if (!sel) {
+        return errorResult(`no report period matching from='${args.from}'`, {
+          available: periods.map((p) => p.from),
+        });
+      }
+
+      const conds = [
+        eq(monitoring.clientId, ctx.clientId),
+        eq(monitoring.periodFrom, sel.from),
+      ];
+      if (args.product) conds.push(eq(monitoring.product, args.product));
+      if (args.platform) conds.push(eq(monitoring.platform, args.platform));
+      const matchedExpr = sql<boolean>`(${monitoring.messageId} IS NOT NULL)`;
+      const agg = await db
+        .select({
+          product: monitoring.product,
+          platform: monitoring.platform,
+          matched: matchedExpr,
+          impressions: sql<number>`coalesce(sum(${monitoring.impressions}), 0)::int`,
+          clicks: sql<number>`coalesce(sum(${monitoring.clicks}), 0)::int`,
+          cost: sql<number>`coalesce(sum(${monitoring.cost}), 0)::float8`,
+        })
+        .from(monitoring)
+        .where(and(...conds))
+        .groupBy(monitoring.product, monitoring.platform, matchedExpr);
+
+      type Bucket = { impressions: number; clicks: number; cost: number };
+      const zero = (): Bucket => ({ impressions: 0, clicks: 0, cost: 0 });
+      const add = (b: Bucket, r: (typeof agg)[number]) => {
+        b.impressions += r.impressions;
+        b.clicks += r.clicks;
+        b.cost += r.cost;
+      };
+      const withCtr = (b: Bucket) => ({
+        ...b,
+        ctr: b.impressions > 0 ? b.clicks / b.impressions : null,
+      });
+      const sum = (a: Bucket, b: Bucket): Bucket => ({
+        impressions: a.impressions + b.impressions,
+        clicks: a.clicks + b.clicks,
+        cost: a.cost + b.cost,
+      });
+
+      const cells = new Map<
+        string,
+        { product: string | null; platform: string; matched: Bucket; unmatched: Bucket }
+      >();
+      const grandMatched = zero();
+      const grandUnmatched = zero();
+      for (const r of agg) {
+        const key = `${r.product ?? ""}|${r.platform}`;
+        let cell = cells.get(key);
+        if (!cell) {
+          cell = { product: r.product, platform: r.platform, matched: zero(), unmatched: zero() };
+          cells.set(key, cell);
+        }
+        add(r.matched ? cell.matched : cell.unmatched, r);
+        add(r.matched ? grandMatched : grandUnmatched, r);
+      }
+
+      const rows = [...cells.values()]
+        .map((c) => ({
+          product: c.product,
+          platform: c.platform,
+          matched: withCtr(c.matched),
+          unmatched: withCtr(c.unmatched),
+          total: withCtr(sum(c.matched, c.unmatched)),
+        }))
+        .sort((a, b) => b.total.impressions - a.total.impressions);
+
+      return jsonResult({
+        period: { from: sel.from, to: sel.to },
+        rows,
+        totals: {
+          matched: withCtr(grandMatched),
+          unmatched: withCtr(grandUnmatched),
+          total: withCtr(sum(grandMatched, grandUnmatched)),
+        },
+      });
     },
   );
 

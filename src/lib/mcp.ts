@@ -629,18 +629,63 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
     "mc_get",
     {
       description:
-        "Get a single message by its MC label (PMMID). Returns null if not found.",
-      inputSchema: { mc_label: z.string() },
+        "Get one or more MCs, each with preview_urls — the {size: url} PNG-screenshot map (same shape as list_mc; fetch with the same Authorization bearer, empty {} when no preview generated yet). Look up by EXACTLY ONE of: mc_label (PMMID — yields at most one row) OR mc_number (optionally narrowed by variant). A number can live in several cells / variants (card fan-out is a copy), so a number/variant lookup may match MULTIPLE rows — the result is therefore ALWAYS an ARRAY (empty when nothing matches). Default excludes soft-archived rows; pass include_archived=true to include them. Ordered by number, variant.",
+      inputSchema: {
+        mc_label: z.string().optional(),
+        mc_number: z.number().int().optional(),
+        variant: z.string().optional(),
+        include_archived: z.boolean().optional(),
+      },
     },
-    async ({ mc_label }) => {
-      const [row] = await db
+    async (args) => {
+      const hasLabel = args.mc_label !== undefined;
+      const hasNumber = args.mc_number !== undefined;
+      if (hasLabel === hasNumber) {
+        return errorResult("provide exactly one of mc_label or mc_number");
+      }
+      if (args.variant !== undefined && !hasNumber) {
+        return errorResult("variant can only be used together with mc_number");
+      }
+      const conds = [eq(messages.clientId, ctx.clientId)];
+      if (hasLabel) conds.push(eq(messages.pmmid, args.mc_label!));
+      if (hasNumber) conds.push(eq(messages.number, args.mc_number!));
+      if (args.variant !== undefined)
+        conds.push(eq(messages.variant, args.variant));
+      if (!args.include_archived) conds.push(isNull(messages.archivedAt));
+      const rows = await db
         .select()
         .from(messages)
-        .where(
-          and(eq(messages.clientId, ctx.clientId), eq(messages.pmmid, mc_label)),
-        )
-        .limit(1);
-      return jsonResult(row ?? null);
+        .where(and(...conds))
+        .orderBy(messages.number, messages.variant);
+
+      // Generated PNG screenshots — {size: url} per MC (same as list_mc).
+      const previewRows = rows.length
+        ? await db
+            .select({
+              id: messagePreviews.id,
+              messageId: messagePreviews.messageId,
+              size: messagePreviews.size,
+            })
+            .from(messagePreviews)
+            .where(
+              and(
+                eq(messagePreviews.clientId, ctx.clientId),
+                inArray(
+                  messagePreviews.messageId,
+                  rows.map((r) => r.id),
+                ),
+              ),
+            )
+        : [];
+      const urlsByMessage = new Map<number, Record<string, string>>();
+      for (const p of previewRows) {
+        const urls = urlsByMessage.get(p.messageId) ?? {};
+        urls[p.size] = `${ctx.origin ?? ""}/api/previews/${p.id}`;
+        urlsByMessage.set(p.messageId, urls);
+      }
+      return jsonResult(
+        rows.map((r) => ({ ...r, preview_urls: urlsByMessage.get(r.id) ?? {} })),
+      );
     },
   );
 }

@@ -3664,3 +3664,13 @@ Kiváltó: user kérés — preview URL a mc_get-be, és lekérés MC-szám ill.
 ## 2026-07-21 — DEPLOYOLVA (6.4.0)
 
 - [x] **DEPLOYOLVA 2026-07-21:** box `cf07e03`→`96a70ba` (/var/www/mm6-erste), 2 commit (mc_get preview_urls + szám/variant lookup + 6.4.0 release). Séma-migráció nincs. `npm run build` ok, `pm2 restart mm6-erste` → **Ready 1441ms**. Health: /mcp 401, /monitoring 307. Box `6.4.0`.
+
+## 2026-07-21 — MCP image-content toolok (vision analysishez)
+
+Kiváltó: user kérés — direkt file-get, amivel az agent asset/creative/MC-preview képet natív image contentként kap (nem Bearer-URL-ként), image-mode elemzésre.
+- [x] `get_mc_preview_files` (read) — MC-azonosító (mc_label VAGY mc_number +variant/+audience_key) + opcionális `sizes[]` → **natív MCP image content** (`{type:"image", data:<base64>, mimeType:"image/png"}`) soronként, naming text-sorral. Több méret egy hívásban. Csak generált preview-t ad (különben preview_generate hint). Cap: ≤16 kép/hívás, >8MB skip.
+- [x] `get_media_file` (read) — asset/creative `file_name` (+opcionális `category`) → uploadedFiles newest-wins, kép mime esetén natív image content; nem-kép mime → hiba a mime-mal (HTML5 zip/video → get_mc_preview_files hint). >8MB refuse. Archiváltak kizárva.
+- Implementáció: `readFileBytes(storageKey|storagePath)` a storage.ts-ből; `imageContent()` helper base64+mimeType. A "connector file reference" claude.ai-specifikus — a hordozható válasz a natív MCP image content, ezt adjuk.
+- [x] Tesztek: új `mcp-image-files.test.ts` (9: image content per size, sizes szűrő, no-preview/no-match/validáció hibák; get_media_file image asset, nem-kép hiba, unknown, tenant-izoláció). `mcp-auth` READ_TOOLS +2. `tsc` tiszta, **integráció 305/305**.
+- [x] `CHANGELOG.md` `[Unreleased] → Added`. McpTab: mindkettő `get_`-tel kezdődik → auto "List & read" csoport.
+- [ ] **Nem deployolva** — két új MCP read-tool → **bump-javaslat 6.4.0 → 6.5.0 (minor)**. Deploy külön lépés.

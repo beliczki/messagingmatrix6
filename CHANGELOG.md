@@ -5,6 +5,18 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.5.0] — 2026-07-21
+
+### Added
+- **MCP: image-content file tools for vision analysis.** `get_mc_preview_files`
+  returns rendered MC preview screenshots as **native MCP image content** (inline
+  image/png bytes, not an auth-token URL) — identify by mc_label or
+  mc_number(+variant/audience_key), optional `sizes` filter, multiple sizes per
+  call, each image preceded by a naming text line. `get_media_file` returns an
+  uploaded asset or creative (by `file_name`, optional `category`) as native
+  image content. Both are read-scope; guards: 8MB per-file inline cap, ≤16
+  previews per call, non-image files rejected with their mime type.
+
 ## [6.4.0] — 2026-07-21
 
 ### Changed

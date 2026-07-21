@@ -747,11 +747,12 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
         conds.push(eq(messages.audience, args.audience_key));
       if (!args.include_archived) conds.push(isNull(messages.archivedAt));
       const mcs = await db
-        .select({ id: messages.id, pmmid: messages.pmmid })
+        .select({ id: messages.id, pmmid: messages.pmmid, variant: messages.variant })
         .from(messages)
         .where(and(...conds))
         .orderBy(messages.number, messages.variant);
       if (mcs.length === 0) return errorResult("no MC matched the query");
+      const metaById = new Map(mcs.map((m) => [m.id, m]));
 
       const pconds = [
         eq(messagePreviews.clientId, ctx.clientId),
@@ -781,14 +782,20 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
         );
       }
 
-      // The same MC number+variant can live in several audience cells (card
-      // fan-out is a copy) rendering the identical creative — collapse to one
-      // preview per size so vision analysis isn't handed 6 copies of each size.
-      const bySize = new Map<string, (typeof previews)[number]>();
-      for (const p of previews) if (!bySize.has(p.size)) bySize.set(p.size, p);
-      const uniquePreviews = [...bySize.values()].sort((a, b) =>
-        a.size.localeCompare(b.size),
-      );
+      // Dedup by (variant, size): the same variant fanned out across audience
+      // cells renders the identical creative (collapse it), but DISTINCT variants
+      // (b/c/d) are different creatives and each stays.
+      const byVariantSize = new Map<string, (typeof previews)[number]>();
+      for (const p of previews) {
+        const v = metaById.get(p.messageId)?.variant ?? "";
+        const key = `${v}|${p.size}`;
+        if (!byVariantSize.has(key)) byVariantSize.set(key, p);
+      }
+      const uniquePreviews = [...byVariantSize.values()].sort((a, b) => {
+        const va = metaById.get(a.messageId)?.variant ?? "";
+        const vb = metaById.get(b.messageId)?.variant ?? "";
+        return va.localeCompare(vb) || a.size.localeCompare(b.size);
+      });
 
       const pmmidById = new Map(mcs.map((m) => [m.id, m.pmmid]));
       const content: Array<
@@ -2360,16 +2367,24 @@ function registerPreviewWidget(server: McpServer, ctx: McpContext): void {
     {
       title: "Show MC previews",
       description:
-        "Render an MC's preview screenshots as an inline image GALLERY (OpenAI Apps SDK widget) in ChatGPT / MCP Inspector — a visual card, distinct from get_mc_preview_files (which hands raw image bytes to the model for analysis). Identify the MC by EXACTLY ONE of mc_label (PMMID) or mc_number (optionally narrowed by variant and/or audience_key). Returns structuredContent { name, previews:[{size,url}] } with absolute, publicly-fetchable preview URLs; clients without widget support still get that data plus a text summary.",
+        "Render MC preview screenshots as an inline image GALLERY (OpenAI Apps SDK widget) in ChatGPT / MCP Inspector — a visual card, distinct from get_mc_preview_files (which hands raw image bytes to the model). Identify by EXACTLY ONE of mc_label (PMMID) or mc_number. Narrow with: variant (single) OR variants (a list, e.g. [\"b\",\"c\",\"d\"] to show several cards side by side); audience_key; and sizes (a list, e.g. [\"300x250\"] to show ONE size only — omit for every generated size). Distinct variants are each shown; the same variant fanned out across audiences is collapsed to one (identical creative). Returns structuredContent { name, previews:[{label,size,url}] } with absolute, public preview URLs; non-widget clients still get that data + a text summary.",
       inputSchema: {
         mc_label: z.string().optional(),
         mc_number: z.number().int().optional(),
         variant: z.string().optional(),
+        variants: z.array(z.string()).optional(),
         audience_key: z.string().optional(),
+        sizes: z.array(z.string()).optional(),
       },
       outputSchema: {
         name: z.string(),
-        previews: z.array(z.object({ size: z.string(), url: z.string() })),
+        previews: z.array(
+          z.object({
+            label: z.string(),
+            size: z.string(),
+            url: z.string(),
+          }),
+        ),
       },
       annotations: { readOnlyHint: true },
       _meta: {
@@ -2385,8 +2400,11 @@ function registerPreviewWidget(server: McpServer, ctx: McpContext): void {
       if (hasLabel === hasNumber) {
         return errorResult("provide exactly one of mc_label or mc_number");
       }
-      if (args.variant !== undefined && !hasNumber) {
-        return errorResult("variant can only be used together with mc_number");
+      if ((args.variant !== undefined || args.variants !== undefined) && !hasNumber) {
+        return errorResult("variant / variants can only be used with mc_number");
+      }
+      if (args.variant !== undefined && args.variants !== undefined) {
+        return errorResult("provide variant OR variants, not both");
       }
       const conds = [
         eq(messages.clientId, ctx.clientId),
@@ -2396,57 +2414,80 @@ function registerPreviewWidget(server: McpServer, ctx: McpContext): void {
       if (hasNumber) conds.push(eq(messages.number, args.mc_number!));
       if (args.variant !== undefined)
         conds.push(eq(messages.variant, args.variant));
+      if (args.variants !== undefined && args.variants.length > 0)
+        conds.push(inArray(messages.variant, args.variants));
       if (args.audience_key !== undefined)
         conds.push(eq(messages.audience, args.audience_key));
       const mcs = await db
-        .select({ id: messages.id, pmmid: messages.pmmid, name: messages.name })
+        .select({
+          id: messages.id,
+          number: messages.number,
+          variant: messages.variant,
+          pmmid: messages.pmmid,
+          name: messages.name,
+        })
         .from(messages)
         .where(and(...conds))
         .orderBy(messages.number, messages.variant);
       if (mcs.length === 0) return errorResult("no MC matched the query");
+      const metaById = new Map(mcs.map((m) => [m.id, m]));
 
+      const pconds = [
+        eq(messagePreviews.clientId, ctx.clientId),
+        inArray(
+          messagePreviews.messageId,
+          mcs.map((m) => m.id),
+        ),
+      ];
+      if (args.sizes && args.sizes.length > 0)
+        pconds.push(inArray(messagePreviews.size, args.sizes));
       const previewRows = await db
         .select({
           id: messagePreviews.id,
+          messageId: messagePreviews.messageId,
           size: messagePreviews.size,
           storageKey: messagePreviews.storageKey,
         })
         .from(messagePreviews)
-        .where(
-          and(
-            eq(messagePreviews.clientId, ctx.clientId),
-            inArray(
-              messagePreviews.messageId,
-              mcs.map((m) => m.id),
-            ),
-          ),
-        )
-        .orderBy(messagePreviews.size, messagePreviews.id);
-      // The same MC number+variant can live in several audience cells (card
-      // fan-out is a copy) — every copy renders the identical creative, so
-      // collapse to ONE preview per size instead of repeating each size once per
-      // cell (which showed e.g. 300x250 six times).
-      const seenSizes = new Set<string>();
-      const previews: { size: string; url: string }[] = [];
+        .where(and(...pconds))
+        .orderBy(messagePreviews.messageId, messagePreviews.size, messagePreviews.id);
+
+      // Dedup by (variant, size): the same variant fanned out across audience
+      // cells renders the identical creative, so collapse it — but keep DISTINCT
+      // variants (b/c/d are different creatives) each showing.
+      const seen = new Set<string>();
+      const previews: { label: string; size: string; url: string; _v: string }[] = [];
       for (const p of previewRows) {
-        if (seenSizes.has(p.size)) continue;
-        seenSizes.add(p.size);
-        previews.push({ size: p.size, url: previewUrl(origin, p.id, p.storageKey) });
+        const meta = metaById.get(p.messageId)!;
+        const key = `${meta.variant}|${p.size}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        previews.push({
+          label: `MC${meta.number}${meta.variant}`,
+          size: p.size,
+          url: previewUrl(origin, p.id, p.storageKey),
+          _v: meta.variant,
+        });
       }
-      const first = mcs[0]!;
-      const label = first.pmmid ?? `MC${args.mc_number ?? ""}`;
-      const name = first.name ? `${label} — ${first.name}` : label;
+      previews.sort(
+        (a, b) => a._v.localeCompare(b._v) || a.size.localeCompare(b.size),
+      );
+      const clean = previews.map(({ label, size, url }) => ({ label, size, url }));
+
+      const num = mcs[0]!.number;
+      const nm = mcs[0]!.name;
+      const name = nm ? `MC${num} — ${nm}` : `MC${num}`;
 
       return {
-        structuredContent: { name, previews },
+        structuredContent: { name, previews: clean },
         content: [
           {
             type: "text" as const,
-            text: previews.length
-              ? `${previews.length} preview(s) for ${name}: ${previews
-                  .map((p) => p.size)
+            text: clean.length
+              ? `${clean.length} preview(s): ${clean
+                  .map((p) => `${p.label} ${p.size}`)
                   .join(", ")}.`
-              : `No generated previews for ${name} yet — run preview_generate first.`,
+              : `No generated previews matched — run preview_generate first (with force after a template/copy change).`,
           },
         ],
       };

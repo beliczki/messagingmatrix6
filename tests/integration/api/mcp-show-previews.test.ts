@@ -55,6 +55,15 @@ beforeEach(async () => {
     { clientId: erste.id, messageId: m2.id, size: "300x250", storageKey: "k3", messageVersion: 1 },
     { clientId: erste.id, messageId: m2.id, size: "970x250", storageKey: "k4", messageVersion: 1 },
   ]);
+
+  // Distinct variants b and c (different creatives), each with a 300x250 preview.
+  for (const [v, key] of [["b", "kb"], ["c", "kc"]] as const) {
+    const [mv] = await db
+      .insert(messages)
+      .values({ clientId: erste.id, number: 244, variant: v, audience: "HK_wlfin", topic: "top1", versionNo: 1, pmmid: `PMM-244${v}`, name: "Rózsaszínhaj zene" })
+      .returning({ id: messages.id });
+    await db.insert(messagePreviews).values({ clientId: erste.id, messageId: mv.id, size: "300x250", storageKey: key, messageVersion: 1 });
+  }
 });
 
 afterEach(async () => {
@@ -73,12 +82,13 @@ describe("show_mc_previews (Apps SDK widget) via real MCP protocol", () => {
     };
 
     expect(res.structuredContent).toBeTruthy();
-    expect(res.structuredContent!.name).toContain("PMM-244d");
+    expect(res.structuredContent!.name).toContain("MC244");
     expect(
       res.structuredContent!.previews.every((p) =>
         p.url.startsWith(`${ORIGIN}/api/previews/`),
       ),
     ).toBe(true);
+    expect(res.structuredContent!.previews.every((p) => p.label === "MC244d")).toBe(true);
     expect(res.structuredContent!.previews.map((p) => p.size).sort()).toEqual([
       "300x250",
       "970x250",
@@ -88,15 +98,29 @@ describe("show_mc_previews (Apps SDK widget) via real MCP protocol", () => {
     await client.close();
   });
 
-  it("dedupes to one preview per size across audience copies (no 6x repeat)", async () => {
+  it("dedupes same-variant audience copies but keeps distinct variants", async () => {
     const client = await connect(erste.id);
-    // no audience_key → matches both cells of MC 244 d, each with the same sizes
-    const res = (await client.callTool({
+    // variant d only → two audience copies collapse to 2 sizes (not 4)
+    const dOnly = (await client.callTool({
       name: "show_mc_previews",
       arguments: { mc_number: 244, variant: "d" },
-    })) as { structuredContent?: { previews: { size: string }[] } };
-    const sizes = res.structuredContent!.previews.map((p) => p.size).sort();
-    expect(sizes).toEqual(["300x250", "970x250"]); // 2, not 4
+    })) as { structuredContent?: { previews: { label: string; size: string }[] } };
+    expect(dOnly.structuredContent!.previews.map((p) => p.size).sort()).toEqual([
+      "300x250",
+      "970x250",
+    ]);
+    await client.close();
+  });
+
+  it("variants + sizes filter shows each variant once at the requested size", async () => {
+    const client = await connect(erste.id);
+    const res = (await client.callTool({
+      name: "show_mc_previews",
+      arguments: { mc_number: 244, variants: ["b", "c", "d"], sizes: ["300x250"] },
+    })) as { structuredContent?: { previews: { label: string; size: string }[] } };
+    const previews = res.structuredContent!.previews;
+    expect(previews.map((p) => p.size)).toEqual(["300x250", "300x250", "300x250"]);
+    expect(previews.map((p) => p.label)).toEqual(["MC244b", "MC244c", "MC244d"]);
     await client.close();
   });
 

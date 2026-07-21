@@ -61,11 +61,12 @@ export const MC_PREVIEWS_WIDGET_HTML = `<!doctype html>
           '<div class="mc-previews__gallery">' +
           previews
             .map(function (p) {
+              var cap = (p.label ? p.label + " · " : "") + p.size;
               return (
                 '<figure class="mc-previews__figure">' +
-                '<figcaption class="mc-previews__cap">' + esc(p.size) + "</figcaption>" +
+                '<figcaption class="mc-previews__cap">' + esc(cap) + "</figcaption>" +
                 '<img class="mc-previews__img" src="' + esc(p.url) + '" ' +
-                'alt="' + esc((d.name || "MC") + " " + p.size) + '" />' +
+                'alt="' + esc((p.label || d.name || "MC") + " " + p.size) + '" />' +
                 "</figure>"
               );
             })

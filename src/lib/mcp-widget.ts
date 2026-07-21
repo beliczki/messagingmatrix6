@@ -23,23 +23,22 @@ export const MC_PREVIEWS_WIDGET_HTML = `<!doctype html>
       /* No reserved scrollbar gutter: the widget grows to its content height,
          so there is nothing to scroll and no band is kept for a scrollbar. */
       html { scrollbar-gutter: auto; }
-      /* display:flow-root makes the body a block-formatting context so child
-         margins are CONTAINED and counted in its height. Without it a child's
-         bottom margin escapes the body and the Apps SDK under-/over-reports the
-         height, leaving dead space. With it we can use padding for the frame AND
-         margins for inner spacing, and the reported height stays correct. */
+      /* ChatGPT measures the #root height; OUTER spacing (body padding/margin) is
+         NOT counted. So the frame padding lives on #root itself (the measured
+         element, so it stretches it), and #root is a flow-root so the INNER title
+         / card margins are contained and stretch #root too — keeping its reported
+         height correct. */
       body {
         margin: 0;
-        padding: 1.5rem;
         overflow-x: hidden;
-        display: flow-root;
         font-family: system-ui, sans-serif;
         color: var(--mc-fg);
       }
-      .mc-previews__name { font-size: 14px; font-weight: 700; margin: 0 0 1rem; color: var(--mc-fg); }
+      #root { display: flow-root; }
+      .mc-previews__name { font-size: 14px; font-weight: 700; margin: 1rem 16px; color: var(--mc-fg); }
       /* Masonry via CSS multi-column: banners of different aspect ratios
          (300x250 / 300x600 / 970x250 / 640x360) pack without row gaps. */
-      .mc-previews__gallery { column-width: 220px; column-gap: 1rem; }
+      .mc-previews__gallery { column-width: 220px; column-gap: 1rem; margin: 1rem; }
       .mc-previews__figure { break-inside: avoid; margin: 0 0 1rem; }
       .mc-previews__cap { margin: 0 0 6px; font-size: 11px; font-weight: 600; color: var(--mc-muted); }
       .mc-previews__link { display: block; cursor: pointer; }

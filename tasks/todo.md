@@ -3790,3 +3790,9 @@ Kiváltó: user — a 6.7.3 margin-eltávolítás után eltűnt a térköz a ká
 
 - [x] **DEPLOYOLVA 2026-07-21:** box `f6eda43`→`e47573c`, widget flow-root (térköz+height együtt) + 6.7.4. Ready 1496ms, /mcp 401. Regen 3283/5968.
 - User teendő: FRISS ChatGPT-üzenet a widget új HTML-jéhez. Ha a flow-root nem oldaná meg a ChatGPT height-mérését (nem tudom náluk tesztelni), szólj — akkor a padding-only varianthoz nyúlok.
+
+## 2026-07-21 — widget height take 2 (#root méri a ChatGPT)
+
+Kiváltó: user pontosítás — a ChatGPT a #root magasságát méri, a KÜLSŐ (body) padding nem számít; a BELSŐ margóknak kell kifeszíteniük a #root-ot. A user mintát adott (name margin 1rem 16px, gallery margin 1rem).
+- [x] body: nincs padding. `#root { display: flow-root }` (belső margók konténerezve → kifeszítik). `.mc-previews__name { margin: 1rem 16px }`, `.mc-previews__gallery { margin: 1rem }` — pont a user mintája szerint. CSS-only.
+- [ ] Deploy 6.7.4 → 6.7.5.

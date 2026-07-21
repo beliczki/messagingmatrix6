@@ -5,6 +5,15 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.7.5] — 2026-07-21
+
+### Fixed
+- **`show_mc_previews` widget height, take 2.** ChatGPT measures the `#root`
+  element height, not the body, so OUTER (body) padding is not counted. Frame
+  spacing is now inner margins on the title (`1rem 16px`) and gallery (`1rem`),
+  with `#root { display: flow-root }` so those inner margins are contained and
+  stretch `#root` to the correct height.
+
 ## [6.7.4] — 2026-07-21
 
 ### Fixed

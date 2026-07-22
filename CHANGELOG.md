@@ -5,6 +5,24 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.10.0] — 2026-07-22
+
+### Changed
+- **MCP report tools accept a plain ISO `from` date.** `report_performance` and
+  `get_mc_reporting` previously matched `from` by exact string against the stored
+  `period_from` (`"01/06/2026 00:00:00"`, DD/MM/YYYY), so an agent passing ISO
+  (`2026-06-01`) got a silent empty result that looked like "no data". A shared
+  `resolvePeriodFrom` helper now normalizes DD/MM/YYYY ↔ ISO, and `get_mc_reporting`
+  returns an error listing the available periods (instead of a silent empty) when
+  `from` matches nothing.
+
+### Removed
+- **`list_mc` `monitoring_status` filter.** It queried the legacy `reporting`
+  table, which the current AdForm pipeline never populates (and `monitoring` has
+  no status column), so the filter always returned zero rows — a trap that
+  misled agents into thinking "no active MCs". Removed the parameter, its dead
+  code path, and the description mention.
+
 ## [6.9.0] — 2026-07-21
 
 ### Added

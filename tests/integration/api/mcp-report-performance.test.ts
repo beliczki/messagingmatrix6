@@ -160,6 +160,12 @@ describe("report_performance via MCP", () => {
     expect(json.rows[0].total.impressions).toBe(2000);
   });
 
+  it("from accepts a bare ISO date (agents pass 2026-06-01, not the stored string)", async () => {
+    const { json } = await callTool(erste.id, "report_performance", { from: "2026-06-01" });
+    expect(json.period.from).toBe(JUN.from);
+    expect(json.totals.total.impressions).toBe(3800);
+  });
+
   it("unknown from returns an error listing available periods", async () => {
     const res = await callTool(erste.id, "report_performance", { from: "1999-01-01 00:00:00" });
     expect(res.isError).toBe(true);

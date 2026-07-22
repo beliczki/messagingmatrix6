@@ -231,6 +231,29 @@ function jsonResult(value: unknown) {
   };
 }
 
+// Report periods are stored as text in the imported XLSX Front-Page format
+// ("DD/MM/YYYY HH:MM:SS"), but agents naturally pass ISO ("2026-06-01").
+// Collapse either form to a YYYY-MM-DD key so `from` matching accepts both and
+// never silently misses on a format mismatch. Returns null when unparseable.
+function periodDateKey(value: string): string | null {
+  const s = value.trim();
+  const dmy = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/); // DD/MM/YYYY [HH:MM:SS]
+  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/); // YYYY-MM-DD[...]
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  return null;
+}
+
+// Resolve an agent-supplied `from` (ISO or native) to the exact stored
+// period_from string among `available`. Exact match wins; otherwise compare by
+// date key. Returns null when nothing matches (caller surfaces the choices).
+function resolvePeriodFrom(fromArg: string, available: string[]): string | null {
+  if (available.includes(fromArg)) return fromArg;
+  const target = periodDateKey(fromArg);
+  if (!target) return null;
+  return available.find((p) => periodDateKey(p) === target) ?? null;
+}
+
 // Preview URLs use a STABLE row id but the bytes change on every regenerate.
 // Without a cache-buster the same URL keeps serving the pre-regen image from the
 // browser / CDN / ChatGPT image-proxy cache. We key ?v on the preview row's
@@ -297,13 +320,12 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
     "list_mc",
     {
       description:
-        "List messages (MCs). Returns a LEAN projection by default (id, number, variant, audience, topic, version_no, pmmid, status, start_date, end_date, template, name, headline) — pass verbose=true for the full row (copy/styles/custom_css/images/video). Each row also carries preview_urls: a {size: url} map of generated PNG screenshots of the rendered HTML creative (e.g. \"300x250\") — fetch with the same Authorization bearer; empty {} when no preview has been generated yet. Paging: limit (default 100, MAX 5000 — set this explicitly to fetch more than 100 in one call) and offset (skip N rows; stable order is number,variant, so offset paging is gap-free for a full export). Filters: topic_key, audience_key, product (matches either audience.product or topic.product), status, monitoring_status (matches reporting.adform_status for the MC). Default excludes soft-archived rows; pass include_archived=true to see them.",
+        "List messages (MCs). Returns a LEAN projection by default (id, number, variant, audience, topic, version_no, pmmid, status, start_date, end_date, template, name, headline) — pass verbose=true for the full row (copy/styles/custom_css/images/video). Each row also carries preview_urls: a {size: url} map of generated PNG screenshots of the rendered HTML creative (e.g. \"300x250\") — fetch with the same Authorization bearer; empty {} when no preview has been generated yet. Paging: limit (default 100, MAX 5000 — set this explicitly to fetch more than 100 in one call) and offset (skip N rows; stable order is number,variant, so offset paging is gap-free for a full export). Filters: topic_key, audience_key, product (matches either audience.product or topic.product), status. Default excludes soft-archived rows; pass include_archived=true to see them.",
       inputSchema: {
         topic_key: z.string().optional(),
         audience_key: z.string().optional(),
         product: z.string().optional(),
         status: z.string().optional(),
-        monitoring_status: z.string().optional(),
         limit: z.number().int().positive().max(5000).optional(),
         offset: z.number().int().nonnegative().optional(),
         verbose: z.boolean().optional(),
@@ -343,23 +365,6 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
         conds.push(
           sql`(${messages.audience} IN ${audKeys.length ? audKeys : [""]} OR ${messages.topic} IN ${topKeys.length ? topKeys : [""]})`,
         );
-      }
-      if (args.monitoring_status) {
-        const labels = (
-          await db
-            .select({ label: reporting.mcLabel })
-            .from(reporting)
-            .where(
-              and(
-                eq(reporting.clientId, ctx.clientId),
-                eq(reporting.adformStatus, args.monitoring_status),
-              ),
-            )
-        )
-          .map((r) => r.label)
-          .filter((l): l is string => !!l);
-        if (labels.length === 0) return jsonResult([]);
-        conds.push(inArray(messages.pmmid, labels));
       }
       const limit = args.limit ?? 100;
       const offset = args.offset ?? 0;
@@ -544,7 +549,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
     "report_performance",
     {
       description:
-        "Aggregated creative performance from imported monitoring reports, broken down by product × platform, each split into matched vs unmatched. Matched = the report row resolved to a matrix message (message_id not null); unmatched = it did not. Metrics per bucket: impressions, clicks, cost, ctr (clicks/impressions, null when impressions=0). Defaults to the NEWEST report period; pass from (a period_from value from list_report_periods) to pick another. Optional exact filters: product, platform. Returns { period: {from,to}, rows: [{product, platform, matched, unmatched, total}], totals: {matched, unmatched, total} }. Rows sorted by total impressions desc. Empty rows + null period when no reports are imported.",
+        "Aggregated creative performance from imported monitoring reports, broken down by product × platform, each split into matched vs unmatched. Matched = the report row resolved to a matrix message (message_id not null); unmatched = it did not. Metrics per bucket: impressions, clicks, cost, ctr (clicks/impressions, null when impressions=0). Defaults to the NEWEST report period; pass from (a period_from value from list_report_periods, or a plain ISO date like 2026-06-01) to pick another. Optional exact filters: product, platform. Returns { period: {from,to}, rows: [{product, platform, matched, unmatched, total}], totals: {matched, unmatched, total} }. Rows sorted by total impressions desc. Empty rows + null period when no reports are imported.",
       inputSchema: {
         from: z.string().optional(),
         product: z.string().optional(),
@@ -568,9 +573,13 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
           totals: { matched: z, unmatched: z, total: z },
         });
       }
-      const sel = args.from
-        ? periods.find((p) => p.from === args.from)
-        : periods[0];
+      const resolvedFrom = args.from
+        ? resolvePeriodFrom(
+            args.from,
+            periods.map((p) => p.from),
+          )
+        : periods[0].from;
+      const sel = periods.find((p) => p.from === resolvedFrom);
       if (!sel) {
         return errorResult(`no report period matching from='${args.from}'`, {
           available: periods.map((p) => p.from),
@@ -992,7 +1001,7 @@ function registerMetaTools(server: McpServer, ctx: McpContext): void {
     "get_mc_reporting",
     {
       description:
-        "Aggregated performance for ONE MC from the imported monitoring reports (the monitoring table — same source as report_performance; the older Reporting-sheet `reporting` table is not populated by the current AdForm pipeline). Look up by EXACTLY ONE of: mc_number (optionally narrowed by variant) — the RELIABLE key, matched against monitoring.mc_number/mc_variant — OR mc_label. mc_label may be a message PMMID (resolved to its number+variant, since the monitoring PMMID carries an extra -l_<lineitem> suffix the message PMMID lacks) or a full monitoring PMMID (matched exactly). A number+variant spans several audience cells, summed together across all imported report periods unless `from` (a period_from from list_report_periods) is given. Returns { mc, matched_rows, totals, by_variant, by_size, by_audience }, each metric block = { impressions, clicks, cost, conversions, ctr }. Empty when nothing matched.",
+        "Aggregated performance for ONE MC from the imported monitoring reports (the monitoring table — same source as report_performance; the older Reporting-sheet `reporting` table is not populated by the current AdForm pipeline). Look up by EXACTLY ONE of: mc_number (optionally narrowed by variant) — the RELIABLE key, matched against monitoring.mc_number/mc_variant — OR mc_label. mc_label may be a message PMMID (resolved to its number+variant, since the monitoring PMMID carries an extra -l_<lineitem> suffix the message PMMID lacks) or a full monitoring PMMID (matched exactly). A number+variant spans several audience cells, summed together across all imported report periods unless `from` (a period_from from list_report_periods, or a plain ISO date like 2026-06-01) is given. Returns { mc, matched_rows, totals, by_variant, by_size, by_audience }, each metric block = { impressions, clicks, cost, conversions, ctr }. Empty when nothing matched.",
       inputSchema: {
         mc_label: z.string().optional(),
         mc_number: z.number().int().optional(),
@@ -1035,8 +1044,21 @@ function registerMetaTools(server: McpServer, ctx: McpContext): void {
           conds.push(eq(monitoring.pmmid, args.mc_label!));
         }
       }
-      if (args.from !== undefined)
-        conds.push(eq(monitoring.periodFrom, args.from));
+      if (args.from !== undefined) {
+        const available = (
+          await db
+            .selectDistinct({ from: monitoring.periodFrom })
+            .from(monitoring)
+            .where(eq(monitoring.clientId, ctx.clientId))
+        ).map((p) => p.from);
+        const resolved = resolvePeriodFrom(args.from, available);
+        if (!resolved) {
+          return errorResult(`no report period matching from='${args.from}'`, {
+            available,
+          });
+        }
+        conds.push(eq(monitoring.periodFrom, resolved));
+      }
 
       const rows = await db
         .select({

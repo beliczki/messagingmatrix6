@@ -125,4 +125,23 @@ describe("get_mc_reporting via MCP (monitoring-backed)", () => {
     const both = await callTool(erste.id, "get_mc_reporting", { mc_label: "x", mc_number: 1 });
     expect(both.isError).toBe(true);
   });
+
+  it("from accepts a bare ISO date (agents pass 2026-06-01, not the stored string)", async () => {
+    const { json } = await callTool(erste.id, "get_mc_reporting", {
+      mc_number: 244,
+      variant: "b",
+      from: "2026-06-01",
+    });
+    expect(json.totals.impressions).toBe(2000);
+  });
+
+  it("unknown from errors with the available periods instead of a silent empty", async () => {
+    const res = await callTool(erste.id, "get_mc_reporting", {
+      mc_number: 244,
+      from: "1999-01-01",
+    });
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain("no report period");
+    expect(res.text).toContain(P.from);
+  });
 });

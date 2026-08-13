@@ -29,7 +29,7 @@ const CHANNELS: Array<{ channel: string; name: string }> = [
 ];
 
 async function main() {
-  const client = getActiveClient();
+  const client = await getActiveClient();
   console.log(`Active client: ${client.key} (id=${client.id})`);
 
   const existing = await db

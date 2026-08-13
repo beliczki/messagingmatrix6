@@ -5,6 +5,31 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.11.0] — 2026-07-22
+
+### Added
+- **DCO / nonDCO matrix axis.** A segmented toggle in the matrix header switches
+  the grid between DCO (template-driven messages) and nonDCO (static image
+  creatives). The two worlds partition cleanly on `audiences.channel` (NULL vs a
+  prodlist channel), so DCO never shows the channel columns and vice versa. The
+  choice persists in `mm6_matrix_state_v1`.
+- **Static creatives become first-class MCs.** A nonDCO MC is a template-less
+  `messages` row (`image1` = the creative file), so it gets an MC number and is
+  addressable everywhere — including MCP `list_mc` / `mc_get` with zero MCP
+  changes. Preview surfaces (grid tiles + the editor pane) render the image
+  directly instead of attempting an HTML render.
+- **`creative_promote` MCP tool.** "Matrixize" an uploaded creative into a nonDCO
+  MC: creates the message on the channel-audience at an auto-derived topic (from
+  the filename, freeze-safe reuse-before-create) and back-links the creative via
+  `mc_number`/`mc_variant`. Channel comes from an explicit arg or a prodlist
+  familyKey match.
+- **Prodlist ingest (FR-A, deliverable-grain).** New `prodlist_rows` table with
+  `list_prodlist` (read) + `prodlist_upsert` (idempotent batch write) MCP tools —
+  the source of the 6 channel-audiences (DISP/SOC/PRG/GSN/GNW/YT) and of the
+  creative→channel classification.
+- **`audiences.channel` column** + `scripts/seed-channel-audiences.ts` to seed the
+  6 channel-audiences for a client.
+
 ## [6.10.0] — 2026-07-22
 
 ### Changed

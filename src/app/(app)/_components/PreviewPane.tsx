@@ -48,6 +48,10 @@ type Props = {
    *  kind="html" keeps the current iframe behavior. */
   templateMeta?: TemplatePreviewMeta;
   templateName?: string;
+  /** nonDCO static-image MC: a creative filename (image1) with no template.
+   *  When set, the viewport shows the image via /api/drive/proxy instead of the
+   *  size-driven HTML iframe (which has no template/size to render). */
+  staticImage?: string | null;
 };
 
 export default function PreviewPane({
@@ -66,8 +70,11 @@ export default function PreviewPane({
   imageState,
   templateMeta,
   templateName,
+  staticImage,
 }: Props) {
+  const showStatic = !!staticImage;
   const showImage =
+    !showStatic &&
     templateMeta &&
     templateMeta.kind !== "html" &&
     typeof templateName === "string";
@@ -186,7 +193,16 @@ export default function PreviewPane({
           bg === "checker" && "preview-viewport--checker",
         )}
       >
-        {showImage ? (
+        {showStatic ? (
+          <div className="preview-pane__static-wrap relative flex size-full items-center justify-center overflow-hidden">
+            <img
+              src={`/api/drive/proxy/${encodeURIComponent(staticImage!)}`}
+              alt={staticImage!}
+              className="preview-pane__static-img max-h-full max-w-full object-contain"
+              loading="lazy"
+            />
+          </div>
+        ) : showImage ? (
           <div className="preview-pane__image-wrap relative size-full max-h-full max-w-full">
             <TemplatePreviewImage
               templateName={templateName!}
@@ -204,7 +220,7 @@ export default function PreviewPane({
           <PreviewIframe key={reloadKey} html={html} size={size} box={box} />
         )}
       </div>
-      {imagePreview && imageState && !showImage ? (
+      {imagePreview && imageState && !showImage && !showStatic ? (
         <div className="preview-pane__image-footer flex h-9 shrink-0 items-center gap-3 border-t border-border bg-surface px-3 text-xs">
           {imageState.url ? (
             <a

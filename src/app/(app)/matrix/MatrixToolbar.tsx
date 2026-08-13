@@ -1,8 +1,13 @@
 "use client";
 
 import { X, Filter as FilterIcon, Users, ListTree } from "lucide-react";
-import { type Filters, STATUS_COLOR } from "./types";
+import { type Filters, type MatrixAxis, STATUS_COLOR } from "./types";
 import MultiPill from "../_components/MultiPill";
+
+const AXES: Array<{ key: MatrixAxis; label: string }> = [
+  { key: "dco", label: "DCO" },
+  { key: "nondco", label: "nonDCO" },
+];
 
 type Props = {
   filters: Filters;
@@ -27,6 +32,28 @@ export default function MatrixToolbar(p: Props) {
     <div className="toolbar matrix-toolbar sticky top-0 z-40 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
       <div className="matrix-toolbar__brand flex items-baseline gap-2">
         <div className="matrix-toolbar__title text-sm font-semibold text-slate-900">Matrix</div>
+      </div>
+
+      <div
+        className="matrix-axis-toggle ml-2 inline-flex overflow-hidden rounded-md border border-slate-300 text-xs font-medium"
+        role="group"
+        aria-label="DCO / nonDCO view"
+      >
+        {AXES.map((ax) => (
+          <button
+            key={ax.key}
+            type="button"
+            aria-pressed={p.filters.axis === ax.key}
+            onClick={() => p.setFilters({ ...p.filters, axis: ax.key })}
+            className={`matrix-axis-toggle__btn px-2.5 py-1 ${
+              p.filters.axis === ax.key
+                ? "bg-slate-800 text-white"
+                : "bg-white text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            {ax.label}
+          </button>
+        ))}
       </div>
 
       <div className="input-box input-box--with-icon relative ml-2">
@@ -61,6 +88,7 @@ export default function MatrixToolbar(p: Props) {
         <button
           onClick={() =>
             p.setFilters({
+              ...p.filters,
               products: new Set(),
               statuses: new Set(),
               search: "",

@@ -64,7 +64,14 @@ import {
   pickWritable as pickCreativeWritable,
   restoreCreative,
   updateCreative,
+  listCreatives,
 } from "@/lib/entities/creatives";
+import { promoteCreative, PromoteError } from "@/lib/entities/promote";
+import {
+  listProdlistRows,
+  upsertProdlistRows,
+  type ProdlistUpsertRow,
+} from "@/lib/entities/prodlist";
 import {
   getFileByFilename,
   sanitizeFilename,
@@ -312,6 +319,25 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
         includeArchived: include_archived,
       });
       if (product) rows = rows.filter((r) => r.product === product);
+      return jsonResult(rows);
+    },
+  );
+
+  server.registerTool(
+    "list_prodlist",
+    {
+      description:
+        "List prodlist deliverable rows for the active client (one row per production-unit × required asset). Filters: channel (DISP|SOC|PRG|GSN|GNW|YT). Default excludes soft-archived rows; pass include_archived=true to see them. These rows are the source of the nonDCO channel-audience set and the creative→channel classification.",
+      inputSchema: {
+        channel: z.string().optional(),
+        include_archived: z.boolean().optional(),
+      },
+    },
+    async ({ channel, include_archived }) => {
+      const rows = await listProdlistRows(ctx.clientId, {
+        includeArchived: include_archived,
+        channel,
+      });
       return jsonResult(rows);
     },
   );
@@ -2126,6 +2152,60 @@ function registerCreativeWriteTools(server: McpServer, ctx: McpContext): void {
       return jsonResult({ ok: true, restored: result.row });
     },
   );
+
+  server.registerTool(
+    "creative_promote",
+    {
+      description:
+        "Promote (\"matrixize\") an uploaded creative into a nonDCO MC: creates a template-less message row (image1 = the creative file) on the channel-audience, at an auto-derived topic, then back-links the creative via mc_number/mc_variant. This gives the static creative a first-class MC identity addressable everywhere (incl. list_mc/mc_get). Identify the creative by EXACTLY ONE of creative_id or file_name. The channel-audience is chosen by: explicit `channel` (DISP|SOC|PRG|GSN|GNW|YT) if given, else a prodlist deliverable match on the creative's familyKey. The topic is auto-derived from the filename unless `topic_override` (an existing topic key) is passed. Refuses if the creative is already matrixed. One write against the rate limit. Returns { message, topic, audience }.",
+      inputSchema: {
+        creative_id: z.number().int().optional(),
+        file_name: z.string().optional(),
+        channel: z.string().optional(),
+        topic_override: z.string().optional(),
+      },
+    },
+    async ({ creative_id, file_name, channel, topic_override }) => {
+      const limited = await requireRate(ctx);
+      if (limited) return limited;
+      if (!creative_id === !file_name) {
+        return errorResult("provide exactly one of creative_id or file_name");
+      }
+      let id = creative_id;
+      if (id === undefined && file_name) {
+        const matches = (await listCreatives(ctx.clientId)).filter(
+          (c) => c.fileName === file_name,
+        );
+        if (matches.length === 0) {
+          return errorResult(`no creative with file_name '${file_name}'`);
+        }
+        if (matches.length > 1) {
+          return errorResult(
+            `file_name '${file_name}' matches ${matches.length} creatives — pass creative_id instead`,
+          );
+        }
+        id = matches[0].id;
+      }
+      try {
+        const result = await promoteCreative(ctx.clientId, id!, {
+          channel,
+          topicOverride: topic_override,
+        });
+        await writeAudit({
+          clientId: ctx.clientId,
+          userId: mcpUserId(ctx),
+          entityType: "messages",
+          entityId: result.message.id,
+          action: "create",
+          after: result.message,
+        });
+        return jsonResult(result);
+      } catch (e) {
+        if (e instanceof PromoteError) return errorResult(e.message);
+        throw e;
+      }
+    },
+  );
 }
 
 // ── Batch tools ──
@@ -2138,6 +2218,63 @@ function registerCreativeWriteTools(server: McpServer, ctx: McpContext): void {
 // about uncommitted work (writeAudit broadcasts unconditionally — pulling
 // individual audit calls into the txn body would emit rollback-then-broadcast on
 // failure).
+
+function registerProdlistWriteTools(server: McpServer, ctx: McpContext): void {
+  server.registerTool(
+    "prodlist_upsert",
+    {
+      description:
+        "Idempotent batch upsert of prodlist deliverable rows for the active client. Required: rows (array). Each row needs deliverable_id (the stable source key — re-upserting the same id updates in place, bumping version). Optional per row: production_unit_id, channel (DISP|SOC|PRG|GSN|GNW|YT), campaign, format, required_asset, flight_start, flight_end, source_ref, family_key, mc_number, mc_variant. Atomic single statement. One audit row for the batch. Returns the upserted rows.",
+      inputSchema: {
+        rows: z.array(
+          z.object({
+            deliverable_id: z.string().min(1),
+            production_unit_id: z.string().optional(),
+            channel: z.string().optional(),
+            campaign: z.string().optional(),
+            format: z.string().optional(),
+            required_asset: z.string().optional(),
+            flight_start: z.string().optional(),
+            flight_end: z.string().optional(),
+            source_ref: z.string().optional(),
+            family_key: z.string().optional(),
+            mc_number: z.number().int().optional(),
+            mc_variant: z.string().optional(),
+          }),
+        ),
+      },
+    },
+    async ({ rows }) => {
+      const limited = await requireRate(ctx);
+      if (limited) return limited;
+      if (rows.length === 0) return jsonResult([]);
+      const mapped: ProdlistUpsertRow[] = rows.map((r) => ({
+        deliverableId: r.deliverable_id,
+        productionUnitId: r.production_unit_id ?? null,
+        channel: r.channel ?? null,
+        campaign: r.campaign ?? null,
+        format: r.format ?? null,
+        requiredAsset: r.required_asset ?? null,
+        flightStart: r.flight_start ?? null,
+        flightEnd: r.flight_end ?? null,
+        sourceRef: r.source_ref ?? null,
+        familyKey: r.family_key ?? null,
+        mcNumber: r.mc_number ?? null,
+        mcVariant: r.mc_variant ?? null,
+      }));
+      const upserted = await upsertProdlistRows(ctx.clientId, mapped);
+      await writeAudit({
+        clientId: ctx.clientId,
+        userId: mcpUserId(ctx),
+        entityType: "prodlist_rows",
+        entityId: `bulk:${ctx.clientId}`,
+        action: "bulk_upsert",
+        after: { count: upserted.length },
+      });
+      return jsonResult(upserted);
+    },
+  );
+}
 
 function registerBatchTools(server: McpServer, ctx: McpContext): void {
   server.registerTool(
@@ -2651,6 +2788,7 @@ export function buildMcpServer(ctx: McpContext): McpServer {
     registerMessageWriteTools(server, ctx);
     registerAssetWriteTools(server, ctx);
     registerCreativeWriteTools(server, ctx);
+    registerProdlistWriteTools(server, ctx);
     registerBatchTools(server, ctx);
   }
   return server;

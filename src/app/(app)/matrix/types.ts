@@ -16,6 +16,9 @@ export type Audience = {
   campaignId: string | null;
   lineitemName: string | null;
   lineitemId: string | null;
+  /** nonDCO scoping: NULL = DCO audience; a prodlist channel
+   *  (DISP|SOC|PRG|GSN|GNW|YT) = a nonDCO channel-audience. */
+  channel: string | null;
   version: number;
   updatedAt: string;
   archivedAt: string | null;
@@ -139,13 +142,20 @@ export const STATUS_COLOR: Record<string, string> = {
 export type View = "grid" | "feed" | "tree";
 export type Density = "detailed" | "compact" | "dense";
 
+// Which matrix world the grid shows. "dco" = template-driven messages
+// (audiences with channel = null). "nondco" = static image creatives promoted
+// onto the 6 prodlist channel-audiences (channel != null).
+export type MatrixAxis = "dco" | "nondco";
+
 export type Filters = {
+  axis: MatrixAxis;
   products: Set<string>;
   statuses: Set<string>;
   search: string;
 };
 
 export const EMPTY_FILTERS: Filters = {
+  axis: "dco",
   products: new Set(),
   statuses: new Set(),
   search: "",

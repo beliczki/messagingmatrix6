@@ -2007,7 +2007,16 @@ function MessagePreview({
         .filter((c) => c && c !== "animated")
         .join(" ");
     }
-    const templateName = draft.template ?? message.template ?? "html";
+    // nonDCO static-image MC: no template but a creative image. Skip the render
+    // fetch (it would 404 on a missing template dir) — PreviewPane shows the
+    // image directly via the staticImage prop below.
+    const resolvedTemplate = draft.template ?? message.template ?? null;
+    const staticImg = (draft.image1 ?? message.image1) ?? null;
+    if (!resolvedTemplate && staticImg) {
+      setHtml("");
+      return;
+    }
+    const templateName = resolvedTemplate ?? "html";
     fetch("/api/render", {
       method: "POST",
       credentials: "include",
@@ -2060,6 +2069,11 @@ function MessagePreview({
       }}
       templateName={templateInfo?.name}
       templateMeta={templateMetaFor(templateInfo)}
+      staticImage={
+        !(draft.template ?? message.template)
+          ? (draft.image1 ?? message.image1) ?? null
+          : null
+      }
     />
   );
 }

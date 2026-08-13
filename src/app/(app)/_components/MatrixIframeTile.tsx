@@ -85,6 +85,19 @@ export function MatrixIframePreview({
   mode: "fill-width" | "fit-rect";
   templateMeta?: TemplatePreviewMeta;
 }) {
+  // nonDCO static-image MC: no template, a creative image in image1. Show the
+  // image directly instead of iframe-rendering (which would POST /api/render
+  // against a missing template dir and 404). Requires image1 so a half-set-up
+  // DCO MC (null template, no image) still falls through to the placeholder.
+  if (!message.template && message.image1) {
+    return (
+      <StaticImagePreview
+        image={message.image1}
+        mode={mode}
+        label={`MC${message.number}${message.variant ?? ""}`}
+      />
+    );
+  }
   if (templateMeta && templateMeta.kind !== "html") {
     return (
       <TemplatePreviewImage
@@ -103,6 +116,43 @@ export function MatrixIframePreview({
       size={size}
       mode={mode}
     />
+  );
+}
+
+// Static creative image (nonDCO): renders message.image1 via the same
+// /api/drive/proxy route + thumb-checker shell the editor's FileThumb uses, so
+// a template-less image MC lines up visually with the html-iframe cells.
+function StaticImagePreview({
+  image,
+  mode,
+  label,
+}: {
+  image: string;
+  mode: "fill-width" | "fit-rect";
+  label: string;
+}) {
+  const src = `/api/drive/proxy/${encodeURIComponent(image)}`;
+  if (mode === "fill-width") {
+    return (
+      <div className="matrix-static-preview thumb-checker relative w-full overflow-hidden">
+        <img
+          src={src}
+          alt={label}
+          className="matrix-static-preview__img block w-full"
+          loading="lazy"
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="matrix-static-preview thumb-checker relative size-full overflow-hidden">
+      <img
+        src={src}
+        alt={label}
+        className="matrix-static-preview__img absolute inset-0 size-full object-contain"
+        loading="lazy"
+      />
+    </div>
   );
 }
 

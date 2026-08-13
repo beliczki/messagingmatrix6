@@ -26,6 +26,7 @@ const READ_TOOLS = [
   "list_mc",
   "list_assets",
   "list_creatives",
+  "list_prodlist",
   "list_report_periods",
   "report_performance",
   "mc_get",

@@ -22,6 +22,7 @@ function aud(overrides: Partial<Audience>): Audience {
     campaignId: null,
     lineitemName: null,
     lineitemId: null,
+    channel: null,
     version: 1,
     updatedAt: "",
     archivedAt: null,

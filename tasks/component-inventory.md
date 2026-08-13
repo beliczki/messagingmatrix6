@@ -117,6 +117,8 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `preview-pane__refresh` | Opcionális refresh gomb | PreviewPane.tsx 110–118 | – |
 | `preview-pane__viewport` | Scrollable scaling container ahol az iframe él | PreviewPane.tsx 122–128 | – |
 | `preview-pane__iframe` | Skálázott iframe | PreviewPane.tsx 177–215 | – |
+| `preview-pane__static-wrap` / `__static-img` | nonDCO static-image MC preview (template nélkül, image1 a /api/drive/proxy-ról, object-contain) | PreviewPane.tsx | – |
+| `matrix-static-preview` / `__img` | Static creative kép-tile a grid/masonry cellákban (thumb-checker shell, MatrixIframePreview ága) | `_components/MatrixIframeTile.tsx` | – |
 | `upload-dialog` | Single-file upload modal (belül `modal` is) | `_components/UploadDialog.tsx` | shared |
 | `upload-dialog--picking` / `--uploading` / `--metadata` / `--saving` / `--done` | Phase modifier (a block-on) | UploadDialog.tsx | – |
 | `upload-dialog__title` | "Upload {category}" h2 | UploadDialog.tsx 121 | – |
@@ -252,6 +254,7 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | Toolbar root (sticky) | `toolbar matrix-toolbar` | 20 |
 | Brand wrapper (cím + count) | `matrix-toolbar__brand` | 21–27 |
 | "Matrix" cím | `matrix-toolbar__title` | 22 |
+| DCO / nonDCO segmented toggle | `matrix-axis-toggle` + `matrix-axis-toggle__btn` | MatrixToolbar.tsx |
 | Message count szöveg ("12 of 27 · …") | `matrix-toolbar__count` | 23–26 |
 | Search input | `input-box` (globalis, ikon nélkül itt) | 29–37 |
 | Product MultiPill | `multi-pill` (globalis, root már megvan) | 39–44 |

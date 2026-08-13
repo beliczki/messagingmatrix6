@@ -15,6 +15,7 @@ export type AuditAction =
   | "bulk_copy"
   | "bulk_create"
   | "bulk_update"
+  | "bulk_upsert"
   | "bulk_delete"
   | "bulk_archive"
   | "bulk_restore";

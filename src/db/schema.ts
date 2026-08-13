@@ -177,6 +177,10 @@ export const audiences = pgTable(
     campaignId: text("campaign_id"),
     lineitemName: text("lineitem_name"),
     lineitemId: text("lineitem_id"),
+    // nonDCO scoping. NULL = DCO audience (template-driven matrix). A prodlist
+    // channel value (DISP|SOC|PRG|GSN|GNW|YT) = a nonDCO channel-audience.
+    // The DCO/nonDCO matrix views partition on IS NULL vs IS NOT NULL.
+    channel: text("channel"),
     version: integer("version").notNull().default(1),
     createdAt: text("created_at")
       .notNull()
@@ -190,6 +194,7 @@ export const audiences = pgTable(
     uniqueIndex("audiences_client_key_unique").on(t.clientId, t.key),
     index("audiences_client_product_idx").on(t.clientId, t.product),
     index("audiences_client_order_idx").on(t.clientId, t.orderIndex),
+    index("audiences_client_channel_idx").on(t.clientId, t.channel),
   ],
 );
 
@@ -759,6 +764,54 @@ export const keywords = pgTable(
 
 export type Keyword = typeof keywords.$inferSelect;
 export type NewKeyword = typeof keywords.$inferInsert;
+
+// Prodlist ingest (FR-A, deliverable-grain). One row per prodlist deliverable
+// (a production unit × required asset). Source of the nonDCO channel set
+// (DISP/SOC/PRG/GSN/GNW/YT) and the creative→channel classification target.
+// `deliverableId` is the stable source hash, unique per client → idempotent
+// upsert. `mcNumber`/`mcVariant` are the soft-link to the promoted message,
+// mirroring `creatives`.
+export const prodlistRows = pgTable(
+  "prodlist_rows",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    clientId: integer("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    deliverableId: text("deliverable_id").notNull(),
+    productionUnitId: text("production_unit_id"),
+    channel: text("channel"),
+    campaign: text("campaign"),
+    format: text("format"),
+    requiredAsset: text("required_asset"),
+    flightStart: text("flight_start"),
+    flightEnd: text("flight_end"),
+    sourceRef: text("source_ref"),
+    familyKey: text("family_key"),
+    mcNumber: integer("mc_number"),
+    mcVariant: text("mc_variant"),
+    version: integer("version").notNull().default(1),
+    createdAt: text("created_at")
+      .notNull()
+      .default(nowUtc),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(nowUtc),
+    archivedAt: text("archived_at"),
+  },
+  (t) => [
+    uniqueIndex("prodlist_rows_client_deliverable_unique").on(
+      t.clientId,
+      t.deliverableId,
+    ),
+    index("prodlist_rows_client_channel_idx").on(t.clientId, t.channel),
+    index("prodlist_rows_client_mc_idx").on(t.clientId, t.mcNumber, t.mcVariant),
+    index("prodlist_rows_client_family_idx").on(t.clientId, t.familyKey),
+  ],
+);
+
+export type ProdlistRow = typeof prodlistRows.$inferSelect;
+export type NewProdlistRow = typeof prodlistRows.$inferInsert;
 
 export type ConfigRow = typeof config.$inferSelect;
 export type NewConfigRow = typeof config.$inferInsert;

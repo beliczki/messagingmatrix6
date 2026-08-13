@@ -20,6 +20,7 @@ const WRITABLE_FIELDS = [
   "campaignId",
   "lineitemName",
   "lineitemId",
+  "channel",
 ] as const;
 type WritableField = (typeof WRITABLE_FIELDS)[number];
 
@@ -176,6 +177,7 @@ export async function createAudience(
       campaignId: input.campaignId,
       lineitemName: input.lineitemName,
       lineitemId: input.lineitemId,
+      channel: input.channel,
     })
     .returning();
   return row;
@@ -381,6 +383,7 @@ export async function duplicateAudience(
       campaignId: src.campaignId,
       lineitemName: src.lineitemName,
       lineitemId: src.lineitemId,
+      channel: src.channel,
     })
     .returning();
   return row;

@@ -25,6 +25,7 @@ import {
   type Audience,
   type Density,
   type Filters,
+  type MatrixAxis,
   type Message,
   type Topic,
   type View,
@@ -115,7 +116,12 @@ type PersistedState = {
   view: View;
   density: Density;
   transposed: boolean;
-  filters: { products: string[]; statuses: string[]; search: string };
+  filters: {
+    axis?: MatrixAxis;
+    products: string[];
+    statuses: string[];
+    search: string;
+  };
 };
 
 function loadPersisted(): Partial<PersistedState> {
@@ -180,6 +186,7 @@ export default function MatrixWorkspace() {
     if (typeof p.transposed === "boolean") setTransposed(p.transposed);
     if (p.filters) {
       setFilters({
+        axis: p.filters.axis === "nondco" ? "nondco" : "dco",
         products: new Set(p.filters.products ?? []),
         statuses: new Set(p.filters.statuses ?? []),
         search: p.filters.search ?? "",
@@ -195,6 +202,7 @@ export default function MatrixWorkspace() {
       density,
       transposed,
       filters: {
+        axis: filters.axis,
         products: [...filters.products],
         statuses: [...filters.statuses],
         search: filters.search,
@@ -599,8 +607,17 @@ export default function MatrixWorkspace() {
     const predicate = parseSearchQuery(filters.search);
     const axes = narrowingAxes(filters.search);
 
+    // DCO/nonDCO partition on the AUDIENCE axis: nonDCO shows only the prodlist
+    // channel-audiences (channel != null), DCO shows only the template-driven
+    // ones (channel == null). Messages are pruned by the visible audience keys
+    // below, so this single partition carries the whole view. (Topic-axis
+    // scoping for auto-topics is deferred to Slice 4, when they exist.)
+    const axisAuds = audiences.filter((a) =>
+      filters.axis === "nondco" ? a.channel != null : a.channel == null,
+    );
+
     let auds =
-      ps.size === 0 ? audiences : audiences.filter((a) => a.product && ps.has(a.product));
+      ps.size === 0 ? axisAuds : axisAuds.filter((a) => a.product && ps.has(a.product));
     let tops =
       ps.size === 0 ? topics : topics.filter((t) => t.product && ps.has(t.product));
     const audKeys = new Set(auds.map((a) => a.key));
@@ -630,7 +647,7 @@ export default function MatrixWorkspace() {
       if (axes.audience) auds = auds.filter((a) => usedAudKeys.has(a.key));
       if (axes.topic) tops = tops.filter((t) => usedTopKeys.has(t.key));
     }
-    return { auds, tops, msgs };
+    return { auds, tops, msgs, axisAudienceCount: axisAuds.length };
   }, [audiences, topics, messages, filters, audienceById, topicById]);
 
   // Feed export must never see archived rows — the client message list acts
@@ -707,7 +724,7 @@ export default function MatrixWorkspace() {
           productOptions={productOptions}
           statusOptions={statusOptions}
           counts={{
-            audiences: audiences.length,
+            audiences: filtered.axisAudienceCount,
             topics: topics.length,
             messages: messages.length,
             visible: filtered.msgs.length,

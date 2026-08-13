@@ -5,6 +5,7 @@ import { audiences, auditLog, clients } from "@/db/schema";
 import {
   archiveAudience,
   createAudience,
+  duplicateAudience,
   getAudience,
   listAudiences,
   restoreAudience,
@@ -125,6 +126,54 @@ describe("audiences entity", () => {
     expect(e1.key).toBe("shared-key");
     expect(t1.key).toBe("shared-key");
     expect(e1.id).not.toBe(t1.id);
+  });
+});
+
+describe("audiences channel column (nonDCO scoping — migration 0005)", () => {
+  it("create persists channel; default is null (DCO)", async () => {
+    const dco = await createAudience(erste.id, { name: "DCO aud" });
+    expect(dco.channel).toBeNull();
+
+    const disp = await createAudience(erste.id, {
+      key: "ch_disp",
+      name: "Display",
+      channel: "DISP",
+    });
+    expect(disp.channel).toBe("DISP");
+  });
+
+  it("list returns channel and both partitions are distinguishable", async () => {
+    await createAudience(erste.id, { name: "DCO" });
+    await createAudience(erste.id, {
+      key: "ch_soc",
+      name: "Social",
+      channel: "SOC",
+    });
+    const rows = await listAudiences(erste.id);
+    const dco = rows.filter((r) => r.channel == null);
+    const nondco = rows.filter((r) => r.channel != null);
+    expect(dco).toHaveLength(1);
+    expect(nondco).toHaveLength(1);
+    expect(nondco[0].channel).toBe("SOC");
+  });
+
+  it("update round-trips a channel change", async () => {
+    const a = await createAudience(erste.id, { name: "A" });
+    const res = await updateAudience(erste.id, a.id, a.version, {
+      channel: "PRG",
+    });
+    expect(res.ok).toBe(true);
+    if (res.ok) expect(res.row.channel).toBe("PRG");
+  });
+
+  it("duplicate copies the channel", async () => {
+    const src = await createAudience(erste.id, {
+      key: "ch_yt",
+      name: "YouTube",
+      channel: "YT",
+    });
+    const dup = await duplicateAudience(erste.id, src.id);
+    expect(dup?.channel).toBe("YT");
   });
 });
 

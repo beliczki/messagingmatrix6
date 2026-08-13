@@ -37,6 +37,10 @@ const READ_TOOLS = [
   "list_products",
   "matrix_status",
   "get_mc_reporting",
+  "list_drafts",
+  "draft_get",
+  "draft_status",
+  "show_draft_previews",
 ];
 
 beforeEach(async () => {
@@ -172,6 +176,9 @@ describe("buildMcpServer scope gating", () => {
       "asset_upload",
       "creative_upload",
       "mc_create_batch",
+      "generate_test_creative",
+      "draft_delete",
+      "draft_promote",
     ]) {
       expect(names).not.toContain(writeTool);
     }
@@ -185,6 +192,9 @@ describe("buildMcpServer scope gating", () => {
       "mc_update_batch",
       "asset_upload",
       "preview_generate",
+      "generate_test_creative",
+      "draft_delete",
+      "draft_promote",
     ]) {
       expect(names).toContain(t);
     }

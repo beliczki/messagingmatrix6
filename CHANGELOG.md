@@ -5,6 +5,32 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.12.0] — 2026-08-13
+
+### Added
+- **Agentic test-creative production over MCP.** New `generate_test_creative`
+  tool stages a draft creative OUTSIDE the matrix (new `draft_messages` table —
+  no audience/topic/MC number) from a template + content fields + uploaded
+  image filenames + a size list, then renders each size to a PNG asynchronously
+  on the shared server-side Chromium. Agents poll `draft_status` for
+  percent/elapsed/per-size preview URLs (migration `0006`).
+- **Draft MCP tool set.** `list_drafts`, `draft_get`, `draft_status` and the
+  `show_draft_previews` Apps-SDK gallery widget (reusing the MC previews
+  widget) are read-scope; `generate_test_creative`, `draft_delete` (hard
+  delete incl. preview PNGs) and `draft_promote` (into a matrix cell via the
+  standard numbering/PMMID/trafficking pipeline, back-linked through
+  `promoted_message_id`) are full-scope.
+- **Drafts page.** Thin `/drafts` view (sidebar: Drafts) with masonry preview
+  tiles, live render-progress polling, and a detail dialog offering Promote
+  (audience + topic picker) and Delete. Public PNG serve route
+  `/api/draft-previews/[id]` mirrors `/api/previews/[id]`.
+
+### Changed
+- **Preview shooter generalized.** `preview-shooter.ts` now exposes a generic
+  `shootItems` (persistence supplied per item); `shootPreviews` keeps its
+  exact signature and behaviour for message previews. Draft renders queue on
+  the same one-Chromium mutex as message preview shoots.
+
 ## [6.11.0] — 2026-07-22
 
 ### Added

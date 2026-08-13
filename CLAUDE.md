@@ -3,7 +3,8 @@
 Project-level guidance for Claude Code working in this repo. The user's global rules in `~/.claude/CLAUDE.md` apply on top of this file.
 
 ## Where plans live
-- **`tasks/todo.md`** — canonical session checkpoint + roadmap. Read first. Update as work progresses; expand the bottom of the file rather than rewriting.
+- **`tasks/todo.md`** — lean active roadmap + recent checkpoints. **Read first, read fully** (kept small on purpose). New session checkpoints append to the bottom; open work is the "Nyitott roadmap" section.
+- **`tasks/todo-archive.md`** — full verbatim history (Phase 0–10 logs, every deploy/session checkpoint 2026-04 → 2026-07, ~4000 lines). The long-term memory — nothing gets deleted, only appended. Read it (tail/offset/grep) when you need the detail behind a roadmap pointer. When `todo.md`'s checkpoints pile up, roll the old ones into here and leave a one-line pointer.
 - **`docs/REBUILD_SPEC.md`** — v6 design spec; multi-tenancy delta D1–D11 layered on top.
 - **`tasks/component-inventory.md`** — semantic class names already in use. Check before inventing a new block name.
 
@@ -36,7 +37,7 @@ If the finished work is ambiguous (e.g. touches multiple categories), propose th
 
 ## Workflow notes specific to mm6
 
-- The `tasks/todo.md` file is large and append-only — read with `tail` / offset rather than the full file. Each session's checkpoint goes at the bottom.
+- `tasks/todo.md` is the lean active file — read it fully. Each session's checkpoint appends to the bottom. History lives in `tasks/todo-archive.md` (large, append-only — read with `tail`/offset/grep); roll old checkpoints there when `todo.md` grows.
 - The `.claude/settings.json` Stop-hook will warn if `src/` has uncommitted changes but `tasks/todo.md` wasn't updated this session. Update the checkpoint before `/clear`.
 - Running multiple deploys in parallel: `npm run dev:erste` (port 6001), `dev:telekom` (6002), `dev:proficio` (6003), `dev:demo` (6000). All share the same SQLite at `db/matrix.db`.
 - Tests: `npm test` (vitest). 167+ tests as of Phase 10. New schema migrations should land with at least one integration test exercising the migration path.

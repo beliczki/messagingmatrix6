@@ -37,6 +37,8 @@ const GROUP_ORDER: Array<{ key: string; label: string; match: (n: string) => boo
   { key: "audience", label: "Audiences", match: (n) => /audience/.test(n) && !n.startsWith("list_") && !n.startsWith("get_") },
   { key: "topic", label: "Topics", match: (n) => /topic/.test(n) && !n.startsWith("list_") && !n.startsWith("get_") },
   { key: "message", label: "Messages (MCs)", match: (n) => /(^|_)mc(_|$)|message/.test(n) && !n.startsWith("list_") && !n.startsWith("get_") && !/batch/.test(n) },
+  // Before "creative": generate_test_creative must not fall into Creative library.
+  { key: "drafts", label: "Drafts (test creatives)", match: (n) => /draft/.test(n) && !n.startsWith("list_") || n === "generate_test_creative" },
   { key: "creative", label: "Creative library", match: (n) => /creative/.test(n) && !n.startsWith("list_") },
   { key: "prodlist", label: "Prodlist", match: (n) => /prodlist/.test(n) && !n.startsWith("list_") },
   { key: "batch", label: "Batch", match: (n) => /batch/.test(n) },
@@ -186,6 +188,32 @@ export function McpTab() {
           (newest&nbsp;wins). brand/product/type are auto-derived from the
           filename via the client&apos;s parsing rules; explicit values
           override.
+        </p>
+      </Section>
+
+      <Section title="Draft test creatives">
+        <p className="text-sm text-slate-600">
+          The agentic production workflow stages creatives{" "}
+          <strong className="font-semibold">outside the matrix</strong>:{" "}
+          <code className="font-mono text-xs">generate_test_creative</code>{" "}
+          takes a template + content fields + image filenames (upload generated
+          images first via{" "}
+          <code className="font-mono text-xs">asset_upload</code>) + a size
+          list, stores a <code className="font-mono text-xs">draft_messages</code>{" "}
+          row and returns a <code className="font-mono text-xs">draft_id</code>{" "}
+          immediately — rendering runs async on the shared server-side
+          Chromium. Poll{" "}
+          <code className="font-mono text-xs">draft_status</code> for percent /
+          elapsed / per-size preview URLs (public, like MC previews, at{" "}
+          <code className="font-mono text-xs">/api/draft-previews/&lt;id&gt;</code>),
+          display with{" "}
+          <code className="font-mono text-xs">show_draft_previews</code>, then
+          either <code className="font-mono text-xs">draft_promote</code> into
+          a matrix cell (standard numbering/PMMID/trafficking) or{" "}
+          <code className="font-mono text-xs">draft_delete</code> (hard delete —
+          drafts have no archive). Drafts also appear on the app&apos;s{" "}
+          <strong className="font-semibold">Drafts</strong> page for review,
+          promotion and deletion.
         </p>
       </Section>
 

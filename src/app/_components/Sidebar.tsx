@@ -8,6 +8,7 @@ import {
   Package,
   BarChart3,
   FileCode,
+  FlaskConical,
   Users as UsersIcon,
   ListTree,
   Settings as SettingsIcon,
@@ -26,6 +27,7 @@ type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 const ITEMS: Array<{ href: string; label: string; Icon: IconType }> = [
   { href: "/matrix", label: "Matrix", Icon: Table2 },
   { href: "/creative-library", label: "Creative Library", Icon: ImageIcon },
+  { href: "/drafts", label: "Drafts", Icon: FlaskConical },
   { href: "/assets", label: "Assets", Icon: Package },
   { href: "/texts", label: "Texts", Icon: Type },
   { href: "/audiences", label: "Audiences", Icon: UsersIcon },

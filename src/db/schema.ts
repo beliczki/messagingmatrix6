@@ -347,6 +347,97 @@ export const messagePreviews = pgTable(
   ],
 );
 
+// Agent-produced test creatives (MCP `generate_test_creative`). Staging only —
+// NOT part of the matrix: no audience/topic/number/variant/pmmid. Same copy /
+// style / media field names as `messages` so renderTemplate binds directly.
+// Hard-deleted (no archived_at): throwaway staging, previews are purged with
+// the row. Promotion into the matrix goes through createMessage and stamps
+// promoted_message_id as a double-promote guard.
+export const draftMessages = pgTable(
+  "draft_messages",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    clientId: integer("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    name: text("name"),
+    template: text("template").notNull(),
+    templateVariantClasses: text("template_variant_classes"),
+    headline: text("headline"),
+    copy1: text("copy1"),
+    copy2: text("copy2"),
+    disclaimer: text("disclaimer"),
+    cta: text("cta"),
+    flash: text("flash"),
+    headlineStyle: text("headline_style"),
+    copy1Style: text("copy1_style"),
+    copy2Style: text("copy2_style"),
+    disclaimerStyle: text("disclaimer_style"),
+    ctaStyle: text("cta_style"),
+    flashStyle: text("flash_style"),
+    customCss: text("custom_css"),
+    image1: text("image1"),
+    image2: text("image2"),
+    image3: text("image3"),
+    image4: text("image4"),
+    image5: text("image5"),
+    image6: text("image6"),
+    // JSON array string of requested "WIDTHxHEIGHT" sizes, e.g. '["300x250"]'
+    // (precedent: config.value stores JSON-as-text).
+    sizes: text("sizes").notNull(),
+    // pending | rendering | done | failed — done-count is NOT stored, it is
+    // derived from draft_previews rows ("stalled" is likewise computed).
+    renderStatus: text("render_status").notNull().default("pending"),
+    renderStartedAt: text("render_started_at"),
+    // JSON map {size: error message} for per-size render failures.
+    renderError: text("render_error"),
+    promotedMessageId: integer("promoted_message_id").references(
+      () => messages.id,
+      { onDelete: "set null" },
+    ),
+    version: integer("version").notNull().default(1),
+    createdAt: text("created_at")
+      .notNull()
+      .default(nowUtc),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(nowUtc),
+  },
+  (t) => [index("draft_messages_client_idx").on(t.clientId)],
+);
+
+// PNG screenshots of draft creatives — one per requested size. Regenerable
+// derivative like message_previews (bytes under previews/ in the object
+// store), but simpler: drafts are immutable in v1, so no version/staleness.
+export const draftPreviews = pgTable(
+  "draft_previews",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    clientId: integer("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    draftId: integer("draft_id")
+      .notNull()
+      .references(() => draftMessages.id, { onDelete: "cascade" }),
+    size: text("size").notNull(),
+    storageKey: text("storage_key").notNull(),
+    createdAt: text("created_at")
+      .notNull()
+      .default(nowUtc),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(nowUtc),
+  },
+  (t) => [
+    uniqueIndex("draft_previews_draft_size_unique").on(
+      t.clientId,
+      t.draftId,
+      t.size,
+    ),
+    index("draft_previews_client_draft_idx").on(t.clientId, t.draftId),
+  ],
+);
+
 // §3.4
 export const assets = pgTable(
   "assets",

@@ -787,3 +787,8 @@ Added an 11th workflow status `ARCHIVED`, sitting next to `INACTIVE` semanticall
 
 **Monitoring tiered match (2026-07-16):**
 - `status-badge--family` — sky badge a Message oszlopban a family-szinten (egyedi MC szám+variáns) linkelt sorokra, a messageName mellett; `status-badge--family-known` — sky badge a messageId nélküli, de a mátrixban létező (több cellára fan-outolt) MC-family sorokra, az amber `status-badge--unmatched` helyén. Mindkettő a `status-badge--unmatched` geometriáját követi (`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase`), title-tooltippel.
+
+**Drafts oldal — agent-staged teszt-kreatívok (2026-08-13):**
+- `drafts-view` — a `/drafts` oldal wrapper blokkja (`assets-library` layout-minta): `__toolbar` (globális `toolbar` + `toolbar__title` + `toolbar__count`), `__promoted-toggle` (Show promoted checkbox), `__scroll`, `__empty` (globális `empty-state` shell).
+- `drafts-tile` — masonry tile egy draftra: `__media` (preview img / placeholder), `__img`, `__placeholder` (Rendering… spinner), `__status` (globális `status-badge` + emerald/amber/red státusz-szín, rendering alatt `done/total` számláló), `__promoted` (sötét sarok-badge), `__meta` / `__name` / `__sub`.
+- `draft-detail` — `AppDialog` (`modal` shell) tartalma: `__header`, `__body` (previews + side kolumna), `__previews` / `__figure` / `__img` (méretenként PNG, `text-[10px] uppercase tracking-wider` felirattal), `__errors` (per-size render-hiba doboz), `__side`, `__fields` (globális `form-field` dl), `__promote` (audience+topic select + `toolbar-btn--primary` Promote), törlés `toolbar-btn--danger`-rel.

@@ -1,5 +1,6 @@
-// Preview shooting — shared by scripts/gen-previews.ts (bulk CLI) and the
-// on-demand callers (POST /api/previews/generate, MCP preview_generate).
+// Preview shooting — shared by scripts/gen-previews.ts (bulk CLI), the
+// on-demand callers (POST /api/previews/generate, MCP preview_generate) and
+// draft renders (MCP generate_test_creative via entities/drafts.ts).
 //
 // Renders in-process via renderTemplate (the same function POST /api/render
 // calls), then screenshots in headless Chromium. The page is served on the
@@ -10,7 +11,12 @@
 // 400ms later) — snapping on `load` would capture the preloader overlay.
 //
 // Runs are serialized by a module-level mutex: concurrent editor clicks / MCP
-// batches queue behind one Chromium instead of launching several.
+// batches / draft renders queue behind one Chromium instead of launching
+// several.
+//
+// Persistence lives on the item (`persist` callback): message previews upsert
+// message_previews (shootPreviews below), drafts insert draft_previews. The
+// shooter itself only renders, screenshots, and hands over the PNG.
 import { and, eq, isNull } from "drizzle-orm";
 import { chromium } from "playwright";
 import { db } from "@/db";
@@ -25,6 +31,21 @@ const PRELOADER_TIMEOUT_MS = 15_000;
 
 export type ShotResult = { messageId: number; size: string } & (
   | { ok: true; previewId: number; updatedAt: string }
+  | { ok: false; error: string }
+);
+
+// Generic shoot unit: a message-shaped `row` renderTemplate binds against
+// (template, headline, image1…, customCss — draft_messages rows qualify
+// as-is), plus the persistence for the resulting PNG.
+export type ShootItem = {
+  template: string;
+  row: Record<string, unknown>;
+  size: string;
+  persist: (buf: Buffer) => Promise<{ id: number; updatedAt: string }>;
+};
+
+export type ItemShotResult = { size: string } & (
+  | { ok: true; id: number; updatedAt: string }
   | { ok: false; error: string }
 );
 
@@ -49,32 +70,93 @@ function defaultBaseUrl(): string {
   );
 }
 
-// Serializes shootPreviews runs. Failures are swallowed on the chain (each
-// caller still gets its own rejection through the returned promise).
+// Serializes shoot runs. Failures are swallowed on the chain (each caller
+// still gets its own rejection through the returned promise).
 let chain: Promise<unknown> = Promise.resolve();
 
-export async function shootPreviews(
+export async function shootItems(
   clientId: number,
-  items: StalePreview[],
-  opts: { baseUrl?: string; onShot?: (r: ShotResult) => void } = {},
-): Promise<ShotResult[]> {
+  items: ShootItem[],
+  opts: { baseUrl?: string; onShot?: (r: ItemShotResult, index: number) => void } = {},
+): Promise<ItemShotResult[]> {
   const run = chain.catch(() => {}).then(() => shootRun(clientId, items, opts));
   chain = run.catch(() => {});
   return run;
 }
 
-async function shootRun(
+// Message-preview shooting: wraps shootItems with the message_previews
+// upsert as the persist step. Signature unchanged for the existing callers.
+export async function shootPreviews(
   clientId: number,
   items: StalePreview[],
-  opts: { baseUrl?: string; onShot?: (r: ShotResult) => void },
+  opts: { baseUrl?: string; onShot?: (r: ShotResult) => void } = {},
 ): Promise<ShotResult[]> {
+  const toShotResult = (item: StalePreview, r: ItemShotResult): ShotResult =>
+    r.ok
+      ? {
+          messageId: item.message.id,
+          size: r.size,
+          ok: true,
+          previewId: r.id,
+          updatedAt: r.updatedAt,
+        }
+      : { messageId: item.message.id, size: r.size, ok: false, error: r.error };
+
+  const shootList: ShootItem[] = items.map((item) => ({
+    template: item.message.template!,
+    row: item.message as unknown as Record<string, unknown>,
+    size: item.size,
+    persist: async (buf) => {
+      const stored = await writeStorageFile(buf, "preview", ".png");
+      if (item.existing) {
+        const [updated] = await db
+          .update(messagePreviews)
+          .set({
+            storageKey: stored.storagePath,
+            messageVersion: item.message.version,
+            updatedAt: nowUtc,
+          })
+          .where(eq(messagePreviews.id, item.existing.id))
+          .returning({ updatedAt: messagePreviews.updatedAt });
+        // Old object only after the row points at the new one — no orphan risk.
+        await deleteStorageFile(item.existing.storageKey);
+        return { id: item.existing.id, updatedAt: updated!.updatedAt };
+      }
+      const [row] = await db
+        .insert(messagePreviews)
+        .values({
+          clientId,
+          messageId: item.message.id,
+          size: item.size,
+          storageKey: stored.storagePath,
+          messageVersion: item.message.version,
+        })
+        .returning();
+      return { id: row!.id, updatedAt: row!.updatedAt };
+    },
+  }));
+
+  const results = await shootItems(clientId, shootList, {
+    baseUrl: opts.baseUrl,
+    onShot: opts.onShot
+      ? (r, i) => opts.onShot!(toShotResult(items[i]!, r))
+      : undefined,
+  });
+  return results.map((r, i) => toShotResult(items[i]!, r));
+}
+
+async function shootRun(
+  clientId: number,
+  items: ShootItem[],
+  opts: { baseUrl?: string; onShot?: (r: ItemShotResult, index: number) => void },
+): Promise<ItemShotResult[]> {
   if (items.length === 0) return [];
   const baseUrl = opts.baseUrl ?? defaultBaseUrl();
   const token = await mintPreviewToken(clientId);
   const textFormatting = await listTextFormatting(clientId);
 
   const browser = await chromium.launch();
-  const results: ShotResult[] = [];
+  const results: ItemShotResult[] = [];
   try {
     const context = await browser.newContext();
     await context.addCookies([{ name: "auth_token", value: token, url: baseUrl }]);
@@ -85,13 +167,13 @@ async function shootRun(
       route.fulfill({ contentType: "text/html; charset=utf-8", body: currentHtml }),
     );
 
-    for (const item of items) {
+    for (const [index, item] of items.entries()) {
       const [w, h] = item.size.split("x").map(Number);
       try {
         currentHtml = renderTemplate({
-          templateName: item.message.template!,
+          templateName: item.template,
           size: item.size,
-          message: item.message as unknown as Record<string, unknown>,
+          message: item.row,
           textFormatting,
           inline: true,
           skipAnimations: true,
@@ -106,49 +188,23 @@ async function shootRun(
           clip: { x: 0, y: 0, width: w!, height: h! },
         });
 
-        const stored = await writeStorageFile(buf, "preview", ".png");
-        let previewId: number;
-        let previewUpdatedAt: string;
-        if (item.existing) {
-          const [updated] = await db
-            .update(messagePreviews)
-            .set({
-              storageKey: stored.storagePath,
-              messageVersion: item.message.version,
-              updatedAt: nowUtc,
-            })
-            .where(eq(messagePreviews.id, item.existing.id))
-            .returning({ updatedAt: messagePreviews.updatedAt });
-          // Old object only after the row points at the new one — no orphan risk.
-          await deleteStorageFile(item.existing.storageKey);
-          previewId = item.existing.id;
-          previewUpdatedAt = updated!.updatedAt;
-        } else {
-          const [row] = await db
-            .insert(messagePreviews)
-            .values({
-              clientId,
-              messageId: item.message.id,
-              size: item.size,
-              storageKey: stored.storagePath,
-              messageVersion: item.message.version,
-            })
-            .returning();
-          previewId = row!.id;
-          previewUpdatedAt = row!.updatedAt;
-        }
-        const r: ShotResult = { messageId: item.message.id, size: item.size, ok: true, previewId, updatedAt: previewUpdatedAt };
+        const persisted = await item.persist(buf);
+        const r: ItemShotResult = {
+          size: item.size,
+          ok: true,
+          id: persisted.id,
+          updatedAt: persisted.updatedAt,
+        };
         results.push(r);
-        opts.onShot?.(r);
+        opts.onShot?.(r, index);
       } catch (e) {
-        const r: ShotResult = {
-          messageId: item.message.id,
+        const r: ItemShotResult = {
           size: item.size,
           ok: false,
           error: (e as Error).message,
         };
         results.push(r);
-        opts.onShot?.(r);
+        opts.onShot?.(r, index);
       }
     }
   } finally {

@@ -5,6 +5,24 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.12.1] — 2026-08-14
+
+### Fixed
+- **MC editor no longer conflicts with itself during autosave.** Slow typing
+  (especially in style / image-name fields, whose keystrokes queue extra
+  render/proxy requests ahead of the PATCH) could fire two overlapping saves
+  with the same `If-Match`, so the second 409'd and the editor showed
+  "Someone else saved changes…" and halted autosave. Saves are now strictly
+  serialized (in-flight guard, drift re-armed against the fresh snapshot;
+  manual Save double-click included), the stale-tab check ignores older rows
+  echoed back by the editor's own SSE invalidate (only a genuinely NEWER
+  version counts as a peer edit), and seven stale-closure `setDraft` spreads
+  became functional updates. Real two-tab conflict detection is unchanged.
+- **`seed-channel-audiences` script crash on the box** — unawaited
+  `getActiveClient()` (SQLite→PG cutover leftover) made `client.id` undefined
+  (`UNDEFINED_VALUE`). Nine sibling scripts carry the same latent bug —
+  triaged as a NOW roadmap item (retire-vs-fix per script).
+
 ## [6.12.0] — 2026-08-13
 
 ### Added

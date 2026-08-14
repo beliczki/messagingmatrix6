@@ -146,6 +146,12 @@ const EDITABLE_KEYS: Array<keyof EditableFields> = [
   "endDate",
 ];
 
+// The tabs receive the real state setter so field updates can use the
+// functional form — spreading a captured `draft` resurrects stale values when
+// a save response or conflict-adopt lands between the capture and the
+// keystroke.
+type SetDraft = React.Dispatch<React.SetStateAction<EditableFields | null>>;
+
 function toEditable(m: Message): EditableFields {
   return Object.fromEntries(
     EDITABLE_KEYS.map((k) => [k, m[k] ?? null]),
@@ -304,7 +310,19 @@ export default function MessageEditor({
   });
 
   const qc = useQueryClient();
+  // Saves are strictly serialized: a second PATCH while one is in flight
+  // would carry the same If-Match (committedSnapshot only advances in
+  // onSuccess) and 409 against our own just-landed save — the editor then
+  // "conflicts with itself" on slow typing. The ref is the in-flight truth
+  // for timer callbacks, whose captured save.isPending is stale.
+  const saveInFlightRef = useRef(false);
   const save = useMutation({
+    onMutate: () => {
+      saveInFlightRef.current = true;
+    },
+    onSettled: () => {
+      saveInFlightRef.current = false;
+    },
     mutationFn: async (payload: Partial<EditableFields>) => {
       if (!committedSnapshot) throw new Error("no snapshot");
       if (Object.keys(payload).length === 0) return null;
@@ -395,11 +413,16 @@ export default function MessageEditor({
     if (Object.keys(payload).length === 0) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setSaveState({ kind: "saving" });
-    debounceRef.current = setTimeout(() => save.mutate(payload), 400);
+    debounceRef.current = setTimeout(() => {
+      // In-flight → skip; when that save settles, isPending flips and this
+      // effect re-runs against the fresh snapshot, re-arming with the drift.
+      if (saveInFlightRef.current) return;
+      save.mutate(payload);
+    }, 400);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [draft, committedSnapshot, autoSave, saveState.kind]);
+  }, [draft, committedSnapshot, autoSave, saveState.kind, save.isPending]);
 
   const isDirty = useMemo(() => {
     if (!draft || !committedSnapshot) return false;
@@ -408,15 +431,18 @@ export default function MessageEditor({
   }, [draft, committedSnapshot]);
 
   // Phase B — stale-tab detection. A live SSE refresh (peer write) advances
-  // the `message` prop's version. If it moved past our open snapshot, this tab
+  // the `message` prop's version. If it moved PAST our open snapshot, this tab
   // was stale: surface a conflict when there are unsaved edits, or silently
   // adopt the fresh row when there are none. Only acts while idle so it can't
-  // race our own just-completed save.
+  // race our own just-completed save. The prop can also move BACKWARD: our own
+  // write broadcasts an SSE invalidate, and that refetch can resolve AFTER a
+  // newer save already patched the cache — such stale echoes must be ignored,
+  // not read as a peer edit (self-conflict otherwise).
   useEffect(() => {
     if (!open || !message || !committedSnapshot) return;
     if (message.id !== committedSnapshot.id) return;
     if (saveState.kind !== "idle") return;
-    if (message.version === committedSnapshot.version) return;
+    if (message.version <= committedSnapshot.version) return;
     if (isDirty) {
       setSaveState({ kind: "conflict", serverRow: message });
     } else {
@@ -428,6 +454,9 @@ export default function MessageEditor({
   function manualSave() {
     if (!draft || !committedSnapshot || !isDirty) return;
     if (saveState.kind === "conflict") return;
+    // Same serialization as autosave: a double-click must not race the first
+    // PATCH with the same If-Match.
+    if (saveInFlightRef.current) return;
     const payload = diffPayload(toEditable(committedSnapshot), draft);
     setSaveState({ kind: "saving" });
     save.mutate(payload);
@@ -864,7 +893,7 @@ function NamingTab({
   aud: Audience | undefined;
   top: Topic | undefined;
   draft: EditableFields;
-  setDraft: (d: EditableFields) => void;
+  setDraft: SetDraft;
 }) {
   return (
     <div className="message-editor-tab message-editor-tab--naming form-grid grid grid-cols-2 gap-x-4">
@@ -887,7 +916,11 @@ function NamingTab({
         <Field label="Status">
           <select
             value={draft.status ?? ""}
-            onChange={(e) => setDraft({ ...draft, status: e.target.value || null })}
+            onChange={(e) =>
+              setDraft((prev) =>
+                prev ? { ...prev, status: e.target.value || null } : prev,
+              )
+            }
             className="custom-dropdown w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
           >
             <option value="">— none —</option>
@@ -905,7 +938,11 @@ function NamingTab({
           <input
             type="text"
             value={draft.name ?? ""}
-            onChange={(e) => setDraft({ ...draft, name: e.target.value || null })}
+            onChange={(e) =>
+              setDraft((prev) =>
+                prev ? { ...prev, name: e.target.value || null } : prev,
+              )
+            }
             className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
           />
         </Field>
@@ -1017,12 +1054,12 @@ function ContentTab({
   templateSizes,
 }: {
   draft: EditableFields;
-  setDraft: (d: EditableFields) => void;
+  setDraft: SetDraft;
   mcLabel: string;
   templateSizes: string[];
 }) {
   function set(k: keyof EditableFields, v: string) {
-    setDraft({ ...draft, [k]: v || null });
+    setDraft((prev) => (prev ? { ...prev, [k]: v || null } : prev));
   }
   const rulesQ = useQuery({
     queryKey: ["text-formatting"],
@@ -1688,10 +1725,10 @@ function StylesTab({
   setDraft,
 }: {
   draft: EditableFields;
-  setDraft: (d: EditableFields) => void;
+  setDraft: SetDraft;
 }) {
   function set(k: keyof EditableFields, v: string) {
-    setDraft({ ...draft, [k]: v || null });
+    setDraft((prev) => (prev ? { ...prev, [k]: v || null } : prev));
   }
   const stylePairs: Array<[keyof EditableFields, string]> = [
     ["headlineStyle", "Headline style"],
@@ -1741,7 +1778,7 @@ function TraffickingTab({
 }: {
   message: Message;
   draft: EditableFields;
-  setDraft: (d: EditableFields) => void;
+  setDraft: SetDraft;
 }) {
   const ro = "w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-xs text-slate-700";
   return (
@@ -1752,7 +1789,9 @@ function TraffickingTab({
             type="date"
             value={draft.startDate ?? ""}
             onChange={(e) =>
-              setDraft({ ...draft, startDate: e.target.value || null })
+              setDraft((prev) =>
+                prev ? { ...prev, startDate: e.target.value || null } : prev,
+              )
             }
             className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
           />
@@ -1762,7 +1801,9 @@ function TraffickingTab({
             type="date"
             value={draft.endDate ?? ""}
             onChange={(e) =>
-              setDraft({ ...draft, endDate: e.target.value || null })
+              setDraft((prev) =>
+                prev ? { ...prev, endDate: e.target.value || null } : prev,
+              )
             }
             className="w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
           />
@@ -1809,7 +1850,7 @@ function TemplateTab({
   templates,
 }: {
   draft: EditableFields;
-  setDraft: (d: EditableFields) => void;
+  setDraft: SetDraft;
   templates: TemplateInfo[];
 }) {
   const current = templates.find((t) => t.name === (draft.template ?? "html"));
@@ -1844,7 +1885,9 @@ function TemplateTab({
         <select
           value={draft.template ?? ""}
           onChange={(e) =>
-            setDraft({ ...draft, template: e.target.value || null })
+            setDraft((prev) =>
+              prev ? { ...prev, template: e.target.value || null } : prev,
+            )
           }
           className="custom-dropdown w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
         >

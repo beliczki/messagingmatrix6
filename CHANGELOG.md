@@ -5,6 +5,14 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.12.2] — 2026-08-14
+
+### Changed
+- **Inactive audiences/topics are visually marked in the matrix.** Column and
+  row header text of INACTIVE audiences/topics renders pale gray
+  (`text-text-tertiary`, dense vertical labels included); header background
+  and behaviour unchanged.
+
 ## [6.12.1] — 2026-08-14
 
 ### Fixed

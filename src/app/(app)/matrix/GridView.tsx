@@ -197,6 +197,7 @@ export default function GridView({
             </th>
             {cols.map((c) => {
               const isAudCol = colsAreAudiences;
+              const colInactive = c.status === "INACTIVE";
               const isPickable = !!pending && isAudCol;
               const isTargetSelected =
                 isPickable && pending!.targetAudienceKeys.has(c.key);
@@ -237,7 +238,14 @@ export default function GridView({
                   >
                     {density === "dense" ? (
                       <div className="matrix-grid__col-header-label--vertical flex h-full items-end justify-center">
-                        <span className="font-semibold text-[10px] text-text-primary [writing-mode:vertical-rl] [transform:rotate(180deg)] truncate max-h-full">
+                        <span
+                          className={clsx(
+                            "font-semibold text-[10px] [writing-mode:vertical-rl] [transform:rotate(180deg)] truncate max-h-full",
+                            colInactive
+                              ? "matrix-grid__col-header-label--inactive text-text-tertiary"
+                              : "text-text-primary",
+                          )}
+                        >
                           {c.name}
                         </span>
                       </div>
@@ -247,6 +255,8 @@ export default function GridView({
                           className={clsx(
                             "matrix-grid__col-header-label font-semibold",
                             density === "compact" ? "text-[10px]" : "text-xs",
+                            colInactive &&
+                              "matrix-grid__col-header-label--inactive text-text-tertiary",
                           )}
                         >
                           {c.name}
@@ -316,6 +326,8 @@ export default function GridView({
                     className={clsx(
                       "matrix-grid__row-header-label font-semibold",
                       density === "detailed" ? "text-xs" : "text-[10px]",
+                      r.status === "INACTIVE" &&
+                        "matrix-grid__row-header-label--inactive text-text-tertiary",
                     )}
                   >
                     {r.name}

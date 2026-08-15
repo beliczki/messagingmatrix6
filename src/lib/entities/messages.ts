@@ -408,13 +408,21 @@ export async function updateMessage(
   return { ok: true, row: updated };
 }
 
-// Fields shared by every audience copy of the same (number, variant): creative
-// content, styling, template, lifecycle status, and the campaign flight dates
-// (startDate/endDate) — those are campaign-level, so a global edit syncs them to
-// all siblings. Only `audience` and `topic` stay per-copy: they define which
-// cell the card lives in, so propagating them would collapse placements.
-const PROPAGATED_FIELDS = WRITABLE_FIELDS.filter(
-  (f) => f !== "audience" && f !== "topic",
+// Two propagation tiers (user decision 2026-08-14):
+// - CARD_FIELDS — creative content, styling, template: shared by every
+//   audience copy of the same (number, variant). Variants are DIFFERENT
+//   creatives, so these never cross a variant boundary.
+// - NUMBER_LEVEL_FIELDS — lifecycle status + campaign flight dates: these are
+//   campaign-level, so a global edit syncs them across ALL variants of the
+//   number (every live row of the card family), not just the same variant.
+// Only `audience` and `topic` stay per-copy: they define which cell the card
+// lives in, so propagating them would collapse placements.
+const NUMBER_LEVEL_FIELDS: WritableField[] = ["status", "startDate", "endDate"];
+const CARD_FIELDS = WRITABLE_FIELDS.filter(
+  (f) =>
+    f !== "audience" &&
+    f !== "topic" &&
+    !NUMBER_LEVEL_FIELDS.includes(f),
 ) as WritableField[];
 
 // Non-archived rows that are the SAME messaging card as `primary` but on a
@@ -439,49 +447,79 @@ export async function findSiblings(
   return rows.filter((m) => m.id !== primary.id);
 }
 
-// Apply the shared subset of `input` (creative + status + flight dates) to every
-// sibling of `primary`. Each sibling is force-updated (last-write-wins) and
-// version-bumped so any editor open on it will see a conflict on its next save.
-// audience/topic are dropped (per-copy placement). Trafficking is recomputed per
-// sibling so a propagated landing_url flows into that sibling's UTM/Final-URL
-// against ITS OWN audience/topic (pmmid stays the sibling's stable identity).
-// Returns { before, after } pairs so the caller can write per-sibling audit
+// Apply the shared subset of `input` to the rest of the card family. CARD_FIELDS
+// go to the audience copies of the same (number, variant); NUMBER_LEVEL_FIELDS
+// (status + flight dates) go to EVERY live row of the number — other variants
+// included. Each row is force-updated (last-write-wins) and version-bumped so
+// any editor open on it will see a conflict on its next save. audience/topic
+// are dropped (per-copy placement). For same-variant copies trafficking is
+// recomputed so a propagated landing_url flows into that sibling's
+// UTM/Final-URL against ITS OWN audience/topic (pmmid stays the sibling's
+// stable identity); other-variant rows only ever receive status/dates, which
+// don't feed trafficking — their UTM fields are deliberately left untouched.
+// Returns { before, after } pairs so the caller can write per-row audit
 // entries (revision history).
 export async function propagateToSiblings(
   clientId: number,
   primary: Message,
   input: MessageInput,
 ): Promise<Array<{ before: Message; after: Message }>> {
-  const payload: Record<string, unknown> = {};
-  for (const f of PROPAGATED_FIELDS) {
-    if (f in input) payload[f] = (input as Record<string, unknown>)[f];
+  const cardPayload: Record<string, unknown> = {};
+  for (const f of CARD_FIELDS) {
+    if (f in input) cardPayload[f] = (input as Record<string, unknown>)[f];
   }
-  if (Object.keys(payload).length === 0) return [];
+  const numberPayload: Record<string, unknown> = {};
+  for (const f of NUMBER_LEVEL_FIELDS) {
+    if (f in input) numberPayload[f] = (input as Record<string, unknown>)[f];
+  }
+  if (
+    Object.keys(cardPayload).length === 0 &&
+    Object.keys(numberPayload).length === 0
+  ) {
+    return [];
+  }
 
   const patterns = await readClientPatterns(clientId);
   const audienceList = await listAudiences(clientId);
-  const siblings = await findSiblings(clientId, primary);
+  const family = (
+    await db
+      .select()
+      .from(messages)
+      .where(
+        and(
+          eq(messages.clientId, clientId),
+          eq(messages.number, primary.number),
+          isNull(messages.archivedAt),
+        ),
+      )
+  ).filter((m) => m.id !== primary.id);
+
   const changes: Array<{ before: Message; after: Message }> = [];
-  for (const sib of siblings) {
-    const merged = { ...sib, ...payload } as Message;
-    const traffic = buildTrafficking(
-      {
-        number: merged.number,
-        variant: merged.variant,
-        audience: merged.audience,
-        topic: merged.topic,
-        landingUrl: merged.landingUrl,
-      },
-      await findAudienceByKey(clientId, merged.audience),
-      await findTopicByKey(clientId, merged.topic),
-      patterns,
-      audienceList,
-      sib.pmmid,
-    );
-    const [after] = await db
-      .update(messages)
-      .set({
-        ...payload,
+  for (const sib of family) {
+    const sameVariant = sib.variant === primary.variant;
+    const payload = sameVariant
+      ? { ...numberPayload, ...cardPayload }
+      : { ...numberPayload };
+    if (Object.keys(payload).length === 0) continue;
+
+    let trafficFields: Record<string, unknown> = {};
+    if (sameVariant) {
+      const merged = { ...sib, ...payload } as Message;
+      const traffic = buildTrafficking(
+        {
+          number: merged.number,
+          variant: merged.variant,
+          audience: merged.audience,
+          topic: merged.topic,
+          landingUrl: merged.landingUrl,
+        },
+        await findAudienceByKey(clientId, merged.audience),
+        await findTopicByKey(clientId, merged.topic),
+        patterns,
+        audienceList,
+        sib.pmmid,
+      );
+      trafficFields = {
         utmCampaign: traffic.utm_campaign,
         utmSource: traffic.utm_source,
         utmMedium: traffic.utm_medium,
@@ -489,6 +527,13 @@ export async function propagateToSiblings(
         utmTerm: traffic.utm_term,
         utmCd26: traffic.utm_cd26,
         finalTraffickedUrl: traffic.final_trafficked_url,
+      };
+    }
+    const [after] = await db
+      .update(messages)
+      .set({
+        ...payload,
+        ...trafficFields,
         version: sql`${messages.version} + 1`,
         updatedAt: nowUtc,
       })

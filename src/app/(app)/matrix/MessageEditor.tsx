@@ -561,7 +561,7 @@ export default function MessageEditor({
           {globalEdit && siblingCount > 0 ? (
             <span
               className="message-editor__global-warning inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700"
-              title={`Global edit is on — your changes to creative & status will also update ${siblingCount} other audience copy(ies) of this card.`}
+              title={`Global edit is on — creative changes also update ${siblingCount} other audience copy(ies) of this card; status & flight dates update EVERY variant of MC${message?.number}.`}
             >
               <Users className="size-3" />
               updates {siblingCount} other audience
@@ -589,7 +589,7 @@ export default function MessageEditor({
               )}
               title={
                 globalEdit
-                  ? "Global: edits to creative & status propagate to all audience copies of this card"
+                  ? "Global: creative edits propagate to all audience copies of this card; status & flight dates to every variant of the number"
                   : "Local: edits apply only to this audience copy"
               }
             >

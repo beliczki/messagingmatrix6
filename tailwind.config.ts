@@ -18,6 +18,7 @@ const config: Config = {
         "text-primary": "var(--text-primary)",
         "text-secondary": "var(--text-secondary)",
         "text-tertiary": "var(--text-tertiary)",
+        "text-disabled": "var(--text-disabled)",
         // border-{name} utility — `border-border` for default (used by base
         // *,::before,::after rule), `border-border-strong` / `-subtle` for
         // explicit emphasis.

@@ -5,6 +5,25 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.13.0] — 2026-08-15
+
+### Changed
+- **Global edit: status + flight dates now propagate NUMBER-wide.** With global
+  edit on, `status`, `startDate` and `endDate` sync to every live row of the
+  MC number — all variants included — while creative fields (headline, copies,
+  images, styles, template) keep propagating only to the audience copies of
+  the same variant. Other-variant rows receive no trafficking rewrite. Editor
+  tooltips updated to describe the two tiers.
+
+### Added
+- **`--text-disabled` design token** (light `#cccccc` / dark `#4d4d4d`,
+  Tailwind `text-text-disabled`) — one step paler than tertiary; the INACTIVE
+  matrix-header marking now uses it.
+- **Strategy/platform edge on audience headers.** Bottom border on matrix
+  audience headers: width encodes strategy (prospecting 3px / remarketing
+  5px), color the buying platform (DV360 dark green / AdForm teal). Channel
+  (nonDCO) audiences stay plain; works in both grid orientations.
+
 ## [6.12.2] — 2026-08-14
 
 ### Changed

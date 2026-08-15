@@ -139,6 +139,69 @@ describe("propagateToSiblings", () => {
     }
   });
 
+  // Status + flight dates are NUMBER-level (user decision 2026-08-14): they
+  // cross the variant boundary; creative fields never do.
+  describe("number-level tier (status + flight dates across variants)", () => {
+    async function seedVariantB(primaryAudience = "aud1") {
+      // Second create in the occupied cell → next variant of the same number.
+      return createMessage(erste.id, {
+        audience: primaryAudience,
+        topic: "top1",
+        name: "Card b",
+        headline: "B original",
+        status: "INCOMING",
+      });
+    }
+
+    it("propagates status + dates to other variants, creative only to same-variant copies", async () => {
+      const primary = await seedCard();
+      const b = await seedVariantB();
+      expect(b.number).toBe(primary.number);
+      expect(b.variant).not.toBe(primary.variant);
+
+      const changes = await propagateToSiblings(erste.id, primary, {
+        headline: "Updated",
+        status: "ACTIVE",
+        endDate: "2099-06-30",
+      });
+      // 3 same-variant audience copies + 1 other-variant row
+      expect(changes).toHaveLength(4);
+
+      for (const sib of await findSiblings(erste.id, primary)) {
+        expect(sib.headline).toBe("Updated");
+        expect(sib.status).toBe("ACTIVE");
+        expect(sib.endDate).toBe("2099-06-30");
+      }
+      const bAfter = (await getMessage(erste.id, b.id))!;
+      expect(bAfter.status).toBe("ACTIVE"); // number-level: crossed the variant
+      expect(bAfter.endDate).toBe("2099-06-30");
+      expect(bAfter.headline).toBe("B original"); // creative: stayed put
+      expect(bAfter.version).toBe(b.version + 1);
+    });
+
+    it("leaves other variants completely untouched on a creative-only edit", async () => {
+      const primary = await seedCard();
+      const b = await seedVariantB();
+      const changes = await propagateToSiblings(erste.id, primary, {
+        headline: "Updated",
+      });
+      expect(changes).toHaveLength(3); // only the same-variant copies
+      const bAfter = (await getMessage(erste.id, b.id))!;
+      expect(bAfter.headline).toBe("B original");
+      expect(bAfter.version).toBe(b.version); // no bump — no write at all
+    });
+
+    it("does not rewrite an other-variant row's trafficking on a status edit", async () => {
+      const primary = await seedCard();
+      const b = await seedVariantB();
+      await propagateToSiblings(erste.id, primary, { status: "ACTIVE" });
+      const bAfter = (await getMessage(erste.id, b.id))!;
+      expect(bAfter.utmCampaign).toBe(b.utmCampaign);
+      expect(bAfter.utmContent).toBe(b.utmContent);
+      expect(bAfter.finalTraffickedUrl).toBe(b.finalTraffickedUrl);
+    });
+  });
+
   it("is a no-op when the payload has no shared fields", async () => {
     const primary = await seedCard();
     const before = await findSiblings(erste.id, primary);

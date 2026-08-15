@@ -37,6 +37,9 @@
   --text-primary: #111111;
   --text-secondary: #666666;
   --text-tertiary: #999999;
+  /* De-emphasized/inactive content (e.g. INACTIVE matrix headers) — one step
+     paler than tertiary, still legible on surface-alt. */
+  --text-disabled: #cccccc;
   --border-default: rgba(0, 0, 0, 0.1);
   --border-strong: #000000;
   --border-subtle: rgba(0, 0, 0, 0.15);
@@ -51,6 +54,7 @@ html.dark {
   --text-primary: #e5e5e5;
   --text-secondary: #999999;
   --text-tertiary: #666666;
+  --text-disabled: #4d4d4d;
   --border-default: rgba(255, 255, 255, 0.1);
   --border-strong: #ffffff;
   --border-subtle: rgba(255, 255, 255, 0.15);
@@ -378,3 +382,15 @@ html.dark {
     border-color: #334155;
   }
 }
+
+/* Matrix audience-header strategy/platform edge. Unlayered ON PURPOSE: these
+   must out-cascade the border-b / border-border utilities sitting on the same
+   <th> (tailwind hoists @layer components above utilities, which would lose).
+   Bottom-border WIDTH encodes the strategy (pro 3px / rem 5px), COLOR the
+   buying platform (dv360 dark green / adform teal). Applied only when both
+   fields are set — channel (nonDCO) audiences carry neither and keep the
+   plain 1px border. */
+.matrix-grid__header--strat-pro { border-bottom-width: 3px; }
+.matrix-grid__header--strat-rem { border-bottom-width: 5px; }
+.matrix-grid__header--plat-dv360 { border-bottom-color: #166534; }
+.matrix-grid__header--plat-adform { border-bottom-color: #0d9488; }

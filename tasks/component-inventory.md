@@ -794,4 +794,8 @@ Added an 11th workflow status `ARCHIVED`, sitting next to `INACTIVE` semanticall
 - `draft-detail` — `AppDialog` (`modal` shell) tartalma: `__header`, `__body` (previews + side kolumna), `__previews` / `__figure` / `__img` (méretenként PNG, `text-[10px] uppercase tracking-wider` felirattal), `__errors` (per-size render-hiba doboz), `__side`, `__fields` (globális `form-field` dl), `__promote` (audience+topic select + `toolbar-btn--primary` Promote), törlés `toolbar-btn--danger`-rel.
 
 **Inactive header jelölés a mátrixban (2026-08-14):**
-- `matrix-grid__col-header-label--inactive` / `matrix-grid__row-header-label--inactive` — INACTIVE státuszú audience/topic fejléc-szövege halványszürke (`text-text-tertiary` token, a `text-text-primary` helyett; dense függőleges labelre is). Csak a szöveg halványul, a cella/fejléc háttere változatlan.
+- `matrix-grid__col-header-label--inactive` / `matrix-grid__row-header-label--inactive` — INACTIVE státuszú audience/topic fejléc-szövege halványszürke (dense függőleges labelre is). Csak a szöveg halványul, a cella/fejléc háttere változatlan.
+- `text-text-disabled` — új globális text-token (`--text-disabled`: light `#cccccc` / dark `#4d4d4d`), a tertiary-nél egy fokkal halványabb, inaktív/de-emphasized tartalomra. Első használó: az inactive mátrix-fejlécek.
+
+**Audience-fejléc strategy/platform él (2026-08-14):**
+- `matrix-grid__header--strat-pro` (3px) / `--strat-rem` (5px) — bottom-border vastagság a stratégia szerint; `matrix-grid__header--plat-dv360` (sötétzöld #166534) / `--plat-adform` (teal #0d9488) — bottom-border szín a buying platform szerint. Mindkét mező kell hozzá; a globals.css VÉGÉN, rétegen kívül (szándékosan, hogy a `border-b`/`border-border` utility-ket felülírja). Mindkét orientációban él (audience sor- ÉS oszlop-fejléc).

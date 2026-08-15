@@ -24,6 +24,26 @@ import {
 import { type EditApi } from "./MatrixGrid";
 import { useLongPress } from "@/app/_components/useLongPress";
 
+// Bottom-border badge on audience headers (globals.css matrix-grid__header--*
+// classes): width encodes the strategy (pro 3px / rem 5px), color the buying
+// platform (dv360 dark green / adform teal). Both must be set — channel
+// (nonDCO) audiences carry neither and stay plain.
+function audienceEdgeClasses(a: Audience): string | null {
+  const strat =
+    a.strategy === "pro"
+      ? "matrix-grid__header--strat-pro"
+      : a.strategy === "rem"
+        ? "matrix-grid__header--strat-rem"
+        : null;
+  const plat =
+    a.buyingPlatform === "dv360"
+      ? "matrix-grid__header--plat-dv360"
+      : a.buyingPlatform === "adform"
+        ? "matrix-grid__header--plat-adform"
+        : null;
+  return strat && plat ? `${strat} ${plat}` : null;
+}
+
 export default function GridView({
   audiences,
   topics,
@@ -217,6 +237,7 @@ export default function GridView({
                       "matrix-grid__col-header--target bg-emerald-50",
                     isDisabled &&
                       "matrix-grid__col-header--target-disabled opacity-50",
+                    isAudCol && audienceEdgeClasses(c as Audience),
                   )}
                   title={c.key}
                 >
@@ -242,7 +263,7 @@ export default function GridView({
                           className={clsx(
                             "font-semibold text-[10px] [writing-mode:vertical-rl] [transform:rotate(180deg)] truncate max-h-full",
                             colInactive
-                              ? "matrix-grid__col-header-label--inactive text-text-tertiary"
+                              ? "matrix-grid__col-header-label--inactive text-text-disabled"
                               : "text-text-primary",
                           )}
                         >
@@ -256,7 +277,7 @@ export default function GridView({
                             "matrix-grid__col-header-label font-semibold",
                             density === "compact" ? "text-[10px]" : "text-xs",
                             colInactive &&
-                              "matrix-grid__col-header-label--inactive text-text-tertiary",
+                              "matrix-grid__col-header-label--inactive text-text-disabled",
                           )}
                         >
                           {c.name}
@@ -310,6 +331,7 @@ export default function GridView({
                 className={clsx(
                   "matrix-grid__row-header group sticky left-0 z-10 border-b border-r border-border bg-surface-alt text-left font-medium text-text-primary",
                   density === "dense" ? "min-w-[140px] p-0" : "min-w-[180px] p-0",
+                  !transposed && audienceEdgeClasses(r as Audience),
                 )}
                 title={r.key}
               >
@@ -327,7 +349,7 @@ export default function GridView({
                       "matrix-grid__row-header-label font-semibold",
                       density === "detailed" ? "text-xs" : "text-[10px]",
                       r.status === "INACTIVE" &&
-                        "matrix-grid__row-header-label--inactive text-text-tertiary",
+                        "matrix-grid__row-header-label--inactive text-text-disabled",
                     )}
                   >
                     {r.name}

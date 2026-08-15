@@ -392,5 +392,5 @@ html.dark {
    plain 1px border. */
 .matrix-grid__header--strat-pro { border-bottom-width: 3px; }
 .matrix-grid__header--strat-rem { border-bottom-width: 5px; }
-.matrix-grid__header--plat-dv360 { border-bottom-color: #166534; }
-.matrix-grid__header--plat-adform { border-bottom-color: #0d9488; }
+.matrix-grid__header--plat-dv360 { border-bottom-color: #43970b; }
+.matrix-grid__header--plat-adform { border-bottom-color: #03c9ab; }

@@ -5,6 +5,13 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.13.1] — 2026-08-15
+
+### Changed
+- **Audience-header platform colors separated.** The two edge colors were too
+  close on screen: AdForm is now bright teal `#03c9ab`, DV360 grass green
+  `#43970b`.
+
 ## [6.13.0] — 2026-08-15
 
 ### Changed

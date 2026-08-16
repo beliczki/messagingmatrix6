@@ -7,9 +7,12 @@
 //      - Resolve value from message via binding-messagingmatrix.
 //      - For image/video types, prepend path-messagingmatrix.
 //      - Substitute {{placeholder}} occurrences with the resolved value.
-//   3. Apply matching text_formatting rules (Spec §3.6) — replace
-//      `text_original` with `text_formatted` in the body when
-//      formatting_scope and formatting_mc_scope both match.
+//   3. Apply matching text_formatting rules (Spec §3.6) at placeholder
+//      resolution: a rule applies only when its `text_original` equals the
+//      entire resolved value (the same predicate the editor uses to list
+//      rules under a field — never a substring hit) and formatting_scope +
+//      formatting_mc_scope both match. Size-scoped rules win over universal
+//      ones, mirroring pickVariantForSize in feed-spans.ts.
 //
 // We don't include the size CSS by default — v5's preview-iframe approach
 // references size CSS via a relative <link>. Callers that want fully inlined
@@ -17,7 +20,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { matchesScope } from "@/lib/entities/text-formatting";
+import { matchesScope, parseScope } from "@/lib/entities/text-formatting";
 import { mcLabelFor } from "@/lib/mc-label";
 import type { TextFormatting } from "@/db/schema";
 
@@ -114,6 +117,9 @@ export function renderTemplate(input: RenderInput): RenderResult {
   let html = fs.readFileSync(indexPath, "utf8");
   const placeholders = templateJson.placeholders ?? {};
 
+  const rules = input.textFormatting ?? [];
+  const mcLabel = rules.length > 0 ? mcLabelFor(input.message) : "";
+
   for (const [name, ph] of Object.entries(placeholders)) {
     const binding = ph["binding-messagingmatrix"] ?? "";
     let value = binding ? lookupField(input.message, binding) : (ph.default ?? "");
@@ -125,6 +131,8 @@ export function renderTemplate(input: RenderInput): RenderResult {
       if (prefix && !/^https?:\/\//i.test(value)) {
         value = prefix + value;
       }
+    } else if (value && rules.length > 0) {
+      value = applyFormatting(value, input.size, mcLabel, rules);
     }
     const re = new RegExp(`\\{\\{\\s*${escapeRegex(name)}\\s*\\}\\}`, "g");
     html = html.replace(re, value);
@@ -133,16 +141,6 @@ export function renderTemplate(input: RenderInput): RenderResult {
   // Replace any remaining {{...}} placeholders with empty string so the output
   // is never littered with un-substituted curly tokens.
   html = html.replace(/\{\{\s*[^}]+\s*\}\}/g, "");
-
-  // Apply text-formatting (Spec §3.6).
-  if (input.textFormatting && input.textFormatting.length > 0) {
-    const mcLabel = mcLabelFor(input.message);
-    for (const rule of input.textFormatting) {
-      if (!matchesScope(rule, input.size, mcLabel)) continue;
-      const re = new RegExp(escapeRegex(rule.textOriginal), "g");
-      html = html.replace(re, rule.textFormatted);
-    }
-  }
 
   if (input.inline) {
     html = inlineCss(html, dir, input.size);
@@ -158,6 +156,30 @@ export function renderTemplate(input: RenderInput): RenderResult {
   }
 
   return { html };
+}
+
+// Spec §3.6 — a rule applies only when its textOriginal equals the entire
+// resolved value; substring hits never fire (the editor lists rules under a
+// field with the same equality predicate, so whatever renders is visible
+// there). A size-scoped rule beats a universal one, same as
+// pickVariantForSize in feed-spans.ts.
+function applyFormatting(
+  value: string,
+  size: string,
+  mcLabel: string,
+  rules: TextFormatting[],
+): string {
+  let universalFallback: string | null = null;
+  for (const rule of rules) {
+    if (rule.textOriginal !== value) continue;
+    if (!matchesScope(rule, size, mcLabel)) continue;
+    if (parseScope(rule.formattingScope) === null) {
+      if (universalFallback === null) universalFallback = rule.textFormatted;
+      continue;
+    }
+    return rule.textFormatted;
+  }
+  return universalFallback ?? value;
 }
 
 function injectBaseHref(html: string, href: string): string {

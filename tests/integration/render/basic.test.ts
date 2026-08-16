@@ -181,10 +181,10 @@ describe("renderTemplate — text-formatting application (Spec §3.6)", () => {
       size: "300x250",
       message: { number: 1, variant: "a", headline: "Save big" },
       textFormatting: [
-        rule({ textOriginal: "Save", textFormatted: "<em>Save</em>" }),
+        rule({ textOriginal: "Save big", textFormatted: "<em>Save</em> big" }),
       ],
     });
-    expect(html).toContain("<em>Save</em>");
+    expect(html).toContain("<em>Save</em> big");
   });
 
   it("size-scoped rule only applies on matching sizes", () => {
@@ -194,8 +194,8 @@ describe("renderTemplate — text-formatting application (Spec §3.6)", () => {
       { h: { type: "text", default: "", "binding-messagingmatrix": "Headline" } },
     );
     const sizeRule = rule({
-      textOriginal: "25%",
-      textFormatted: "<strong>25%</strong>",
+      textOriginal: "Save 25% today",
+      textFormatted: "Save <strong>25%</strong> today",
       formattingScope: "300x250",
     });
     const a = renderTemplate({
@@ -210,7 +210,7 @@ describe("renderTemplate — text-formatting application (Spec §3.6)", () => {
       message: { number: 1, variant: "a", headline: "Save 25% today" },
       textFormatting: [sizeRule],
     });
-    expect(a.html).toContain("<strong>25%</strong>");
+    expect(a.html).toContain("Save <strong>25%</strong> today");
     expect(b.html).not.toContain("<strong>25%</strong>");
     expect(b.html).toContain("Save 25% today");
   });
@@ -222,8 +222,8 @@ describe("renderTemplate — text-formatting application (Spec §3.6)", () => {
       { h: { type: "text", default: "", "binding-messagingmatrix": "Headline" } },
     );
     const r = rule({
-      textOriginal: "loan",
-      textFormatted: "<b>loan</b>",
+      textOriginal: "Get a loan today",
+      textFormatted: "Get a <b>loan</b> today",
       formattingMcScope: "MC1b",
     });
     const matches = renderTemplate({
@@ -238,8 +238,69 @@ describe("renderTemplate — text-formatting application (Spec §3.6)", () => {
       message: { number: 1, variant: "a", headline: "Get a loan today" },
       textFormatting: [r],
     });
-    expect(matches.html).toContain("<b>loan</b>");
+    expect(matches.html).toContain("Get a <b>loan</b> today");
     expect(nope.html).not.toContain("<b>loan</b>");
+  });
+
+  it("rule matching a substring of the field value does NOT apply (exact match only)", () => {
+    // Regression: rule created on a shorter copy ("Most Személyi Kölcsön")
+    // must not leak <br>s into a longer copy that merely contains it.
+    tpl(
+      "card",
+      { "index.html": `<p>{{h}}</p>`, "300x250.css": "" },
+      { h: { type: "text", default: "", "binding-messagingmatrix": "Copy1" } },
+    );
+    const { html } = renderTemplate({
+      templateName: "card",
+      size: "300x250",
+      message: {
+        number: 301,
+        variant: "b",
+        copy1: "Most Személyi Kölcsön adósság-rendezéshez",
+      },
+      textFormatting: [
+        rule({
+          textOriginal: "Most Személyi Kölcsön",
+          textFormatted: "Most <br/>Személyi <br/>Kölcsön",
+          formattingScope: "300x250,300x600",
+        }),
+      ],
+    });
+    expect(html).not.toContain("<br/>");
+    expect(html).toContain("Most Személyi Kölcsön adósság-rendezéshez");
+  });
+
+  it("size-scoped rule wins over a universal rule for the same text", () => {
+    tpl(
+      "card",
+      { "index.html": `<p>{{h}}</p>`, "300x250.css": "" },
+      { h: { type: "text", default: "", "binding-messagingmatrix": "Headline" } },
+    );
+    const universal = rule({
+      id: 1,
+      textOriginal: "Big offer",
+      textFormatted: "Big<br>offer",
+    });
+    const sized = rule({
+      id: 2,
+      textOriginal: "Big offer",
+      textFormatted: "<b>Big</b> offer",
+      formattingScope: "300x250",
+    });
+    const onScoped = renderTemplate({
+      templateName: "card",
+      size: "300x250",
+      message: { number: 1, variant: "a", headline: "Big offer" },
+      textFormatting: [universal, sized],
+    });
+    const offScoped = renderTemplate({
+      templateName: "card",
+      size: "640x360",
+      message: { number: 1, variant: "a", headline: "Big offer" },
+      textFormatting: [universal, sized],
+    });
+    expect(onScoped.html).toContain("<b>Big</b> offer");
+    expect(offScoped.html).toContain("Big<br>offer");
   });
 });
 

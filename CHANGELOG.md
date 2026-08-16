@@ -5,6 +5,19 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.14.0] — 2026-08-16
+
+### Changed
+- **Text-formatting rules now require an exact field-value match.** Rendering
+  previously replaced any substring occurrence of `text_original` anywhere in
+  the banner HTML, so a rule created on a shorter copy could silently inject
+  its formatting (e.g. `<br>`s) into longer texts that merely contained it —
+  invisible in the editor, which only lists rules matching the whole field
+  value. Rules now apply at placeholder resolution and only when
+  `text_original` equals the entire resolved value; size-scoped rules win over
+  universal ones (same precedence as feed-export spans). Feed export was
+  already exact-match and is unchanged.
+
 ## [6.13.1] — 2026-08-15
 
 ### Changed

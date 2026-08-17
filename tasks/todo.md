@@ -182,7 +182,11 @@ Fő lépések (ha full-lifecycle):
 
 ## Session checkpointok (legutóbbi felül; régiek → archív)
 
-### 2026-08-17 — 6.15.0 UI-affordance patch (edit-mode hint + MultiPill quick-select)
+### 2026-08-17 — DEPLOYOLVA 6.15.0 (edit-mode hint + MultiPill quick-select)
+- Bump `6.14.0`→`6.15.0`, commit `d5489b8`, push, box deploy: `/var/www/mm6-erste` pull → build → `pm2 restart mm6-erste` (Ready 1623ms; séma-migráció nincs). Health: `/` 307, `/mcp` 401, `/login` 200.
+- **User teendő (prod vizuális check):** (1) matrix jobb-toolbar Edit mode panel — a hint-sor a gomb fölött; (2) Status pill dropdown — "Select all / none"; (3) creative library Size pill — default/social/iab/none, `social`+`iab` stackel, ismételt kattintás leszedi.
+
+
 - Kiindulás: user szerint nem lehet UI-ból audience/topic-ot felvenni. Valójában **lehet** — a `+` záró oszlop/sor csak **edit mode**-ban és csak **grid view**-ban látszik (`GridView.tsx:313,437` → `MatrixGrid.addHeader:534`, POST `/api/audiences|topics`, kulcs szerveroldali auto-gen: `config.patterns.audienceKey` vagy `aud{N+1}`). A felfedezhetőség volt a hiba, nem a funkció.
 - **Fix 1:** `edit-mode-panel__hint` — egy szürke sor a title és a toggle között ("Add / duplicate topics and audiences; add, copy and move Messaging Cards.").
 - **Fix 2:** `MultiPill` új opcionális `quickSelect` propja + `multi-pill__bulk` / `__bulk-link` osztályok. Status pillek (MatrixToolbar + DimensionGrid) → megosztott `STATUS_QUICK_SELECT` ("Select all / none"). Creative library Size pill → lokális `SIZE_QUICK_SELECT` (default/social/iab/none). Preset-szemantika: nevesített preset **togglel** (mind bent → kiveszi, különben hozzáadja), így `social`+`iab` stackelhető; `none` = all↔none flip; az `options`-ben nem létező méretekre hivatkozó preset link elrejtve.

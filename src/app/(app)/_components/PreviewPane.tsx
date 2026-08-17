@@ -101,52 +101,53 @@ export default function PreviewPane({
     <div className="preview-pane flex h-full flex-col">
       <div className="preview-pane__toolbar flex h-10 shrink-0 items-center justify-between border-b border-border bg-surface px-3">
         <div className="flex items-center gap-2">
-          {/* Static-image MCs (nonDCO creatives) have no template/size/animation
-              to drive, so the size dropdown + skip-animation + image-preview
-              controls are hidden — the viewport is a plain Creative-Library-style
-              image box. Only the background toggle stays useful. */}
-          {showStatic ? (
+          {/* Static-image MCs (nonDCO creatives) list the creative's REAL sizes
+              (same MC number+variant, one row per stored size); switching shows
+              that size's file. No template/animation, so the skip-animation +
+              image-preview toggles are hidden — the viewport is a plain
+              Creative-Library-style image box. */}
+          {sizes.length > 0 ? (
+            <select
+              value={size ?? ""}
+              onChange={(e) => onSizeChange(e.target.value)}
+              className="custom-dropdown preview-pane__size-select rounded border border-border bg-surface px-2 py-1 text-xs"
+              disabled={sizes.length === 0}
+            >
+              {sizes.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          ) : showStatic ? (
             <span className="preview-pane__static-label text-xs text-text-secondary">
               {staticImage}
             </span>
-          ) : (
-            <>
-              <select
-                value={size ?? ""}
-                onChange={(e) => onSizeChange(e.target.value)}
-                className="custom-dropdown preview-pane__size-select rounded border border-border bg-surface px-2 py-1 text-xs"
-                disabled={sizes.length === 0}
-              >
-                {sizes.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              <button
-                onClick={() => onSkipAnimChange(!skipAnim)}
+          ) : null}
+          {!showStatic ? (
+            <button
+              onClick={() => onSkipAnimChange(!skipAnim)}
+              className={clsx(
+                "preview-pane__skip-anim flex items-center gap-1 rounded border px-2 py-1 text-xs",
+                skipAnim
+                  ? "preview-pane__skip-anim--active border-text-primary bg-text-primary text-background"
+                  : "border-border bg-surface text-text-primary hover:bg-surface-alt",
+              )}
+              title="Skip animations in preview"
+            >
+              <span
                 className={clsx(
-                  "preview-pane__skip-anim flex items-center gap-1 rounded border px-2 py-1 text-xs",
+                  "flex size-3.5 items-center justify-center rounded-sm border",
                   skipAnim
-                    ? "preview-pane__skip-anim--active border-text-primary bg-text-primary text-background"
-                    : "border-border bg-surface text-text-primary hover:bg-surface-alt",
+                    ? "border-background bg-background text-text-primary"
+                    : "border-border-subtle",
                 )}
-                title="Skip animations in preview"
               >
-                <span
-                  className={clsx(
-                    "flex size-3.5 items-center justify-center rounded-sm border",
-                    skipAnim
-                      ? "border-background bg-background text-text-primary"
-                      : "border-border-subtle",
-                  )}
-                >
-                  {skipAnim && <Check className="size-2.5" strokeWidth={3} />}
-                </span>
-                Skip animation
-              </button>
-            </>
-          )}
+                {skipAnim && <Check className="size-2.5" strokeWidth={3} />}
+              </span>
+              Skip animation
+            </button>
+          ) : null}
           {onImagePreviewChange && !showImage && !showStatic ? (
             <button
               onClick={() => onImagePreviewChange(!imagePreview)}

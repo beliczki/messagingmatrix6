@@ -43,6 +43,28 @@ export async function listCreatives(
   return db.select().from(creatives).where(where).orderBy(creatives.id);
 }
 
+// All live creatives back-linked to one matrix cell (mcNumber + mcVariant).
+// Powers the nonDCO static-MC preview's size switcher: same creative name,
+// many sizes — each a separate creatives row sharing the (mcNumber, mcVariant).
+export async function listCreativesByMc(
+  clientId: number,
+  mcNumber: number,
+  mcVariant: string,
+): Promise<Creative[]> {
+  return db
+    .select()
+    .from(creatives)
+    .where(
+      and(
+        eq(creatives.clientId, clientId),
+        eq(creatives.mcNumber, mcNumber),
+        eq(creatives.mcVariant, mcVariant),
+        isNull(creatives.archivedAt),
+      ),
+    )
+    .orderBy(creatives.id);
+}
+
 export async function getCreative(
   clientId: number,
   id: number,

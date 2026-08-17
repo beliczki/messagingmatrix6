@@ -1954,25 +1954,70 @@ function MessagePreview({
   templateInfo?: TemplateInfo;
   onSizeChange?: (s: string) => void;
 }) {
-  const sizes = templateInfo?.sizes ?? [
+  // nonDCO static-image MC: no template, image1 = a creative file. The size
+  // dropdown then lists the REAL sizes of this creative — same MC number+variant,
+  // one creatives row per stored size — and switching size shows that file.
+  const draftImage1 = draft.image1 ?? message.image1 ?? null;
+  const draftTemplate = draft.template ?? message.template ?? null;
+  const isStatic = !draftTemplate && !!draftImage1;
+
+  const siblingsQ = useQuery({
+    queryKey: ["creatives", "by-mc", message.number, message.variant],
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/creatives/by-mc?number=${message.number}&variant=${encodeURIComponent(message.variant)}`,
+        { credentials: "include" },
+      );
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return r.json() as Promise<{
+        sizes: { dimensions: string; fileName: string; type: string | null }[];
+      }>;
+    },
+    enabled: isStatic,
+  });
+
+  // dim → fileName (first wins), largest area first for a sensible dropdown order.
+  const staticSizeMap = useMemo(() => {
+    const m = new Map<string, string>();
+    const rows = [...(siblingsQ.data?.sizes ?? [])].sort((a, b) => {
+      const ar = a.dimensions.match(/^(\d+)x(\d+)$/);
+      const br = b.dimensions.match(/^(\d+)x(\d+)$/);
+      return (br ? +br[1]! * +br[2]! : 0) - (ar ? +ar[1]! * +ar[2]! : 0);
+    });
+    for (const s of rows) if (!m.has(s.dimensions)) m.set(s.dimensions, s.fileName);
+    return m;
+  }, [siblingsQ.data]);
+  const staticSizes = useMemo(() => [...staticSizeMap.keys()], [staticSizeMap]);
+
+  const templateSizes = templateInfo?.sizes ?? [
     "300x250",
     "300x600",
     "640x360",
     "970x250",
     "1080x510",
   ];
-  const [size, setSize] = useState<string>(sizes[0] ?? "300x250");
-  // If the template's sizes change (e.g. user switches template), reset size.
+  const sizes = isStatic ? staticSizes : templateSizes;
+  const [size, setSize] = useState<string>(templateSizes[0] ?? "300x250");
+  // Reset the selected size when the available set changes. In static mode
+  // default to the size whose file IS the current image1 (else the first).
   useEffect(() => {
-    if (!sizes.includes(size)) setSize(sizes[0] ?? "300x250");
-  }, [sizes.join(",")]);
+    if (sizes.length === 0 || sizes.includes(size)) return;
+    if (isStatic) {
+      const cur = [...staticSizeMap.entries()].find(([, f]) => f === draftImage1);
+      setSize(cur?.[0] ?? sizes[0]!);
+    } else {
+      setSize(sizes[0]!);
+    }
+  }, [sizes.join(","), isStatic]);
   // Notify parent so layout can react to landscape/portrait.
   useEffect(() => {
     onSizeChange?.(size);
   }, [size]);
 
   const [html, setHtml] = useState<string>("");
-  const [bg, setBg] = useState<PreviewBg>("light");
+  // Static creatives default to the checker background — matches the Creative
+  // Library preview dialog and reads transparency on PNGs.
+  const [bg, setBg] = useState<PreviewBg>(isStatic ? "checker" : "light");
   const [skipAnim, setSkipAnim] = useState<boolean>(true);
   const [imagePreview, setImagePreview] = useState<boolean>(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2112,11 +2157,7 @@ function MessagePreview({
       }}
       templateName={templateInfo?.name}
       templateMeta={templateMetaFor(templateInfo)}
-      staticImage={
-        !(draft.template ?? message.template)
-          ? (draft.image1 ?? message.image1) ?? null
-          : null
-      }
+      staticImage={isStatic ? (staticSizeMap.get(size) ?? draftImage1) : null}
     />
   );
 }

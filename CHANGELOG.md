@@ -5,6 +5,17 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.16.0] — 2026-08-17
+
+### Added
+- **nonDCO static-MC preview size switcher.** The template-less creative
+  preview now lists the creative's real stored sizes (all `creatives` rows
+  sharing the MC number+variant) in the size dropdown; switching a size shows
+  that size's file. Backed by a new scoped route `GET /api/creatives/by-mc?
+  number=&variant=` and `listCreativesByMc`. The preview box matches the
+  Creative Library dialog — checker background by default, background toggle,
+  no template/animation controls (`MessageEditor.tsx`, `PreviewPane.tsx`).
+
 ## [6.15.2] — 2026-08-17
 
 ### Fixed

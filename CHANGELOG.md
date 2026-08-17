@@ -5,7 +5,21 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
-## [6.15.1] — 2026-08-17
+## [6.15.2] — 2026-08-17
+
+### Fixed
+- **nonDCO static-image MC preview showed template controls.** For a
+  template-less creative MC the preview toolbar rendered the DCO size dropdown
+  (300x250 / 300x600 / …), Skip-animation and Image-preview toggles — all
+  meaningless for a static image. In static mode the toolbar now shows only the
+  creative filename + background toggle, and the viewport is a plain
+  Creative-Library-style image box (`PreviewPane.tsx`).
+
+### Changed
+- **`rebuild-creatives.ts` sets `product` on generated nonDCO topics.** Without
+  it the auto-created topics had `product = NULL`, so selecting the product in
+  the matrix filter dropped every nonDCO row. (The already-generated LTP topics
+  were back-filled directly.)
 
 ### Fixed
 - **nonDCO matrix vanished when a product was selected.** The 6 nonDCO channel

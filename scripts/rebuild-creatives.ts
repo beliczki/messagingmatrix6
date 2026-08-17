@@ -306,7 +306,7 @@ async function main() {
     const topicKey = `${product}_${g.topicRaw}`.slice(0, 200);
     if (!topicDone.has(topicKey)) {
       try {
-        await createTopic(clientId, { key: topicKey, name: g.topicRaw });
+        await createTopic(clientId, { key: topicKey, name: g.topicRaw, product });
       } catch {
         /* topic already exists — createTopic throws on dup key */
       }

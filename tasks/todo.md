@@ -302,9 +302,9 @@ Kérés: `~/ERSTE Addressable AI Agent/static_creatives_export.csv` `suggested_f
 - [x] **R2** Átnevezés végrehajtása: `os.rename` + **mtime visszaírás** (`os.utime` a CSV `date`-jéből), case-only esetek két lépésben, htmlFolder-suffix levágva, `suggestion_correction` prioritással. Rollback-manifest kiírása.
 - [x] **R3** Verifikáció: 0 hiányzó forrás, 0 duplikátum, minden mtime egyezik a CSV `date`-tel.
 - [ ] **R4** Lapos tükör (`~/ERSTE.../creatives`) újraszinkronizálása az új nevekre, mtime-megőrzéssel + `creatives_manifest.csv` / `static_creatives_export.csv` frissítés.
-- [ ] **R5** mm6 rebuild: `rebuild-creatives.ts <PROD> --commit` mind a 7 termékre (LTP/SZA/SZK/VAL/HK/MARKET/HITEL) — a script idempotens, a `createdAt` a fájl mtime-jából jön.
-- [ ] **R6** Ellenőrzés a DB-n: nonDCO max MC-szám, „DCO szám átível topicon = 0", feloldhatatlan preview = 0, creatives darabszám + `createdAt` eloszlás a CSV `date`-hez képest.
-- [ ] **R7** CHANGELOG + bump-javaslat.
+- [x] **R5** mm6 rebuild: `rebuild-creatives.ts <PROD> --commit` mind a 7 termékre (LTP/SZA/SZK/VAL/HK/MARKET/HITEL) — a script idempotens, a `createdAt` a fájl mtime-jából jön.
+- [x] **R6** Ellenőrzés a DB-n: nonDCO max MC-szám, „DCO szám átível topicon = 0", feloldhatatlan preview = 0, creatives darabszám + `createdAt` eloszlás a CSV `date`-hez képest.
+- [x] **R7** CHANGELOG + bump-javaslat.
 - **DEPLOYOLVA 6.19.0** (2026-08-17): commit `11091ae`, box `a64235f`→`11091ae` (2 commit lemaradást is behozott: createdAt-backfill + docs), `npm run build` OK, `pm2 restart mm6-erste` → online. Nincs séma-migráció (csak route válasz-alak + propagáció-logika + kliens). Health `/` 307, `/mcp` 401.
 
 **R1–R4 EREDMÉNY (2026-08-17):**
@@ -357,3 +357,11 @@ Séma-migráció (channels tábla) → **migrate+kód egy passzban a boxon** (`d
 **Sorrend-javaslat:** S1 → S2 → S3 (független, gyors, alacsony kockázat, azonnal deployolható) ⇒ S4 → S5 → S6 (channel-mag, egyben migrálva/deployolva).
 - **DEPLOYOLVA 6.20.0** (2026-08-17): S1–S3 (channel-epic 1/2, migration-free). Commit `6a818ca`, box `11091ae`→`6a818ca`, build OK, `pm2 restart mm6-erste` → online. Health `/` 307, `/mcp` 401. S4–S6 (channels tábla + migráció + Settings + audiences-takarítás) hátravan, egyben deployolva. ⚠️ Megjegyzés: a boxra NEM kerültek fel a `rebuild-creatives.ts`/`mcp.ts`/`numbering.ts` lokális commitolatlan módosítások (nem az én munkám) — csak origin/main.
 - **DEPLOYOLVA 6.21.0** (2026-08-17): S4–S6 channel-mag. Commit `c71831c`, box `6a818ca`→`c71831c`. Séma-migráció `0007` (channels tábla) + `migrate-channels.ts` (erste): **6 channel seedelve, 6 ch_* audience törölve, 0 message elveszett** (ch_*-kulcsú msg 583→602 közben NŐTT a párhuzamos rebuild miatt). build OK, `pm2 restart` → online. Health `/` 307, `/mcp` 401, `/api/channels` 401. ⚠️ **rebuild-creatives.ts (user uncommitted) még channel-audience-t használ — a channels-táblára kell átírni futtatás előtt.** ⚠️ Csak erste-re futott a data-migráció; ha más kliens is használ nonDCO-t, nekik is kell.
+
+**R5–R7 EREDMÉNY (2026-08-17):**
+- **Mind a 7 termék újraépítve.** Az első háttérfutás a HITEL újraimportja közben megszakadt (külső kill, 520/555 creative bement, 0 nonDCO MC) — a script idempotens, a HITEL újrafuttatása rendbe tette.
+- **Végállapot (DB, erste):** **688 nonDCO üzenet** (357 DISP + 331 SOC), **232 distinct MC-szám, tartomány 2–397** (a korábbi 826 sor / 333–837 helyett). 3145 creatives. `createdAt` visszaállítva a CSV file-dátumokból (`fix-creative-dates.ts --commit`, 3145 sor; 3118 CSV-ből, 27 mtime-ból).
+- **Invariánsok:** DCO szám átível topicon = 0 · nonDCO image1 feloldhatatlan = 0 · nonDCO image1 hiányzik = 0 · DCO max = 332. nonDCO-ban 10 szám ível át topicon — pontosan a 10 előzetesen azonosított fájlnév-vs-fájlnév ütközés (7/159/171/174/287/288/289/290/302/321), ezeket szándékosan nem nyúltuk.
+- **⚠️ Párhuzamos session:** közben a repo 6.19.0 → **6.21.0**-ra ment (channels epic: a channel-audience-ök átkerültek a külön `channels` táblába, `migrate-channels.ts`). A rebuild által írt `audience='ch_disp'/'ch_soc'` kulcsok **helyesek maradtak** — a channels-modell pont ezt írja elő ("nonDCO messages keep their audience key and resolve through the channels table"). A tengely-scope-olt auto-számozás (`liveOnAxis`) is bekerült HEAD-be a 6.20.0-val, a channels-modellhez igazítva.
+- Tesztek **566/566 zöld**, `tsc` tiszta.
+- **Nyitva maradt (user-döntés kérdése):** 1231 fájl neve továbbra is `MC0` — a szám a CSV-ből jön, nem a fájlnévből. Ha a fájlnevek is a valódi számot vinnék, a rename-et újra kéne futtatni MC0 → `suggested_mc_number` behelyettesítéssel (a 9 ütköző csoportra a fenti 389–397 leképezéssel).

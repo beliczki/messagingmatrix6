@@ -5,6 +5,30 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- **nonDCO MC numbers are deterministic again — the axis no longer climbs into
+  the 800s.** `scripts/rebuild-creatives.ts` took the MC number from the
+  filename and fell back to `max(number) + 1` for every file still named `MC0`.
+  That fallback ran *after* the product's own rows were deleted, so each rebuild
+  re-drew ~300 cards from above the global max and the nonDCO axis drifted
+  upward on every run (last state: 333–837). The number now comes from the
+  filename, or — for `MC0` files — from the `suggested_mc_number` column of
+  `static_creatives_export.csv`. The plan is computed over all products at once
+  and is a pure function of the folder + CSV, so a re-run reproduces it exactly;
+  a file with neither source aborts the script instead of inventing a number.
+  Where the CSV suggested a number another product's filename already claimed
+  (324–332), the filename wins and the losing group is re-allocated above the
+  top of the nonDCO space (`HITEL 324–329 → 389–394`, `MARKET 330–332 →
+  395–397`).
+- Erste rebuild result: **688 nonDCO messages / 232 numbers, range 2–397**
+  (was 826 rows over 333–837), and `creatives.createdAt` re-backfilled from the
+  export CSV's file dates.
+
+### Changed
+- `mc_create`'s `mc_number: 'new'` description and the `numbering.ts` comments
+  now say what the code has done since 6.20.0: the fresh number is the max + 1
+  **on the target audience's axis**, not the global max.
+
 ## [6.21.0] — 2026-08-17
 
 Channels-entity epic, part 2 of 2 (S4–S6). Channels are now a first-class

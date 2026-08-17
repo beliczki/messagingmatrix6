@@ -41,7 +41,7 @@ function maxVariantChar(messages: ExistingMessage[]): string {
 
 // Determine the (number, variant, version) for a NEW message inserted at the
 // (topic, audience) cell. Matches v5 useMatrix.js:377-409 behavior:
-//   - Cell empty (or only deleted) → number = MAX(non-deleted globally) + 1,
+//   - Cell empty (or only deleted) → number = MAX(non-deleted in `messages`) + 1,
 //     variant = 'a', version = 1
 //   - Cell occupied → number = existing cell number,
 //     variant = next char after MAX(variant char code)
@@ -56,7 +56,7 @@ export function nextMcSlot(
   );
 
   if (inCell.length === 0) {
-    // Empty cell — global max.
+    // Empty cell — max over the passed set (createMessage passes one axis).
     return { number: nextNewNumber(messages), variant: "a", version: 1 };
   }
 
@@ -70,8 +70,11 @@ export function nextMcSlot(
   };
 }
 
-// Next free MC number: MAX(live numbers globally) + 1. Numbers identify a
-// card across audience copies, so allocation is global, never per cell.
+// Next free MC number: MAX(live numbers in the passed set) + 1. Numbers identify
+// a card across audience copies, so allocation is never per cell. The caller
+// decides the scope of `messages`: createMessage passes ONE axis (DCO or
+// nonDCO), because the two are independent number spaces — a new DCO MC must
+// not jump to 400+ just because the static nonDCO library climbed that high.
 export function nextNewNumber(messages: ExistingMessage[]): number {
   let max = 0;
   for (const m of messages.filter(isLive)) {

@@ -52,7 +52,9 @@ import { createCreative, updateCreative } from "../src/lib/entities/creatives";
 import { generatePmmid } from "../src/lib/pmmid";
 import { buildTrafficking } from "../src/lib/trafficking";
 
-const SRC_DIR = "/Users/robertbeliczki/ERSTE Addressable AI Agent/creatives";
+const BASE = "/Users/robertbeliczki/ERSTE Addressable AI Agent";
+const SRC_DIR = `${BASE}/creatives`;
+const CSV = `${BASE}/static_creatives_export.csv`;
 const IMAGE_EXT = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg"]);
 const VIDEO_EXT = new Set(["mp4", "mov", "webm"]);
 const MIME: Record<string, string> = {
@@ -77,7 +79,8 @@ type Rec = {
   ext: string;
   type: "image" | "video";
   product: string;
-  mcNumber: number | null;
+  fnNumber: number | null; // MC number as written in the filename (0 = "MC0")
+  mcNumber: number | null; // resolved number — filled in by resolveNumbers()
   mcVariant: string;
   topicRaw: string;
   version: number;
@@ -86,15 +89,61 @@ type Rec = {
   familyKey: string;
 };
 
+// `suggested_mc_number` is the LAST of the export CSV's 12 columns and sits
+// after the free-text `comment`, so the naive comma split that reading the
+// early columns gets away with is not enough here.
+function splitCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (quoted) {
+      if (c === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else quoted = false;
+      } else cur += c;
+    } else if (c === '"') quoted = true;
+    else if (c === ",") {
+      out.push(cur);
+      cur = "";
+    } else cur += c;
+  }
+  out.push(cur);
+  return out;
+}
+
+// suggested_filename → the MC number the export suggests for it ("MC313" → 313).
+function loadSuggestedNumbers(): Map<string, number> {
+  const lines = fs.readFileSync(CSV, "utf8").split("\n");
+  const header = splitCsvLine(lines[0]!);
+  const iName = header.indexOf("suggested_filename");
+  const iNum = header.indexOf("suggested_mc_number");
+  if (iName < 0 || iNum < 0)
+    throw new Error("static_creatives_export.csv: missing suggested_* columns");
+  const out = new Map<string, number>();
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i]) continue;
+    const c = splitCsvLine(lines[i]!);
+    const m = (c[iNum] ?? "").trim().match(/^MC(\d+)$/i);
+    const name = (c[iName] ?? "").trim();
+    if (name && m) out.set(name, parseInt(m[1]!, 10));
+  }
+  return out;
+}
+
 function underscoredTopic(keywords: string): string {
   return keywords.trim().split(/\s+/).filter(Boolean).join("_");
 }
 
-function scanProduct(product: string): Rec[] {
-  const prefix = `ERSTE_${product}_`;
+// Every image/video creative in the folder, all products. The numbering plan is
+// a client-wide fact, so it can only be computed from the whole set.
+function scanAll(): Rec[] {
   const out: Rec[] = [];
   for (const name of fs.readdirSync(SRC_DIR)) {
-    if (!name.startsWith(prefix)) continue;
+    if (!name.startsWith("ERSTE_")) continue;
     const ext = name.slice(name.lastIndexOf(".") + 1).toLowerCase();
     const type = IMAGE_EXT.has(ext)
       ? "image"
@@ -110,8 +159,9 @@ function scanProduct(product: string): Rec[] {
       filename: name,
       ext,
       type,
-      product,
-      mcNumber: p.mcNumber,
+      product: p.product ?? "",
+      fnNumber: p.mcNumber,
+      mcNumber: null,
       mcVariant: (p.mcVariant ?? "").toLowerCase(),
       topicRaw: underscoredTopic(p.keywords),
       version: p.version,
@@ -121,6 +171,72 @@ function scanProduct(product: string): Rec[] {
     });
   }
   return out;
+}
+
+// The MC number of a static creative comes from its filename; files still
+// carrying MC0 take the number the export CSV suggests for them. Both are
+// client-wide facts, so the plan is computed over ALL products and is a pure
+// function of the folder + CSV — a re-run reproduces it exactly. The old
+// `max(number)+1` auto-assign did not: it re-drew every MC0 card's number from
+// above the global max on each rebuild, which is how the nonDCO axis climbed
+// past 800.
+//
+// Conflict rule: a filename claim beats a suggested claim. The CSV's generator
+// handed 324–332 to MC0 families while those numbers were already written into
+// another product's filenames; the losing groups are re-allocated above the top
+// of the nonDCO space. Two products colliding on filename numbers is left as it
+// is — that is the pre-existing state, not something this plan introduces.
+function resolveNumbers(
+  all: Rec[],
+  suggested: Map<string, number>,
+): { reassigned: { product: string; from: number; to: number }[]; unresolved: Rec[] } {
+  const unresolved: Rec[] = [];
+  const claimed = new Map<number, Set<string>>(); // filename claims: number → products
+  for (const r of all) {
+    if (r.fnNumber != null && r.fnNumber !== 0) {
+      const s = claimed.get(r.fnNumber) ?? new Set<string>();
+      s.add(r.product);
+      claimed.set(r.fnNumber, s);
+    }
+  }
+
+  // Suggested claims, grouped per (product, suggested number).
+  const groups = new Map<string, { product: string; number: number; recs: Rec[] }>();
+  for (const r of all) {
+    if (r.fnNumber != null && r.fnNumber !== 0) continue;
+    const n = suggested.get(r.filename);
+    if (n == null) {
+      unresolved.push(r);
+      continue;
+    }
+    const key = `${r.product}:${n}`;
+    const g = groups.get(key) ?? { product: r.product, number: n, recs: [] };
+    g.recs.push(r);
+    groups.set(key, g);
+  }
+
+  let next = 0;
+  for (const n of claimed.keys()) if (n > next) next = n;
+  for (const g of groups.values()) if (g.number > next) next = g.number;
+  next++;
+
+  const reassigned: { product: string; from: number; to: number }[] = [];
+  // Sorted so the allocation order — and therefore every reassigned number — is
+  // identical on every run, whatever order readdir hands the files back in.
+  const sorted = [...groups.values()].sort(
+    (a, b) => a.product.localeCompare(b.product) || a.number - b.number,
+  );
+  for (const g of sorted) {
+    const owners = claimed.get(g.number);
+    const taken = owners && [...owners].some((p) => p !== g.product);
+    const number = taken ? next++ : g.number;
+    if (taken) reassigned.push({ product: g.product, from: g.number, to: number });
+    for (const r of g.recs) r.mcNumber = number;
+  }
+  for (const r of all) {
+    if (r.fnNumber != null && r.fnNumber !== 0) r.mcNumber = r.fnNumber;
+  }
+  return { reassigned, unresolved };
 }
 
 // Per-NUMBER topic = the number's variant-'a' keyword (fallback: lowest variant).
@@ -152,10 +268,12 @@ function pickRep(recs: Rec[]): Rec {
   )[0]!;
 }
 
-// One nonDCO MC identity = one card (number+variant / MC0-family), in ≥1 channel.
+// One nonDCO MC identity = one card (number + variant), in ≥1 channel. Every
+// record carries a resolved number by the time this runs (resolveNumbers aborts
+// otherwise), so a card is always keyed by the number.
 type Group = {
   key: string;
-  number: number | null; // null → auto-assign
+  number: number;
   variant: string;
   topicRaw: string;
   byChannel: Map<Channel, Rec[]>;
@@ -164,18 +282,14 @@ type Group = {
 function buildGroups(recs: Rec[], topicOf: Map<number, string>): Group[] {
   const groups = new Map<string, Group>();
   for (const r of recs) {
-    const numbered = r.mcNumber != null && r.mcNumber !== 0;
-    const gkey = numbered
-      ? `n:${r.mcNumber}:${r.mcVariant || "a"}`
-      : `f:${r.familyKey}`;
-    const topicRaw = numbered ? topicOf.get(r.mcNumber!)! : r.topicRaw;
+    const gkey = `n:${r.mcNumber}:${r.mcVariant || "a"}`;
     const g =
       groups.get(gkey) ??
       ({
         key: gkey,
-        number: numbered ? r.mcNumber! : null,
+        number: r.mcNumber!,
         variant: r.mcVariant || "a",
-        topicRaw,
+        topicRaw: topicOf.get(r.mcNumber!)!,
         byChannel: new Map(),
       } satisfies Group);
     const list = g.byChannel.get(r.channel) ?? [];
@@ -199,16 +313,38 @@ async function main() {
     `\n=== rebuild-creatives ${product} (client ${client.key}/${clientId}) ${commit ? "COMMIT" : "DRY-RUN"} ===`,
   );
 
-  const recs = scanProduct(product);
+  const all = scanAll();
+  const { reassigned, unresolved } = resolveNumbers(all, loadSuggestedNumbers());
+  if (unresolved.length) {
+    console.error(
+      `\n${unresolved.length} file(s) carry MC0 and have no suggested_mc_number in the CSV — refusing to auto-number:`,
+    );
+    for (const r of unresolved.slice(0, 20)) console.error(`   ${r.filename}`);
+    process.exit(1);
+  }
+  console.log(`Numbering plan (all products): ${all.length} files`);
+  console.log(
+    `  from filename: ${all.filter((r) => r.fnNumber != null && r.fnNumber !== 0).length}` +
+      `  ·  from CSV suggestion: ${all.filter((r) => r.fnNumber == null || r.fnNumber === 0).length}`,
+  );
+  if (reassigned.length) {
+    console.log(
+      `  re-allocated (suggestion collided with a filename claim): ${reassigned.length}`,
+    );
+    for (const x of reassigned)
+      console.log(`     ${x.product}: MC${x.from} → MC${x.to}`);
+  }
+
+  const recs = all.filter((r) => r.product === product);
   const topicOf = topicByNumber(recs);
   const groups = buildGroups(recs, topicOf);
   const cellCount = groups.reduce((n, g) => n + g.byChannel.size, 0);
-  console.log(`Source files (image+video): ${recs.length}`);
+  console.log(`\nSource files (image+video) for ${product}: ${recs.length}`);
   console.log(
     `  channel split: DISP=${recs.filter((r) => r.channel === "DISP").length} SOC=${recs.filter((r) => r.channel === "SOC").length}`,
   );
   console.log(
-    `  MC0/unnumbered files: ${recs.filter((r) => r.mcNumber == null || r.mcNumber === 0).length}`,
+    `  MC numbers: ${new Set(recs.map((r) => r.mcNumber)).size} distinct, range ${Math.min(...recs.map((r) => r.mcNumber!))}–${Math.max(...recs.map((r) => r.mcNumber!))}`,
   );
   console.log(`Planned: ${groups.length} nonDCO cards → ${cellCount} matrix cells`);
 
@@ -331,12 +467,6 @@ async function main() {
       (t) => [t.key, t],
     ),
   );
-  const [{ maxn }] = await db
-    .select({ maxn: sql<number>`coalesce(max(${messages.number}),0)` })
-    .from(messages)
-    .where(eq(messages.clientId, clientId));
-  let autoNum = Number(maxn) + 1;
-
   async function insertNonDco(
     audienceKey: string,
     topicKey: string,
@@ -390,7 +520,7 @@ async function main() {
     // topic = "<PRODUCT>_<keyword>" carried on the message only — no topics-table
     // row is created; the matrix synthesizes nonDCO rows from these strings.
     const topicKey = `${product}_${g.topicRaw}`.slice(0, 200);
-    const number = g.number ?? autoNum++;
+    const number = g.number;
     for (const [ch, recsInCh] of g.byChannel) {
       const rep = pickRep(recsInCh);
       await insertNonDco(

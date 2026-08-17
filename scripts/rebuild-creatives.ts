@@ -316,20 +316,32 @@ async function main() {
     const chans = [...g.byChannel.keys()];
     const primary = chans[0]!;
     const repP = pickRep(g.byChannel.get(primary)!);
-    const opts =
-      g.number != null
-        ? { requestedNumber: g.number, requestedVariant: g.variant }
-        : {};
-    const msg = await createMessage(
-      clientId,
-      {
-        audience: AUD[primary],
-        topic: topicKey,
-        image1: fileNameByRec.get(repP)!,
-        name: repP.filename,
-      },
-      opts,
-    );
+    const input = {
+      audience: AUD[primary],
+      topic: topicKey,
+      image1: fileNameByRec.get(repP)!,
+      name: repP.filename,
+    };
+    // Prefer the filename's MC number/variant. If it collides with a live
+    // message in another topic (the "a number never spans topics" invariant),
+    // fall back to an auto-assigned number — the creative keeps its filename
+    // label in the creatives row; only the matrix MC number differs.
+    let msg;
+    if (g.number != null) {
+      try {
+        msg = await createMessage(clientId, input, {
+          requestedNumber: g.number,
+          requestedVariant: g.variant,
+        });
+      } catch (e) {
+        console.log(
+          `  ⚠ MC${g.number}${g.variant} could not claim filename number (${(e as Error).message.slice(0, 70)}) → auto-number`,
+        );
+        msg = await createMessage(clientId, input, {});
+      }
+    } else {
+      msg = await createMessage(clientId, input, {});
+    }
     cells++;
 
     for (const ch of chans.slice(1)) {

@@ -1,7 +1,6 @@
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import {
-  audiences,
   prodlistRows,
   topics,
   type Audience,
@@ -12,6 +11,7 @@ import { parseCreativeFilename } from "@/lib/parse-creative-filename";
 import { createMessage } from "./messages";
 import { createTopic } from "./topics";
 import { getCreative, updateCreative } from "./creatives";
+import { channelToAudience, findChannelByCode } from "./channels";
 
 export class PromoteError extends Error {}
 
@@ -58,24 +58,6 @@ export function autoTopicFromFilename(filename: string): {
     .map((t) => t.charAt(0).toUpperCase() + t.slice(1).toLowerCase())
     .join(" ");
   return { key, name };
-}
-
-async function findAudienceByChannel(
-  clientId: number,
-  channel: string,
-): Promise<Audience | null> {
-  const [row] = await db
-    .select()
-    .from(audiences)
-    .where(
-      and(
-        eq(audiences.clientId, clientId),
-        eq(audiences.channel, channel),
-        isNull(audiences.archivedAt),
-      ),
-    )
-    .limit(1);
-  return row ?? null;
 }
 
 async function findTopicByKey(
@@ -144,12 +126,13 @@ export async function promoteCreative(
       `no channel for creative ${creativeId} — pass channel explicitly or ingest a matching prodlist row`,
     );
   }
-  const audience = await findAudienceByChannel(clientId, channel);
-  if (!audience) {
+  const channelRow = await findChannelByCode(clientId, channel);
+  if (!channelRow) {
     throw new PromoteError(
-      `no channel-audience for channel '${channel}' — seed the channel audiences first`,
+      `no channel '${channel}' — add it under Settings › Channels first`,
     );
   }
+  const audience = channelToAudience(channelRow);
 
   const fileName = creative.fileName;
   const creativeVersion = creative.version;

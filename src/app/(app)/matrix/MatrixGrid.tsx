@@ -23,6 +23,7 @@ import CycleIconButton from "../_components/CycleIconButton";
 import ArchiveToggle from "../_components/ArchiveToggle";
 import {
   type Audience,
+  type Channel,
   type Density,
   type Filters,
   type MatrixAxis,
@@ -31,6 +32,7 @@ import {
   type View,
   EMPTY_FILTERS,
   STATUS_OPTIONS,
+  channelToAudience,
 } from "./types";
 import { parseSearchQuery, narrowingAxes } from "@/lib/search-query";
 
@@ -347,8 +349,21 @@ export default function MatrixWorkspace() {
         templates: { name: string; sizes: string[]; defaultSize: string | null }[];
       }>("/api/templates/folders"),
   });
+  const channelsQ = useQuery({
+    queryKey: ["channels"],
+    queryFn: () => fetchJSON<{ channels: Channel[] }>("/api/channels"),
+  });
 
-  const audiences = audiencesQ.data?.audiences ?? [];
+  // Channels are merged into `audiences` as Audience-shaped rows (channel =
+  // code ⇒ nonDCO axis), so the whole DCO/nonDCO column logic below is
+  // unchanged — it still partitions a single audience list on channel != null.
+  const audiences = useMemo(
+    () => [
+      ...(audiencesQ.data?.audiences ?? []),
+      ...(channelsQ.data?.channels ?? []).map(channelToAudience),
+    ],
+    [audiencesQ.data, channelsQ.data],
+  );
   const topics = topicsQ.data?.topics ?? [];
   const messages = messagesQ.data?.messages ?? [];
   const templates = templatesQ.data?.templates ?? [];

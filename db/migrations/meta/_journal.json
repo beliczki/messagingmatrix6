@@ -50,6 +50,13 @@
       "when": 1786627993585,
       "tag": "0006_harsh_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786985858656,
+      "tag": "0007_known_violations",
+      "breakpoints": true
     }
   ]
 }

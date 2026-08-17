@@ -23,6 +23,11 @@ import {
   type TraffickingPatterns,
 } from "@/lib/trafficking";
 import { listAudiences } from "@/lib/entities/audiences";
+import {
+  channelToAudience,
+  findChannelByKey,
+  listChannels,
+} from "@/lib/entities/channels";
 import { readDefaultTemplate } from "@/lib/templates";
 
 const WRITABLE_FIELDS = [
@@ -109,6 +114,11 @@ async function listLiveMessages(
     .where(eq(messages.clientId, clientId));
 }
 
+// Resolve a placement key to an Audience. nonDCO messages store a CHANNEL key
+// (e.g. "ch_disp") here — channels live in their own table now, so when the key
+// isn't a real audience we fall back to the channel, presented in Audience
+// shape (channelToAudience). This keeps numbering/pmmid/trafficking working for
+// nonDCO rows exactly as when channels were audience rows.
 async function findAudienceByKey(
   clientId: number,
   key: string,
@@ -118,7 +128,9 @@ async function findAudienceByKey(
     .from(audiences)
     .where(and(eq(audiences.clientId, clientId), eq(audiences.key, key)))
     .limit(1);
-  return rows[0] ?? null;
+  if (rows[0]) return rows[0];
+  const channel = await findChannelByKey(clientId, key);
+  return channel ? channelToAudience(channel) : null;
 }
 
 async function findTopicByKey(
@@ -219,8 +231,13 @@ export async function createMessage(
   // DCO card with its static nonDCO twin in a different topic. The "a number
   // never spans topics" rule below is therefore enforced only within the
   // target audience's own axis. (audienceList is also needed by the
-  // pmmid/trafficking patterns further down.)
-  const audienceList = await listAudiences(clientId);
+  // pmmid/trafficking patterns further down.) Channels are merged in as
+  // Audience-shaped rows (channel = code ⇒ nonDCO) so nonDCO placements land on
+  // the correct axis and resolve their {{audiences[key]...}} pattern lookups.
+  const audienceList = [
+    ...(await listAudiences(clientId)),
+    ...(await listChannels(clientId)).map(channelToAudience),
+  ];
   const channelByAudience = new Map(
     audienceList.map((a) => [a.key, a.channel ?? null]),
   );

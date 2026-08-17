@@ -27,6 +27,44 @@ export type Audience = {
   mcCount?: number;
 };
 
+// nonDCO channel (own table). Presented to the grid as an Audience with
+// channel = code (non-null ⇒ nonDCO axis) so the existing DCO/nonDCO column
+// logic treats channels exactly as the old channel-audience rows did.
+export type Channel = {
+  id: number;
+  key: string;
+  code: string;
+  label: string;
+  orderIndex: number;
+  archivedAt: string | null;
+};
+
+export function channelToAudience(c: Channel): Audience {
+  return {
+    id: c.id,
+    key: c.key,
+    name: c.label,
+    product: null,
+    orderIndex: c.orderIndex,
+    status: null,
+    strategy: null,
+    buyingPlatform: null,
+    dataSource: null,
+    targetingType: null,
+    device: null,
+    tag: null,
+    comment: null,
+    campaignName: null,
+    campaignId: null,
+    lineitemName: null,
+    lineitemId: null,
+    channel: c.code,
+    version: 1,
+    updatedAt: "",
+    archivedAt: c.archivedAt,
+  };
+}
+
 export type TextFormattingRule = {
   id: number;
   textOriginal: string;

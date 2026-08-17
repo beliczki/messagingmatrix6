@@ -8,6 +8,7 @@ import { ClientsTab } from "./_clients/ClientsTab";
 import { StorageTab } from "./_storage/StorageTab";
 import { StructureTab } from "./_structure/StructureTab";
 import { KeywordsTab } from "./_keywords/KeywordsTab";
+import { ChannelsTab } from "./_channels/ChannelsTab";
 import { SnapshotsTab } from "./_snapshots/SnapshotsTab";
 import { ChangelogTab } from "./_changelog/ChangelogTab";
 import { McpTab } from "./_mcp/McpTab";
@@ -19,6 +20,7 @@ type TabKey =
   | "storage"
   | "structure"
   | "keywords"
+  | "channels"
   | "snapshots"
   | "changelog"
   | "mcp"
@@ -30,6 +32,7 @@ const TABS: Array<{ key: TabKey; label: string }> = [
   { key: "storage", label: "Storage" },
   { key: "structure", label: "Structure" },
   { key: "keywords", label: "Keywords" },
+  { key: "channels", label: "Channels" },
   { key: "snapshots", label: "Snapshots" },
   { key: "changelog", label: "Changelog" },
   { key: "mcp", label: "MCP" },
@@ -121,6 +124,8 @@ export function SettingsView({
             <StructureTab />
           ) : active === "keywords" ? (
             <KeywordsTab />
+          ) : active === "channels" ? (
+            <ChannelsTab />
           ) : active === "snapshots" ? (
             <SnapshotsTab />
           ) : active === "changelog" ? (

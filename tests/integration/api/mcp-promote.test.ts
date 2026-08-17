@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { audiences, clients, creatives, prodlistRows } from "@/db/schema";
+import { channels, clients, creatives, prodlistRows } from "@/db/schema";
 import { buildMcpServer, _resetMcpRateLimitForTests } from "@/lib/mcp";
 import {
   createTestDb,
@@ -38,14 +38,15 @@ async function callTool(
 }
 
 async function seedChannelAudience(clientId: number, channel: string, order: number) {
+  // Channels are their own table now; promotion resolves by channel code.
   const [row] = await db
-    .insert(audiences)
+    .insert(channels)
     .values({
       clientId,
       key: `ch_${channel.toLowerCase()}`,
-      name: channel,
+      code: channel,
+      label: channel,
       orderIndex: order,
-      channel,
     })
     .returning();
   return row;

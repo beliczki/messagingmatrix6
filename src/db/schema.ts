@@ -198,6 +198,35 @@ export const audiences = pgTable(
   ],
 );
 
+// nonDCO channels — first-class, separate from audiences (2026-08-17). Each row
+// is a column of the nonDCO matrix. `key` (e.g. "ch_disp") is what nonDCO
+// messages store in `messages.audience`; `code` (e.g. "DISP") is the prodlist
+// channel value; `label` is the display name. Channels used to live as
+// `audiences.channel != null` rows — they were migrated out so the audiences
+// list stays DCO-only. nonDCO MCs are minted only via creative promotion.
+export const channels = pgTable(
+  "channels",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    clientId: integer("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    key: text("key").notNull(),
+    code: text("code").notNull(),
+    label: text("label").notNull(),
+    orderIndex: integer("order_index").notNull(),
+    createdAt: text("created_at").notNull().default(nowUtc),
+    updatedAt: text("updated_at").notNull().default(nowUtc),
+    archivedAt: text("archived_at"),
+  },
+  (t) => [
+    uniqueIndex("channels_client_key_unique").on(t.clientId, t.key),
+    index("channels_client_code_idx").on(t.clientId, t.code),
+    index("channels_client_order_idx").on(t.clientId, t.orderIndex),
+  ],
+);
+export type Channel = typeof channels.$inferSelect;
+
 // §3.2 — narrower than audiences: no targeting/trafficking columns
 export const topics = pgTable(
   "topics",

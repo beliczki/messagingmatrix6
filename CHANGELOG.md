@@ -5,6 +5,36 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.21.0] — 2026-08-17
+
+Channels-entity epic, part 2 of 2 (S4–S6). Channels are now a first-class
+entity, separate from audiences. **Ships with schema migration 0007 + a one-time
+data migration — deploy migrate+code in one pass.**
+
+### Added
+- **`channels` table + Settings › Channels tab.** nonDCO channels (the nonDCO
+  matrix columns) live in their own table `(key, code, label, orderIndex,
+  archivedAt)` with full CRUD (`/api/channels`, `/api/channels/[id]`). The new
+  Settings tab manages the list — add, rename label, archive/restore. nonDCO
+  MCs are still minted only via creative upload.
+- **`scripts/migrate-channels.ts`** — one-time move of legacy
+  `audiences.channel != null` rows into `channels`, then deletes them from
+  audiences (nonDCO messages keep their `audience = "ch_disp"` key and resolve
+  through the channels table). Idempotent; also seeds the 6 canonical channels.
+
+### Changed
+- **Channels no longer pollute the audiences list.** After migration the
+  audiences page is DCO-only. Channel keys still resolve everywhere — numbering,
+  pmmid/trafficking, and matrix columns — because `findAudienceByKey` falls back
+  to the channels table (presented in Audience shape via `channelToAudience`),
+  and the matrix merges channels into its audience list. Creative promotion
+  resolves the channel via `findChannelByCode`.
+
+### Removed
+- **`scripts/seed-channel-audiences.ts` is retired** (now a deprecation shim
+  pointing to `migrate-channels.ts`) — seeding channel-audiences would re-dirty
+  the audiences list.
+
 ## [6.20.0] — 2026-08-17
 
 Channels-entity epic, part 1 of 2 (the low-risk, no-migration slices S1–S3).

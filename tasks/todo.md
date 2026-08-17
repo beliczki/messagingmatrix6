@@ -297,12 +297,61 @@ Kérés: `~/ERSTE Addressable AI Agent/static_creatives_export.csv` `suggested_f
 - A behelyettesítés **nem mechanikus**: 43 `(suggested_mc_number, variant)` pár **több topichoz** tartozik, és 19 pár **ütközik** egy már számozott családdal (gyakran más termékben).
 
 **Lépések (a ⚠️ döntés után indul):**
-- [ ] **R0** User-döntés: az átnevezés csak a `suggested_filename`-t követi (MC0 marad), VAGY a `MC0` → `suggested_mc_number` behelyettesítéssel együtt (és akkor a 43+19 ütközés feloldási szabálya kell).
-- [ ] **R1** Rename-manifest generálás (dry-run CSV: `path`, régi név, új név, mtime ISO, ütközés-flag) — `.tmp_rename/` alatt, semmit nem ír.
-- [ ] **R2** Átnevezés végrehajtása: `os.rename` + **mtime visszaírás** (`os.utime` a CSV `date`-jéből), case-only esetek két lépésben, htmlFolder-suffix levágva, `suggestion_correction` prioritással. Rollback-manifest kiírása.
-- [ ] **R3** Verifikáció: 0 hiányzó forrás, 0 duplikátum, minden mtime egyezik a CSV `date`-tel.
+- [x] **R0** User-döntés (2026-08-17): **szó szerint a `suggested_filename`** (MC0 marad MC0) + a htmlFolder-mappáknál a `.htmlFolder` suffix levágva: az átnevezés csak a `suggested_filename`-t követi (MC0 marad), VAGY a `MC0` → `suggested_mc_number` behelyettesítéssel együtt (és akkor a 43+19 ütközés feloldási szabálya kell).
+- [x] **R1** Rename-manifest generálás (dry-run CSV: `path`, régi név, új név, mtime ISO, ütközés-flag) — `.tmp_rename/` alatt, semmit nem ír.
+- [x] **R2** Átnevezés végrehajtása: `os.rename` + **mtime visszaírás** (`os.utime` a CSV `date`-jéből), case-only esetek két lépésben, htmlFolder-suffix levágva, `suggestion_correction` prioritással. Rollback-manifest kiírása.
+- [x] **R3** Verifikáció: 0 hiányzó forrás, 0 duplikátum, minden mtime egyezik a CSV `date`-tel.
 - [ ] **R4** Lapos tükör (`~/ERSTE.../creatives`) újraszinkronizálása az új nevekre, mtime-megőrzéssel + `creatives_manifest.csv` / `static_creatives_export.csv` frissítés.
 - [ ] **R5** mm6 rebuild: `rebuild-creatives.ts <PROD> --commit` mind a 7 termékre (LTP/SZA/SZK/VAL/HK/MARKET/HITEL) — a script idempotens, a `createdAt` a fájl mtime-jából jön.
 - [ ] **R6** Ellenőrzés a DB-n: nonDCO max MC-szám, „DCO szám átível topicon = 0", feloldhatatlan preview = 0, creatives darabszám + `createdAt` eloszlás a CSV `date`-hez képest.
 - [ ] **R7** CHANGELOG + bump-javaslat.
 - **DEPLOYOLVA 6.19.0** (2026-08-17): commit `11091ae`, box `a64235f`→`11091ae` (2 commit lemaradást is behozott: createdAt-backfill + docs), `npm run build` OK, `pm2 restart mm6-erste` → online. Nincs séma-migráció (csak route válasz-alak + propagáció-logika + kliens). Health `/` 307, `/mcp` 401.
+
+**R1–R4 EREDMÉNY (2026-08-17):**
+- **1867 fájl/mappa átnevezve** a Leadás-könyvtárakban (1358 már jó nevű volt, 0 ütközés). A 2 „failed" sor valójában lement — a macfuse a `rename` utáni `stat`-ra dobott ENOENT-et (metadata-cache), a cél-fájlok a helyükön vannak.
+- **11 case-only átnevezés** (`MC289_B` → `MC289_b`) temp-néven keresztül lement, 0 temp-maradvány.
+- **Dátumok:** a `rename` a Drive-mounton megőrzi az mtime-ot; a **26 htmlFolder-mappánál** viszont a Drive utólag felülírta (sync) → `os.utime`-mal visszaállítva a CSV `date`-ből. **Végállapot: 3227/3227 cél létezik, 0 mtime-eltérés a CSV-hez képest.**
+- **R4 tárgytalan:** a lapos tükör (`~/ERSTE.../creatives`) nevei és mtime-jai már azonosak voltak a CSV-vel, és azok is maradtak (3227 fájl, 0 eltérés mindkét irányban).
+- Manifestek: `rename_manifest.csv` + `rename_done.csv` a session-scratchpadban (rollback-alap).
+
+**R5 — GYÖKÉR-OK JAVÍTVA (2026-08-17), fut a 7 termék:**
+- **`rebuild-creatives.ts` számozás determinisztikussá téve.** A nonDCO MC-szám mostantól: (1) a fájlnévből, ha van valódi szám; (2) a `static_creatives_export.csv` `suggested_mc_number` oszlopából, ha a fájlnév `MC0`. A terv **az összes termékre egyszerre** számolódik, tisztán a mappa + CSV függvénye → **egy re-run bitre ugyanazt adja**. Az `autoNum = max(number)+1` fallback **törölve** (ez volt a 800+ számok forrása); ha egy fájl se fájlnév-, se CSV-számot nem hoz, a script **leáll**, nem talál ki számot.
+- **Ütközés-szabály:** a fájlnév-igény veri a CSV-javaslatot. A CSV generátora 324–332-t osztott ki MC0-családoknak, miközben azok a számok már más termék fájlneveiben éltek → a 9 vesztes csoport a nonDCO-tér teteje fölé került: `HITEL MC324–329 → MC389–394`, `MARKET MC330–332 → MC395–397`. Determinisztikus (termék+szám szerint rendezve allokál). Fájlnév-vs-fájlnév ütközés (10 szám: 7/159/171/174/287/288/289/290/302/321) **érintetlen** — az a korábbi állapot, nem ez a terv hozta.
+- **Számterv (dry-run, mind a 7 termék):** 446 nonDCO kártya → 688 cella, számtartomány **2–397** (a mai 826 sor / 333–837 helyett). 3145 forrásfájl: 1914 fájlnév-szám + 1231 CSV-javaslat.
+- **Új-MC auto-számozás tengely-scope-olt** (`messages.ts` `liveOnAxis` + `numbering.ts` doc): egy új DCO MC a DCO-max+1-et kapja (333), egy új nonDCO a nonDCO-max+1-et (398) — nem ugrik át a másik tengely magasságára. +1 integrációs teszt (`messages.test.ts`), MCP tool-leírás + MatrixGrid komment frissítve.
+- **Backup a destruktív futás előtt:** `~/ERSTE.../backup_20260817_prerenumber/` — `nondco_messages.csv` (826), `creatives_rows.csv` (3145), `uploaded_files_rows.csv` (3145).
+
+**(eredeti blokkoló megjegyzés, feloldva):** a rebuild újrafuttatása **tartalmilag no-op** (a forrás bájtra és névre azonos), viszont **kárt okoz**: a `rebuild-creatives.ts:331` `autoNum = max(number)+1` a törlés UTÁN számol, így a **308 auto-számozott nonDCO kártya** (a 826-ból; 69 jön a fájlnévből) újraszámozódna 333–837-ről 838+-ra. Ez a nonDCO-hiba gyökere is: 1259 fájlnév `MC0`, a CSV `suggested_mc_number`-e viszont MC2–MC388 — ezt a mostani rename (szándékosan) nem javította.
+
+---
+
+## 🟡 NEXT — Channels-entitás + MC-creation defaults epic (TERV, 2026-08-17, JÓVÁHAGYÁSRA VÁR)
+
+**Kiváltó (user, 2026-08-17):** 5 összefüggő igény. Döntések lockolva: (1) channelek KÜLÖN entitás, ch_* audience-ok kiszedve az audiences-ből; (2) default template a Templates oldalon megjelölve (per-client config); (3) egy nagy összefüggő terv.
+
+**Élő adat (migráció mérete):** 6 ch_* channel-audience · 180 DCO audience · **826 nonDCO message hivatkozik `audience="ch_*"` string-kulcson** (nincs DB FK → törlésnél elárvulnának) · 826 template=null · 814 status null/üres.
+
+**Architekturális tény (térkép, 2026-08-17):** a "channel" ma NEM tábla, hanem az `audiences.channel` nullable oszlop. nonDCO message a channelt közvetve, `messages.audience = "ch_disp"` kulcson hivatkozza. A DCO/nonDCO tengely mindenhol `audience.channel == null` vs `!= null`. `createMessage` (`messages.ts:322-351`) pmmid+trafficking-et épít az audience-kulcs lookupból → a channel-audience törlése a nonDCO pmmid/UTM-et is érinti.
+
+**Ajánlott megközelítés (light-B, kockázat-minimalizált — jóváhagyandó):** új `channels` tábla adja a channel-definíciókat; a `messages.audience` string-kulcsok (`ch_disp`) VÁLTOZATLANOK maradnak (nincs 826-soros átdrótozás); a ch_* SOROK törlődnek az `audiences`-ből; a channel-kulcs lookupok (numbering / trafficking / matrix-oszlop / archive-cascade) **channel-aware fallback**-et kapnak (ha egy audience-kulcs nincs a valódi audience-ök közt, a channels táblából oldódik fel). Ez a user B-döntését teljesíti (külön entitás + ch_* kitakarítás) a 826-soros adat-rewrite és a `messages.channel` oszlop nélkül.
+
+### Szeletek (mind commit-méretű, teszttel)
+
+- [x] **S1 — Default status = INCOMING.** `createMessage`: `status: input.status ?? "INCOMING"` (lefedi dialog+MCP `mc_create`/`mc_create_batch`+promote+draft-promote; copy/move a forrás státuszát klónozza, változatlan). Teszt: create default INCOMING; explicit status felülír. *(Nyitott: a 814 meglévő null-status backfill — külön, opcionális.)*
+- [x] **S2 — Default template DCO MC-hez.** Új per-client `config` kulcs `defaultTemplate` (a `visibleTemplates` mintájára). Templates oldal: "Set as default" jelölő egy HTML template-re → írja a configot. Create-logika: ha a cél audience DCO (nem channel) ÉS nincs template megadva → `template = config.defaultTemplate`; channel/nonDCO ág marad `null`. Teszt: DCO create default template-et kap, nonDCO nem.
+- [x] **S3 — nonDCO edit-mode kivezetés + info box.** `filters.axis === "nondco"` guard: add-MC ("+" üres cella + dense), add-audience/add-topic header-gombok (`GridView.tsx:310-322,424-443,600-624`) elrejtve nonDCO-ban; az `EditModePanel` (`MatrixGrid.tsx:883-888`) helyén nonDCO-ban info box: "Upload correctly named creatives to the Creative Library to see them here." (empty-state token, szemantikus class). Nincs séma.
+- [ ] **S4 — Channels tábla + migráció (a nehéz mag).** Új `channels` tábla `(clientId, key, code, label, orderIndex, archivedAt)`. Migráció: tábla + seed a 6 ch_*-ból (kulcs `ch_disp`, kód `DISP`, label `Display` megőrzve) → majd a 6 ch_* audience SOR archiválása/törlése. Rewire channel-aware fallbackkel: matrix-oszlop deriv (`MatrixGrid.tsx:582-585,642-644`), axis-numbering `channelByAudience` (`messages.ts:215-227`), promote channel→kulcs (`promote.ts:63-79`), createMessage pmmid/trafficking lookup (channels a lookup-felületen), archive/restore cascade (`audiences.ts`/`messages.ts`). **Integr. teszt: migráció után a 826 nonDCO message + derivált topic-sorok VÁLTOZATLANUL látszanak a mátrixban; promote channelre rak; numbering DCO/nonDCO nem ütközik.**
+- [ ] **S5 — Settings › Channels management.** Új Settings tab/szekció a channel-lista kezelésére (label + sorrend + archive; a channel-SET forrása a `prodlist_rows.channel`-lel reconciled). Reuse: DimensionGrid vagy keywords-stílus. (Méret→channel map `egyelőre` kód-szintű marad, channels kulcsokra hivatkozva.)
+- [ ] **S6 — Audiences lista tiszta + verifikáció.** A ch_* sorok az S4 után már nincsenek az `audiences`-ben → a lista automatikusan tiszta; ellenőrzés + regressziós teszt hogy channel nem szivárog vissza. `types.ts:21` + `WRITABLE_FIELDS` channel-mező sorsa (marad a fallbackhez vagy törlődik) az S4-ben dől el.
+
+### Kockázatok / hazardok (térkép szerint, sorrendben)
+1. `messages.audience` nem-FK text → ch_* törlésnél a 826 sor csendben elárvulhat. **Kezelés:** kulcs-stringek megőrzése + channel-aware lookup, migrációs teszt.
+2. Axis-numbering `sameAxis`/`targetIsDco` → rossz join DCO/nonDCO MC-szám ütközést okoz. **Kezelés:** dedikált numbering teszt.
+3. Promote + rebuild-creatives + seed channel→audience lookup elhal. **Kezelés:** átirányítás channels táblára.
+4. Archive/restore cascade parent-child alak változik. **Kezelés:** channel-aware cascade.
+5. nonDCO pmmid/trafficking az audience-lookupon lóg. **Kezelés (S4 nyitott al-döntés):** ellenőrizni kell-e egyáltalán nonDCO-nak pmmid/UTM; ha igen, channels a lookup-felületen.
+
+### Deploy
+Séma-migráció (channels tábla) → **migrate+kód egy passzban a boxon** (`db:migrate` + build + `pm2 restart mm6-erste`), soha nem lokális migrate önmagában. Bump: minor (több user-látható változás + séma) — vagy a user dönthet nagyobbról a channel-modell törése miatt.
+
+**Sorrend-javaslat:** S1 → S2 → S3 (független, gyors, alacsony kockázat, azonnal deployolható) ⇒ S4 → S5 → S6 (channel-mag, egyben migrálva/deployolva).

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
-import { audiences, clients, messages, topics } from "@/db/schema";
+import { audiences, clients, config, messages, topics } from "@/db/schema";
 import {
   archiveMessage,
   copyMessages,
@@ -70,6 +70,61 @@ describe("messages — numbering on create", () => {
     expect(m.number).toBe(1);
     expect(m.variant).toBe("a");
     expect(m.versionNo).toBe(1);
+  });
+
+  it("new message defaults to INCOMING status; an explicit status wins", async () => {
+    await seedAudienceAndTopic(erste.id, "aud1", "top1");
+    await seedAudienceAndTopic(erste.id, "aud2", "top2");
+    const def = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    expect(def.status).toBe("INCOMING");
+    const explicit = await createMessage(erste.id, {
+      topic: "top2",
+      audience: "aud2",
+      status: "ACTIVE",
+    });
+    expect(explicit.status).toBe("ACTIVE");
+  });
+
+  it("DCO MC inherits the client's default template; nonDCO stays image-based", async () => {
+    await seedAudienceAndTopic(erste.id, "aud1", "top1"); // DCO audience
+    // A nonDCO channel-audience + its topic.
+    await db.insert(audiences).values({
+      clientId: erste.id,
+      key: "ch_disp",
+      name: "Display",
+      orderIndex: 1,
+      channel: "DISP",
+    });
+    await db.insert(topics).values({
+      clientId: erste.id,
+      key: "topN",
+      name: "TOPN",
+      orderIndex: 1,
+      product: "Loans",
+    });
+    await db.insert(config).values({
+      clientId: erste.id,
+      key: "defaultTemplate",
+      value: "erste-html",
+    });
+
+    const dco = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    expect(dco.template).toBe("erste-html");
+
+    const nondco = await createMessage(erste.id, {
+      topic: "topN",
+      audience: "ch_disp",
+    });
+    expect(nondco.template).toBeNull();
+
+    // An explicit template always wins over the default.
+    await seedAudienceAndTopic(erste.id, "aud2", "top2");
+    const explicit = await createMessage(erste.id, {
+      topic: "top2",
+      audience: "aud2",
+      template: "other-tpl",
+    });
+    expect(explicit.template).toBe("other-tpl");
   });
 
   it("second message in same cell gets next variant (b)", async () => {
@@ -217,6 +272,44 @@ describe("messages — numbering on create", () => {
     await expect(
       createMessage(erste.id, { topic: "nd2", audience: "ch_soc" }, { requestedNumber: 5 }),
     ).rejects.toThrow(/already in use/);
+  });
+
+  it("auto-assign is axis-scoped — a tall nonDCO space does not push a new DCO MC up", async () => {
+    await seedAudienceAndTopic(erste.id, "aud1", "top1");
+    await db.insert(audiences).values({
+      clientId: erste.id,
+      key: "ch_disp",
+      name: "Display",
+      orderIndex: 1,
+      channel: "DISP",
+    });
+    await db.insert(topics).values({
+      clientId: erste.id,
+      key: "nd_top",
+      name: "ND",
+      orderIndex: 1,
+      product: "Loans",
+    });
+    // The static library climbed to MC800 on the nonDCO axis…
+    await createMessage(
+      erste.id,
+      { topic: "nd_top", audience: "ch_disp" },
+      { requestedNumber: 800 },
+    );
+    // …a brand-new DCO MC must still start at 1, not 801.
+    const dco = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
+    expect(dco.number).toBe(1);
+    // And the next nonDCO one continues its own space at 801.
+    await seedAudienceAndTopic(erste.id, "aud2", "nd_top2");
+    await db
+      .update(audiences)
+      .set({ channel: "SOC" })
+      .where(and(eq(audiences.clientId, erste.id), eq(audiences.key, "aud2")));
+    const nd = await createMessage(erste.id, {
+      topic: "nd_top2",
+      audience: "aud2",
+    });
+    expect(nd.number).toBe(801);
   });
 
   it("requestedNumber present in a mixed cell adds that number's next variant", async () => {

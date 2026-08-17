@@ -386,9 +386,16 @@ export default function MatrixWorkspace() {
     }
   }, [pendingAction, selection, messagesById, copyMutation, moveMutation]);
 
+  // nonDCO MCs are born only from correctly-named creative uploads, never
+  // hand-added in the grid — so edit mode is disabled on the nonDCO axis. The
+  // toggle + EditModePanel are swapped for an info box below, and editApi.editMode
+  // is forced off here so any add/duplicate affordance already open in GridView
+  // vanishes the moment the axis switches to nonDCO.
+  const isNonDco = filters.axis === "nondco";
+
   const editApi: EditApi = useMemo(
     () => ({
-      editMode,
+      editMode: editMode && !isNonDco,
       setEditMode,
       selection,
       toggleSelect,
@@ -412,6 +419,7 @@ export default function MatrixWorkspace() {
     }),
     [
       editMode,
+      isNonDco,
       selection,
       pendingAction,
       toggleSelect,
@@ -471,7 +479,7 @@ export default function MatrixWorkspace() {
 
   // Create an MC in a cell. mcNumber: undefined = server default (first
   // number's next variant), a number = that number's next variant or a new
-  // number if globally free, "new" = force a fresh number (global max + 1).
+  // number if free on this axis, "new" = force a fresh number (axis max + 1).
   const createInCell = useCallback(
     async (audience: string, topic: string, mcNumber?: number | "new") => {
       setCreateBusy(true);
@@ -846,7 +854,7 @@ export default function MatrixWorkspace() {
                   onChange={setDensity}
                 />
               ) : null}
-              {view === "grid" ? (
+              {view === "grid" && !isNonDco ? (
                 <button
                   type="button"
                   onClick={() => editApi.setEditMode(!editApi.editMode)}
@@ -881,10 +889,24 @@ export default function MatrixWorkspace() {
                 setDensity={setDensity}
               />
               {view === "grid" ? (
-                <EditModePanel
-                  editApi={editApi}
-                  topicNameByKey={topicById}
-                />
+                isNonDco ? (
+                  <div className="matrix-nondco-info empty-state rounded-md border border-slate-200 bg-white p-3">
+                    <div className="matrix-nondco-info__title text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                      nonDCO
+                    </div>
+                    <div className="matrix-nondco-info__hint mt-1 text-[10px] leading-snug text-slate-500">
+                      nonDCO MCs are created automatically when you upload
+                      correctly-named creatives to the Creative Library. Upload
+                      correctly-named creatives to the Creative Library to see
+                      them here.
+                    </div>
+                  </div>
+                ) : (
+                  <EditModePanel
+                    editApi={editApi}
+                    topicNameByKey={topicById}
+                  />
+                )
               ) : null}
               {view === "grid" ? <MatrixExportPanel filters={filters} /> : null}
               {view === "feed" ? (

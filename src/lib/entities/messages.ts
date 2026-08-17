@@ -23,6 +23,7 @@ import {
   type TraffickingPatterns,
 } from "@/lib/trafficking";
 import { listAudiences } from "@/lib/entities/audiences";
+import { readDefaultTemplate } from "@/lib/templates";
 
 const WRITABLE_FIELDS = [
   "audience",
@@ -194,7 +195,8 @@ export async function createMessage(
   clientId: number,
   input: MessageInput,
   // requestedNumber (MCP/HTTP mc_number): claim a specific MC number, or
-  // "new" to force a fresh number (global max + 1) even in an occupied cell.
+  // "new" to force a fresh number (max + 1 on the target axis) even in an
+  // occupied cell.
   // requestedVariant (MCP/HTTP variant): force a specific variant letter instead
   // of the auto-assigned one — the caller owns the exact (number, variant) label.
   // Both kept out of MessageInput so they can't leak into the insert spread.
@@ -227,13 +229,18 @@ export async function createMessage(
     ((channelByAudience.get(m.audience ?? "") ?? null) === null) === targetIsDco;
 
   const live = await listLiveMessages(clientId);
+  // Allocation is axis-scoped too: a new DCO MC must not inherit a number from
+  // the (much taller) nonDCO space and vice versa, so the auto-assign sees only
+  // the target axis. In-cell lookups are unaffected — the target audience is on
+  // the target axis by definition.
+  const liveOnAxis = live.filter(sameAxis);
   // A cell may hold multiple MC numbers (creative generations). Default is
   // nextMcSlot (first number's next variant); an explicit number attaches to
   // that number's variant sequence in the cell, or introduces the number when
-  // it's globally free; "new" forces a fresh number.
-  const slot = nextMcSlot(live, input.topic, input.audience);
+  // it's free on this axis; "new" forces a fresh number.
+  const slot = nextMcSlot(liveOnAxis, input.topic, input.audience);
   if (opts.requestedNumber === "new") {
-    slot.number = nextNewNumber(live);
+    slot.number = nextNewNumber(liveOnAxis);
     slot.variant = "a";
   } else if (opts.requestedNumber !== undefined) {
     const n = opts.requestedNumber;
@@ -350,11 +357,26 @@ export async function createMessage(
     pmmid,
   );
 
+  // New DCO MCs inherit the client's default template when the caller passes
+  // none; nonDCO (channel) placements stay image-based (template null).
+  const template =
+    input.template != null
+      ? input.template
+      : targetIsDco
+        ? await readDefaultTemplate(clientId)
+        : null;
+
   const [row] = await db
     .insert(messages)
     .values({
       ...input,
       clientId,
+      // New MCs start life in INCOMING unless the caller passes a status —
+      // covers the matrix create dialog, MCP mc_create/mc_create_batch, and
+      // creative/draft promotion. copy/move clone the source status via their
+      // own insert paths, so they are unaffected.
+      status: input.status ?? "INCOMING",
+      template,
       number: slot.number,
       variant: slot.variant,
       audience: input.audience,

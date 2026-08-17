@@ -5,6 +5,29 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.20.0] — 2026-08-17
+
+Channels-entity epic, part 1 of 2 (the low-risk, no-migration slices S1–S3).
+
+### Added
+- **Per-client default template for new DCO MCs.** The Templates page has a
+  "Set default" star that marks one template (config key `defaultTemplate`).
+  New DCO MCs (real matrix audience) inherit it automatically at create time;
+  nonDCO/channel placements stay image-based (no template). Read via
+  `readDefaultTemplate` (`templates.ts`), applied in `createMessage`.
+
+### Changed
+- **New MCs default to `INCOMING` status.** `createMessage` now sets
+  `status: input.status ?? "INCOMING"`, covering the matrix create dialog, MCP
+  `mc_create`/`mc_create_batch`, and creative/draft promotion. copy/move keep
+  cloning the source status.
+- **The nonDCO matrix axis has no edit mode.** Add-MC, add-audience/add-topic,
+  and duplicate affordances are gone on the nonDCO axis, and the Edit-mode panel
+  is replaced by an info box ("nonDCO MCs are created automatically when you
+  upload correctly-named creatives to the Creative Library"). nonDCO MCs are
+  minted only by creative upload. `editApi.editMode` is forced off on that axis
+  (`MatrixGrid.tsx`, new `matrix-nondco-info` block).
+
 ## [6.19.0] — 2026-08-17
 
 ### Changed

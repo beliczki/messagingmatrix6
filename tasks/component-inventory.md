@@ -457,6 +457,7 @@ A Creative Library kistestvére, egyszerűbb metadata-val. Csak masonry view (ni
 | Wide aspect modifier (preview top, editor bottom) | `template-editor--landscape` |
 | **Header sáv (speckó, NEM `toolbar`)** | `template-editor__header` |
 | Template selector `<select>` | `custom-dropdown template-editor__template-select` |
+| Default-template jelölő gomb (per-client) | `template-editor__default-toggle` (+`--active`) |
 | New Template gomb | `toolbar-btn--primary` |
 | **Files panel (slide-in left)** | `template-files-panel` |
 | Files panel toggle (chevron, code header-ben) | `template-files-panel__toggle` |
@@ -616,7 +617,8 @@ The Edit toggle and the entire selection-actions block moved out of the top `mat
 - `edit-mode-panel__actions` — 2×2 grid of Copy / Move / Delete / Cancel.
 - `edit-mode-panel__pending` — stacked Apply (N) / Cancel shown while a target picker is open.
 - `edit-mode-panel__error` — rose box (`border-rose-200 bg-rose-50 text-[10px] text-rose-700`) at the panel bottom showing the last failed bulk copy/move (Apply or DnD), e.g. "MC330a is ACTIVE — measured cards keep their PMMID and can't be moved". Clears on pending-action change or edit-mode toggle.
-- `edit-mode-toggle`, `edit-mode-toggle--active` — collapsed-mode icon-only Edit button, rendered in the right toolbar's narrow column below the density CycleIconButton.
+- `edit-mode-toggle`, `edit-mode-toggle--active` — collapsed-mode icon-only Edit button, rendered in the right toolbar's narrow column below the density CycleIconButton. Hidden on the nonDCO axis (no edit mode there).
+- `matrix-nondco-info` (2026-08-17) — visual twin of `edit-mode-panel` (`empty-state` tone) shown in the right toolbar's expanded body IN PLACE OF the Edit mode panel when `view === "grid" && axis === "nondco"`. `__title` ("nonDCO"), `__hint` explains nonDCO MCs are created only by uploading correctly-named creatives to the Creative Library. nonDCO axis disables edit mode entirely (`editApi.editMode` forced off in MatrixGrid).
 - `matrix-export-panel` (2026-07-16) — third visual twin of `edit-mode-panel`/`feed-export-panel`, right toolbar expanded body directly under the Edit mode panel (`view === "grid"`). `__title` ("Matrix export"), `__filters` chip row reusing `filter-chip` (selected products/statuses vagy "All products"/"All statuses"); Download gomb = `toolbar-btn--primary` a FeedExportPanel mintájára. GET `/api/export/matrix-xlsx?products=&statuses=`.
 
 **Reuse:**

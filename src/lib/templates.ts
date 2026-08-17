@@ -261,6 +261,32 @@ async function readVisibleTemplatesConfig(
   }
 }
 
+// The per-client default template applied to new DCO MCs (config key
+// "defaultTemplate", a plain template-name string). Marked on the Templates
+// page. Null when unset — new DCO MCs then fall back to no template. nonDCO
+// MCs (channel-audience placement) never receive this; they are image-based.
+export async function readDefaultTemplate(
+  clientId: number,
+): Promise<string | null> {
+  const [row] = await db
+    .select()
+    .from(config)
+    .where(and(eq(config.clientId, clientId), eq(config.key, "defaultTemplate")))
+    .limit(1);
+  if (!row) return null;
+  const name = row.value.startsWith('"') ? safeJsonString(row.value) : row.value;
+  return name && name.length > 0 ? name : null;
+}
+
+function safeJsonString(raw: string): string | null {
+  try {
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "string" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
 // Read a single file under templates/{name}/.
 export function readTemplateFile(name: string, file: string): Buffer | null {
   const p = safeTemplateFilePath(name, file);

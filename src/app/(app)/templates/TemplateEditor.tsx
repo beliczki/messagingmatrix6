@@ -24,6 +24,7 @@ import {
   Tag as TagIcon,
   Palette,
   Filter,
+  Star,
 } from "lucide-react";
 import clsx from "clsx";
 import PreviewPane from "../_components/PreviewPane";
@@ -282,6 +283,30 @@ export default function TemplateEditor() {
       ),
   });
   const customStatusColors = lookAndFeelQ.data?.lookAndFeel?.statusColors ?? {};
+
+  // The per-client default template new DCO MCs inherit (config key
+  // "defaultTemplate"). Marked here; read at MC-create time server-side.
+  const defaultTemplateQ = useQuery({
+    queryKey: ["config", "defaultTemplate"],
+    queryFn: () =>
+      fetchJSON<{ rows: { key: string; value: unknown }[] }>(
+        "/api/config?key=defaultTemplate",
+      ),
+  });
+  const defaultTemplate =
+    (defaultTemplateQ.data?.rows?.[0]?.value as string | undefined) ?? null;
+  const setDefaultTemplateMut = useMutation({
+    mutationFn: async (name: string) => {
+      const r = await fetch("/api/config", {
+        method: "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "defaultTemplate", value: name }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["config", "defaultTemplate"] }),
+  });
 
   const uniqueCards: Message[] = (() => {
     const all = messagesQ.data?.messages ?? [];
@@ -606,6 +631,37 @@ export default function TemplateEditor() {
               </option>
             ))}
           </select>
+          {activeTemplate ? (
+            <button
+              onClick={() => {
+                if (defaultTemplate === activeTemplate) return;
+                setDefaultTemplateMut.mutate(activeTemplate);
+              }}
+              disabled={
+                defaultTemplate === activeTemplate ||
+                setDefaultTemplateMut.isPending
+              }
+              title={
+                defaultTemplate === activeTemplate
+                  ? "This is the default template for new DCO MCs"
+                  : "Set as the default template for new DCO MCs"
+              }
+              className={clsx(
+                "template-editor__default-toggle toolbar-btn flex items-center gap-1 rounded border px-2 py-1.5 text-xs font-medium",
+                defaultTemplate === activeTemplate
+                  ? "template-editor__default-toggle--active border-amber-400 bg-amber-50 text-amber-700"
+                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+              )}
+            >
+              <Star
+                className={clsx(
+                  "size-3.5",
+                  defaultTemplate === activeTemplate && "fill-amber-400",
+                )}
+              />
+              {defaultTemplate === activeTemplate ? "Default" : "Set default"}
+            </button>
+          ) : null}
           <NewTemplateButton
             onCreated={(name) => {
               qc.invalidateQueries({ queryKey: ["templates", "all"] });

@@ -1,6 +1,6 @@
 {
   "name": "messagingmatrix",
-  "version": "6.19.0",
+  "version": "6.20.0",
   "private": true,
   "scripts": {
     "dev": "PORT=6001 ACTIVE_CLIENT_KEY=erste next dev",

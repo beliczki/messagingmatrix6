@@ -5,7 +5,24 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
-## [6.16.0] — 2026-08-17
+## [6.17.0] — 2026-08-17
+
+### Changed
+- **MC numbering is now axis-scoped (DCO vs nonDCO).** The "a number never spans
+  topics" invariant is enforced only within the target audience's own axis
+  (DCO = `audiences.channel IS NULL`, nonDCO = channel set). A DCO MC and its
+  static nonDCO twin may therefore share the same MC number in different topics,
+  while within either axis a number still maps to a single topic
+  (`createMessage`). Two new tests cover the cross-axis pairing and the
+  within-axis rejection.
+
+### Fixed
+- **`rebuild-creatives.ts` preserves filename MC numbers for DCO-paired
+  creatives.** nonDCO messages are now direct-inserted (pmmid + trafficking via
+  the real generators) so a creative keeps its filename number even when a DCO
+  card already holds it, and a number can carry different variants across channel
+  cells. The script is also idempotent — it drops a product's existing nonDCO
+  messages before regenerating.
 
 ### Added
 - **nonDCO static-MC preview size switcher.** The template-less creative

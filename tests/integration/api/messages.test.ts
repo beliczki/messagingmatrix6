@@ -176,6 +176,49 @@ describe("messages — numbering on create", () => {
     ).rejects.toThrow(/already in use/);
   });
 
+  it("requestedNumber may reuse a DCO number for a nonDCO channel audience (cross-axis pairing)", async () => {
+    await seedAudienceAndTopic(erste.id, "aud1", "top1");
+    await createMessage(erste.id, { topic: "top1", audience: "aud1" }); // DCO MC1
+    await db.insert(audiences).values({
+      clientId: erste.id,
+      key: "ch_disp",
+      name: "Display",
+      orderIndex: 1,
+      channel: "DISP",
+    });
+    await db.insert(topics).values({
+      clientId: erste.id,
+      key: "nd_top",
+      name: "ND",
+      orderIndex: 1,
+      product: "Loans",
+    });
+    // The DCO MC1 lives in top1; a nonDCO audience is a separate number space,
+    // so it may claim MC1 in its own topic — the static pair of the DCO card.
+    const nd = await createMessage(
+      erste.id,
+      { topic: "nd_top", audience: "ch_disp" },
+      { requestedNumber: 1 },
+    );
+    expect(nd.number).toBe(1);
+    expect(nd.audience).toBe("ch_disp");
+  });
+
+  it("within the nonDCO axis a number still cannot span topics", async () => {
+    await db.insert(audiences).values([
+      { clientId: erste.id, key: "ch_disp", name: "Display", orderIndex: 0, channel: "DISP" },
+      { clientId: erste.id, key: "ch_soc", name: "Social", orderIndex: 1, channel: "SOC" },
+    ]);
+    await db.insert(topics).values([
+      { clientId: erste.id, key: "nd1", name: "ND1", orderIndex: 0, product: "Loans" },
+      { clientId: erste.id, key: "nd2", name: "ND2", orderIndex: 1, product: "Loans" },
+    ]);
+    await createMessage(erste.id, { topic: "nd1", audience: "ch_disp" }, { requestedNumber: 5 });
+    await expect(
+      createMessage(erste.id, { topic: "nd2", audience: "ch_soc" }, { requestedNumber: 5 }),
+    ).rejects.toThrow(/already in use/);
+  });
+
   it("requestedNumber present in a mixed cell adds that number's next variant", async () => {
     await seedAudienceAndTopic(erste.id);
     const a = await createMessage(erste.id, { topic: "top1", audience: "aud1" }); // MC1a

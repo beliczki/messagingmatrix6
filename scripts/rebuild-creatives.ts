@@ -3,21 +3,25 @@
 //
 // Ground truth: ~/ERSTE Addressable AI Agent/creatives/ERSTE_<PROD>_MC<N>_<var>_<TOPIC>_n<ver>_<WxH>.<ext>
 //
-// Per-product pipeline (scoped to one product — the sample-first rollout):
-//   1. hard-delete the product's `creatives` rows + `uploaded_files` (filename
-//      ERSTE_<PROD>_%). MinIO bytes are LEFT intact (extra safety net); the
-//      caller has already dumped both tables to a restorable CSV.
+// Per-product pipeline (scoped to one product; IDEMPOTENT — safe to re-run):
+//   0. hard-delete the product's existing nonDCO messages (image1 ERSTE_<PROD>_%
+//      on a channel audience) so a re-run doesn't duplicate them.
+//   1. hard-delete the product's `creatives` rows + `uploaded_files`
+//      (ERSTE_<PROD>_%). MinIO bytes are LEFT intact (safety net; the caller has
+//      dumped both tables to a restorable CSV).
 //   2. hard-delete the product's Adobe PSD DCO MCs (template='Adobe PSD',
 //      audience.product = PROD) — these static creatives move to nonDCO.
 //   3. reimport every image/video file: uploadFile (bytes → MinIO + uploaded_files)
 //      + createCreative (parsed metadata).
-//   4. generate nonDCO MCs, one per (mcNumber, mcVariant) identity:
-//      template=null + image1=representative file, at a per-NUMBER topic
-//      (= the number's variant-'a' keyword, user-locked). The MC lives in every
-//      channel that has a file for it: created in the first channel via
-//      createMessage (MC number/variant preserved from the filename; MC0 →
-//      auto-assigned), copied into the others via copyMessages (same card, new
-//      audience), each channel showing its own size's representative image.
+//   4. generate nonDCO MCs by DIRECT INSERT (pmmid + trafficking via the real
+//      generators). One message per (mcNumber|MC0-family, variant, channel):
+//      template=null + image1=representative file, on the channel-audience, at a
+//      per-NUMBER topic (= the number's variant-'a' keyword). MC number/variant
+//      come from the filename; MC0 → a fresh number above the global max.
+//      Direct insert (not createMessage) so a nonDCO number can PAIR a DCO
+//      number in a different topic (cross-axis reuse), and so a number can carry
+//      different variants across channel cells — neither of which createMessage's
+//      DCO-oriented guards allow.
 //
 // Channel from size (user-locked, v1): 1080x1080 + 1200x628 → SOC, else DISP.
 //
@@ -31,19 +35,23 @@ loadEnv({ path: ".env" });
 
 import fs from "node:fs";
 import path from "node:path";
-import { and, eq, like, sql } from "drizzle-orm";
+import { and, eq, like, inArray, sql } from "drizzle-orm";
 import { db } from "../src/db";
-import { creatives, messages, uploadedFiles, audiences } from "../src/db/schema";
+import {
+  creatives,
+  messages,
+  uploadedFiles,
+  audiences,
+  topics,
+  config as configTable,
+} from "../src/db/schema";
 import { getActiveClient } from "../src/lib/active-client";
 import { parseCreativeFilename } from "../src/lib/parse-creative-filename";
 import { uploadFile } from "../src/lib/entities/files";
 import { createCreative, updateCreative } from "../src/lib/entities/creatives";
-import {
-  createMessage,
-  copyMessages,
-  updateMessage,
-} from "../src/lib/entities/messages";
 import { createTopic } from "../src/lib/entities/topics";
+import { generatePmmid } from "../src/lib/pmmid";
+import { buildTrafficking } from "../src/lib/trafficking";
 
 const SRC_DIR = "/Users/robertbeliczki/ERSTE Addressable AI Agent/creatives";
 const IMAGE_EXT = new Set(["png", "jpg", "jpeg", "gif", "webp", "svg"]);
@@ -62,6 +70,7 @@ const MIME: Record<string, string> = {
 const SOC_SIZES = new Set(["1080x1080", "1200x628"]);
 type Channel = "SOC" | "DISP";
 const AUD: Record<Channel, string> = { SOC: "ch_soc", DISP: "ch_disp" };
+const CHANNEL_AUDS = ["ch_disp", "ch_soc", "ch_prg", "ch_gsn", "ch_gnw", "ch_yt"];
 
 type Rec = {
   file: string;
@@ -144,8 +153,7 @@ function pickRep(recs: Rec[]): Rec {
   )[0]!;
 }
 
-// One nonDCO MC identity = one card (number+variant / MC0-family), living in
-// one or more channels.
+// One nonDCO MC identity = one card (number+variant / MC0-family), in ≥1 channel.
 type Group = {
   key: string;
   number: number | null; // null → auto-assign
@@ -195,17 +203,15 @@ async function main() {
   const recs = scanProduct(product);
   const topicOf = topicByNumber(recs);
   const groups = buildGroups(recs, topicOf);
+  const cellCount = groups.reduce((n, g) => n + g.byChannel.size, 0);
   console.log(`Source files (image+video): ${recs.length}`);
   console.log(
     `  channel split: DISP=${recs.filter((r) => r.channel === "DISP").length} SOC=${recs.filter((r) => r.channel === "SOC").length}`,
   );
   console.log(
-    `  MC0/unnumbered files (auto-assign): ${recs.filter((r) => r.mcNumber == null || r.mcNumber === 0).length}`,
+    `  MC0/unnumbered files: ${recs.filter((r) => r.mcNumber == null || r.mcNumber === 0).length}`,
   );
-  const cellCount = groups.reduce((n, g) => n + g.byChannel.size, 0);
-  console.log(
-    `Planned: ${groups.length} nonDCO cards → ${cellCount} matrix cells (card × channel)`,
-  );
+  console.log(`Planned: ${groups.length} nonDCO cards → ${cellCount} matrix cells`);
 
   const psd = await db
     .select({ id: messages.id, number: messages.number, variant: messages.variant })
@@ -225,26 +231,29 @@ async function main() {
         sql`${messages.archivedAt} is null`,
       ),
     );
-  console.log(
-    `Adobe PSD DCO MCs to delete (product ${product}): ${psd.length} — [${psd
-      .map((m) => m.number + m.variant)
-      .join(", ")}]`,
-  );
+  console.log(`Adobe PSD DCO MCs to delete (product ${product}): ${psd.length}`);
 
   if (!commit) {
-    console.log(`\nDRY-RUN — nothing written. Sample cards:`);
-    for (const g of groups.slice(0, 10)) {
-      const chans = [...g.byChannel.keys()].join("+");
-      console.log(
-        `  MC${g.number ?? "auto"}${g.variant} [${chans}] topic="${g.topicRaw}" (${[...g.byChannel.values()].reduce((n, l) => n + l.length, 0)} files)`,
-      );
-    }
+    console.log(`\nDRY-RUN — nothing written.`);
     process.exit(0);
   }
 
   // ---- COMMIT ----
   const uid = `rebuild:${product}`;
 
+  // 0. idempotent: drop this product's existing nonDCO messages
+  const delOld = await db
+    .delete(messages)
+    .where(
+      and(
+        eq(messages.clientId, clientId),
+        like(messages.image1, `ERSTE_${product}_%`),
+        inArray(messages.audience, CHANNEL_AUDS),
+      ),
+    )
+    .returning({ id: messages.id });
+
+  // 1. drop this product's creatives + uploaded_files (MinIO bytes kept)
   const delC = await db
     .delete(creatives)
     .where(and(eq(creatives.clientId, clientId), eq(creatives.product, product)))
@@ -258,8 +267,11 @@ async function main() {
       ),
     )
     .returning({ id: uploadedFiles.id });
-  console.log(`Deleted: ${delC.length} creatives, ${delF.length} uploaded_files`);
+  console.log(
+    `Deleted: ${delOld.length} old nonDCO MCs, ${delC.length} creatives, ${delF.length} uploaded_files`,
+  );
 
+  // 2. drop this product's Adobe PSD DCO MCs
   for (const m of psd) {
     await db
       .delete(messages)
@@ -267,7 +279,7 @@ async function main() {
   }
   console.log(`Deleted ${psd.length} Adobe PSD DCO MCs`);
 
-  // reimport → uploaded_files + creatives
+  // 3. reimport files → uploaded_files + creatives
   const fileNameByRec = new Map<Rec, string>();
   const creativeIdByRec = new Map<Rec, number>();
   for (const r of recs) {
@@ -298,70 +310,111 @@ async function main() {
   }
   console.log(`Imported ${recs.length} creatives`);
 
-  // generate nonDCO MCs
+  // 4. direct-insert nonDCO messages
+  const [cfg] = await db
+    .select()
+    .from(configTable)
+    .where(and(eq(configTable.clientId, clientId), eq(configTable.key, "patterns")))
+    .limit(1);
+  const patterns = cfg ? (JSON.parse(cfg.value) as Record<string, unknown>) : {};
+  const audienceList = await db
+    .select()
+    .from(audiences)
+    .where(eq(audiences.clientId, clientId));
+  const audByKey = new Map(audienceList.map((a) => [a.key, a]));
+  const topByKey = new Map(
+    (await db.select().from(topics).where(eq(topics.clientId, clientId))).map(
+      (t) => [t.key, t],
+    ),
+  );
+  const [{ maxn }] = await db
+    .select({ maxn: sql<number>`coalesce(max(${messages.number}),0)` })
+    .from(messages)
+    .where(eq(messages.clientId, clientId));
+  let autoNum = Number(maxn) + 1;
+
+  async function insertNonDco(
+    audienceKey: string,
+    topicKey: string,
+    number: number,
+    variant: string,
+    image1: string,
+    name: string,
+  ) {
+    const audienceRow = audByKey.get(audienceKey)!;
+    const topicRow = topByKey.get(topicKey)!;
+    const pmmid = generatePmmid(
+      { audience: audienceKey, topic: topicKey, number, variant, versionNo: 1 },
+      audienceList,
+      [],
+      (patterns as { pmmid?: string }).pmmid,
+    );
+    const tr = buildTrafficking(
+      { number, variant, audience: audienceKey, topic: topicKey, landingUrl: null },
+      audienceRow,
+      topicRow,
+      patterns,
+      audienceList,
+      pmmid,
+    );
+    await db.insert(messages).values({
+      clientId,
+      number,
+      variant,
+      audience: audienceKey,
+      topic: topicKey,
+      versionNo: 1,
+      image1,
+      name,
+      pmmid,
+      utmCampaign: tr.utm_campaign,
+      utmSource: tr.utm_source,
+      utmMedium: tr.utm_medium,
+      utmContent: tr.utm_content,
+      utmTerm: tr.utm_term,
+      utmCd26: tr.utm_cd26,
+      finalTraffickedUrl: tr.final_trafficked_url,
+    });
+  }
+
   const topicDone = new Set<string>();
   let cards = 0;
   let cells = 0;
   for (const g of groups) {
     const topicKey = `${product}_${g.topicRaw}`.slice(0, 200);
     if (!topicDone.has(topicKey)) {
-      try {
-        await createTopic(clientId, { key: topicKey, name: g.topicRaw, product });
-      } catch {
-        /* topic already exists — createTopic throws on dup key */
+      if (!topByKey.has(topicKey)) {
+        try {
+          const t = await createTopic(clientId, {
+            key: topicKey,
+            name: g.topicRaw,
+            product,
+          });
+          topByKey.set(topicKey, t);
+        } catch {
+          const [t] = await db
+            .select()
+            .from(topics)
+            .where(and(eq(topics.clientId, clientId), eq(topics.key, topicKey)))
+            .limit(1);
+          if (t) topByKey.set(topicKey, t);
+        }
       }
       topicDone.add(topicKey);
     }
 
-    const chans = [...g.byChannel.keys()];
-    const primary = chans[0]!;
-    const repP = pickRep(g.byChannel.get(primary)!);
-    const input = {
-      audience: AUD[primary],
-      topic: topicKey,
-      image1: fileNameByRec.get(repP)!,
-      name: repP.filename,
-    };
-    // Prefer the filename's MC number/variant. If it collides with a live
-    // message in another topic (the "a number never spans topics" invariant),
-    // fall back to an auto-assigned number — the creative keeps its filename
-    // label in the creatives row; only the matrix MC number differs.
-    let msg;
-    if (g.number != null) {
-      try {
-        msg = await createMessage(clientId, input, {
-          requestedNumber: g.number,
-          requestedVariant: g.variant,
-        });
-      } catch (e) {
-        console.log(
-          `  ⚠ MC${g.number}${g.variant} could not claim filename number (${(e as Error).message.slice(0, 70)}) → auto-number`,
-        );
-        msg = await createMessage(clientId, input, {});
-      }
-    } else {
-      msg = await createMessage(clientId, input, {});
-    }
-    cells++;
-
-    for (const ch of chans.slice(1)) {
-      const { created } = await copyMessages(
-        clientId,
-        [msg.pmmid!],
-        [AUD[ch]],
+    const number = g.number ?? autoNum++;
+    for (const [ch, recsInCh] of g.byChannel) {
+      const rep = pickRep(recsInCh);
+      await insertNonDco(
+        AUD[ch],
+        topicKey,
+        number,
+        g.variant,
+        fileNameByRec.get(rep)!,
+        rep.filename,
       );
-      const copy = created[0]!;
-      const repC = pickRep(g.byChannel.get(ch)!);
-      await updateMessage(clientId, copy.id, copy.version, {
-        image1: fileNameByRec.get(repC)!,
-        name: repC.filename,
-      });
-      cells++;
-    }
-
-    // back-link every creative in the card to its MC cell
-    for (const list of g.byChannel.values()) {
-      for (const r of list) {
+      for (const r of recsInCh) {
         const cid = creativeIdByRec.get(r)!;
         const cur = await db
           .select({ v: creatives.version })
@@ -370,10 +423,11 @@ async function main() {
           .limit(1);
         if (cur[0])
           await updateCreative(clientId, cid, cur[0].v, {
-            mcNumber: msg.number,
-            mcVariant: msg.variant,
+            mcNumber: number,
+            mcVariant: g.variant,
           });
       }
+      cells++;
     }
     cards++;
   }

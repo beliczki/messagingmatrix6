@@ -212,6 +212,20 @@ export async function createMessage(
     throw new MessageError(`topic '${input.topic}' not found`);
   }
 
+  // Numbering is AXIS-SCOPED. DCO (audience.channel == null) and nonDCO
+  // (channel set) are independent number spaces, so one MC number may pair a
+  // DCO card with its static nonDCO twin in a different topic. The "a number
+  // never spans topics" rule below is therefore enforced only within the
+  // target audience's own axis. (audienceList is also needed by the
+  // pmmid/trafficking patterns further down.)
+  const audienceList = await listAudiences(clientId);
+  const channelByAudience = new Map(
+    audienceList.map((a) => [a.key, a.channel ?? null]),
+  );
+  const targetIsDco = (audienceRow.channel ?? null) === null;
+  const sameAxis = (m: { audience?: string | null }) =>
+    ((channelByAudience.get(m.audience ?? "") ?? null) === null) === targetIsDco;
+
   const live = await listLiveMessages(clientId);
   // A cell may hold multiple MC numbers (creative generations). Default is
   // nextMcSlot (first number's next variant); an explicit number attaches to
@@ -234,12 +248,14 @@ export async function createMessage(
       slot.number = n;
       slot.variant = nextVariantForNumber(liveInCell, n);
     } else {
-      // Claiming a number is for numbers not yet in use anywhere. Placing an
+      // Claiming a number is for numbers not yet in use ON THIS AXIS. Placing an
       // existing card into more audiences is copy's job (it clones the
       // fields, so audience copies can't silently diverge), and a number
-      // never spans topics (findSiblings relies on it). The error names
-      // which case was hit so a caller can pick the right tool.
-      const liveHolder = live.find((m) => isLive(m) && m.number === n);
+      // never spans topics WITHIN an axis (findSiblings relies on it). Cross-axis
+      // reuse is allowed — a DCO number may be claimed for its nonDCO twin.
+      const liveHolder = live.find(
+        (m) => isLive(m) && m.number === n && sameAxis(m),
+      );
       if (liveHolder) {
         throw new MessageError(
           liveHolder.topic === input.topic
@@ -247,7 +263,7 @@ export async function createMessage(
             : `MC number ${n} is already in use in topic '${liveHolder.topic}' — a number never spans topics; pick a free number or omit it for auto-assign`,
         );
       }
-      if (live.some((m) => m.number === n)) {
+      if (live.some((m) => m.number === n && sameAxis(m))) {
         throw new MessageError(
           `MC number ${n} is retired — archived rows still hold it; restore the archived card instead, or pick a free number`,
         );
@@ -305,8 +321,7 @@ export async function createMessage(
 
   const patterns = await readClientPatterns(clientId);
   // The Erste pmmid/trafficking patterns look the audience up by key
-  // ({{audiences[Audience_Key].Field}}), so the full list must be in context.
-  const audienceList = await listAudiences(clientId);
+  // ({{audiences[Audience_Key].Field}}) — audienceList is resolved above.
   const pmmid = generatePmmid(
     {
       audience: input.audience,

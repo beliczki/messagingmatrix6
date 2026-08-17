@@ -616,8 +616,14 @@ export default function MatrixWorkspace() {
       filters.axis === "nondco" ? a.channel != null : a.channel == null,
     );
 
+    // nonDCO columns are the shared, product-agnostic prodlist channels
+    // (ch_disp … ch_yt, product == null), so a product filter must NOT prune
+    // them — it only narrows the topic (row) axis there. In DCO every audience
+    // carries a product, so the product filter prunes columns as usual.
     let auds =
-      ps.size === 0 ? axisAuds : axisAuds.filter((a) => a.product && ps.has(a.product));
+      ps.size === 0 || filters.axis === "nondco"
+        ? axisAuds
+        : axisAuds.filter((a) => a.product && ps.has(a.product));
     let tops =
       ps.size === 0 ? topics : topics.filter((t) => t.product && ps.has(t.product));
     const audKeys = new Set(auds.map((a) => a.key));

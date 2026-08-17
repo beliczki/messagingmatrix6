@@ -5,6 +5,16 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.15.1] — 2026-08-17
+
+### Fixed
+- **nonDCO matrix vanished when a product was selected.** The 6 nonDCO channel
+  audiences (`ch_disp`…`ch_yt`) carry `product = NULL` (they are shared,
+  product-agnostic channel columns), so the product filter pruned all of them
+  and left the grid empty. The product filter now narrows only the topic (row)
+  axis in nonDCO mode; the channel columns always stay, matching DCO where each
+  audience does carry a product (`MatrixGrid.tsx`).
+
 ## [6.15.0] — 2026-08-17
 
 ### Added

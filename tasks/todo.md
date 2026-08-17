@@ -305,3 +305,4 @@ Kérés: `~/ERSTE Addressable AI Agent/static_creatives_export.csv` `suggested_f
 - [ ] **R5** mm6 rebuild: `rebuild-creatives.ts <PROD> --commit` mind a 7 termékre (LTP/SZA/SZK/VAL/HK/MARKET/HITEL) — a script idempotens, a `createdAt` a fájl mtime-jából jön.
 - [ ] **R6** Ellenőrzés a DB-n: nonDCO max MC-szám, „DCO szám átível topicon = 0", feloldhatatlan preview = 0, creatives darabszám + `createdAt` eloszlás a CSV `date`-hez képest.
 - [ ] **R7** CHANGELOG + bump-javaslat.
+- **DEPLOYOLVA 6.19.0** (2026-08-17): commit `11091ae`, box `a64235f`→`11091ae` (2 commit lemaradást is behozott: createdAt-backfill + docs), `npm run build` OK, `pm2 restart mm6-erste` → online. Nincs séma-migráció (csak route válasz-alak + propagáció-logika + kliens). Health `/` 307, `/mcp` 401.

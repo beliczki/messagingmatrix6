@@ -68,6 +68,8 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `multi-pill__badge` | A számláló badge | MultiPill.tsx 44–48 | – |
 | `multi-pill__menu` | Lefelé nyíló popover | MultiPill.tsx 50–74 | – |
 | `multi-pill__option` | Egy checkbox + label sor | MultiPill.tsx 55–70 | – |
+| `multi-pill__bulk` | Quick-select fejlécsor a menü tetején (`text-[10px] text-slate-500`, alul `border-slate-100`) | MultiPill.tsx | csak ha `quickSelect` prop van |
+| `multi-pill__bulk-link` | Egy kattintható link (`underline hover:text-slate-900`), ` / ` elválasztóval | MultiPill.tsx | Status: "Select all / none"; Creative library Size: "default / social / iab / none" |
 | `custom-dropdown` | Stílusozott `<select>` (státusz, méret, template, MC stepper) | sok helyen raw `<select>` Tailwind class-okkal | most felkerül mindenre |
 | `input-box` | Text / search input wrapper (vagy maga az input ha nincs ikon) | mindenhol (search-ek, form input-ok, login) | – |
 | `input-box--with-icon` | Wrapper modifier mikor bal-oldali ikon van | CL toolbar | – |
@@ -607,6 +609,7 @@ The Edit toggle and the entire selection-actions block moved out of the top `mat
 **Új BEM block-ok:**
 - `edit-mode-panel` — the box itself (`rounded-md border border-slate-200 bg-white p-3`), positioned in the right toolbar's expanded body below `ViewControls` when `view === "grid"`. Visual twin of `feed-export-panel`.
 - `edit-mode-panel__title` — uppercase label ("Edit mode"), same `text-[10px] font-medium uppercase tracking-wider text-slate-500` as `feed-export-panel__title`.
+- `edit-mode-panel__hint` — one-line `text-[10px] leading-snug text-slate-500` blurb between `__title` and `__toggle`, naming what edit mode unlocks (add/duplicate topics+audiences, add/copy/move MCs). Static copy, always visible.
 - `edit-mode-panel__toggle`, `edit-mode-panel__toggle--active` — full-width Enter/Exit edit mode button inside the panel.
 - `edit-mode-panel__selection` — selection sub-section (only when `editMode && selection.mcIds.size > 0`); separated from the toggle by a top border + `pt-3`.
 - `edit-mode-panel__count` — "N selected · topic Foo" header.

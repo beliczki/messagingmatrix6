@@ -5,6 +5,23 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.15.0] — 2026-08-17
+
+### Added
+- **Quick-select links in filter dropdowns.** New opt-in `quickSelect` prop on
+  `MultiPill` renders a small grey link row above the checkbox list. The Status
+  pills (matrix toolbar + audiences/topics/texts grids) get `Select all / none`.
+  The creative-library Size pill gets `default / social / iab / none`:
+  `default` = 300x250 + 1080x1080, `social` = 1080x1080 + 1200x628, `iab` =
+  300x250 + 300x600 + 640x360 + 970x250, `none` flips the whole list between
+  all-selected and cleared. Named presets toggle only their own sizes, so
+  `social` and `iab` stack instead of replacing each other; presets naming
+  sizes absent from the library are hidden rather than rendered inert.
+- **Edit-mode hint in the matrix side panel.** One grey line above the
+  Enter/Exit button naming what the mode unlocks (add/duplicate topics and
+  audiences, add/copy/move Messaging Cards) — the add and duplicate
+  affordances only exist inside edit mode, which was not discoverable.
+
 ## [6.14.0] — 2026-08-16
 
 ### Changed

@@ -27,7 +27,18 @@ import UploadQueue, {
   useDropTarget,
   type QueueItem,
 } from "../_components/UploadQueue";
-import MultiPill from "../_components/MultiPill";
+import MultiPill, { type QuickPreset } from "../_components/MultiPill";
+
+// Size-pill shortcuts. Each named preset toggles its own sizes (so social+iab
+// can stack); "none" flips the whole list between all-selected and cleared.
+const SIZE_QUICK_SELECT: { presets: QuickPreset[] } = {
+  presets: [
+    { label: "default", values: ["300x250", "1080x1080"] },
+    { label: "social", values: ["1080x1080", "1200x628"] },
+    { label: "iab", values: ["300x250", "300x600", "640x360", "970x250"] },
+    { label: "none", values: "all-none" },
+  ],
+};
 import ArchiveToggle from "../_components/ArchiveToggle";
 import RightToolbar from "../_components/RightToolbar";
 import CreativeDetailDialog from "./CreativeDetailDialog";
@@ -820,7 +831,7 @@ function Toolbar({
 
       <MultiPill label="Product" values={products} options={productOptions} onChange={setProducts} />
       <MultiPill label="Type" values={types} options={typeOptions} onChange={setTypes} />
-      <MultiPill label="Size" values={sizes} options={sizeOptions} onChange={setSizes} />
+      <MultiPill label="Size" values={sizes} options={sizeOptions} quickSelect={SIZE_QUICK_SELECT} onChange={setSizes} />
 
       {activeFilters > 0 ? (
         <button

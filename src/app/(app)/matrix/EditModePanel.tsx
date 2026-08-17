@@ -36,6 +36,11 @@ export default function EditModePanel({
         Edit mode
       </div>
 
+      <div className="edit-mode-panel__hint mt-1 text-[10px] leading-snug text-slate-500">
+        Add / duplicate topics and audiences; add, copy and move Messaging
+        Cards.
+      </div>
+
       <button
         type="button"
         onClick={() => editApi.setEditMode(!editApi.editMode)}

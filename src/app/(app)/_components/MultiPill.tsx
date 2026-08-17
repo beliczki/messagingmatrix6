@@ -2,6 +2,24 @@
 
 import { useEffect, useRef, useState } from "react";
 
+// A quick-select link above the option list. `values` is either an explicit
+// subset — clicking toggles it (adds when not all present, removes when it
+// already is, so presets compose) — or one of three whole-list shorthands:
+// "all" selects everything, "none" clears, "all-none" flips between the two.
+export type QuickPreset = {
+  label: string;
+  values: string[] | "all" | "none" | "all-none";
+};
+
+// Shared by both Status pills (matrix toolbar + DimensionGrid).
+export const STATUS_QUICK_SELECT = {
+  prefix: "Select",
+  presets: [
+    { label: "all", values: "all" },
+    { label: "none", values: "none" },
+  ],
+} satisfies { prefix?: string; presets: QuickPreset[] };
+
 type Props = {
   label: string;
   values: Set<string>;
@@ -10,6 +28,8 @@ type Props = {
   // Optional per-option color (Tailwind bg-* class) shown as a leading dot —
   // used by the Status filter to tint each option with its status color.
   optionColors?: Record<string, string>;
+  // Optional quick-select row at the top of the menu. Omit for a plain list.
+  quickSelect?: { prefix?: string; presets: QuickPreset[] };
 };
 
 export default function MultiPill({
@@ -18,6 +38,7 @@ export default function MultiPill({
   options,
   onChange,
   optionColors,
+  quickSelect,
 }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -42,6 +63,30 @@ export default function MultiPill({
 
   if (options.length === 0) return null;
 
+  // A subset preset only lists sizes/values the current data actually has, so
+  // a preset naming nothing present is dropped rather than rendered as a link
+  // that visibly does nothing.
+  const availableOf = (p: QuickPreset) =>
+    Array.isArray(p.values) ? p.values.filter((v) => options.includes(v)) : [];
+  const shownPresets = (quickSelect?.presets ?? []).filter(
+    (p) => !Array.isArray(p.values) || availableOf(p).length > 0,
+  );
+
+  function applyPreset(p: QuickPreset): Set<string> {
+    if (p.values === "all") return new Set(options);
+    if (p.values === "none") return new Set();
+    if (p.values === "all-none")
+      return values.size > 0 ? new Set() : new Set(options);
+    const avail = availableOf(p);
+    const next = new Set(values);
+    const isFull = avail.every((v) => values.has(v));
+    for (const v of avail) {
+      if (isFull) next.delete(v);
+      else next.add(v);
+    }
+    return next;
+  }
+
   return (
     <div ref={ref} className="multi-pill relative text-xs">
       <button
@@ -58,6 +103,23 @@ export default function MultiPill({
       </button>
       {open ? (
         <div className="multi-pill__menu absolute left-0 top-full z-50 mt-1 max-h-72 w-56 overflow-auto rounded-md border border-slate-200 bg-white p-1.5 shadow-lg">
+          {shownPresets.length > 0 ? (
+            <div className="multi-pill__bulk mb-1 border-b border-slate-100 px-2 pb-1 text-[10px] text-slate-500">
+              {quickSelect?.prefix ? `${quickSelect.prefix} ` : null}
+              {shownPresets.map((p, i) => (
+                <span key={p.label}>
+                  {i > 0 ? " / " : null}
+                  <button
+                    type="button"
+                    onClick={() => onChange(applyPreset(p))}
+                    className="multi-pill__bulk-link underline hover:text-slate-900"
+                  >
+                    {p.label}
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : null}
           {options.map((opt) => {
             const checked = values.has(opt);
             return (

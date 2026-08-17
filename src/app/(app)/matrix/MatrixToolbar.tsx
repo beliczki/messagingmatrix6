@@ -2,7 +2,7 @@
 
 import { X, Filter as FilterIcon, Users, ListTree } from "lucide-react";
 import { type Filters, type MatrixAxis, STATUS_COLOR } from "./types";
-import MultiPill from "../_components/MultiPill";
+import MultiPill, { STATUS_QUICK_SELECT } from "../_components/MultiPill";
 
 const AXES: Array<{ key: MatrixAxis; label: string }> = [
   { key: "dco", label: "DCO" },
@@ -81,6 +81,7 @@ export default function MatrixToolbar(p: Props) {
         values={p.filters.statuses}
         options={p.statusOptions}
         optionColors={STATUS_COLOR}
+        quickSelect={STATUS_QUICK_SELECT}
         onChange={(s) => p.setFilters({ ...p.filters, statuses: s })}
       />
 

@@ -574,12 +574,39 @@ export default function MatrixWorkspace() {
     return [...nums].sort((a, b) => a - b);
   }, [createCell, messages]);
 
+  // nonDCO topic rows are synthesized ON THE FLY from the creative-backed
+  // messages — their topic (= the creative-name keyword) is deliberately NOT
+  // stored in the DCO `topics` table, which stays reserved for curated DCO
+  // topics. Product comes from the topic key's `<PRODUCT>_` prefix; the display
+  // name drops that prefix.
+  const channelAudienceKeys = useMemo(
+    () => new Set(audiences.filter((a) => a.channel != null).map((a) => a.key)),
+    [audiences],
+  );
+  const nonDcoTopics = useMemo(() => {
+    const seen = new Map<string, Topic>();
+    for (const m of messages) {
+      if (!channelAudienceKeys.has(m.audience) || seen.has(m.topic)) continue;
+      const i = m.topic.indexOf("_");
+      const product = i > 0 ? m.topic.slice(0, i) : null;
+      const name = i > 0 ? m.topic.slice(i + 1) : m.topic;
+      seen.set(m.topic, {
+        key: m.topic,
+        name,
+        product,
+        orderIndex: 0,
+      } as Topic);
+    }
+    return [...seen.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [messages, channelAudienceKeys]);
+
   const productOptions = useMemo(() => {
     const s = new Set<string>();
     for (const a of audiences) if (a.product) s.add(a.product);
     for (const t of topics) if (t.product) s.add(t.product);
+    for (const t of nonDcoTopics) if (t.product) s.add(t.product);
     return [...s].sort();
-  }, [audiences, topics]);
+  }, [audiences, topics, nonDcoTopics]);
 
   // Always offer the full canonical status set so every status is filterable
   // even when no message currently carries it. Any non-canonical status that
@@ -597,8 +624,8 @@ export default function MatrixWorkspace() {
     [audiences],
   );
   const topicById = useMemo(
-    () => new Map(topics.map((t) => [t.key, t])),
-    [topics],
+    () => new Map([...topics, ...nonDcoTopics].map((t) => [t.key, t])),
+    [topics, nonDcoTopics],
   );
 
   const filtered = useMemo(() => {
@@ -624,8 +651,12 @@ export default function MatrixWorkspace() {
       ps.size === 0 || filters.axis === "nondco"
         ? axisAuds
         : axisAuds.filter((a) => a.product && ps.has(a.product));
+    // nonDCO rows come from the synthesized creative topics; DCO from the table.
+    const axisTops = filters.axis === "nondco" ? nonDcoTopics : topics;
     let tops =
-      ps.size === 0 ? topics : topics.filter((t) => t.product && ps.has(t.product));
+      ps.size === 0
+        ? axisTops
+        : axisTops.filter((t) => t.product && ps.has(t.product));
     const audKeys = new Set(auds.map((a) => a.key));
     const topKeys = new Set(tops.map((t) => t.key));
     let msgs = messages.filter((m) => audKeys.has(m.audience) && topKeys.has(m.topic));
@@ -654,7 +685,7 @@ export default function MatrixWorkspace() {
       if (axes.topic) tops = tops.filter((t) => usedTopKeys.has(t.key));
     }
     return { auds, tops, msgs, axisAudienceCount: axisAuds.length };
-  }, [audiences, topics, messages, filters, audienceById, topicById]);
+  }, [audiences, topics, nonDcoTopics, messages, filters, audienceById, topicById]);
 
   // Feed export must never see archived rows — the client message list acts
   // as the allowed set gating carry-forward rows server-side, so toggling

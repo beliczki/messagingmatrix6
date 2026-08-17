@@ -49,7 +49,6 @@ import { getActiveClient } from "../src/lib/active-client";
 import { parseCreativeFilename } from "../src/lib/parse-creative-filename";
 import { uploadFile } from "../src/lib/entities/files";
 import { createCreative, updateCreative } from "../src/lib/entities/creatives";
-import { createTopic } from "../src/lib/entities/topics";
 import { generatePmmid } from "../src/lib/pmmid";
 import { buildTrafficking } from "../src/lib/trafficking";
 
@@ -254,6 +253,10 @@ async function main() {
     .returning({ id: messages.id });
 
   // 1. drop this product's creatives + uploaded_files (MinIO bytes kept)
+  //    The filename prefix alone is NOT enough: asset-library uploads follow the
+  //    same ERSTE_<PROD>_MC… naming, so without the category guard a rebuild also
+  //    wipes hand-uploaded assets, leaving the surviving assets rows pointing at
+  //    a dead file_id (happened to 3 SZK assets on 2026-08-17).
   const delC = await db
     .delete(creatives)
     .where(and(eq(creatives.clientId, clientId), eq(creatives.product, product)))
@@ -263,6 +266,7 @@ async function main() {
     .where(
       and(
         eq(uploadedFiles.clientId, clientId),
+        eq(uploadedFiles.category, "creative"),
         like(uploadedFiles.filename, `ERSTE_${product}_%`),
       ),
     )
@@ -342,7 +346,10 @@ async function main() {
     name: string,
   ) {
     const audienceRow = audByKey.get(audienceKey)!;
-    const topicRow = topByKey.get(topicKey)!;
+    // nonDCO topics are NOT stored in the topics table (they are synthesized in
+    // the matrix from the message's topic string), so topicRow is usually null —
+    // buildTrafficking tolerates that (topic product just won't feed patterns).
+    const topicRow = topByKey.get(topicKey) ?? null;
     const pmmid = generatePmmid(
       { audience: audienceKey, topic: topicKey, number, variant, versionNo: 1 },
       audienceList,
@@ -377,32 +384,12 @@ async function main() {
     });
   }
 
-  const topicDone = new Set<string>();
   let cards = 0;
   let cells = 0;
   for (const g of groups) {
+    // topic = "<PRODUCT>_<keyword>" carried on the message only — no topics-table
+    // row is created; the matrix synthesizes nonDCO rows from these strings.
     const topicKey = `${product}_${g.topicRaw}`.slice(0, 200);
-    if (!topicDone.has(topicKey)) {
-      if (!topByKey.has(topicKey)) {
-        try {
-          const t = await createTopic(clientId, {
-            key: topicKey,
-            name: g.topicRaw,
-            product,
-          });
-          topByKey.set(topicKey, t);
-        } catch {
-          const [t] = await db
-            .select()
-            .from(topics)
-            .where(and(eq(topics.clientId, clientId), eq(topics.key, topicKey)))
-            .limit(1);
-          if (t) topByKey.set(topicKey, t);
-        }
-      }
-      topicDone.add(topicKey);
-    }
-
     const number = g.number ?? autoNum++;
     for (const [ch, recsInCh] of g.byChannel) {
       const rep = pickRep(recsInCh);

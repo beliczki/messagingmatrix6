@@ -5,7 +5,16 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
-## [6.17.0] — 2026-08-17
+## [6.18.0] — 2026-08-17
+
+### Changed
+- **nonDCO matrix topic rows are synthesized on the fly, not stored.** The DCO
+  `topics` table is reserved for curated DCO topics again; the nonDCO axis now
+  derives its row headers directly from the creative-backed messages (each
+  message's `topic` = the creative-name keyword, product from the `<PRODUCT>_`
+  prefix). `rebuild-creatives.ts` no longer creates a topics row per creative
+  keyword — it carries the topic string on the message only. The ~322
+  image-derived topics were removed from the table (`MatrixGrid.tsx`).
 
 ### Changed
 - **MC numbering is now axis-scoped (DCO vs nonDCO).** The "a number never spans

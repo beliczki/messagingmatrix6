@@ -355,3 +355,4 @@ Kérés: `~/ERSTE Addressable AI Agent/static_creatives_export.csv` `suggested_f
 Séma-migráció (channels tábla) → **migrate+kód egy passzban a boxon** (`db:migrate` + build + `pm2 restart mm6-erste`), soha nem lokális migrate önmagában. Bump: minor (több user-látható változás + séma) — vagy a user dönthet nagyobbról a channel-modell törése miatt.
 
 **Sorrend-javaslat:** S1 → S2 → S3 (független, gyors, alacsony kockázat, azonnal deployolható) ⇒ S4 → S5 → S6 (channel-mag, egyben migrálva/deployolva).
+- **DEPLOYOLVA 6.20.0** (2026-08-17): S1–S3 (channel-epic 1/2, migration-free). Commit `6a818ca`, box `11091ae`→`6a818ca`, build OK, `pm2 restart mm6-erste` → online. Health `/` 307, `/mcp` 401. S4–S6 (channels tábla + migráció + Settings + audiences-takarítás) hátravan, egyben deployolva. ⚠️ Megjegyzés: a boxra NEM kerültek fel a `rebuild-creatives.ts`/`mcp.ts`/`numbering.ts` lokális commitolatlan módosítások (nem az én munkám) — csak origin/main.

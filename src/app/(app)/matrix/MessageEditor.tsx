@@ -347,37 +347,38 @@ export default function MessageEditor({
       if (!r.ok) {
         throw new Error(await r.text());
       }
-      const body = (await r.json()) as { message: Message };
-      return body.message;
+      const body = (await r.json()) as {
+        message: Message;
+        siblings?: Message[];
+      };
+      return { message: body.message, siblings: body.siblings ?? [] };
     },
     onSuccess: (saved) => {
       if (saved) {
         // Bump our snapshot so the next save uses the new version.
-        setCommittedSnapshot(saved);
-        // Patch the saved row straight into the grid cache so reopening this
-        // card shows the persisted values immediately — invalidate alone is an
-        // async refetch the reopen can outrun, leaving the editor re-seeded
-        // from the stale grid row. The server response carries the recomputed
-        // UTM/Final-URL fields too, so they propagate as well. setQueriesData
-        // (prefix match) because the matrix key is parameterized by its
-        // showArchived toggle — an exact ["messages"] key would silently
-        // no-op there.
+        setCommittedSnapshot(saved.message);
+        // Patch the saved row — and, under global edit, the fanned-out sibling
+        // rows the server returns — straight into the grid cache so reopening
+        // this card (and every other audience copy's status dot) reflects the
+        // persisted values immediately. We patch the known-changed rows instead
+        // of invalidating: a full /api/messages refetch is heavy (every row)
+        // and its latency left the sibling dots stale for seconds. The response
+        // carries recomputed UTM/Final-URL fields too, so those propagate as
+        // well. setQueriesData (prefix match) because the matrix key is
+        // parameterized by its showArchived toggle — an exact ["messages"] key
+        // would silently no-op there.
+        const byId = new Map<number, Message>();
+        byId.set(saved.message.id, saved.message);
+        for (const s of saved.siblings) byId.set(s.id, s);
         qc.setQueriesData<{ messages: Message[] }>(
           { queryKey: ["messages"] },
           (prev) =>
             prev
               ? {
-                  messages: prev.messages.map((m) =>
-                    m.id === saved.id ? saved : m,
-                  ),
+                  messages: prev.messages.map((m) => byId.get(m.id) ?? m),
                 }
               : prev,
         );
-        // Global edit fans the change out to sibling rows server-side; those
-        // updated rows aren't in this response, so refetch to pull them in.
-        if (globalEdit) {
-          qc.invalidateQueries({ queryKey: ["messages"] });
-        }
       }
       setSaveState({ kind: "saved" });
       // Clear "saved" indicator after 1.5s.
@@ -561,7 +562,7 @@ export default function MessageEditor({
           {globalEdit && siblingCount > 0 ? (
             <span
               className="message-editor__global-warning inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700"
-              title={`Global edit is on — creative changes also update ${siblingCount} other audience copy(ies) of this card; status & flight dates update EVERY variant of MC${message?.number}.`}
+              title={`Global edit is on — all changes (creative, status, flight dates) also update ${siblingCount} other audience copy(ies) of this card (MC${message?.number}${message?.variant ?? ""}). Other variants of the number are left untouched.`}
             >
               <Users className="size-3" />
               updates {siblingCount} other audience
@@ -589,7 +590,7 @@ export default function MessageEditor({
               )}
               title={
                 globalEdit
-                  ? "Global: creative edits propagate to all audience copies of this card; status & flight dates to every variant of the number"
+                  ? "Global: all edits (creative, status, flight dates) propagate to every audience copy of this card — same variant only; other variants are untouched"
                   : "Local: edits apply only to this audience copy"
               }
             >

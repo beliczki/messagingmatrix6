@@ -273,3 +273,35 @@ Fő lépések (ha full-lifecycle):
 - **User teendő (prod vizuális check, edit-mód):** (1) status dot színek a Design-tab tokenekből, (2) dense New MC kis kör +, (3) add audience/topic záró cella + gomb, (4) header hover Duplicate.
 
 *(Korábbi checkpointok — 6.1.0–6.8.0 deployok, MCP tool-bővítések, Postgres/MinIO migráció, Phase 0–10 — mind az archívban.)*
+
+### 2026-08-17 — Global edit: státusz + flight date variant-szintűre
+- **Root cause (nem bug, tervezési ütközés):** a `status`/`startDate`/`endDate` a 2026-08-14-i döntés óta **number-szintű** mezők voltak (`NUMBER_LEVEL_FIELDS`), így Global edit-nél az MC331c státusza szétterült az **összes variánsra** (a,b,c). A user viszont variant-szintet akart (331a inaktív mindenhol, 331c aktív mindenhol). Ezt látta „a c mellett az a és b is aktív lesz"-ként. A „nem megy tovább a többi audience-re" tünet = Global edit ki volt kapcsolva, vagy 409 (más is editálta → reload-only conflict, audit logban látszik).
+- **Fix (user-döntés 2026-08-17, felülírja a 2026-08-14-it):** `NUMBER_LEVEL_FIELDS = []` — mindhárom mező variant-szintű lett (ugyanúgy propagál, mint a kreatív mezők: azonos number+variant, minden audience-ben; más variáns érintetlen). Frissítve: `messages.ts` komment + mező-lista, `MessageEditor.tsx` 2 tooltip copy, `propagate-siblings.test.ts` fő assertion (b variáns már NEM változik). Tesztek 9/9 zöld, `tsc` tiszta.
+- **Nincs retroaktív adatjavítás:** a régi rossz állapotokat (ahol a/b már aktívra flippelt) a usernek egyszer manuálisan kell rendbe tennie (331a inaktív global, 331b inaktív global). Innentől helyesen propagál.
+- **Kapcsolódó fix (ugyanaz a session):** globalEdit státusz-mentés után a TÖBBI audience testvér-pöttye ~30s-t késett. Ok: az `onSuccess` csak a primaryt patch-elte a cache-be (`setQueriesData`), a testvéreket egy `invalidateQueries` **teljes /api/messages refetch**-re bízta (~2435 sor, nehéz → lassú). A szerver viszont már kiszámolja a módosított testvér-sorokat (`propagateToSiblings` `changes`), csak eldobta. Fix: a `PATCH /api/messages/[id]` visszaadja a `siblings: after[]` sorokat, a kliens azokat is **közvetlenül bepatch-eli** (id→row Map), a teljes refetch kiesett. Cross-tab frissülés továbbra is az SSE broadcaston megy (writeAudit → `audit.ts:43`). Érintett: `messages/[id]/route.ts`, `MessageEditor.tsx` onSuccess. `tsc` tiszta, tesztek zöld.
+- Bump-javaslat: **6.18.0 → 6.19.0** (minor, user-látható viselkedésváltozás — státusz-szint + azonnali sibling-frissülés).
+
+### 2026-08-17 — TERV: Leadás-forrás átnevezés a javasolt névre + Creative Library újraépítés (JÓVÁHAGYÁSRA VÁR)
+Kérés: `~/ERSTE Addressable AI Agent/static_creatives_export.csv` `suggested_filename` oszlopa alapján átnevezni **az eredeti fájlokat a GoogleDrive Leadás-könyvtárakban** (dátumok megőrzésével!), majd újra lefuttatni a creative-library update-et (dátumok ott is megmaradnak).
+
+**Felderítés (kész, 2026-08-17):**
+- CSV: 3227 sor, mind a 3227 forrás-path létezik; 1869 sor neve ≠ `suggested_filename`; 0 duplikált cél-név ugyanabban a könyvtárban.
+- A GoogleDrive mount **case-insensitive** (macfuse) → 11 „csak kisbetű/nagybetű" átnevezés (`MC289_B` → `MC289_b`) csak **két lépésben** (temp néven át) megy.
+- 26 `htmlFolder` sor valódi **könyvtár**, és a javaslat hibásan `.htmlFolder` kiterjesztést biggyeszt a végére → ezeknél a `.htmlFolder` suffixet le kell vágni.
+- 10 sorban van `suggestion_correction` érték (kézi felülbírálás) → az élvez elsőbbséget a `suggested_filename`-nel szemben.
+- 53 `suggested_filename` nem illeszkedik a kanonikus `ERSTE_<PROD>_MC<N>_<var>_<TOPIC>_n<v>_<WxH>.<ext>` mintára (pl. `MC3_va_`, hash-topicok).
+
+**Fontos megállapítás (ez blokkolja a „aztán újra a library update" részt):**
+- A lapos tükör (`~/ERSTE.../creatives`, 3227 fájl) **már most is pontosan a `suggested_filename` neveket viseli, és az mtime-ok bitre egyeznek a forrásokkal** (0 eltérés). A mm6 DB is ebből épült (3145 creatives = 3227 − 82 htmlFolder). → Az eredetik átnevezése **forrás-higiénia**, önmagában **nem változtat semmit a DB-ben**; a rebuild újrafuttatása ugyanazt az eredményt adná.
+- A valószínű **valódi nonDCO-hiba:** 1259 `suggested_filename` **még mindig `MC0`-t tartalmaz**, miközben a CSV `suggested_mc_number` oszlopa valódi számot ad (MC2–MC388, 231 distinct). A `rebuild-creatives.ts` a **fájlnévből** veszi az MC-számot → az 1259 MC0-fájl **friss, globális max fölötti számot** kapott (ezért fut fel a nonDCO 837-ig) a szándékolt MC2–MC388 helyett.
+- A behelyettesítés **nem mechanikus**: 43 `(suggested_mc_number, variant)` pár **több topichoz** tartozik, és 19 pár **ütközik** egy már számozott családdal (gyakran más termékben).
+
+**Lépések (a ⚠️ döntés után indul):**
+- [ ] **R0** User-döntés: az átnevezés csak a `suggested_filename`-t követi (MC0 marad), VAGY a `MC0` → `suggested_mc_number` behelyettesítéssel együtt (és akkor a 43+19 ütközés feloldási szabálya kell).
+- [ ] **R1** Rename-manifest generálás (dry-run CSV: `path`, régi név, új név, mtime ISO, ütközés-flag) — `.tmp_rename/` alatt, semmit nem ír.
+- [ ] **R2** Átnevezés végrehajtása: `os.rename` + **mtime visszaírás** (`os.utime` a CSV `date`-jéből), case-only esetek két lépésben, htmlFolder-suffix levágva, `suggestion_correction` prioritással. Rollback-manifest kiírása.
+- [ ] **R3** Verifikáció: 0 hiányzó forrás, 0 duplikátum, minden mtime egyezik a CSV `date`-tel.
+- [ ] **R4** Lapos tükör (`~/ERSTE.../creatives`) újraszinkronizálása az új nevekre, mtime-megőrzéssel + `creatives_manifest.csv` / `static_creatives_export.csv` frissítés.
+- [ ] **R5** mm6 rebuild: `rebuild-creatives.ts <PROD> --commit` mind a 7 termékre (LTP/SZA/SZK/VAL/HK/MARKET/HITEL) — a script idempotens, a `createdAt` a fájl mtime-jából jön.
+- [ ] **R6** Ellenőrzés a DB-n: nonDCO max MC-szám, „DCO szám átível topicon = 0", feloldhatatlan preview = 0, creatives darabszám + `createdAt` eloszlás a CSV `date`-hez képest.
+- [ ] **R7** CHANGELOG + bump-javaslat.

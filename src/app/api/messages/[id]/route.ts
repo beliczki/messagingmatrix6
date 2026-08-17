@@ -8,6 +8,7 @@ import {
 } from "@/lib/entities/messages";
 import { denyDemo, withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
+import type { Message } from "@/db/schema";
 import {
   missingVersion,
   readClientVersion,
@@ -60,6 +61,7 @@ export const PATCH = withSession<Params>(async ({ req, claims, params }) => {
   // audience copy of this same card. Triggered by ?propagate=siblings. Each
   // sibling gets its own audit entry so the change shows in its history too.
   let propagated = 0;
+  let siblings: Message[] = [];
   if (new URL(req.url).searchParams.get("propagate") === "siblings") {
     const changes = await propagateToSiblings(claims.cid, result.row, input);
     for (const c of changes) {
@@ -74,9 +76,13 @@ export const PATCH = withSession<Params>(async ({ req, claims, params }) => {
       });
     }
     propagated = changes.length;
+    // Return the updated sibling rows so the client can patch them straight
+    // into its cache — the primary alone would leave the other audience copies
+    // stale until the next full /api/messages refetch (heavy: every row).
+    siblings = changes.map((c) => c.after);
   }
 
-  return NextResponse.json({ message: result.row, propagated });
+  return NextResponse.json({ message: result.row, propagated, siblings });
 });
 
 export const DELETE = withSession<Params>(async ({ req, claims, params }) => {

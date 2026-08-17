@@ -141,7 +141,7 @@ describe("propagateToSiblings", () => {
 
   // Status + flight dates are NUMBER-level (user decision 2026-08-14): they
   // cross the variant boundary; creative fields never do.
-  describe("number-level tier (status + flight dates across variants)", () => {
+  describe("variant-level status + flight dates (never cross a variant)", () => {
     async function seedVariantB(primaryAudience = "aud1") {
       // Second create in the occupied cell → next variant of the same number.
       return createMessage(erste.id, {
@@ -153,7 +153,7 @@ describe("propagateToSiblings", () => {
       });
     }
 
-    it("propagates status + dates to other variants, creative only to same-variant copies", async () => {
+    it("propagates status + dates only to same-variant copies, never to other variants", async () => {
       const primary = await seedCard();
       const b = await seedVariantB();
       expect(b.number).toBe(primary.number);
@@ -164,8 +164,8 @@ describe("propagateToSiblings", () => {
         status: "ACTIVE",
         endDate: "2099-06-30",
       });
-      // 3 same-variant audience copies + 1 other-variant row
-      expect(changes).toHaveLength(4);
+      // Only the 3 same-variant audience copies — the other-variant row is untouched.
+      expect(changes).toHaveLength(3);
 
       for (const sib of await findSiblings(erste.id, primary)) {
         expect(sib.headline).toBe("Updated");
@@ -173,10 +173,10 @@ describe("propagateToSiblings", () => {
         expect(sib.endDate).toBe("2099-06-30");
       }
       const bAfter = (await getMessage(erste.id, b.id))!;
-      expect(bAfter.status).toBe("ACTIVE"); // number-level: crossed the variant
-      expect(bAfter.endDate).toBe("2099-06-30");
+      expect(bAfter.status).toBe("INCOMING"); // variant-level: did NOT cross the variant
+      expect(bAfter.endDate).toBe(b.endDate);
       expect(bAfter.headline).toBe("B original"); // creative: stayed put
-      expect(bAfter.version).toBe(b.version + 1);
+      expect(bAfter.version).toBe(b.version); // no write at all
     });
 
     it("leaves other variants completely untouched on a creative-only edit", async () => {

@@ -5,6 +5,27 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.19.0] — 2026-08-17
+
+### Changed
+- **Global edit: status and flight dates are now variant-level, not
+  number-level.** Setting a status (or start/end date) on `MC331c` with global
+  edit on now fans out only to the other audience copies of `MC331c` — the other
+  variants (`MC331a`, `MC331b`) are left untouched. Previously status/dates were
+  campaign-level and crossed every variant of the number, so `a` and `b` flipped
+  together with `c`. `NUMBER_LEVEL_FIELDS` is now empty; all shared fields
+  propagate at the same (number, variant) grain as creative fields
+  (`messages.ts`, editor tooltips updated). Reverses the 2026-08-14 two-tier
+  decision.
+
+### Fixed
+- **Sibling status dots refresh instantly after a global-edit save.** The
+  `PATCH /api/messages/[id]?propagate=siblings` response now returns the updated
+  sibling rows, and the editor patches them straight into the grid cache instead
+  of triggering a full `/api/messages` refetch. The other audiences' status dots
+  no longer lag several seconds behind the edited cell (`messages/[id]/route.ts`,
+  `MessageEditor.tsx`). Cross-tab sync still flows over the SSE broadcast.
+
 ## [6.18.0] — 2026-08-17
 
 ### Changed

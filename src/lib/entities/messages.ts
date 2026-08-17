@@ -423,16 +423,17 @@ export async function updateMessage(
   return { ok: true, row: updated };
 }
 
-// Two propagation tiers (user decision 2026-08-14):
-// - CARD_FIELDS — creative content, styling, template: shared by every
-//   audience copy of the same (number, variant). Variants are DIFFERENT
-//   creatives, so these never cross a variant boundary.
-// - NUMBER_LEVEL_FIELDS — lifecycle status + campaign flight dates: these are
-//   campaign-level, so a global edit syncs them across ALL variants of the
-//   number (every live row of the card family), not just the same variant.
+// Single propagation tier (user decision 2026-08-17, superseding the
+// 2026-08-14 two-tier split): every shared field — creative content, styling,
+// template, AND lifecycle status + campaign flight dates — is variant-level.
+// A global edit syncs them across the audience copies of the SAME
+// (number, variant) only; variants are DIFFERENT creatives with their own
+// lifecycle, so a status/date change on 331c never crosses into 331a/331b.
 // Only `audience` and `topic` stay per-copy: they define which cell the card
 // lives in, so propagating them would collapse placements.
-const NUMBER_LEVEL_FIELDS: WritableField[] = ["status", "startDate", "endDate"];
+// NUMBER_LEVEL_FIELDS is now empty — kept as the config seam so a field can be
+// promoted back to number-level without touching the fan-out logic below.
+const NUMBER_LEVEL_FIELDS: WritableField[] = [];
 const CARD_FIELDS = WRITABLE_FIELDS.filter(
   (f) =>
     f !== "audience" &&
@@ -462,16 +463,14 @@ export async function findSiblings(
   return rows.filter((m) => m.id !== primary.id);
 }
 
-// Apply the shared subset of `input` to the rest of the card family. CARD_FIELDS
-// go to the audience copies of the same (number, variant); NUMBER_LEVEL_FIELDS
-// (status + flight dates) go to EVERY live row of the number — other variants
-// included. Each row is force-updated (last-write-wins) and version-bumped so
-// any editor open on it will see a conflict on its next save. audience/topic
-// are dropped (per-copy placement). For same-variant copies trafficking is
-// recomputed so a propagated landing_url flows into that sibling's
-// UTM/Final-URL against ITS OWN audience/topic (pmmid stays the sibling's
-// stable identity); other-variant rows only ever receive status/dates, which
-// don't feed trafficking — their UTM fields are deliberately left untouched.
+// Apply the shared subset of `input` to the rest of the card family. Every
+// shared field (creative, status, flight dates) goes to the audience copies of
+// the same (number, variant); other variants of the number are left untouched.
+// Each row is force-updated (last-write-wins) and version-bumped so any editor
+// open on it will see a conflict on its next save. audience/topic are dropped
+// (per-copy placement). Trafficking is recomputed for each copy so a propagated
+// landing_url flows into that sibling's UTM/Final-URL against ITS OWN
+// audience/topic (pmmid stays the sibling's stable identity).
 // Returns { before, after } pairs so the caller can write per-row audit
 // entries (revision history).
 export async function propagateToSiblings(

@@ -57,6 +57,17 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
   export CSV's file dates.
 
 ### Changed
+- Source filenames now carry the real MC number: the `MC0` token was substituted
+  with the resolved number in all 1259 affected creatives, in both the Drive
+  Leadas originals and the flat mirror the rebuild reads (mtimes preserved). The
+  DB followed in place — `uploaded_files.filename`, `creatives.fileName`,
+  `messages.image1` and `messages.name` — no re-upload needed, since
+  `storage_path` is content-addressed, not name-derived. A dry-run of the
+  rebuild now reports `from filename: 3145 · from CSV suggestion: 0` and
+  reproduces the same 688 messages over 2–397, which is the self-check that the
+  filenames and the DB agree.
+- `loadSuggestedNumbers` tolerates a CRLF export — a stray `\r` on the last
+  column used to hide `suggested_mc_number` and abort the run.
 - `mc_create`'s `mc_number: 'new'` description and the `numbering.ts` comments
   now say what the code has done since 6.20.0: the fresh number is the max + 1
   **on the target audience's axis**, not the global max.

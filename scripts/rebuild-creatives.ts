@@ -117,7 +117,9 @@ function splitCsvLine(line: string): string[] {
 
 // suggested_filename → the MC number the export suggests for it ("MC313" → 313).
 function loadSuggestedNumbers(): Map<string, number> {
-  const lines = fs.readFileSync(CSV, "utf8").split("\n");
+  // The export is written by an external tool that has shipped both LF and CRLF
+  // — a stray \r on the last column would silently hide `suggested_mc_number`.
+  const lines = fs.readFileSync(CSV, "utf8").split("\n").map((l) => l.replace(/\r$/, ""));
   const header = splitCsvLine(lines[0]!);
   const iName = header.indexOf("suggested_filename");
   const iNum = header.indexOf("suggested_mc_number");

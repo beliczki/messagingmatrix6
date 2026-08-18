@@ -5,6 +5,26 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.22.0] — 2026-08-17
+
+### Added
+- **Bulk removal in the matrix edit mode — archive *or* delete.** The Delete
+  button in the edit-mode panel was a disabled "coming in v2" placeholder; it
+  now opens a chooser for the selection: **Archive** (soft, `archived_at`,
+  restorable via Show archived) or **Delete permanently** (the rows are gone —
+  so throwaway PREVIEW copies no longer silt up the archive). New
+  `POST /api/messages/bulk-delete` (`mode: archive | purge`) backed by
+  `archiveMessages()` / `deleteMessages()`, both all-or-nothing and version-
+  checked like the bulk copy/move ops.
+- Two named guards on the hard delete: a **measurement-locked row**
+  (ACTIVE/INACTIVE/ARCHIVED — the same set that already blocks a move) can only
+  be archived, since its PMMID still anchors reporting joins; and deleting the
+  **last card carrying a (number, variant)** is refused while creatives back-link
+  it (`creatives.mc_number` is a plain column, not an FK, so it would dangle).
+  The dialog greys out Delete and names the blocking rows before the request.
+- Hard delete writes a **per-row audit entry with the full before-state** — after
+  the row is gone the audit log is the only record of what the card was.
+
 ### Fixed
 - **nonDCO MC numbers are deterministic again — the axis no longer climbs into
   the 800s.** `scripts/rebuild-creatives.ts` took the MC number from the

@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   audiences,
@@ -23,6 +23,7 @@ import {
   type TraffickingPatterns,
 } from "@/lib/trafficking";
 import { listAudiences } from "@/lib/entities/audiences";
+import { listCreativesByMc } from "@/lib/entities/creatives";
 import {
   channelToAudience,
   findChannelByKey,
@@ -849,21 +850,21 @@ export type MoveResult =
       status?: string;
     };
 
-// Statuses that lock a row against placement changes. ACTIVE = measurement is
-// running and the PMMID is the live measurement key (utm_content + reporting
-// labels). INACTIVE / ARCHIVED = the row has been measured at some point and
-// its PMMID still anchors historical reporting joins. Pre-ACTIVE statuses
-// (INCOMING/NAMING/CONTENT/PREVIEW/APPROVED) and post-failure / archive-only
-// statuses (ERROR/DEAD/MEMORY) stay movable: no measurement attached, PMMID
-// regenerates freely.
-const BLOCKED_MOVE_STATUSES = new Set(["ACTIVE", "INACTIVE", "ARCHIVED"]);
+// Statuses that lock a row against placement changes and against hard delete.
+// ACTIVE = measurement is running and the PMMID is the live measurement key
+// (utm_content + reporting labels). INACTIVE / ARCHIVED = the row has been
+// measured at some point and its PMMID still anchors historical reporting
+// joins. Pre-ACTIVE statuses (INCOMING/NAMING/CONTENT/PREVIEW/APPROVED) and
+// post-failure / archive-only statuses (ERROR/DEAD/MEMORY) stay movable and
+// purgeable: no measurement attached, PMMID regenerates freely.
+const MEASUREMENT_LOCKED_STATUSES = new Set(["ACTIVE", "INACTIVE", "ARCHIVED"]);
 
 // Move messages into a single target audience. Same-topic only. PMMID is
 // regenerated against the new audience (it encodes audience/topic/number/
 // variant/versionNo — moving without regen would make the key lie about the
 // row's content). versionNo (the creative-revision counter) stays frozen — a
 // move is a placement change, not a creative revision. UTM columns are also
-// regenerated. Rows in BLOCKED_MOVE_STATUSES are rejected up front.
+// regenerated. Rows in MEASUREMENT_LOCKED_STATUSES are rejected up front.
 // On (number, variant) collision in the target cell, variant auto-bumps to the
 // next free char so moves always succeed without renumbering existing rows.
 export async function moveMessages(
@@ -905,7 +906,7 @@ export async function moveMessages(
         current: source,
       };
     }
-    if (BLOCKED_MOVE_STATUSES.has(source.status ?? "")) {
+    if (MEASUREMENT_LOCKED_STATUSES.has(source.status ?? "")) {
       return {
         ok: false,
         reason: "row_locked_by_status",
@@ -1034,4 +1035,148 @@ export async function moveMessages(
     updated.push(row);
   }
   return { ok: true, updated };
+}
+
+export type RemoveItem = { mcLabel: string; expectedVersion: number };
+export type RemoveResult =
+  | { ok: true; rows: Message[] }
+  | {
+      ok: false;
+      reason:
+        | "version_conflict"
+        | "not_found"
+        | "row_locked_by_status"
+        | "creative_linked";
+      mcLabel: string;
+      current?: Message;
+      status?: string;
+      creativeCount?: number;
+    };
+
+// Shared pre-pass for the two bulk removals: resolve every mc_label and enforce
+// the optimistic version. All-or-nothing — the first bad item aborts the batch
+// before anything is written (callers wrap the whole op in a transaction).
+async function resolveRemovals(
+  clientId: number,
+  items: RemoveItem[],
+): Promise<
+  { ok: true; rows: Message[] } | Extract<RemoveResult, { ok: false }>
+> {
+  const rows: Message[] = [];
+  for (const item of items) {
+    const row = await getMessageByPmmid(clientId, item.mcLabel);
+    if (!row) {
+      return { ok: false, reason: "not_found", mcLabel: item.mcLabel };
+    }
+    if (row.version !== item.expectedVersion) {
+      return {
+        ok: false,
+        reason: "version_conflict",
+        mcLabel: item.mcLabel,
+        current: row,
+      };
+    }
+    rows.push(row);
+  }
+  return { ok: true, rows };
+}
+
+// Soft-delete a batch: same per-row semantics as archiveMessage (archived_at +
+// version bump), restorable from the grid's "Show archived". No status guard —
+// archiving a measured row is exactly how a live card is retired.
+export async function archiveMessages(
+  clientId: number,
+  items: RemoveItem[],
+): Promise<RemoveResult> {
+  const resolved = await resolveRemovals(clientId, items);
+  if (!resolved.ok) return resolved;
+
+  const archived: Message[] = [];
+  for (const row of resolved.rows) {
+    const [updated] = await db
+      .update(messages)
+      .set({
+        archivedAt: nowUtc,
+        version: sql`${messages.version} + 1`,
+        updatedAt: nowUtc,
+      })
+      .where(and(eq(messages.clientId, clientId), eq(messages.id, row.id)))
+      .returning();
+    archived.push(updated);
+  }
+  return { ok: true, rows: archived };
+}
+
+// Hard-delete a batch — the row is gone, only the audit entry survives. Two
+// guards, both naming their case to the caller:
+//   * MEASUREMENT_LOCKED_STATUSES → archive is the only way out of a measured
+//     row (its PMMID still anchors reporting joins).
+//   * creative back-links → creatives.mc_number/mc_variant is a plain column
+//     pair, not an FK. Deleting the last row carrying a (number, variant) would
+//     leave those creatives claiming an MC that no longer exists, and
+//     promoteCreative refuses to re-promote an already-matrixed creative.
+// Rows referenced by an FK (message_previews, monitoring, draft_messages) are
+// handled by the schema's cascade / set-null.
+export async function deleteMessages(
+  clientId: number,
+  items: RemoveItem[],
+): Promise<RemoveResult> {
+  const resolved = await resolveRemovals(clientId, items);
+  if (!resolved.ok) return resolved;
+  const rows = resolved.rows;
+
+  for (const row of rows) {
+    if (MEASUREMENT_LOCKED_STATUSES.has(row.status ?? "")) {
+      return {
+        ok: false,
+        reason: "row_locked_by_status",
+        mcLabel: row.pmmid ?? "",
+        status: row.status ?? "",
+        current: row,
+      };
+    }
+  }
+
+  // A (number, variant) only loses its creative back-links when NO row carries
+  // it any more — an archived twin still holds the pair and can be restored.
+  const deletingIds = new Set(rows.map((r) => r.id));
+  const checkedPairs = new Set<string>();
+  for (const row of rows) {
+    const pair = `${row.number}${row.variant}`;
+    if (checkedPairs.has(pair)) continue;
+    checkedPairs.add(pair);
+
+    const carriers = await db
+      .select({ id: messages.id })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.clientId, clientId),
+          eq(messages.number, row.number),
+          eq(messages.variant, row.variant),
+        ),
+      );
+    if (carriers.some((c) => !deletingIds.has(c.id))) continue;
+
+    const linked = await listCreativesByMc(clientId, row.number, row.variant);
+    if (linked.length > 0) {
+      return {
+        ok: false,
+        reason: "creative_linked",
+        mcLabel: row.pmmid ?? "",
+        creativeCount: linked.length,
+        current: row,
+      };
+    }
+  }
+
+  await db
+    .delete(messages)
+    .where(
+      and(
+        eq(messages.clientId, clientId),
+        inArray(messages.id, [...deletingIds]),
+      ),
+    );
+  return { ok: true, rows };
 }

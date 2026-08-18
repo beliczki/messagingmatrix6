@@ -17,6 +17,7 @@ import MatrixExportPanel from "./MatrixExportPanel";
 import MatrixToolbar from "./MatrixToolbar";
 import MessageEditor from "./MessageEditor";
 import CreateMcDialog from "./CreateMcDialog";
+import DeleteMcDialog from "./DeleteMcDialog";
 import HeaderDetailDialog from "./HeaderDetailDialog";
 import RightToolbar from "../_components/RightToolbar";
 import CycleIconButton from "../_components/CycleIconButton";
@@ -70,11 +71,14 @@ function bulkErrorText(
       error?: string;
       mc_label?: string;
       status?: string;
+      creative_count?: number;
     };
     const label = j.mc_label ? labelFor(j.mc_label) : "";
     switch (j.error) {
       case "row_locked_by_status":
-        return `${label} is ${j.status} — measured cards keep their PMMID and can't be moved`;
+        return `${label} is ${j.status} — measured cards keep their PMMID and can't be moved or deleted`;
+      case "creative_linked":
+        return `${label} is the last card carrying that number — ${j.creative_count} creative(s) still link to it, so it can only be archived`;
       case "version_conflict":
         return `${label} changed since the grid loaded — reload and retry`;
       case "not_found":
@@ -108,6 +112,8 @@ export type EditApi = {
   toggleTargetAudience: (audienceKey: string) => void;
   pendingAction: PendingAction;
   applyPending: () => void;
+  /** Opens the archive-or-delete chooser for the current selection. */
+  openDeleteDialog: () => void;
   bulkBusy: boolean;
   bulkError: string | null;
 };
@@ -172,6 +178,8 @@ export default function MatrixWorkspace() {
     mcIds: new Set(),
   });
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  // Archive-or-delete chooser for the current selection (DeleteMcDialog).
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -317,15 +325,35 @@ export default function MatrixWorkspace() {
     },
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (vars: {
+      mode: "archive" | "purge";
+      items: { mc_label: string; version: number }[];
+    }) => postJSON("/api/messages/bulk-delete", vars),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["messages"] });
+      setDeleteOpen(false);
+      clearSelection();
+      setEditMode(false);
+    },
+  });
+
   // A failed apply's error shouldn't survive into a new pending action, a
   // target change, or an edit-mode re-entry. reset() is referentially stable
   // in react-query v5, so this only fires when those actually change.
   const resetCopy = copyMutation.reset;
   const resetMove = moveMutation.reset;
+  const resetDelete = deleteMutation.reset;
   useEffect(() => {
     resetCopy();
     resetMove();
   }, [pendingAction, editMode, resetCopy, resetMove]);
+
+  // Same for the removal chooser: reopening it must not show the previous
+  // attempt's error.
+  useEffect(() => {
+    resetDelete();
+  }, [deleteOpen, resetDelete]);
 
   const audiencesQ = useQuery({
     queryKey: ["audiences"],
@@ -401,6 +429,28 @@ export default function MatrixWorkspace() {
     }
   }, [pendingAction, selection, messagesById, copyMutation, moveMutation]);
 
+  // Selection snapshot for the removal chooser: the labels it lists and the
+  // measurement-locked rows that force archive-only. MEASUREMENT_LOCKED_STATUSES
+  // in entities/messages.ts is the server-side source of truth for this set.
+  const selectedRows = [...selection.mcIds]
+    .map((id) => messagesById.get(id))
+    .filter((m): m is Message => !!m);
+  const deleteLabels = selectedRows.map((m) => `MC${m.number}${m.variant}`);
+  const deleteLocked = selectedRows
+    .filter((m) => ["ACTIVE", "INACTIVE", "ARCHIVED"].includes(m.status ?? ""))
+    .map((m) => ({ label: `MC${m.number}${m.variant}`, status: m.status ?? "" }));
+
+  const applyDelete = useCallback(
+    (mode: "archive" | "purge") => {
+      const items = selectedRows
+        .filter((m) => m.pmmid)
+        .map((m) => ({ mc_label: m.pmmid!, version: m.version }));
+      if (items.length === 0) return;
+      deleteMutation.mutate({ mode, items });
+    },
+    [selectedRows, deleteMutation],
+  );
+
   // nonDCO MCs are born only from correctly-named creative uploads, never
   // hand-added in the grid — so edit mode is disabled on the nonDCO axis. The
   // toggle + EditModePanel are swapped for an info box below, and editApi.editMode
@@ -420,9 +470,14 @@ export default function MatrixWorkspace() {
       toggleTargetAudience,
       pendingAction,
       applyPending,
-      bulkBusy: copyMutation.isPending || moveMutation.isPending,
+      openDeleteDialog: () => setDeleteOpen(true),
+      bulkBusy:
+        copyMutation.isPending ||
+        moveMutation.isPending ||
+        deleteMutation.isPending,
       bulkError: (() => {
         if (headerActionError) return headerActionError;
+        // The removal error belongs to the dialog, not the panel banner.
         const err = copyMutation.error ?? moveMutation.error;
         if (!err) return null;
         return bulkErrorText(err, (mcLabel) => {
@@ -445,6 +500,7 @@ export default function MatrixWorkspace() {
       applyPending,
       copyMutation.isPending,
       moveMutation.isPending,
+      deleteMutation.isPending,
       copyMutation.error,
       moveMutation.error,
       headerActionError,
@@ -975,6 +1031,25 @@ export default function MatrixWorkspace() {
           }
         }}
         onClose={() => setCreateCell(null)}
+      />
+
+      <DeleteMcDialog
+        open={deleteOpen && selection.mcIds.size > 0}
+        labels={deleteLabels}
+        locked={deleteLocked}
+        busy={deleteMutation.isPending}
+        error={
+          deleteMutation.error
+            ? bulkErrorText(deleteMutation.error, (mcLabel) => {
+                for (const m of messagesById.values())
+                  if (m.pmmid === mcLabel) return `MC${m.number}${m.variant}`;
+                return mcLabel;
+              })
+            : null
+        }
+        onArchive={() => applyDelete("archive")}
+        onDelete={() => applyDelete("purge")}
+        onClose={() => setDeleteOpen(false)}
       />
     </div>
     </ReactFlowProvider>

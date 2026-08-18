@@ -81,6 +81,20 @@ Cél: MC-t archiválni/visszaállítani lehessen az appból (ma csak MCP/HTTP). 
 - [ ] **M9.2** (opcionális) chip-context akció `GridView.tsx`-ben editor-nyitás nélkül.
 - [ ] **M9.3** (szomszédos, külön commit) audience/topic Archive-akció a `DimensionEditPanel`-be — a restore route-ok + editor-szintű showArchived már élnek, csak a panel kínál ma kizárólag hard-delete-et.
 
+### M10 — Bulk Delete az edit-mode panelben: Archive **vagy** Delete dialog (✅ KÉSZ, 6.22.0, 2026-08-17)
+Kiindulás: `EditModePanel.tsx:88-96` — a Delete gomb be van drótozva `disabled`-re (`title="Bulk delete — coming in v2"`), nincs mögötte se handler, se endpoint; a Copy/Move mögött ott a `bulk-copy`/`bulk-move`. Cél: kijelölés → Delete → dialog két kimenettel: **Archive** (soft, `archived_at`, „Show archived"-dal visszahozható) vagy **Delete** (hard, sor törlése), hogy az archívum ne teljen meg szeméttel. Rokon: M9 (egy-kártyás archive az editorból) — más belépési pont, ütközés nincs.
+- [x] **M10.1** Entity-réteg (`lib/entities/messages.ts`): `archiveMessages()` + `deleteMessages()` a `moveMessages` (`:869`) mintájára — `{mcLabel, expectedVersion}[]`, egy tranzakció, hibán `{ok:false, reason, mcLabel}`. Reason-ök: `version_conflict`, `not_found`, `row_locked_by_status`, `creative_linked`.
+  - Hard delete tiltva, ha a státusz a `BLOCKED_MOVE_STATUSES`-ban van (`:859`, ACTIVE/INACTIVE/ARCHIVED) — mérés-zárolt sor csak archiválható. A konstans mostantól két műveletet szolgál (move + delete), ezért semlegesebb néven (`MEASUREMENT_LOCKED_STATUSES`), egy fájlon belüli 2 hivatkozás.
+  - Hard delete tiltva, ha ez az **utolsó élő (number, variant)** sor és van rá `creatives` back-link (`mc_number`/`mc_variant` nem FK, lógva maradna). Az üzenet nevezze meg az esetet (a többi MC-hiba stílusában).
+  - Amit az FK elintéz: `message_previews` cascade (`schema.ts:353`), `monitoring.message_id` → null (`:621`), `draft_messages.promoted_message_id` → null (`:423`). A MinIO-ban maradó preview-PNG-k a meglévő `scripts/cleanup-unused-assets.ts` dolga, nem itt.
+- [x] **M10.2** Route: `POST /api/messages/bulk-delete`, body `{ mode: "archive" | "purge", items: [{mc_label, version}] }`, a `bulk-move/route.ts` szerkezetével (zod + `withSession` + `denyDemo` + tranzakció + reason→HTTP: 409/404/400). Audit: hard delete-nél **soronként** `action:"delete"` a teljes `before`-ral (a sor után ez az egyetlen nyom), archive-nál egy aggregált `bulk_archive` (mint a `bulk_move`).
+- [x] **M10.3** Dialog: `matrix/DeleteMcDialog.tsx` — `ModalBackdrop` + `modal`/`modal__header`/`modal__close` osztályok a `CreateMcDialog` mintájára, `alert-dialog` danger-tokenek (`bg-rose-600`, `ShieldAlert`) az `AlertDialog.tsx:139-144`-ből. Három kimenet (Archive / Delete permanently / Cancel), ezért nem fér az `AlertDialog` confirm API-jába (az bináris). Tartalom: N kijelölt MC + státusz-bontás; ha van zárolt sor, a Delete gomb disabled + `title` megnevezi, hány sor és miért.
+- [x] **M10.4** Wiring (`MatrixGrid.tsx`): `deleteMutation` a `copyMutation`/`moveMutation` mintájára (`:296-318`), `EditApi` bővítés `openDeleteDialog` / `closeDeleteDialog` / `applyDelete(mode)`, `bulkBusy` + `bulkError` kiterjesztése (`:423-433`), siker után `invalidateQueries(["messages"])` + `clearSelection()`. A dialog a `CreateMcDialog` mellé renderelve (`:965`), mert a státusz-bontáshoz a `messagesById` kell. `EditModePanel.tsx:88-96` gomb élesítése (a `disabled` és a v2-title törlése).
+- [x] **M10.5** Tesztek (lokális PG :55432): archive-bulk, hard delete törli a sort + a `message_previews` sorokat, status-lock elutasítás, creative-linked elutasítás, `version_conflict`.
+- [x] **M10.6** `tasks/component-inventory.md` (`delete-mc-dialog`) + CHANGELOG + verzió: **minor, `6.21.0` → `6.22.0`** (új route + új UI-akció).
+
+**User-döntés (2026-08-17):** státusz-zár OK; creative-linked eset = **tiltás** (nem néma unlink); egy dialog két akciógombbal. Így ment ki.
+
 ### M3 — Üres-vs-tele cella szín-különbség megszüntetése (triviális)
 Cél: egységes cella-háttér, hogy a color-by (M1) tiszta alapon üljön.
 - [ ] **M3.1** `GridView.tsx:456-458` (PlainCell) + `:524-526` (EditableCell): egy bg mindkét ágra (a `matrix-grid__cell--has-messages` class maradhat egyéb hookként). Az edit-mode drop-target ring maradjon (`:527-532`).
@@ -200,6 +214,12 @@ Fő lépések (ha full-lifecycle):
 ---
 
 ## Session checkpointok (legutóbbi felül; régiek → archív)
+
+### 2026-08-17 — MC-átszámozás SQL-lel + M10 bulk delete (6.22.0)
+- **MC renumber élesben (client 8).** A DCO html-kártyák a nonDCO eredetijük számát kapták meg (axis-scoped számozás, `entities/messages.ts:215-227`): `34800` MC838a → **MC290a**, `34801` MC838a → **MC321a**, `34802` MC838b → **MC321c**. Nincs app-szintű renumber (a `number`/`variant` nem writable a PATCH-en), ezért kézi SQL: `number`(+`variant`) mellett `pmmid` (`m_838`→`m_szám`, `-v_b-`→`-v_c-`), `utm_cd26`, `utm_term`, `final_trafficked_url`, `version+1`. Az `updateMessage` minden mentésen újraszámolja a trafficking mezőket, de a **pmmid-et soha** — azt kézzel kell vinni.
+- Előtte ellenőrizve: cél-szám szabad a DCO tengelyen, 0 `creatives`/`monitoring`/`reporting`/`text_formatting`/preview hivatkozás, és egyik feed exportban sem szerepeltek.
+- **Ismert csapda:** a `findSiblings` (`:448`) csak (number, variant)-re szűr, tengelyre nem → a global edit (`?propagate=siblings`) a nonDCO ikreket is testvérnek látja. A renumberelt kártyákon ne használd.
+- **M10 leszállítva** (részletek fent): `archiveMessages`/`deleteMessages` + `POST /api/messages/bulk-delete` + `DeleteMcDialog` + a panel Delete gombja élesítve. 7 új integrációs teszt, teljes suite 573/573 zöld, `tsc --noEmit` tiszta. Böngészős click-through még nem volt.
 
 ### 2026-08-17 — 3 eltűnt SZK asset: root cause + restore (rebuild-creatives category-guard)
 - **Tünet:** az Assets gridben három 08-16-án feltöltött SZK asset (id 1140–1142) szürke placeholderként jelent meg.

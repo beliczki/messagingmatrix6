@@ -87,9 +87,9 @@ export default function EditModePanel({
               </button>
               <button
                 type="button"
-                disabled
-                title="Bulk delete — coming in v2"
-                className="selection-actions__btn selection-actions__btn--delete inline-flex cursor-not-allowed items-center justify-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs text-slate-400"
+                onClick={editApi.openDeleteDialog}
+                title="Archive or delete the selected cards"
+                className="selection-actions__btn selection-actions__btn--delete inline-flex items-center justify-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-rose-700 hover:bg-rose-50"
               >
                 <Trash2 className="size-3" />
                 Delete

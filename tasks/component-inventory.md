@@ -808,3 +808,7 @@ Added an 11th workflow status `ARCHIVED`, sitting next to `INACTIVE` semanticall
 **Settings › Channels (2026-08-17):**
 - `channels-tab` (+`__header`/`__add`/`__list`/`__row`/`__label`/`__key`) — nonDCO channel-lista kezelő a Settings Channels tabon (KeywordsTab tónusa). Add-form (`form-field` + `input-box` + `toolbar-btn--primary`), soronként code = `status-badge`, label inline szerkeszthető, archive/restore `toolbar-btn` ikongomb. GET/POST `/api/channels`, PATCH/DELETE `/api/channels/[id]`.
 - `matrix-nondco-info` már fent — a nonDCO tengely edit-panel helyettesítője.
+
+**Bulk Delete a mátrix edit-módban (2026-08-17):**
+- `delete-mc-dialog` — a kijelölés archive-vagy-delete választója (`modal` shell, `max-w-sm`, `create-mc-dialog` mintája): `__labels` / `__label` (MC-pillék slate chipben), `__locked` (amber figyelmeztetés a mérés-zárolt sorokról, `ShieldAlert` ikonnal), `__actions` (gomb-oszlop), `__action--archive` (`toolbar-btn--primary` slate), `__action--delete` (rose `bg-rose-600`, disabled ha van zárolt sor), `__action--cancel` (`toolbar-btn`), `__error` (rose hibadoboz, `create-mc-dialog__error`-ral azonos).
+- `selection-actions__btn--delete` már nem disabled placeholder: rose szöveg + `hover:bg-rose-50`, megnyitja a `delete-mc-dialog`-ot.

@@ -399,3 +399,39 @@ Séma-migráció (channels tábla) → **migrate+kód egy passzban a boxon** (`d
 - **CRLF-csapda:** a CSV újraírása CRLF-re váltott, amitől a `loadSuggestedNumbers` nem találta az utolsó oszlopot. A fájl visszaállítva LF-re, a parser pedig megvédve a `\r`-től.
 - **DB in-place átnevezve, NEM újraépítve.** A `storage_path` tartalom-hash alapú, nem a fájlnévből jön → elég volt 4 UPDATE egy tranzakcióban (`uploaded_files.filename` + `original_filename` 1231, `creatives.file_name` 1231, `messages.image1` 290, `messages.name` 290). Ezzel megspóroltunk egy ~2 órás, destruktív újratöltést MinIO-ba.
 - **Verifikáció:** `creatives.mc_number` vs az új fájlnév száma → **0 eltérés** (a DB számai már pontosan egyeztek). Rebuild dry-run: **3145 fájl, mind a fájlnévből, 0 CSV-javaslat, 0 újraallokáció** — a terv változatlan. DB: 688 nonDCO üzenet, 232 szám, **2–397**, feloldhatatlan image1 = 0, DB-név nincs a lemezen = 0. DCO max = **333** (közben született egy új DCO MC — pont a tengely-scope-olt allokáció működése).
+
+---
+
+## 🔴 INCIDENS — MC301c tartalom felülíródott (2026-08-17 20:15) — helyreállítva, javítás JÓVÁHAGYÁSRA VÁR
+
+**Tünet (user, 2026-08-18):** MC301c tartalma MC330c/MC330a tartalmára cserélődött.
+
+**Mi történt (audit_log alapján, bizonyított):** 2026-08-17 **20:15:42 → 20:15:59** között az MC301c **mind a 36 audience-sora** (34 DCO + 2 nonDCO `ch_disp`/`ch_soc`) hatszor egymás után teljesen felülíródott, mindig egy **másik** kártya tartalmával, ~3 mp-enként: **MC316a** („Kalkulátor - autó") → **MC317b** („Kalkulátor - lakás") → **MC319d** („Kalkulátor - varatlen") → két név nélküli kártya → **MC330a** („Lakásfelújítás lépésenként", `MC330_a_felhasznalas_lakasfelujitas_n1.jpg`). Kárfelmérés az egész audit-történetre (≥5 kártya-mező egyszerre változott): **csak a 301c érintett** (216 sor-update); a 332a/b/c találatok új kártya kitöltései, nem kár.
+
+### Két külön gyökér-ok
+
+**GY1 — elavult `committedSnapshot` az editorban (ez írta be a más kártya tartalmát).**
+`MessageEditor.tsx` `save.onSuccess` **feltétel nélkül** rebase-eli a `committedSnapshot`-ot a mentett sorra, akkor is, ha az editor közben már **másik kártyára lépett** (prev/next `onJump`). Sorrend:
+1. A kártyán fut egy autosave PATCH (globális szerkesztéssel ~2 mp, mert 35 testvérsort ír).
+2. A user átlép B kártyára → a reset-effect `draft`+`committedSnapshot` = B.
+3. Az A-ra indított mentés beér → `onSuccess` → `committedSnapshot` **vissza A-ra**, miközben a `draft` már B.
+4. A következő autosave `diff(A, B)` = B **összes** mezője → PATCH **A sor id-jára** → A kártya tartalma = B tartalma.
+5. Globális szerkesztéssel ez az összes audience-másolatra rámegy.
+Önfenntartó: a lassú propagáló PATCH miatt a következő lapozáskor megint van in-flight mentés → 6 hullám 17 mp alatt.
+
+**GY2 — a testvér-fan-out nem tengely-tudatos (a user diagnózisa, megerősítve).**
+`messages.ts` `findSiblings` / `propagateToSiblings` **csak `(clientId, number, variant)`-ra szűr**, tengely nélkül — a kódkomment még a régi invariánst állítja („(number, variant) never spans more than one topic"). A **6.17.0** viszont pont ezt oldotta fel: `nextMcSlot` kommentje szerint „Cross-axis reuse is allowed — a DCO number may be claimed for its nonDCO twin". Így egy DCO MC301c global edit **beleír a nonDCO MC301c-be** (és fordítva). Élő kitettség most: **31 `(number, variant)` pár / 20 MC-szám él mindkét tengelyen.**
+
+### Helyreállítás — KÉSZ (2026-08-18)
+- [x] Forrás: `audit_log.before` a kaszkád **első** bejegyzéséből soronként (pontosabb, mint az xlsx: soronkénti, UTM-mel együtt). Backup a felülírt állapotról: scratchpad `mc301c_before_restore.jsonl` (36 sor).
+- [x] 36 sor visszaállítva (tartalom + stílus + képek + UTM + státusz + flight dates), `version` +1. Ellenőrizve az `erste-SZK-feed-v1-22-merged-adform.xlsx` ellen: „Pattintsd le a régi hiteled!" / „Próbáld ki hitelkiváltás kalkulátorunkat!" / `keklabda_pattan` / `purple fullSurfaceColor objectGfx` — egyezik. A 2 nonDCO sor a saját statikus kreatív-nevét kapta vissza.
+- [x] Previewk: `message_previews.message_version` = 1 vs `messages.version` = 9 → a meglévő stale-detektálás újragenerálja, nincs teendő.
+
+### Javítás (TERV — jóváhagyásra vár)
+- [x] **F1 (GY1)** `MessageEditor.tsx`: új `openRowIdRef` tartja a ténylegesen nyitott sort. `save.onSuccess` csak akkor rebase-eli a `committedSnapshot`-ot, ha `openRowIdRef.current === saved.message.id`; a `onError` konfliktus-ág elhagyott sorra `return`-öl (nem blokkolja a most nyitott kártyát). A grid-cache patch marad feltétel nélküli (a mentett sorok valósak).
+- [x] **F2 (GY2)** `messages.ts`: új `sameAxisAs(clientId, primary)` helper (a `nextMcSlot` `sameAxis`-ával azonos szemantika: `listAudiences` + `listChannels().map(channelToAudience)`, ismeretlen kulcs = DCO). `findSiblings` és `propagateToSiblings` `family`-je is szűr rá. `MatrixGrid.openSiblingCount` szintén tengely-tudatos (`channelAudienceKeys`), hogy a figyelmeztetés azt mondja, amit a fan-out csinál. A `messages.ts:279` + a `propagateToSiblings` elavult kommentjei javítva.
+- [x] **F3** Bump `6.22.1` → **`6.22.2`** (patch) + CHANGELOG. *(Alternatíva volt a minor, mert az F2 user-látható viselkedésváltozás — de mindkettő hibás viselkedés javítása, ezért patch.)*
+
+**Tesztek:** 3 új integrációs teszt (`tests/integration/api/messages.test.ts`, `messages — global-edit fan-out is axis-scoped`): findSiblings kihagyja a nonDCO névrokont; DCO global edit nem ér el a nonDCO ikerhez; és fordítva. Ellenőrizve, hogy a javítás nélkül **buknak**. Teljes suite **576/576 zöld**, `tsc` tiszta.
+**Nem fedi teszt:** az F1 React-race — a repo-ban nincs komponens-teszt infra (`.test.tsx` nincs), ezért nem építettem hozzá újat.
+**Deploy:** nincs séma-migráció, sima build + `pm2 restart mm6-erste`. A DB-helyreállítás a közös Hetzner Postgresen már él.

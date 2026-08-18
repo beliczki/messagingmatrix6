@@ -276,7 +276,8 @@ export async function createMessage(
       // Claiming a number is for numbers not yet in use ON THIS AXIS. Placing an
       // existing card into more audiences is copy's job (it clones the
       // fields, so audience copies can't silently diverge), and a number
-      // never spans topics WITHIN an axis (findSiblings relies on it). Cross-axis
+      // never spans topics WITHIN an axis (findSiblings is axis-scoped for
+      // exactly this reason — see sameAxisAs). Cross-axis
       // reuse is allowed — a DCO number may be claimed for its nonDCO twin.
       const liveHolder = live.find(
         (m) => isLive(m) && m.number === n && sameAxis(m),
@@ -481,10 +482,34 @@ const CARD_FIELDS = WRITABLE_FIELDS.filter(
     !NUMBER_LEVEL_FIELDS.includes(f),
 ) as WritableField[];
 
+// Axis membership test for the card family below. Numbering is axis-scoped
+// (see nextMcSlot): a DCO number may be claimed for its static nonDCO twin, so
+// (number, variant) alone can name TWO different cards — the DCO one and its
+// nonDCO namesake in another topic. The family is therefore (number, variant)
+// WITHIN one axis. Channels are merged in as Audience-shaped rows so a nonDCO
+// row's `ch_*` audience key resolves to a channel (⇒ nonDCO); a key that
+// resolves to nothing counts as DCO, matching nextMcSlot's `sameAxis`.
+async function sameAxisAs(
+  clientId: number,
+  primary: Message,
+): Promise<(m: { audience: string }) => boolean> {
+  const audienceList = [
+    ...(await listAudiences(clientId)),
+    ...(await listChannels(clientId)).map(channelToAudience),
+  ];
+  const channelByAudience = new Map(
+    audienceList.map((a) => [a.key, a.channel ?? null]),
+  );
+  const isDco = (m: { audience: string }) =>
+    (channelByAudience.get(m.audience) ?? null) === null;
+  const primaryIsDco = isDco(primary);
+  return (m) => isDco(m) === primaryIsDco;
+}
+
 // Non-archived rows that are the SAME messaging card as `primary` but on a
-// different audience. (number, variant) never spans more than one topic, so it
-// uniquely identifies the card. Used by the editor's global-edit warning count
-// and by the propagation fan-out below.
+// different audience. Within one axis, (number, variant) never spans more than
+// one topic, so it uniquely identifies the card. Used by the editor's
+// global-edit warning count and by the propagation fan-out below.
 export async function findSiblings(
   clientId: number,
   primary: Message,
@@ -500,12 +525,15 @@ export async function findSiblings(
         isNull(messages.archivedAt),
       ),
     );
-  return rows.filter((m) => m.id !== primary.id);
+  const onAxis = await sameAxisAs(clientId, primary);
+  return rows.filter((m) => m.id !== primary.id && onAxis(m));
 }
 
 // Apply the shared subset of `input` to the rest of the card family. Every
 // shared field (creative, status, flight dates) goes to the audience copies of
-// the same (number, variant); other variants of the number are left untouched.
+// the same (number, variant) ON THE SAME AXIS — a DCO card and its static
+// nonDCO namesake share a number but are different cards, so a global edit on
+// one must never reach the other. Other variants of the number are untouched.
 // Each row is force-updated (last-write-wins) and version-bumped so any editor
 // open on it will see a conflict on its next save. audience/topic are dropped
 // (per-copy placement). Trafficking is recomputed for each copy so a propagated
@@ -535,6 +563,7 @@ export async function propagateToSiblings(
 
   const patterns = await readClientPatterns(clientId);
   const audienceList = await listAudiences(clientId);
+  const onAxis = await sameAxisAs(clientId, primary);
   const family = (
     await db
       .select()
@@ -546,7 +575,7 @@ export async function propagateToSiblings(
           isNull(messages.archivedAt),
         ),
       )
-  ).filter((m) => m.id !== primary.id);
+  ).filter((m) => m.id !== primary.id && onAxis(m));
 
   const changes: Array<{ before: Message; after: Message }> = [];
   for (const sib of family) {

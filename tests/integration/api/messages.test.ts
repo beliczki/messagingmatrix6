@@ -495,6 +495,91 @@ describe("messages — numbering on create", () => {
   });
 });
 
+describe("messages — global-edit fan-out is axis-scoped", () => {
+  // Numbering lets a DCO card share its number with a static nonDCO twin, so
+  // (number, variant) names TWO cards. The fan-out must stay on one axis —
+  // otherwise a global edit on the DCO MC1a overwrites the nonDCO MC1a's
+  // creative-derived content (and vice versa).
+  async function seedTwins() {
+    await seedAudienceAndTopic(erste.id, "aud1", "top1");
+    await db.insert(audiences).values([
+      { clientId: erste.id, key: "aud2", name: "AUD2", orderIndex: 1 },
+      {
+        clientId: erste.id,
+        key: "ch_disp",
+        name: "Display",
+        orderIndex: 2,
+        channel: "DISP",
+      },
+    ]);
+    await db.insert(topics).values({
+      clientId: erste.id,
+      key: "nd_top",
+      name: "ND",
+      orderIndex: 1,
+      product: "Loans",
+    });
+    const dco = await createMessage(erste.id, {
+      topic: "top1",
+      audience: "aud1",
+      headline: "DCO original",
+    });
+    // Second audience copy of the same DCO card — the legitimate fan-out target.
+    const [dcoCopy] = await db
+      .insert(messages)
+      .values({
+        clientId: erste.id,
+        number: dco.number,
+        variant: dco.variant,
+        audience: "aud2",
+        topic: "top1",
+        headline: "DCO original",
+      })
+      .returning();
+    const nondco = await createMessage(
+      erste.id,
+      {
+        topic: "nd_top",
+        audience: "ch_disp",
+        headline: "static creative",
+      },
+      { requestedNumber: dco.number },
+    );
+    expect(nondco.number).toBe(dco.number);
+    expect(nondco.variant).toBe(dco.variant);
+    return { dco, dcoCopy, nondco };
+  }
+
+  it("findSiblings skips the nonDCO namesake of a DCO card", async () => {
+    const { findSiblings } = await import("@/lib/entities/messages");
+    const { dco, dcoCopy } = await seedTwins();
+    const sibs = await findSiblings(erste.id, dco);
+    expect(sibs.map((s) => s.id)).toEqual([dcoCopy.id]);
+  });
+
+  it("a DCO global edit does not reach the nonDCO twin", async () => {
+    const { propagateToSiblings } = await import("@/lib/entities/messages");
+    const { dco, dcoCopy, nondco } = await seedTwins();
+    await propagateToSiblings(erste.id, dco, { headline: "DCO edited" });
+    expect((await getMessage(erste.id, dcoCopy.id))?.headline).toBe(
+      "DCO edited",
+    );
+    expect((await getMessage(erste.id, nondco.id))?.headline).toBe(
+      "static creative",
+    );
+  });
+
+  it("a nonDCO global edit does not reach the DCO namesake", async () => {
+    const { propagateToSiblings } = await import("@/lib/entities/messages");
+    const { dco, dcoCopy, nondco } = await seedTwins();
+    await propagateToSiblings(erste.id, nondco, { headline: "static edited" });
+    expect((await getMessage(erste.id, dco.id))?.headline).toBe("DCO original");
+    expect((await getMessage(erste.id, dcoCopy.id))?.headline).toBe(
+      "DCO original",
+    );
+  });
+});
+
 describe("messages — cascade archive + parent-first restore", () => {
   it("archiving an audience cascades to all its messages", async () => {
     const { archiveAudience } = await import("@/lib/entities/audiences");

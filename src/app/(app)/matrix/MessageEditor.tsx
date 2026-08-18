@@ -230,10 +230,20 @@ export default function MessageEditor({
     if (open) setTab("naming");
   }, [open]);
 
+  // The row the editor is CURRENTLY on. A save resolves asynchronously — with
+  // global edit it fans out to every audience copy and can take seconds — so
+  // its response may land after the user has already stepped to another card.
+  // Such a response belongs to the card we LEFT and must not touch this
+  // editor's state; the ref is the only reading of "current" available to the
+  // mutation callbacks, whose captured `committedSnapshot` is the one from the
+  // render that fired the save.
+  const openRowIdRef = useRef<number | null>(null);
+
   // Re-seed draft + snapshot every time the open message changes (initial
   // open AND prev/next navigation). Leaves the active tab alone.
   useEffect(() => {
     if (open && message) {
+      openRowIdRef.current = message.id;
       setDraft(toEditable(message));
       setCommittedSnapshot(message);
       setSaveState({ kind: "idle" });
@@ -355,8 +365,16 @@ export default function MessageEditor({
     },
     onSuccess: (saved) => {
       if (saved) {
-        // Bump our snapshot so the next save uses the new version.
-        setCommittedSnapshot(saved.message);
+        // Bump our snapshot so the next save uses the new version — but ONLY
+        // while the editor is still on the row this save targeted. If the user
+        // stepped to another card while it was in flight, rebasing here would
+        // pull the snapshot back to the PREVIOUS card while `draft` already
+        // holds the new one; the next autosave would diff those two and write
+        // the new card's entire content onto the previous card's row (and,
+        // under global edit, onto all of its audience copies).
+        if (openRowIdRef.current === saved.message.id) {
+          setCommittedSnapshot(saved.message);
+        }
         // Patch the saved row — and, under global edit, the fanned-out sibling
         // rows the server returns — straight into the grid cache so reopening
         // this card (and every other audience copy's status dot) reflects the
@@ -388,6 +406,9 @@ export default function MessageEditor({
     },
     onError: (e) => {
       if (e instanceof VersionMismatchError) {
+        // A conflict on a row we already navigated away from is not this
+        // editor's conflict — blocking the card now open on it would be wrong.
+        if (openRowIdRef.current !== e.current.id) return;
         // Hold the server row but do NOT rebase `committedSnapshot` — the user
         // must explicitly reload (reload-only conflict resolution).
         setSaveState({ kind: "conflict", serverRow: e.current });

@@ -5,6 +5,28 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.22.2] — 2026-08-18
+
+### Fixed
+- **Stepping to another card mid-save no longer copies that card's content onto
+  the one you left.** A save resolves asynchronously — with global edit on it
+  writes every audience copy and can take seconds — and its response rebased the
+  editor's snapshot unconditionally. Navigating prev/next while one was in
+  flight left the snapshot on the *previous* card while the draft already held
+  the new one, so the next autosave diffed the two and wrote the new card's
+  entire content (texts, images, styling, trafficking) onto the previous card's
+  row and all of its audience copies. The snapshot now only rebases while the
+  editor is still on the row that save targeted, and a version conflict on a row
+  already navigated away from no longer blocks the card now open. This destroyed
+  MC301c's content on 2026-08-17; it has been restored from the audit log.
+- **A global edit no longer crosses the DCO/nonDCO axis.** Numbering has been
+  axis-scoped since 6.17.0 — a DCO card may share its number with its static
+  nonDCO twin — but the fan-out still matched on `(number, variant)` alone, so
+  editing one overwrote the other. `findSiblings` and `propagateToSiblings` are
+  now axis-scoped, and the editor's "updates N other audiences" count matches
+  what actually gets written. 31 `(number, variant)` pairs across 20 MC numbers
+  currently live on both axes.
+
 ## [6.22.1] — 2026-08-18
 
 ### Fixed

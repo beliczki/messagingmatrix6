@@ -805,16 +805,21 @@ export default function MatrixWorkspace() {
   );
 
   // Other audience copies of the open card — drives the editor's global-edit
-  // warning. (number, variant) uniquely identifies a card across audiences.
+  // warning, so it must count exactly what propagateToSiblings will write.
+  // (number, variant) identifies a card only WITHIN an axis: numbering lets a
+  // DCO card share its number with a static nonDCO twin, and those are
+  // different cards the fan-out leaves alone.
   const openSiblingCount = useMemo(() => {
     if (!openMessage) return 0;
+    const openIsNonDco = channelAudienceKeys.has(openMessage.audience);
     return messages.filter(
       (m) =>
         m.id !== openMessage.id &&
         m.number === openMessage.number &&
-        m.variant === openMessage.variant,
+        m.variant === openMessage.variant &&
+        channelAudienceKeys.has(m.audience) === openIsNonDco,
     ).length;
-  }, [openMessage, messages]);
+  }, [openMessage, messages, channelAudienceKeys]);
 
   const headerEntity = useMemo(() => {
     if (!headerDialog) return null;

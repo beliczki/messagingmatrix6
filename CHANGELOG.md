@@ -5,6 +5,18 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.22.1] — 2026-08-18
+
+### Fixed
+- **The removal dialog no longer reads as if it deleted the card.** It said
+  "Remove 4 Messaging Cards" and listed MC290a four times, when the selection is
+  really four *audience copies* of one card. It now counts per card — "MC290a ·
+  4 of 32 audience copies" — and flags with a `LAST COPY` badge plus a red note
+  the groups whose last copy is in the selection, which is the only case where a
+  permanent delete takes the card's content (texts, images, trafficking) with
+  it. Copy counts come from the full message list, so a copy hidden by the
+  current filter still counts as keeping the card alive.
+
 ## [6.22.0] — 2026-08-17
 
 ### Added

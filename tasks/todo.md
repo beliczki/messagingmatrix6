@@ -215,6 +215,11 @@ Fő lépések (ha full-lifecycle):
 
 ## Session checkpointok (legutóbbi felül; régiek → archív)
 
+### 2026-08-18 — Delete-dialog szövegjavítás (6.22.1)
+- **User-kifogás:** a dialog „Remove 4 Messaging Cards" + 4× `MC290a` felirata azt sugallta, hogy magát a kártyát törli, pedig egy kijelölt cella = **egy audience-másolat**. A megkülönböztetés azért fontos, mert a kártya tartalma csak az UTOLSÓ másolat permanens törlésekor tűnik el.
+- Javítás (`DeleteMcDialog.tsx` + `MatrixGrid.tsx`): a fejléc „Remove N audience copies", a lista **kártyánként csoportosít** ((number, variant, topic) = valódi audience-másolatok) „MC290a · 4 of 32 audience copies" formában, `LAST COPY` rose badge + piros figyelmeztető doboz ott, ahol a kijelölés az utolsó másolatot is tartalmazza. A darabszám a **teljes** üzenetlistából jön, nem a szűrt nézetből (szűrt másolat is életben tartja a kártyát).
+- Backend változatlan; `tsc` tiszta.
+
 ### 2026-08-17 — MC-átszámozás SQL-lel + M10 bulk delete (6.22.0)
 - **MC renumber élesben (client 8).** A DCO html-kártyák a nonDCO eredetijük számát kapták meg (axis-scoped számozás, `entities/messages.ts:215-227`): `34800` MC838a → **MC290a**, `34801` MC838a → **MC321a**, `34802` MC838b → **MC321c**. Nincs app-szintű renumber (a `number`/`variant` nem writable a PATCH-en), ezért kézi SQL: `number`(+`variant`) mellett `pmmid` (`m_838`→`m_szám`, `-v_b-`→`-v_c-`), `utm_cd26`, `utm_term`, `final_trafficked_url`, `version+1`. Az `updateMessage` minden mentésen újraszámolja a trafficking mezőket, de a **pmmid-et soha** — azt kézzel kell vinni.
 - Előtte ellenőrizve: cél-szám szabad a DCO tengelyen, 0 `creatives`/`monitoring`/`reporting`/`text_formatting`/preview hivatkozás, és egyik feed exportban sem szerepeltek.

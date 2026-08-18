@@ -429,13 +429,38 @@ export default function MatrixWorkspace() {
     }
   }, [pendingAction, selection, messagesById, copyMutation, moveMutation]);
 
-  // Selection snapshot for the removal chooser: the labels it lists and the
-  // measurement-locked rows that force archive-only. MEASUREMENT_LOCKED_STATUSES
-  // in entities/messages.ts is the server-side source of truth for this set.
+  // Selection snapshot for the removal chooser. A selected cell is one AUDIENCE
+  // COPY of a card, not the card: MC290a can sit in 32 audiences and each row
+  // carries its own copy of the fields. So the dialog counts per card family
+  // (number + variant within one topic — audience copies of the same card) and
+  // flags the families whose LAST copy is in the selection, because that is the
+  // only case where a purge takes the card's content with it.
   const selectedRows = [...selection.mcIds]
     .map((id) => messagesById.get(id))
     .filter((m): m is Message => !!m);
-  const deleteLabels = selectedRows.map((m) => `MC${m.number}${m.variant}`);
+  const familyKeyOf = (m: Message) => `${m.number}|${m.variant}|${m.topic}`;
+  const familySizes = new Map<string, number>();
+  for (const m of messages) {
+    if (m.archivedAt) continue;
+    const k = familyKeyOf(m);
+    familySizes.set(k, (familySizes.get(k) ?? 0) + 1);
+  }
+  const deleteGroups = [
+    ...selectedRows
+      .reduce((acc, m) => {
+        const k = familyKeyOf(m);
+        const g = acc.get(k) ?? {
+          label: `MC${m.number}${m.variant}`,
+          topic: m.topic,
+          selected: 0,
+          total: familySizes.get(k) ?? 0,
+        };
+        g.selected += 1;
+        acc.set(k, g);
+        return acc;
+      }, new Map<string, { label: string; topic: string; selected: number; total: number }>())
+      .values(),
+  ];
   const deleteLocked = selectedRows
     .filter((m) => ["ACTIVE", "INACTIVE", "ARCHIVED"].includes(m.status ?? ""))
     .map((m) => ({ label: `MC${m.number}${m.variant}`, status: m.status ?? "" }));
@@ -1035,7 +1060,8 @@ export default function MatrixWorkspace() {
 
       <DeleteMcDialog
         open={deleteOpen && selection.mcIds.size > 0}
-        labels={deleteLabels}
+        count={selectedRows.length}
+        groups={deleteGroups}
         locked={deleteLocked}
         busy={deleteMutation.isPending}
         error={

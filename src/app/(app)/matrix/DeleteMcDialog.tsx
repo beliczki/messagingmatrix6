@@ -1,18 +1,25 @@
 "use client";
 
 import { useEffect } from "react";
-import { Archive, ShieldAlert, Trash2, X } from "lucide-react";
+import { Archive, ShieldAlert, Trash2, TriangleAlert, X } from "lucide-react";
 import ModalBackdrop from "../_components/ModalBackdrop";
 
-// Removal chooser for an edit-mode selection. Two outcomes, not one: archive
-// keeps the card (restorable via "Show archived"), delete drops the rows for
-// good — the point is that throwaway PREVIEW copies don't have to silt up the
-// archive. Measurement-locked rows (ACTIVE/INACTIVE/ARCHIVED) can only be
-// archived, so the delete action turns off whenever the selection holds one.
+// Removal chooser for an edit-mode selection. Two things it has to get right:
+//
+//  * A selected cell is one AUDIENCE COPY of a card, not the card. MC290a can
+//    sit in 32 audiences; deleting 4 of them leaves the card alive. So the
+//    dialog counts per card ("4 of 32 audience copies"), never "4 cards".
+//  * A card's content only dies with its LAST copy — that group gets an
+//    explicit warning, because a purge there is the irreversible one.
+//
+// Measurement-locked rows (ACTIVE/INACTIVE/ARCHIVED) can only be archived, so
+// the delete action turns off whenever the selection holds one.
 type Props = {
   open: boolean;
-  /** MC labels of the selection, e.g. ["MC290a", "MC290a", …]. */
-  labels: string[];
+  /** Number of selected cells (= audience copies), not cards. */
+  count: number;
+  /** Selection grouped per card: how many of its copies are selected, of how many. */
+  groups: { label: string; topic: string; selected: number; total: number }[];
   /** Selected rows that are measurement-locked, with the status that locks them. */
   locked: { label: string; status: string }[];
   busy: boolean;
@@ -24,7 +31,8 @@ type Props = {
 
 export default function DeleteMcDialog({
   open,
-  labels,
+  count,
+  groups,
   locked,
   busy,
   error,
@@ -44,6 +52,7 @@ export default function DeleteMcDialog({
   if (!open) return null;
 
   const lockedStatuses = [...new Set(locked.map((l) => l.status))].join(", ");
+  const lastCopies = groups.filter((g) => g.selected >= g.total);
 
   return (
     <ModalBackdrop onClose={onClose} className="z-50 items-center justify-center">
@@ -51,8 +60,7 @@ export default function DeleteMcDialog({
         <header className="modal__header flex shrink-0 items-center gap-2 border-b border-slate-100 px-5 py-3">
           <Trash2 className="size-4 text-slate-700" />
           <h2 className="modal__title text-sm font-semibold text-slate-900">
-            Remove {labels.length} Messaging Card
-            {labels.length === 1 ? "" : "s"}
+            Remove {count} audience cop{count === 1 ? "y" : "ies"}
           </h2>
           <button
             type="button"
@@ -65,16 +73,47 @@ export default function DeleteMcDialog({
         </header>
 
         <div className="modal__body flex-1 overflow-y-auto px-5 py-4">
-          <div className="delete-mc-dialog__labels flex flex-wrap gap-1">
-            {labels.map((label, i) => (
-              <span
-                key={`${label}-${i}`}
-                className="delete-mc-dialog__label rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-700"
-              >
-                {label}
-              </span>
-            ))}
+          <p className="delete-mc-dialog__hint text-[10px] leading-snug text-slate-500">
+            This removes the selected cells — the card&apos;s placements in those
+            audiences. The card itself lives on in its remaining copies.
+          </p>
+
+          <div className="delete-mc-dialog__groups mt-3 flex flex-col gap-1">
+            {groups.map((g) => {
+              const isLast = g.selected >= g.total;
+              return (
+                <div
+                  key={`${g.label}-${g.topic}`}
+                  className="delete-mc-dialog__group flex items-center gap-2 rounded border border-slate-200 px-2 py-1.5"
+                >
+                  <span className="delete-mc-dialog__label rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700">
+                    {g.label}
+                  </span>
+                  <span className="delete-mc-dialog__count text-[10px] text-slate-600">
+                    {g.selected} of {g.total} audience cop
+                    {g.total === 1 ? "y" : "ies"}
+                  </span>
+                  {isLast ? (
+                    <span className="delete-mc-dialog__last status-badge ml-auto rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-rose-700">
+                      last copy
+                    </span>
+                  ) : null}
+                </div>
+              );
+            })}
           </div>
+
+          {lastCopies.length > 0 ? (
+            <div className="delete-mc-dialog__warning mt-3 flex items-start gap-2 rounded border border-rose-200 bg-rose-50 px-2 py-1.5 text-[10px] leading-relaxed text-rose-700">
+              <TriangleAlert className="mt-px size-3 shrink-0" />
+              <span>
+                {lastCopies.map((g) => g.label).join(", ")}: the selection holds
+                the last copy, so a permanent delete takes the card&apos;s
+                content (texts, images, trafficking) with it. Archive keeps it
+                restorable.
+              </span>
+            </div>
+          ) : null}
 
           {locked.length > 0 ? (
             <div className="delete-mc-dialog__locked mt-3 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] leading-relaxed text-amber-800">

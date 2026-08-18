@@ -435,3 +435,5 @@ Séma-migráció (channels tábla) → **migrate+kód egy passzban a boxon** (`d
 **Tesztek:** 3 új integrációs teszt (`tests/integration/api/messages.test.ts`, `messages — global-edit fan-out is axis-scoped`): findSiblings kihagyja a nonDCO névrokont; DCO global edit nem ér el a nonDCO ikerhez; és fordítva. Ellenőrizve, hogy a javítás nélkül **buknak**. Teljes suite **576/576 zöld**, `tsc` tiszta.
 **Nem fedi teszt:** az F1 React-race — a repo-ban nincs komponens-teszt infra (`.test.tsx` nincs), ezért nem építettem hozzá újat.
 **Deploy:** nincs séma-migráció, sima build + `pm2 restart mm6-erste`. A DB-helyreállítás a közös Hetzner Postgresen már él.
+
+- **DEPLOYOLVA 6.22.2** (2026-08-18): MC301c incidens javítása (F1 editor stale-snapshot + F2 tengely-scope-olt fan-out). Commit `0956f82`, box `d7c4c63`→`0956f82` (a 6.22.1-et is behozta), `npm run build` OK, `pm2 restart mm6-erste` → online. Nincs séma-migráció. Health `/` 307, `/mcp` 401, `/api/channels` 401. A DB-helyreállítás (36 sor) a közös Postgresen érintetlen.

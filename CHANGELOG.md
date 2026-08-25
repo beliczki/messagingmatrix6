@@ -5,6 +5,29 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.23.0] — 2026-08-25
+
+### Added
+- **"Hide inactive" checkbox in the matrix corner cell.** The top-left corner
+  (next to the transpose toggle) now carries a `Hide inactive` checkbox that
+  drops every `INACTIVE` audience column and topic row from the grid on both
+  axes. It never hides an MC — only the dimension headers — and is independent
+  of the archive toggle. The choice persists in `mm6_matrix_state_v1`.
+- **Drag-and-drop reordering of matrix rows and columns in edit mode.** An
+  always-visible grip appears (only in edit mode) on the left edge of each row
+  header and along the bottom of each column header, above the strategy/platform
+  colour border, in every density. Dragging one header onto another persists the
+  new order into the existing `orderIndex`. New `POST /api/audiences/reorder` and
+  `POST /api/topics/reorder` (both `withSession` + `denyDemo`, audited). The
+  reorder permutes the dragged group only within the `orderIndex` slots it
+  already occupies, so reordering the visible DCO subset never interleaves it
+  with the hidden nonDCO audiences.
+
+### Known limitation
+- nonDCO **topic rows** are synthesized from creative names on the fly (no stored
+  `orderIndex` since 6.18.0), so they carry no reorder grip. Persisting their
+  order needs a dedicated overlay table — deferred to a follow-up (M11 Phase 2).
+
 ## [6.22.2] — 2026-08-18
 
 ### Fixed

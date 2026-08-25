@@ -99,10 +99,23 @@ Kiindulás: `EditModePanel.tsx:88-96` — a Delete gomb be van drótozva `disabl
 Cél: egységes cella-háttér, hogy a color-by (M1) tiszta alapon üljön.
 - [ ] **M3.1** `GridView.tsx:456-458` (PlainCell) + `:524-526` (EditableCell): egy bg mindkét ágra (a `matrix-grid__cell--has-messages` class maradhat egyéb hookként). Az edit-mode drop-target ring maradjon (`:527-532`).
 
-### M2 — "Hide inactive" checkbox (audience + topic sor/oszlop)
-Cél: INACTIVE audience/topic sorok/oszlopok elrejtése (MC-t soha).
-- [ ] **M2.1** `Hide inactive` checkbox a `MatrixToolbar`-ba (count block mellé, `:76`); persist `mm6_matrix_hide_inactive`.
-- [ ] **M2.2** Kliens-szűrő a `filtered` useMemóba (`MatrixGrid.tsx:596-634`): dobd az `status==="INACTIVE"` audience/topic sorokat/oszlopokat; MC-t nem érint; archive-logikát nem érint.
+### M2 — "Hide inactive" checkbox a SAROK-cellába (audience + topic sor/oszlop)
+Cél: INACTIVE audience/topic sorok/oszlopok elrejtése (MC-t soha). **User-döntés (2026-08-25): a checkbox a mátrix bal-felső SAROK-cellájába (`matrix-grid__corner`, `GridView.tsx:201`) kerül a transpose-gomb mellé, NEM a toolbarba.**
+- [x] **M2.1** `hideInactive` state + persist a `mm6_matrix_state_v1`-be (`MatrixGrid.tsx`: `PersistedState`, hydrate, payload, default `false`). Prop + setter le a `GridView`-ba.
+- [x] **M2.2** Checkbox a sarok-cellába (`GridView.tsx` `matrix-grid__corner`): `Hide inactive` pipa a transpose-gomb alá (`flex-col`), `normal-case font-normal` override; a sarok `h-20` marad.
+- [x] **M2.3** Szűrő a `filtered` useMemóba: `hideInactive` esetén `auds`/`tops` `status!=="INACTIVE"` szűrés az `audKeys`/`topKeys` kiszámítása ELŐTT (MC a header eltűnésével esik ki); MC-t/archive-ot nem érint. **✅ KÉSZ (6.23.0, 2026-08-25).**
+
+### M11 — Drag-and-drop sorrend a mátrix headereken (edit mode, `orderIndex`)
+Cél: edit módban a sorok/oszlopok drag-drop-pal átrendezhetőek; a sorrend a meglévő `orderIndex`-be mentődik (audiences + topics). **User-döntés (2026-08-25): mindig látszó handle, de CSAK edit módban; sor elején (bal szél), oszlop alján a szín-border (`audienceEdgeClasses`) FELETT; minden density nézetben.**
+Reuse: a `keywords/reorder` minta (`reorderKeywords` `entities/keywords.ts:190` + `POST /api/keywords/reorder` route + `KeywordsTab` reorder mutation `:149`). A grid már használ `@dnd-kit/core` DndContextet MC-chip drag-re (`GridView.tsx:100-146,460`), abba ágazok be.
+- **Fázis 1 — valódi `orderIndex`-szel bíró entitások (DCO audiences+topics, nonDCO channel-audiences): ✅ KÉSZ (6.23.0, 2026-08-25).**
+  - [x] **M11.1** Entity: `reorderAudiences`/`reorderTopics` (`entities/audiences.ts` / `topics.ts`), EGY tranzakcióban. **Permute-within-occupied-slots** (nem 0..N reindex): `slots = present.map(orderIndexOf).sort(asc)`, `newOrder[i] → orderIndex = slots[i]`; csak a küldött csoport pozíciói permutálódnak → DCO/nonDCO nem interleave-el. Más kliens id-ja + <2 id no-op.
+  - [x] **M11.2** Route: `POST /api/audiences/reorder` + `POST /api/topics/reorder`, `withSession`+`denyDemo`, body `{ ids }`, audit `bulk_update` (before/after orderIndex). Bad-body → 400.
+  - [x] **M11.3** GridView DnD: `ro:<kind>:<id>` draggable + `rod:<kind>:<id>` droppable a `mc:`/`cell:` mellé; `onDragStart`/`onDragEnd` branch a prefixre; drop → splice a látható `audiences`/`topics` prop id-listájában (nem `rows`/`cols` — a callback a korai return ELŐTT van) → `onReorder` → invalidate. Kind az id-ben kódolva (nincs stale-closure a rowKind-ra).
+  - [x] **M11.4** Handle: `HeaderReorderHandle` (mindig látszó grip, CSAK edit módban) — `GripVertical` a row-header bal szélén (`inset-y-0 left-0`), `GripHorizontal` a col-header alján a szín-border felett (`inset-x-0 bottom-0`), a gomb `pl-4`/`pb-3.5` paddinggal nem takarja a szöveget; `HeaderDropZone` pointer-events-none overlay (geometria-alapú collision, isOver ring). Dense is támogatott. `topicReorderable={axis==="dco"}` → nonDCO synth topic-sor nincs grip.
+  - [x] **M11.5** Tesztek: `reorderAudiences` (reverse, permute-slots, foreign-client drop, <2 no-op) + `reorderTopics` (permute-slots). ⚠️ **Nem futott le** — se Docker daemon, se lokális PG-szerver (csak libpq kliens); tsc tiszta + unit 181/181 zöld. Az integ-suite futtatása Docker-t igényel.
+  - [x] **M11.6** CHANGELOG + bump **minor `6.22.2` → `6.23.0`** + component-inventory (`matrix-grid__row-reorder`/`__col-reorder`/`__reorder-overlay`/`__hide-inactive`).
+- **Fázis 2 — nonDCO SZINTETIZÁLT topic-sorok sorrendje (⚠️ ÚJ TÁROLÁSI RÉTEG — push-back-first):** a nonDCO topic-sorok a `message.topic` keywordből szintetizálódnak menet közben (`MatrixGrid nonDcoTopics`, 6.18.0 óta nincsenek a `topics` táblában), nincs `orderIndex`-ük. Sorrend-mentéshez **új overlay-tábla kell** (`matrix_row_order(clientId, axis, rowKey, orderIndex)`, `0007+` migráció, deploy egy passzban). A user kérte ("handle mindenhol"), de ez külön epic — **3-kérdéses push-back kell (tényleg kell perzisztens sorrend a szintetizált soroknak? legolcsóbb 80% = kliens-oldali localStorage-order? build vs outcome?) MIELŐTT tábla születik.** Fázis 1 leszállítása után külön green-light.
 
 ### W2.6 + W2.7 — Unmatrixed filter pill + badge (Creative Library)
 Cél: uploaded creative-ek MC-link nélkül láthatóak/szűrhetőek legyenek. (A link-mezők + a `CreativeDetailDialog` szerkesztés már él — csak a szűrő/badge hiányzik.)
@@ -437,3 +450,10 @@ Séma-migráció (channels tábla) → **migrate+kód egy passzban a boxon** (`d
 **Deploy:** nincs séma-migráció, sima build + `pm2 restart mm6-erste`. A DB-helyreállítás a közös Hetzner Postgresen már él.
 
 - **DEPLOYOLVA 6.22.2** (2026-08-18): MC301c incidens javítása (F1 editor stale-snapshot + F2 tengely-scope-olt fan-out). Commit `0956f82`, box `d7c4c63`→`0956f82` (a 6.22.1-et is behozta), `npm run build` OK, `pm2 restart mm6-erste` → online. Nincs séma-migráció. Health `/` 307, `/mcp` 401, `/api/channels` 401. A DB-helyreállítás (36 sor) a közös Postgresen érintetlen.
+
+### 2026-08-25 — Hide-inactive sarok-checkbox + header drag-reorder (6.23.0)
+- **M2 ✅** — `Hide inactive` pipa a mátrix sarok-cellájába (transpose alá, `matrix-grid__hide-inactive`); `filtered` useMemo dobja az `INACTIVE` audience/topic headereket mindkét tengelyen (MC-t/archive-ot nem érint); persist `mm6_matrix_state_v1`.
+- **M11 Fázis 1 ✅** — edit-mode drag-drop sorrend a headereken. Mindig látszó grip (csak edit módban): row bal szél (`GripVertical`), col alsó él a szín-border felett (`GripHorizontal`), minden density. `reorderAudiences`/`reorderTopics` (permute-within-occupied-slots — nem 0..N reindex, így DCO/nonDCO nem interleave-el) + `POST /api/{audiences,topics}/reorder` (`withSession`+`denyDemo`, audit). GridView DnD kiterjesztve `ro:`/`rod:` prefixekkel a meglévő `@dnd-kit` contextbe.
+- **nonDCO topic-sorok:** nincs grip (synth, nincs orderIndex) → `topicReorderable={axis==="dco"}`. **M11 Fázis 2** (overlay-tábla a synth-sorok sorrendjéhez) külön epic, push-back-first — a user kérte ("handle mindenhol"), de új tárolási réteg, ezért elhalasztva.
+- **Teszt-állapot:** tsc tiszta, unit **181/181 zöld**. Új integ-tesztek (audiences: reverse/permute-slots/foreign-drop/no-op; topics: permute-slots) MEGÍRVA, de **nem futottak** — nincs se Docker daemon, se lokális PG-szerver (csak libpq kliens a gépen). ⏳ Integ-suite futtatása + deploy hátravan (nincs séma-migráció, sima build + `pm2 restart`).
+- **Bump:** `6.22.2` → `6.23.0` (minor: 2 új route + új edit-mode UI-akció + új sarok-kontroll). CHANGELOG + component-inventory frissítve.

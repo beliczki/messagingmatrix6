@@ -124,6 +124,7 @@ type PersistedState = {
   view: View;
   density: Density;
   transposed: boolean;
+  hideInactive: boolean;
   filters: {
     axis?: MatrixAxis;
     products: string[];
@@ -147,6 +148,7 @@ export default function MatrixWorkspace() {
   const [view, setView] = useState<View>("grid");
   const [density, setDensity] = useState<Density>("detailed");
   const [transposed, setTransposed] = useState<boolean>(true);
+  const [hideInactive, setHideInactive] = useState<boolean>(false);
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [openMessageId, setOpenMessageId] = useState<number | null>(null);
   // Unpersisted, like every other page's archive toggle — a session starts
@@ -194,6 +196,7 @@ export default function MatrixWorkspace() {
       setDensity("compact");
     }
     if (typeof p.transposed === "boolean") setTransposed(p.transposed);
+    if (typeof p.hideInactive === "boolean") setHideInactive(p.hideInactive);
     if (p.filters) {
       setFilters({
         axis: p.filters.axis === "nondco" ? "nondco" : "dco",
@@ -211,6 +214,7 @@ export default function MatrixWorkspace() {
       view,
       density,
       transposed,
+      hideInactive,
       filters: {
         axis: filters.axis,
         products: [...filters.products],
@@ -219,7 +223,7 @@ export default function MatrixWorkspace() {
       },
     };
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-  }, [hydrated, view, density, transposed, filters]);
+  }, [hydrated, view, density, transposed, hideInactive, filters]);
 
   const messagesById = useMemo(() => new Map<number, Message>(), []);
 
@@ -661,6 +665,30 @@ export default function MatrixWorkspace() {
     [queryClient],
   );
 
+  // Drag-drop reorder of a header axis (edit mode). `ids` is the new order of
+  // the currently visible rows/columns of that dimension; the server permutes
+  // them within the orderIndex slots they already occupy. Optimistic-free —
+  // we just refetch, the grid re-sorts by orderIndex.
+  const handleReorder = useCallback(
+    async (kind: "audience" | "topic", ids: number[]) => {
+      const entity = kind === "audience" ? "audiences" : "topics";
+      setHeaderActionError(null);
+      try {
+        await postJSON(`/api/${entity}/reorder`, { ids });
+        await queryClient.invalidateQueries({ queryKey: [entity] });
+      } catch (e) {
+        const body = (e as Error).message.replace(/^\d+:\s*/, "");
+        try {
+          const j = JSON.parse(body) as { error?: string };
+          setHeaderActionError(typeof j.error === "string" ? j.error : body);
+        } catch {
+          setHeaderActionError(body);
+        }
+      }
+    },
+    [queryClient],
+  );
+
   // Distinct live MC numbers of the chooser's cell, ascending.
   const createCellNumbers = useMemo(() => {
     if (!createCell) return [];
@@ -761,6 +789,13 @@ export default function MatrixWorkspace() {
       ps.size === 0
         ? axisTops
         : axisTops.filter((t) => t.product && ps.has(t.product));
+    // Hide-inactive (corner-cell toggle): drop INACTIVE audience columns and
+    // topic rows on both axes before the message prune below, so their MC cells
+    // vanish with them. Never touches an MC's own status; archive is separate.
+    if (hideInactive) {
+      auds = auds.filter((a) => a.status !== "INACTIVE");
+      tops = tops.filter((t) => t.status !== "INACTIVE");
+    }
     const audKeys = new Set(auds.map((a) => a.key));
     const topKeys = new Set(tops.map((t) => t.key));
     let msgs = messages.filter((m) => audKeys.has(m.audience) && topKeys.has(m.topic));
@@ -789,7 +824,7 @@ export default function MatrixWorkspace() {
       if (axes.topic) tops = tops.filter((t) => usedTopKeys.has(t.key));
     }
     return { auds, tops, msgs, axisAudienceCount: axisAuds.length };
-  }, [audiences, topics, nonDcoTopics, messages, filters, audienceById, topicById]);
+  }, [audiences, topics, nonDcoTopics, messages, filters, hideInactive, audienceById, topicById]);
 
   // Feed export must never see archived rows — the client message list acts
   // as the allowed set gating carry-forward rows server-side, so toggling
@@ -888,6 +923,10 @@ export default function MatrixWorkspace() {
               density={density}
               transposed={transposed}
               setTransposed={setTransposed}
+              hideInactive={hideInactive}
+              setHideInactive={setHideInactive}
+              topicReorderable={filters.axis === "dco"}
+              onReorder={handleReorder}
               onOpenMessage={(id) => setOpenMessageId(id)}
               onOpenHeader={(kind, key) => setHeaderDialog({ kind, key })}
               editApi={editApi}

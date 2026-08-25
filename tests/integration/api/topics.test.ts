@@ -7,6 +7,7 @@ import {
   generateTopicKey,
   getTopic,
   listTopics,
+  reorderTopics,
   restoreTopic,
   updateTopic,
 } from "@/lib/entities/topics";
@@ -177,5 +178,18 @@ describe("topics optimistic locking", () => {
     const stale = await updateTopic(erste.id, t.id, 1, { name: "T3" });
     expect(stale.ok).toBe(false);
     if (!stale.ok) expect(stale.current?.version).toBe(2);
+  });
+
+  it("reorderTopics permutes only within the sent subset's own slots", async () => {
+    const a = await createTopic(erste.id, { name: "A" });
+    const b = await createTopic(erste.id, { name: "B" });
+    const c = await createTopic(erste.id, { name: "C" });
+    const d = await createTopic(erste.id, { name: "D" });
+    // Send [C, A]: group {A,C} occupies slots {0,2}; B and D never move.
+    await reorderTopics(erste.id, [c.id, a.id]);
+    const order = (await listTopics(erste.id)).map((r) => r.name);
+    expect(order).toEqual(["C", "B", "A", "D"]);
+    expect((await getTopic(erste.id, b.id))?.orderIndex).toBe(1);
+    expect((await getTopic(erste.id, d.id))?.orderIndex).toBe(3);
   });
 });

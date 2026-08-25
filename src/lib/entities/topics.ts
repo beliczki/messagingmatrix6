@@ -1,4 +1,4 @@
-import { and, count, eq, isNull, max, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { config, messages, topics, nowUtc, type Topic } from "@/db/schema";
 import { evaluatePattern } from "@/lib/patterns";
@@ -400,4 +400,34 @@ export async function restoreTopic(
     .where(and(eq(topics.clientId, clientId), eq(topics.id, id)))
     .returning();
   return { ok: true, row: updated };
+}
+
+// Drag-drop reorder of topic rows/columns in the matrix (edit mode). Unlike
+// keywords-reorder (which reindexes 0..N over the whole field), the matrix only
+// ever sends the ids of the *currently visible axis subset*, so we must NOT
+// touch the positions of the rows the client did not send. We permute the
+// group *within the orderIndex slots it already occupies*: collect the group's
+// current slots, sort them, and reassign in the new order. Rows outside the
+// group keep their orderIndex untouched, so DCO and nonDCO sets never interleave.
+export async function reorderTopics(
+  clientId: number,
+  ids: number[],
+): Promise<void> {
+  if (ids.length < 2) return;
+  await db.transaction(async (tx) => {
+    const rows = await tx
+      .select({ id: topics.id, orderIndex: topics.orderIndex })
+      .from(topics)
+      .where(and(eq(topics.clientId, clientId), inArray(topics.id, ids)));
+    const byId = new Map(rows.map((r) => [r.id, r.orderIndex]));
+    const present = ids.filter((id) => byId.has(id));
+    if (present.length < 2) return;
+    const slots = present.map((id) => byId.get(id)!).sort((a, b) => a - b);
+    for (let i = 0; i < present.length; i++) {
+      await tx
+        .update(topics)
+        .set({ orderIndex: slots[i], updatedAt: nowUtc })
+        .where(and(eq(topics.clientId, clientId), eq(topics.id, present[i])));
+    }
+  });
 }

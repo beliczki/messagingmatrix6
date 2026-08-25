@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import clsx from "clsx";
-import { Copy, Plus } from "lucide-react";
+import { Copy, GripHorizontal, GripVertical, Plus } from "lucide-react";
 import {
   DndContext,
   DragOverlay,
@@ -51,6 +51,10 @@ export default function GridView({
   density,
   transposed,
   setTransposed,
+  hideInactive,
+  setHideInactive,
+  topicReorderable,
+  onReorder,
   onOpenMessage,
   onOpenHeader,
   editApi,
@@ -65,6 +69,10 @@ export default function GridView({
   density: Density;
   transposed: boolean;
   setTransposed: (v: boolean) => void;
+  hideInactive: boolean;
+  setHideInactive: (v: boolean) => void;
+  topicReorderable: boolean;
+  onReorder: (kind: "audience" | "topic", ids: number[]) => void;
   onOpenMessage: (id: number) => void;
   onOpenHeader: (kind: "audience" | "topic", key: string) => void;
   editApi: EditApi;
@@ -108,27 +116,63 @@ export default function GridView({
     draggedId: number;
     ids: number[];
   } | null>(null);
+  // Header-reorder drag (edit mode): a `ro:<kind>:<id>` grip handle is dragged
+  // onto another header's `rod:<kind>:<id>` drop zone. Kept separate from the
+  // MC-chip dragState so the two flows never cross.
+  const [reorderState, setReorderState] = useState<{
+    kind: "audience" | "topic";
+    id: number;
+    label: string;
+  } | null>(null);
 
   const onDragStart = useCallback(
     (e: DragStartEvent) => {
       const idStr = String(e.active.id);
-      if (!idStr.startsWith("mc:")) return;
-      const draggedId = Number(idStr.slice(3));
-      const ids = editApi.selection.mcIds.has(draggedId)
-        ? [...editApi.selection.mcIds]
-        : [draggedId];
-      setDragState({ draggedId, ids });
+      if (idStr.startsWith("mc:")) {
+        const draggedId = Number(idStr.slice(3));
+        const ids = editApi.selection.mcIds.has(draggedId)
+          ? [...editApi.selection.mcIds]
+          : [draggedId];
+        setDragState({ draggedId, ids });
+        return;
+      }
+      if (idStr.startsWith("ro:")) {
+        const [, kind, idS] = idStr.split(":");
+        setReorderState({
+          kind: kind as "audience" | "topic",
+          id: Number(idS),
+          label: String(e.active.data.current?.label ?? ""),
+        });
+      }
     },
     [editApi.selection.mcIds],
   );
 
   const onDragEnd = useCallback(
     (e: DragEndEvent) => {
+      const ro = reorderState;
       const state = dragState;
+      setReorderState(null);
       setDragState(null);
-      if (!state || !e.over) return;
+      if (!e.over) return;
       const overId = String(e.over.id);
-      if (!overId.startsWith("cell:")) return;
+      // Header reorder: splice the dragged header to the target's position
+      // within the visible id list of that dimension, then persist.
+      if (ro && overId.startsWith("rod:")) {
+        const [, kind, targetS] = overId.split(":");
+        const targetId = Number(targetS);
+        if (kind !== ro.kind || targetId === ro.id) return;
+        const list = kind === "audience" ? audiences : topics;
+        const ids = list.map((x) => x.id);
+        const from = ids.indexOf(ro.id);
+        const to = ids.indexOf(targetId);
+        if (from < 0 || to < 0) return;
+        ids.splice(from, 1);
+        ids.splice(to, 0, ro.id);
+        onReorder(kind as "audience" | "topic", ids);
+        return;
+      }
+      if (!state || !overId.startsWith("cell:")) return;
       const [aud, top] = overId.slice(5).split("\0");
       if (!aud || !top) return;
       const activator = e.activatorEvent as MouseEvent | KeyboardEvent | null;
@@ -142,7 +186,7 @@ export default function GridView({
         copy,
       });
     },
-    [dragState, onDndDrop],
+    [dragState, reorderState, audiences, topics, onDndDrop, onReorder],
   );
 
   const pending = editApi.pendingAction;
@@ -191,7 +235,17 @@ export default function GridView({
           </span>
         ) : null}
       </div>
+    ) : editMode && reorderState ? (
+      <div className="matrix-grid__reorder-overlay pointer-events-none flex items-center gap-1 rounded border-2 border-dashed border-sky-500 bg-white/90 px-2 py-1 text-xs font-semibold text-text-primary shadow dark:bg-slate-800/90">
+        <GripHorizontal className="size-3 text-text-tertiary" />
+        {reorderState.label || "Reorder"}
+      </div>
     ) : null;
+
+  // Audience headers always carry a real orderIndex; topic headers only in DCO
+  // (nonDCO topic rows are synthesized client-side, no id to persist).
+  const rowReorderable = rowKind === "audience" ? true : topicReorderable;
+  const colReorderable = colKind === "audience" ? true : topicReorderable;
 
   const grid = (
     <div className="matrix-grid h-full overflow-auto">
@@ -199,7 +253,7 @@ export default function GridView({
         <thead className="matrix-grid__head">
           <tr>
             <th className="matrix-grid__corner sticky left-0 top-0 z-30 h-20 min-w-[180px] border-b border-r border-border bg-surface-alt p-0 text-xs font-semibold uppercase tracking-wide text-text-secondary">
-              <div className="flex h-full min-h-20 items-center justify-center p-2">
+              <div className="flex h-full min-h-20 flex-col items-center justify-center gap-1 p-2">
                 <button
                   type="button"
                   onClick={() => setTransposed(!transposed)}
@@ -213,6 +267,18 @@ export default function GridView({
                   </span>
                   <span>{colLabel}</span>
                 </button>
+                <label
+                  className="matrix-grid__hide-inactive inline-flex cursor-pointer items-center gap-1 text-[10px] font-normal normal-case tracking-normal text-text-secondary"
+                  title="Hide INACTIVE audiences and topics (never hides MCs)"
+                >
+                  <input
+                    type="checkbox"
+                    checked={hideInactive}
+                    onChange={(e) => setHideInactive(e.target.checked)}
+                    className="size-3 accent-sky-600"
+                  />
+                  Hide inactive
+                </label>
               </div>
             </th>
             {cols.map((c) => {
@@ -254,6 +320,7 @@ export default function GridView({
                     className={clsx(
                       "matrix-grid__col-header-btn block size-full text-left transition hover:bg-black/5 dark:hover:bg-white/10",
                       density === "dense" ? "p-1" : "p-2",
+                      editMode && colReorderable && "pb-3.5",
                     )}
                     aria-label={`Open ${colKind} ${c.name}`}
                   >
@@ -304,6 +371,21 @@ export default function GridView({
                       <Copy className="size-3" />
                     </button>
                   ) : null}
+                  {editMode && colReorderable ? (
+                    <>
+                      <HeaderDropZone
+                        kind={colKind}
+                        id={c.id}
+                        active={!!reorderState && reorderState.kind === colKind}
+                      />
+                      <HeaderReorderHandle
+                        kind={colKind}
+                        id={c.id}
+                        label={c.name}
+                        orientation="col"
+                      />
+                    </>
+                  ) : null}
                 </th>
               );
             })}
@@ -341,6 +423,7 @@ export default function GridView({
                   className={clsx(
                     "matrix-grid__row-header-btn block size-full text-left transition hover:bg-black/5 dark:hover:bg-white/10",
                     density === "dense" ? "p-1" : "p-2",
+                    editMode && rowReorderable && "pl-4",
                   )}
                   aria-label={`Open ${rowKind} ${r.name}`}
                 >
@@ -373,6 +456,21 @@ export default function GridView({
                   >
                     <Copy className="size-3" />
                   </button>
+                ) : null}
+                {editMode && rowReorderable ? (
+                  <>
+                    <HeaderDropZone
+                      kind={rowKind}
+                      id={r.id}
+                      active={!!reorderState && reorderState.kind === rowKind}
+                    />
+                    <HeaderReorderHandle
+                      kind={rowKind}
+                      id={r.id}
+                      label={r.name}
+                      orientation="row"
+                    />
+                  </>
                 ) : null}
               </th>
               {cols.map((c) => {
@@ -461,6 +559,77 @@ export default function GridView({
       {grid}
       <DragOverlay dropAnimation={null}>{dragOverlay}</DragOverlay>
     </DndContext>
+  );
+}
+
+// Always-visible grip that drags a header to reorder it (edit mode only).
+// Orientation picks the icon + placement: rows grip on the left edge, columns
+// grip along the bottom (above the strategy/platform colour border). Only
+// rendered inside the DndContext, so useDraggable is safe.
+function HeaderReorderHandle({
+  kind,
+  id,
+  label,
+  orientation,
+}: {
+  kind: "audience" | "topic";
+  id: number;
+  label: string;
+  orientation: "row" | "col";
+}) {
+  const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
+    id: `ro:${kind}:${id}`,
+    data: { label },
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      role="button"
+      tabIndex={-1}
+      aria-label={`Drag to reorder ${label}`}
+      title="Drag to reorder"
+      onClick={(e) => e.stopPropagation()}
+      className={clsx(
+        "z-20 flex cursor-grab touch-none items-center justify-center text-text-tertiary hover:text-text-primary active:cursor-grabbing",
+        orientation === "row"
+          ? "matrix-grid__row-reorder absolute inset-y-0 left-0 w-3.5"
+          : "matrix-grid__col-reorder absolute inset-x-0 bottom-0 h-3",
+        isDragging && "opacity-40",
+      )}
+    >
+      {orientation === "row" ? (
+        <GripVertical className="size-3" />
+      ) : (
+        <GripHorizontal className="size-3" />
+      )}
+    </div>
+  );
+}
+
+// Invisible drop target covering a whole header cell; pointer-events-none so it
+// never blocks the header button — dnd-kit collision is geometry-based, not
+// pointer-based. Highlights when a compatible reorder drag is over it.
+function HeaderDropZone({
+  kind,
+  id,
+  active,
+}: {
+  kind: "audience" | "topic";
+  id: number;
+  active: boolean;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: `rod:${kind}:${id}` });
+  return (
+    <div
+      ref={setNodeRef}
+      aria-hidden="true"
+      className={clsx(
+        "pointer-events-none absolute inset-0 z-10",
+        active && isOver && "ring-2 ring-inset ring-sky-500 bg-sky-500/10",
+      )}
+    />
   );
 }
 

@@ -1,4 +1,4 @@
-import { and, count, eq, isNull, max, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { audiences, config, messages, nowUtc, type Audience } from "@/db/schema";
 import { evaluatePattern } from "@/lib/patterns";
@@ -447,6 +447,35 @@ export async function restoreAudience(
     .where(and(eq(audiences.clientId, clientId), eq(audiences.id, id)))
     .returning();
   return { ok: true, row: updated };
+}
+
+// Drag-drop reorder of audience rows/columns in the matrix (edit mode). See
+// reorderTopics for the "permute within occupied slots" rationale: the matrix
+// only sends the currently visible axis subset, so we permute the group within
+// its own orderIndex slots and leave every other audience untouched — this is
+// what keeps the DCO (channel==null) and nonDCO (channel!=null) sets from
+// interleaving when one axis is reordered.
+export async function reorderAudiences(
+  clientId: number,
+  ids: number[],
+): Promise<void> {
+  if (ids.length < 2) return;
+  await db.transaction(async (tx) => {
+    const rows = await tx
+      .select({ id: audiences.id, orderIndex: audiences.orderIndex })
+      .from(audiences)
+      .where(and(eq(audiences.clientId, clientId), inArray(audiences.id, ids)));
+    const byId = new Map(rows.map((r) => [r.id, r.orderIndex]));
+    const present = ids.filter((id) => byId.has(id));
+    if (present.length < 2) return;
+    const slots = present.map((id) => byId.get(id)!).sort((a, b) => a - b);
+    for (let i = 0; i < present.length; i++) {
+      await tx
+        .update(audiences)
+        .set({ orderIndex: slots[i], updatedAt: nowUtc })
+        .where(and(eq(audiences.clientId, clientId), eq(audiences.id, present[i])));
+    }
+  });
 }
 
 export class BadRequest extends Error {

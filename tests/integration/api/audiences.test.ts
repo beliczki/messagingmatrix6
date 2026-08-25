@@ -8,6 +8,7 @@ import {
   duplicateAudience,
   getAudience,
   listAudiences,
+  reorderAudiences,
   restoreAudience,
   updateAudience,
 } from "@/lib/entities/audiences";
@@ -198,5 +199,48 @@ describe("audiences audit logging", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].entityType).toBe("audiences");
     expect(rows[0].action).toBe("create");
+  });
+
+  it("reorderAudiences reverses the full set within its slots", async () => {
+    const a = await createAudience(erste.id, { name: "A" });
+    const b = await createAudience(erste.id, { name: "B" });
+    const c = await createAudience(erste.id, { name: "C" });
+    await reorderAudiences(erste.id, [c.id, b.id, a.id]);
+    const order = (await listAudiences(erste.id)).map((r) => r.name);
+    expect(order).toEqual(["C", "B", "A"]);
+  });
+
+  it("reorderAudiences permutes only within the sent subset's own slots", async () => {
+    // A(0) B(1) C(2) D(3); send [C, A] — the {A,C} group occupies slots {0,2},
+    // so C→0 and A→2 while B and D never move. This is what keeps a reordered
+    // DCO subset from interleaving with hidden nonDCO audiences.
+    const a = await createAudience(erste.id, { name: "A" });
+    const b = await createAudience(erste.id, { name: "B" });
+    const c = await createAudience(erste.id, { name: "C" });
+    const d = await createAudience(erste.id, { name: "D" });
+    await reorderAudiences(erste.id, [c.id, a.id]);
+    const order = (await listAudiences(erste.id)).map((r) => r.name);
+    expect(order).toEqual(["C", "B", "A", "D"]);
+    // b and d untouched at their original indices
+    expect((await getAudience(erste.id, b.id))?.orderIndex).toBe(1);
+    expect((await getAudience(erste.id, d.id))?.orderIndex).toBe(3);
+  });
+
+  it("reorderAudiences ignores ids from another client", async () => {
+    const a = await createAudience(erste.id, { name: "A" });
+    const b = await createAudience(erste.id, { name: "B" });
+    const foreign = await createAudience(telekom.id, { name: "T" });
+    // Only a+b are erste's; foreign is silently dropped, still a valid 2-swap.
+    await reorderAudiences(erste.id, [b.id, a.id, foreign.id]);
+    const order = (await listAudiences(erste.id)).map((r) => r.name);
+    expect(order).toEqual(["B", "A"]);
+    // Telekom's row untouched.
+    expect((await getAudience(telekom.id, foreign.id))?.orderIndex).toBe(0);
+  });
+
+  it("reorderAudiences is a no-op for fewer than two ids", async () => {
+    const a = await createAudience(erste.id, { name: "A" });
+    await reorderAudiences(erste.id, [a.id]);
+    expect((await getAudience(erste.id, a.id))?.orderIndex).toBe(0);
   });
 });

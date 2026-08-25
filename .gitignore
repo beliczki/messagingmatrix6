@@ -33,3 +33,6 @@ test-results
 
 # Codex CLI local state
 .codex/
+
+# Office temporary owner-lock files (e.g. ~$foo.xlsx)
+~$*

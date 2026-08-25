@@ -271,6 +271,7 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | Sticky thead | `matrix-grid__head` | 55–86 |
 | Corner cell + transpose toggle gomb | `matrix-grid__corner` | – |
 | Transpose toggle (`╲ ↔ ╱`) | `matrix-grid__transpose-btn` | – |
+| Hide-inactive checkbox a sarok-cellában | `matrix-grid__hide-inactive` | – |
 | Column header cell | `matrix-grid__col-header` | – |
 | Column header címke (audience/topic name) | `matrix-grid__col-header-label` | – |
 | Column header kulcs (alsó kis szöveg) | `matrix-grid__col-header-key` | – |
@@ -278,6 +279,9 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | Row header címke | `matrix-grid__row-header-label` | 95 |
 | Row header kulcs | `matrix-grid__row-header-key` | 96–98 |
 | Hover Duplicate gomb az audience/topic header-en (edit mode) | `matrix-grid__header-dup-btn` | – |
+| Drag-reorder grip a row-headeren (edit mode, bal szél) | `matrix-grid__row-reorder` | – |
+| Drag-reorder grip a col-headeren (edit mode, alsó él, szín-border felett) | `matrix-grid__col-reorder` | – |
+| Reorder drag-overlay (a húzott header neve) | `matrix-grid__reorder-overlay` | – |
 | Trailing "add column" cella a fejlécsor végén, MM5-stílus széles cella (edit mode) | `matrix-grid__col-add` | – |
 | Trailing "add row" sor a body végén, MM5-stílus magas cella (edit mode) | `matrix-grid__row-add` | – |
 | Kitöltő sáv az add-row sorban (spanning td) | `matrix-grid__row-add-fill` | – |

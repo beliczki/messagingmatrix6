@@ -32,7 +32,7 @@ export default function ModalBackdrop({
     <div
       role={role}
       className={clsx(
-        "modal-backdrop fixed inset-0 flex bg-slate-900/40 backdrop-blur-sm",
+        "modal-backdrop fixed inset-0 flex bg-black/30 backdrop-blur-sm",
         className,
       )}
       onMouseDown={(e) => {

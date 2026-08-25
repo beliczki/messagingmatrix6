@@ -337,7 +337,7 @@ export function MatrixIframeTile({
     <button
       type="button"
       onClick={onOpen}
-      className="matrix-iframe-tile group block w-full overflow-hidden rounded-md [content-visibility:auto] [contain-intrinsic-size:auto_300px]"
+      className="matrix-iframe-tile group block w-full overflow-hidden rounded-md bg-slate-100 dark:bg-black [content-visibility:auto] [contain-intrinsic-size:auto_300px]"
     >
       <MatrixIframePreview
         message={message}

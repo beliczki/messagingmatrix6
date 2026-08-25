@@ -45,7 +45,7 @@ export default function MatrixExportPanel({ filters }: { filters: Filters }) {
       <button
         type="button"
         onClick={download}
-        className="toolbar-btn--primary mt-3 flex w-full items-center justify-center gap-2 rounded-md bg-brand-button px-3 py-1.5 text-sm font-medium text-white"
+        className="toolbar-btn--primary mt-3 flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
       >
         <Download className="size-4" />
         Download XLSX

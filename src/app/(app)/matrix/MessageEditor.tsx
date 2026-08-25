@@ -2037,9 +2037,25 @@ function MessagePreview({
   }, [size]);
 
   const [html, setHtml] = useState<string>("");
-  // Static creatives default to the checker background — matches the Creative
-  // Library preview dialog and reads transparency on PNGs.
-  const [bg, setBg] = useState<PreviewBg>(isStatic ? "checker" : "light");
+  // Preview background: remembered per-browser (mm6_preview_bg) so it doesn't
+  // reset every time the editor opens. Falls back to the static-vs-html default
+  // (static creatives → checker, matching the Creative Library preview dialog).
+  const [bg, setBg] = useState<PreviewBg>(() => {
+    try {
+      const v = localStorage.getItem("mm6_preview_bg");
+      if (v === "light" || v === "dark" || v === "checker") return v;
+    } catch {
+      // ignore storage failures
+    }
+    return isStatic ? "checker" : "light";
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("mm6_preview_bg", bg);
+    } catch {
+      // ignore storage failures
+    }
+  }, [bg]);
   const [skipAnim, setSkipAnim] = useState<boolean>(true);
   const [imagePreview, setImagePreview] = useState<boolean>(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);

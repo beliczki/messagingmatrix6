@@ -439,3 +439,24 @@ html { view-transition-name: mm-theme; }
     );
   }
 }
+
+/* Dark-mode scrollbars. Webkit paints the track and — worst of all — the
+   bottom-right corner where a horizontal and vertical scrollbar meet in solid
+   white, which shows as a bright square at the corner of the matrix grid. Theme
+   the track/thumb/corner so nothing stays white in dark mode. */
+html.dark ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+html.dark ::-webkit-scrollbar-track,
+html.dark ::-webkit-scrollbar-corner {
+  background: var(--surface);
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+  border: 3px solid var(--surface);
+  border-radius: 8px;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #4d4d4d;
+}

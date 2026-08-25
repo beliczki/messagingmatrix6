@@ -5,6 +5,21 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.27.1] — 2026-08-25
+
+### Fixed
+- **More dark-mode polish:** the matrix "Download XLSX" button (Matrix Export
+  panel) now inverts to white in dark like the other primary buttons; dark-mode
+  scrollbars are themed so the white square where the matrix grid's scrollbars
+  meet is gone; Creative Library masonry tiles get a dark backing so the rounded
+  corners no longer show a white matte.
+- **Dialog backdrop is neutral, not bluish** — was a blue-tinted `slate-900/40`;
+  now a neutral `black/30` behind the same blur, so it doesn't clash with the
+  dialog's grey.
+- **The MC editor remembers the preview background** (light / checker / dark)
+  across opens via `mm6_preview_bg` — it no longer snaps back to white every
+  time.
+
 ## [6.27.0] — 2026-08-25
 
 ### Fixed

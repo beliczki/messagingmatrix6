@@ -68,6 +68,11 @@ export async function POST(req: NextRequest) {
 
   let html: string;
   try {
+    const url = new URL(req.url);
+    const proto =
+      req.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");
+    const host =
+      req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? url.host;
     const result = renderTemplate({
       templateName,
       size,
@@ -75,6 +80,7 @@ export async function POST(req: NextRequest) {
       textFormatting,
       inline: true,
       skipAnimations: false,
+      baseOrigin: `${proto}://${host}`,
     });
     html = result.html;
   } catch (e) {

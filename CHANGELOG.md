@@ -5,6 +5,20 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.27.2] — 2026-08-25
+
+### Fixed
+- **The Creative Library console 404 flood is gone.** Preview iframes were
+  requesting `main.css`, `dynamic.content.js` and `empty.png` from the site root
+  and 404ing, because a root-relative `<base href>` doesn't resolve inside a
+  `srcDoc` iframe (the browser falls back to the parent origin's root). Two
+  fixes: the injected base is now **absolute** (origin from the request, nginx
+  forwarded headers aware), so template assets resolve to
+  `/api/templates/<name>/…` and load; and the redundant `<link rel=stylesheet>`
+  tags for CSS we already inline are stripped (they re-fetched the same CSS and
+  were the most-repeated 404). These 404s were always there — 6.27.0's
+  `quietConsole` just stopped burying them under the template's own logs.
+
 ## [6.27.1] — 2026-08-25
 
 ### Fixed

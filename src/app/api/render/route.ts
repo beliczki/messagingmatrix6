@@ -24,6 +24,15 @@ export const POST = withSession(async ({ req, claims }) => {
   const inline = body?.inline === true;
   const skipAnimations = body?.skipAnimations === true;
   const quietConsole = body?.quietConsole === true;
+  // Absolute origin for the <base href> — a root-relative base doesn't resolve
+  // inside the srcDoc iframe (see render.ts). Behind nginx use the forwarded
+  // headers; fall back to the request URL.
+  const url = new URL(req.url);
+  const proto =
+    req.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");
+  const host =
+    req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? url.host;
+  const baseOrigin = `${proto}://${host}`;
 
   try {
     const { html } = renderTemplate({
@@ -34,6 +43,7 @@ export const POST = withSession(async ({ req, claims }) => {
       inline,
       skipAnimations,
       quietConsole,
+      baseOrigin,
     });
     return new NextResponse(html, {
       status: 200,

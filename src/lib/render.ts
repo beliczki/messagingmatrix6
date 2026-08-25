@@ -44,6 +44,15 @@ export type RenderInput = {
    * where the template's logs are useful.
    */
   quietConsole?: boolean;
+  /**
+   * Absolute origin (e.g. "https://erste.messagingmatrix.ai") for the injected
+   * <base href>. A root-relative base ("/api/templates/<name>/") does NOT
+   * resolve inside a `srcDoc` iframe — the browser falls back to the parent
+   * page's origin at the ROOT, so every relative template asset (main.css,
+   * dynamic.content.js, empty.png) 404s. An absolute base fixes it. Omitted =
+   * root-relative fallback (fine for same-document `src`-loaded previews).
+   */
+  baseOrigin?: string;
 };
 
 export type RenderResult = {
@@ -155,8 +164,13 @@ export function renderTemplate(input: RenderInput): RenderResult {
     // The iframe preview uses `srcDoc=`, which gives the document no base URL,
     // so the template's relative refs (dynamic.content.js, thm.json, …) all
     // 404. Point them at /api/templates/<name>/ which already serves these.
-    // Only for inline mode — AdForm/POMS exports ship with the files alongside.
-    html = injectBaseHref(html, `/api/templates/${input.templateName}/`);
+    // Must be ABSOLUTE for srcDoc (a root-relative base falls back to the parent
+    // origin's root). Only for inline mode — AdForm/POMS exports ship the files
+    // alongside.
+    html = injectBaseHref(
+      html,
+      `${input.baseOrigin ?? ""}/api/templates/${input.templateName}/`,
+    );
   }
 
   if (input.skipAnimations) {
@@ -235,16 +249,28 @@ function injectQuietConsole(html: string): string {
 }
 
 function inlineCss(html: string, templateDir: string, size: string): string {
-  const sizeCssPath = path.join(templateDir, `${size}.css`);
-  const mainCssPath = path.join(templateDir, "main.css");
+  const files = ["main.css", `${size}.css`];
   const parts: string[] = [];
-  if (fs.existsSync(mainCssPath)) {
-    parts.push(fs.readFileSync(mainCssPath, "utf8"));
-  }
-  if (fs.existsSync(sizeCssPath)) {
-    parts.push(fs.readFileSync(sizeCssPath, "utf8"));
+  const inlined: string[] = [];
+  for (const f of files) {
+    const p = path.join(templateDir, f);
+    if (fs.existsSync(p)) {
+      parts.push(fs.readFileSync(p, "utf8"));
+      inlined.push(f);
+    }
   }
   if (parts.length === 0) return html;
+  // Drop the now-redundant <link rel=stylesheet href="…"> for each file we just
+  // inlined. In the srcDoc preview those links re-fetch the same CSS and (when
+  // the base doesn't resolve) 404 — the biggest, most-repeated source of console
+  // noise. The inlined <style> already carries their rules.
+  for (const f of inlined) {
+    const re = new RegExp(
+      `<link\\b[^>]*\\bhref=["']${escapeRegex(f)}["'][^>]*>\\s*`,
+      "gi",
+    );
+    html = html.replace(re, "");
+  }
   const styleBlock = `<style data-mm6-inline>\n${parts.join("\n")}\n</style>`;
   // Insert just before </head>; if no </head>, prepend.
   if (/<\/head>/i.test(html)) {

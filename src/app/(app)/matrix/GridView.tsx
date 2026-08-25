@@ -24,22 +24,28 @@ import {
 import { type EditApi } from "./MatrixGrid";
 import { useLongPress } from "@/app/_components/useLongPress";
 
-// Bottom-border badge on audience headers (globals.css matrix-grid__header--*
+// Coloured edge badge on audience headers (globals.css matrix-grid__header--*
 // classes): width encodes the strategy (pro 3px / rem 5px), color the buying
-// platform (dv360 dark green / adform teal). Both must be set — channel
+// platform (dv360 dark green / adform teal). The edge follows the layout — the
+// bottom when audiences are columns, the right when they are rows (transposed),
+// so the strip always sits against the cells. Both fields must be set — channel
 // (nonDCO) audiences carry neither and stay plain.
-function audienceEdgeClasses(a: Audience): string | null {
+function audienceEdgeClasses(
+  a: Audience,
+  edge: "bottom" | "right" = "bottom",
+): string | null {
+  const s = edge === "right" ? "-r" : "";
   const strat =
     a.strategy === "pro"
-      ? "matrix-grid__header--strat-pro"
+      ? `matrix-grid__header--strat-pro${s}`
       : a.strategy === "rem"
-        ? "matrix-grid__header--strat-rem"
+        ? `matrix-grid__header--strat-rem${s}`
         : null;
   const plat =
     a.buyingPlatform === "dv360"
-      ? "matrix-grid__header--plat-dv360"
+      ? `matrix-grid__header--plat-dv360${s}`
       : a.buyingPlatform === "adform"
-        ? "matrix-grid__header--plat-adform"
+        ? `matrix-grid__header--plat-adform${s}`
         : null;
   return strat && plat ? `${strat} ${plat}` : null;
 }
@@ -413,7 +419,7 @@ export default function GridView({
                 className={clsx(
                   "matrix-grid__row-header group sticky left-0 z-10 border-b border-r border-border bg-surface-alt text-left font-medium text-text-primary",
                   density === "dense" ? "min-w-[140px] p-0" : "min-w-[180px] p-0",
-                  !transposed && audienceEdgeClasses(r as Audience),
+                  !transposed && audienceEdgeClasses(r as Audience, "right"),
                 )}
                 title={r.key}
               >

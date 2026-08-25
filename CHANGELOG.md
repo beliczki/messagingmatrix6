@@ -5,6 +5,16 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.23.1] — 2026-08-25
+
+### Fixed
+- **The audience strategy/platform colour strip now sits on the right edge when
+  audiences are rows (transposed view), not the bottom.** It was always a
+  bottom border, so in the rows-as-audiences layout the strip ran along the
+  bottom of the label instead of against the cells. Added right-edge CSS
+  variants; `audienceEdgeClasses` picks bottom (audiences as columns) or right
+  (audiences as rows).
+
 ## [6.23.0] — 2026-08-25
 
 ### Added

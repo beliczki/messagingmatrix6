@@ -394,3 +394,10 @@ html.dark {
 .matrix-grid__header--strat-rem { border-bottom-width: 5px; }
 .matrix-grid__header--plat-dv360 { border-bottom-color: #43970b; }
 .matrix-grid__header--plat-adform { border-bottom-color: #03c9ab; }
+/* Right-edge variants — used when audiences sit in ROWS (transposed view), so
+   the strip lands on the edge adjacent to the cells (their right) instead of
+   the bottom. Same width/colour encoding. */
+.matrix-grid__header--strat-pro-r { border-right-width: 3px; }
+.matrix-grid__header--strat-rem-r { border-right-width: 5px; }
+.matrix-grid__header--plat-dv360-r { border-right-color: #43970b; }
+.matrix-grid__header--plat-adform-r { border-right-color: #03c9ab; }

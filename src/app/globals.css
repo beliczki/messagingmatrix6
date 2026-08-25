@@ -401,3 +401,17 @@ html.dark {
 .matrix-grid__header--strat-rem-r { border-right-width: 5px; }
 .matrix-grid__header--plat-dv360-r { border-right-color: #43970b; }
 .matrix-grid__header--plat-adform-r { border-right-color: #03c9ab; }
+
+/* Hover crosshair rails. Unlayered (same reason as above — must beat the
+   border-border utility on the cells/headers). Only border-COLOR changes, on
+   borders that already exist, so there is zero layout shift and the change
+   transitions cleanly. --edge-r paints a column's left+right guide (this and
+   the previous column's right border); --edge-b a row's top+bottom guide (this
+   and the previous row's bottom border). Toggled in GridView.paintCrosshair. */
+:root { --mx-cross: #0ea5e9; }
+html.dark { --mx-cross: #38bdf8; }
+.matrix-grid__cell,
+.matrix-grid__col-header,
+.matrix-grid__row-header { transition: border-color 140ms ease; }
+.matrix-grid__x--edge-r { border-right-color: var(--mx-cross); }
+.matrix-grid__x--edge-b { border-bottom-color: var(--mx-cross); }

@@ -809,6 +809,9 @@ Added an 11th workflow status `ARCHIVED`, sitting next to `INACTIVE` semanticall
 **Audience-fejléc strategy/platform él (2026-08-14):**
 - `matrix-grid__header--strat-pro` (3px) / `--strat-rem` (5px) — bottom-border vastagság a stratégia szerint; `matrix-grid__header--plat-dv360` (zöld #43970b) / `--plat-adform` (teal #03c9ab) — bottom-border szín a buying platform szerint. Mindkét mező kell hozzá; a globals.css VÉGÉN, rétegen kívül (szándékosan, hogy a `border-b`/`border-border` utility-ket felülírja). Mindkét orientációban él (audience sor- ÉS oszlop-fejléc).
 
+**Hover crosshair él-rail (2026-08-25, M4.1):**
+- `matrix-grid__x--edge-r` (border-right-color) / `--edge-b` (border-bottom-color) — hoverkor a cellához tartozó oszlop (bal+jobb) és sor (alsó+felső) él-vonala `--mx-cross` színt kap. Imperatívan toggle-ölve (`GridView.paintCrosshair`, nincs state/re-render); `data-col-key`/`data-row-key` a headereken + cellákon. Csak border-COLOR vált (0 layout-shift), `transition: border-color 140ms`. globals.css VÉGÉN, rétegen kívül. Új token: `--mx-cross` (light `#0ea5e9` / dark `#38bdf8`).
+
 **Settings › Channels (2026-08-17):**
 - `channels-tab` (+`__header`/`__add`/`__list`/`__row`/`__label`/`__key`) — nonDCO channel-lista kezelő a Settings Channels tabon (KeywordsTab tónusa). Add-form (`form-field` + `input-box` + `toolbar-btn--primary`), soronként code = `status-badge`, label inline szerkeszthető, archive/restore `toolbar-btn` ikongomb. GET/POST `/api/channels`, PATCH/DELETE `/api/channels/[id]`.
 - `matrix-nondco-info` már fent — a nonDCO tengely edit-panel helyettesítője.

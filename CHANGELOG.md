@@ -5,6 +5,25 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.24.0] — 2026-08-25
+
+### Added
+- **Subtle hover crosshair on the matrix.** Hovering a cell now tints the
+  border-lines that bound its column (left + right) and its row (top + bottom),
+  all the way up/left to the column and row headers, so you can trace which two
+  headers a distant cell belongs to. Hovering a header alone lights just that
+  one column or row. It works in edit mode too. Only existing border colours
+  change (no layout shift) and they fade with a 140 ms transition, so nothing
+  flickers. Colour is a single `--mx-cross` token. (M4.1)
+
+### Changed
+- **Matrix cells now share one uniform background** whether empty or filled —
+  the old empty-cell tint (`bg-slate-50/50` / dark `white/[0.03]`) is gone, so
+  every cell sits on the same `bg-surface` base. This is the clean canvas the M1
+  "Color by" band will sit on. The `matrix-grid__cell--has-messages` class stays
+  as a semantic hook (it has no CSS of its own); edit-mode drop-target rings are
+  unchanged. (M3)
+
 ## [6.23.1] — 2026-08-25
 
 ### Fixed

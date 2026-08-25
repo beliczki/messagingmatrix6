@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import { Copy, GripHorizontal, GripVertical, Plus } from "lucide-react";
 import {
@@ -253,9 +253,62 @@ export default function GridView({
   const rowReorderable = rowKind === "audience" ? true : topicReorderable;
   const colReorderable = colKind === "audience" ? true : topicReorderable;
 
+  // Hover crosshair: on the cell under the pointer, tint the border-lines that
+  // bound its column (this column's + the previous column's right border) and
+  // its row (this row's + the previous row's bottom border), plus the two
+  // headers. Only border-COLOR changes on already-present borders → zero layout
+  // shift, a clean CSS transition, and no conflict with edit-mode drop rings
+  // (those are box-shadow). Driven imperatively so hovering never re-renders the
+  // grid. Hovering a header alone lights just that one column/row.
+  const tableRef = useRef<HTMLTableElement>(null);
+  const crossRef = useRef<{ col: string | null; row: string | null }>({
+    col: null,
+    row: null,
+  });
+  const colKeyList = cols.map((c) => c.key);
+  const rowKeyList = rows.map((r) => r.key);
+
+  function paintCrosshair(col: string | null, row: string | null) {
+    const table = tableRef.current;
+    if (!table) return;
+    if (crossRef.current.col === col && crossRef.current.row === row) return;
+    crossRef.current = { col, row };
+    table
+      .querySelectorAll(".matrix-grid__x--edge-r, .matrix-grid__x--edge-b")
+      .forEach((el) =>
+        el.classList.remove("matrix-grid__x--edge-r", "matrix-grid__x--edge-b"),
+      );
+    if (col) {
+      const i = colKeyList.indexOf(col);
+      for (const k of [col, colKeyList[i - 1]].filter(Boolean) as string[])
+        table
+          .querySelectorAll(`[data-col-key="${CSS.escape(k)}"]`)
+          .forEach((el) => el.classList.add("matrix-grid__x--edge-r"));
+    }
+    if (row) {
+      const i = rowKeyList.indexOf(row);
+      for (const k of [row, rowKeyList[i - 1]].filter(Boolean) as string[])
+        table
+          .querySelectorAll(`[data-row-key="${CSS.escape(k)}"]`)
+          .forEach((el) => el.classList.add("matrix-grid__x--edge-b"));
+    }
+  }
+
+  function handleCrossOver(e: React.MouseEvent) {
+    const el = (e.target as HTMLElement).closest(
+      "[data-col-key],[data-row-key]",
+    ) as HTMLElement | null;
+    paintCrosshair(el?.dataset.colKey ?? null, el?.dataset.rowKey ?? null);
+  }
+
   const grid = (
     <div className="matrix-grid h-full overflow-auto">
-      <table className="border-separate border-spacing-0">
+      <table
+        ref={tableRef}
+        onMouseOver={handleCrossOver}
+        onMouseLeave={() => paintCrosshair(null, null)}
+        className="border-separate border-spacing-0"
+      >
         <thead className="matrix-grid__head">
           <tr>
             <th className="matrix-grid__corner sticky left-0 top-0 z-30 h-20 min-w-[180px] border-b border-r border-border bg-surface-alt p-0 text-xs font-semibold uppercase tracking-wide text-text-secondary">
@@ -311,6 +364,7 @@ export default function GridView({
                       "matrix-grid__col-header--target-disabled opacity-50",
                     isAudCol && audienceEdgeClasses(c as Audience),
                   )}
+                  data-col-key={c.key}
                   title={c.key}
                 >
                   <button
@@ -421,6 +475,7 @@ export default function GridView({
                   density === "dense" ? "min-w-[140px] p-0" : "min-w-[180px] p-0",
                   !transposed && audienceEdgeClasses(r as Audience, "right"),
                 )}
+                data-row-key={r.key}
                 title={r.key}
               >
                 <button
@@ -489,6 +544,8 @@ export default function GridView({
                       key={c.id}
                       audience={audKey}
                       topic={topKey}
+                      colKey={c.key}
+                      rowKey={r.key}
                       messages={list}
                       density={density}
                       onOpenMessage={onOpenMessage}
@@ -510,6 +567,8 @@ export default function GridView({
                     key={c.id}
                     audience={audKey}
                     topic={topKey}
+                    colKey={c.key}
+                    rowKey={r.key}
                     messages={list}
                     ghosts={ghosts}
                     density={density}
@@ -645,26 +704,34 @@ function HeaderDropZone({
 function PlainCell({
   audience,
   topic,
+  colKey,
+  rowKey,
   messages,
   density,
   onOpenMessage,
 }: {
   audience: string;
   topic: string;
+  colKey: string;
+  rowKey: string;
   messages: Message[];
   density: Density;
   onOpenMessage: (id: number) => void;
 }) {
   return (
     <td
+      data-col-key={colKey}
+      data-row-key={rowKey}
       className={clsx(
         "matrix-grid__cell border-b border-r border-border align-top",
         density === "dense"
           ? "matrix-grid__cell--dense w-7 min-w-7 max-w-7 p-0.5"
           : "min-w-[160px] p-1.5",
-        messages.length === 0
-          ? "bg-slate-50/50 dark:bg-white/[0.03]"
-          : "matrix-grid__cell--has-messages bg-surface",
+        // M3: uniform cell background (empty and filled alike) so the M1
+        // "Color by" band sits on a clean base; the has-messages class stays
+        // as a semantic hook (no CSS of its own).
+        "bg-surface",
+        messages.length > 0 && "matrix-grid__cell--has-messages",
       )}
       data-audience={audience}
       data-topic={topic}
@@ -692,6 +759,8 @@ function PlainCell({
 function EditableCell({
   audience,
   topic,
+  colKey,
+  rowKey,
   messages,
   ghosts,
   density,
@@ -702,6 +771,8 @@ function EditableCell({
 }: {
   audience: string;
   topic: string;
+  colKey: string;
+  rowKey: string;
   messages: Message[];
   ghosts: Message[];
   density: Density;
@@ -725,14 +796,17 @@ function EditableCell({
   return (
     <td
       ref={setNodeRef}
+      data-col-key={colKey}
+      data-row-key={rowKey}
       className={clsx(
         "matrix-grid__cell group border-b border-r border-border align-top",
         density === "dense"
           ? "matrix-grid__cell--dense w-7 min-w-7 max-w-7 p-0.5"
           : "min-w-[160px] p-1.5",
-        messages.length === 0
-          ? "bg-slate-50/50 dark:bg-white/[0.03]"
-          : "matrix-grid__cell--has-messages bg-surface",
+        // M3: uniform cell background (see PlainCell) — filled cells keep the
+        // has-messages hook; the drop-target rings below are unaffected.
+        "bg-surface",
+        messages.length > 0 && "matrix-grid__cell--has-messages",
         isOver &&
           !dropDisabled &&
           "matrix-grid__cell--drop-target ring-2 ring-emerald-400",

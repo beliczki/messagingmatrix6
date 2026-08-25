@@ -95,9 +95,9 @@ Kiindulás: `EditModePanel.tsx:88-96` — a Delete gomb be van drótozva `disabl
 
 **User-döntés (2026-08-17):** státusz-zár OK; creative-linked eset = **tiltás** (nem néma unlink); egy dialog két akciógombbal. Így ment ki.
 
-### M3 — Üres-vs-tele cella szín-különbség megszüntetése (triviális)
+### M3 — Üres-vs-tele cella szín-különbség megszüntetése (✅ KÉSZ, 6.24.0, 2026-08-25)
 Cél: egységes cella-háttér, hogy a color-by (M1) tiszta alapon üljön.
-- [ ] **M3.1** `GridView.tsx:456-458` (PlainCell) + `:524-526` (EditableCell): egy bg mindkét ágra (a `matrix-grid__cell--has-messages` class maradhat egyéb hookként). Az edit-mode drop-target ring maradjon (`:527-532`).
+- [x] **M3.1** `GridView.tsx` PlainCell (`:665`) + EditableCell (`:733`): a `messages.length===0 ? "bg-slate-50/50 dark:bg-white/[0.03]" : "…bg-surface"` feltételes háttér lecserélve egységes `"bg-surface"`-re; a `matrix-grid__cell--has-messages` osztály megmarad szemantikus hookként (nincs saját CSS-e, sehol nem hivatkozzák CSS-ből). A drop-target/reject ring (EditableCell) érintetlen. `tsc` exit 0.
 
 ### M2 — "Hide inactive" checkbox a SAROK-cellába (audience + topic sor/oszlop)
 Cél: INACTIVE audience/topic sorok/oszlopok elrejtése (MC-t soha). **User-döntés (2026-08-25): a checkbox a mátrix bal-felső SAROK-cellájába (`matrix-grid__corner`, `GridView.tsx:201`) kerül a transpose-gomb mellé, NEM a toolbarba.**
@@ -133,7 +133,7 @@ Cél: audience-oszlopok színezése strategy/platform szerint, legenddel.
 - [ ] **M1.3** Szín **band az audience oszlop-fejlécen** (nem a cellán); `Both` = két vékony sáv; kis legend. ⚠️ OPEN Q: `Both` vizuál + header-only.
 
 ### M4 — Crosshair highlight (sor+oszlop) hover + click-pin
-- [ ] **M4.1** `hoveredCell {row,col}` state a `GridView`-ban; `onMouseEnter` → teljes sor+oszlop halvány kiemelés (fejlécekkel), layout-shift nélkül. (Ma nincs crosshair-state — net-új.)
+- [x] **M4.1 (✅ KÉSZ, 6.24.0, 2026-08-25)** Él-rail crosshair, NEM state-alapú. Imperatív (`GridView.paintCrosshair` + delegált `onMouseOver`/`onMouseLeave` a `<table>`-ön, ref) → hoverkor nincs grid-újrarajzolás. `data-col-key`/`data-row-key` a 2 header-`<th>`-re + mindkét cella-`<td>`-re; a `c`+`c-1` oszlop `border-right`-ja és a `r`+`r-1` sor `border-bottom`-ja kap `--mx-cross` színt (`matrix-grid__x--edge-r`/`--edge-b`, unlayered CSS). Csak meglévő border SZÍNE vált → **0 layout-shift**, `transition: border-color 140ms` → nem villódzik. Edit módban is megy (border-color ≠ ring box-shadow). Header-hover = csak az az oszlop/sor. Korlát: legszélső bal oszlop / legfelső sor külső élét a sticky header adja (nincs `c-1`/`r-1`).
 - [ ] **M4.2** Click-to-pin: kattintásra pinnel escape/újraklikkig; a chip-open klikket nem nyeli el. ⚠️ OPEN Q: pin+hover mindkettő.
 
 ### M5 — Detail-view audience header: strategy tag + lineitem_id
@@ -458,3 +458,10 @@ Séma-migráció (channels tábla) → **migrate+kód egy passzban a boxon** (`d
 - **Teszt-állapot:** tsc tiszta (lokál + box build exit 0), unit **181/181 zöld**. Új integ-tesztek (audiences: reverse/permute-slots/foreign-drop/no-op; topics: permute-slots) MEGÍRVA, de **nem futottak** — nincs se Docker daemon, se lokális PG-szerver (csak libpq kliens a gépen). ⏳ Integ-suite lefuttatása hátravan, amint a Docker fenn van (`npm run test:fast`).
 - **Bump:** `6.22.2` → `6.23.0` (minor: 2 új route + új edit-mode UI-akció + új sarok-kontroll). CHANGELOG + component-inventory frissítve.
 - **DEPLOYOLVA 6.23.0 (2026-08-25):** commit `12b1633`, push origin main, box `/var/www/mm6-erste` git pull `0956f82→12b1633` + `npm run build` (exit 0) + `pm2 restart mm6-erste` → online. Nincs séma-migráció. Health: `/`→307, `/mcp`→401, `/api/audiences/reorder` GET→405 (csak POST), `/api/topics/reorder` POST no-auth→401. `~$` Office lock-fájl gitignore-olva.
+
+### 2026-08-25 — Egységes cella-háttér (M3) + hover crosshair (M4.1) — 6.24.0
+- **6.23.1 (előző, addig nem checkpointolt):** audience strategy/platform szín-strip a jobb élre került transposed nézetben (audience=sor), nem az aljára — `audienceEdgeClasses` bottom/right ág + right-edge CSS-variánsok. Commit `245d58d`.
+- **M3 ✅** — `GridView.tsx` PlainCell + EditableCell egységes `bg-surface` (üres és tele cella azonos háttér); a feltételes `bg-slate-50/50 dark:white/[0.03]` üres-tint törölve. A `matrix-grid__cell--has-messages` osztály marad szemantikus hookként (nincs saját CSS-e). Tiszta alap az M1 „Color by"-hoz.
+- **M4.1 ✅** — hover crosshair él-rail-ekkel. Imperatív (`paintCrosshair` + delegált `onMouseOver`/`onMouseLeave` a `<table>`-ön), nincs grid re-render hoverkor. Oszlop bal+jobb (`c`+`c-1` `border-right`) és sor alsó+felső (`r`+`r-1` `border-bottom`) él kap `--mx-cross` színt; csak border-COLOR vált → 0 layout-shift, `transition: border-color 140ms` → nem villódzik. Edit módban is megy (nem ütközik a drop-ring box-shadow-jával). Header-hover = csak az az oszlop/sor. `data-col-key`/`data-row-key` a headereken + cellákon. Új CSS-token `--mx-cross` (light `#0ea5e9` / dark `#38bdf8`), unlayered mátrix-blokk.
+- **Verifikáció:** `tsc --noEmit` exit 0. Vizuális check a boxon/dev-en (nem futott le böngészős smoke).
+- **Bump:** `6.23.1` → `6.24.0` (minor — M4.1 új feature; M3 CSS-tisztítás egybevonva). CHANGELOG + component-inventory frissítve. Nincs séma-migráció.

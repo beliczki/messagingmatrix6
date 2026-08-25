@@ -67,16 +67,9 @@ function applyLive(laf: LookAndFeel) {
   for (const k of STATUS_KEYS) {
     root.style.setProperty(STATUS_VAR[k], laf.statusColors[k]);
   }
-  applyColorMode(laf.colorMode);
-}
-
-function applyColorMode(mode: "light" | "dark" | "system") {
-  const root = document.documentElement;
-  const dark =
-    mode === "dark" ||
-    (mode === "system" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
-  root.classList.toggle("dark", dark);
+  // Colour mode (light/dark) is no longer managed here — it is a per-browser
+  // toggle in the sidebar (localStorage mm6_theme + the `.dark` class). Applying
+  // it here would clobber that choice whenever brand colours are saved.
 }
 
 export function DesignTab() {
@@ -111,12 +104,7 @@ export function DesignTab() {
       if (!r.ok) throw new Error("save failed");
       return r.json();
     },
-    onSuccess: (_data, laf) => {
-      try {
-        localStorage.setItem("mm6_theme", laf.colorMode);
-      } catch {
-        // ignore storage failures
-      }
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["config", "lookAndFeel"] });
     },
   });
@@ -234,13 +222,6 @@ export function DesignTab() {
         />
       </Section>
 
-      <Section title="Color mode">
-        <ColorModeField
-          value={draft.colorMode}
-          onChange={(v) => setField("colorMode", v)}
-        />
-      </Section>
-
       <Section title="Cobranding">
         <CheckboxField
           label="Enable cobranding logo"
@@ -342,50 +323,6 @@ function TextField({
         className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
       />
     </label>
-  );
-}
-
-function ColorModeField({
-  value,
-  onChange,
-}: {
-  value: "light" | "dark" | "system";
-  onChange: (v: "light" | "dark" | "system") => void;
-}) {
-  const options: Array<{ key: "light" | "dark" | "system"; label: string }> = [
-    { key: "light", label: "Light" },
-    { key: "dark", label: "Dark" },
-    { key: "system", label: "System" },
-  ];
-  return (
-    <div className="form-field color-mode-field flex items-center gap-3">
-      <p className="form-field__label text-sm font-medium text-slate-700 dark:text-slate-300">
-        Theme
-      </p>
-      <div
-        className="color-mode-field__pill inline-flex rounded-md border border-slate-300 bg-white p-0.5 dark:border-slate-600 dark:bg-slate-800"
-        role="radiogroup"
-        aria-label="Color mode"
-      >
-        {options.map((o) => (
-          <button
-            key={o.key}
-            type="button"
-            role="radio"
-            aria-checked={value === o.key}
-            onClick={() => onChange(o.key)}
-            className={
-              "color-mode-field__btn rounded-[4px] px-3 py-1 text-xs font-medium transition-colors " +
-              (value === o.key
-                ? "bg-brand-button text-white"
-                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700")
-            }
-          >
-            {o.label}
-          </button>
-        ))}
-      </div>
-    </div>
   );
 }
 

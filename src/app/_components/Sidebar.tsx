@@ -16,8 +16,10 @@ import {
   Rss,
   Type,
   LogOut,
+  Sun,
+  Moon,
 } from "lucide-react";
-import { useState, type ComponentType, type SVGProps } from "react";
+import { useEffect, useState, type ComponentType, type SVGProps } from "react";
 import clsx from "clsx";
 
 type NavUser = { email: string; role: string };
@@ -52,6 +54,24 @@ type Props = {
 export function Sidebar({ user, client, version, onOpenUsers, onOpenSettings }: Props) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+
+  // Light/dark toggle — per-browser, mirrors the existing mm6_theme mechanism
+  // (localStorage + a `.dark` class on <html>, set pre-hydration by the inline
+  // script in the root layout). Light/dark only; "system" is dropped. Init from
+  // the class the inline script already applied to avoid a hydration flash.
+  const [dark, setDark] = useState(false);
+  useEffect(() => {
+    setDark(document.documentElement.classList.contains("dark"));
+  }, []);
+  function setTheme(next: boolean) {
+    setDark(next);
+    document.documentElement.classList.toggle("dark", next);
+    try {
+      localStorage.setItem("mm6_theme", next ? "dark" : "light");
+    } catch {
+      // ignore storage failures
+    }
+  }
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -111,15 +131,6 @@ export function Sidebar({ user, client, version, onOpenUsers, onOpenSettings }: 
             </Link>
           );
         })}
-        <p
-          className={clsx(
-            "app-sidebar__version mt-1.5 select-none text-[10px] font-medium text-slate-400",
-            collapsed ? "text-center" : "px-2.5",
-          )}
-          title={`Version ${version}`}
-        >
-          v{version}
-        </p>
       </nav>
 
       <div
@@ -167,6 +178,78 @@ export function Sidebar({ user, client, version, onOpenUsers, onOpenSettings }: 
           <LogOut className="size-4" />
           {!collapsed ? <span>Sign out</span> : null}
         </button>
+
+        <div className="app-sidebar__theme mt-2 border-t border-slate-100 pt-2 dark:border-slate-800">
+          {collapsed ? (
+            <div className="flex flex-col items-center gap-3">
+              {/* rotated version — the outer span reserves layout height (CSS
+                  rotate does not), the inner is turned 90° CCW so it reads
+                  bottom-to-top without overflowing the 56px rail. */}
+              <span className="app-sidebar__version flex h-11 w-full items-center justify-center">
+                <span
+                  className="-rotate-90 whitespace-nowrap font-mono text-[10px] leading-none text-slate-400"
+                  title={`Version ${version}`}
+                >
+                  v{version}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setTheme(!dark)}
+                title={dark ? "Light mode" : "Dark mode"}
+                aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
+                className="app-sidebar__theme-round flex size-8 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition-colors hover:text-slate-900 dark:bg-slate-800 dark:text-slate-300 dark:hover:text-white"
+              >
+                {dark ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div
+                className="app-sidebar__theme-pill inline-flex rounded-md border border-slate-300 bg-white p-0.5 dark:border-slate-600 dark:bg-slate-800"
+                role="radiogroup"
+                aria-label="Theme"
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={!dark}
+                  onClick={() => setTheme(false)}
+                  title="Light mode"
+                  className={clsx(
+                    "app-sidebar__theme-btn flex size-6 items-center justify-center rounded-[4px] transition-colors",
+                    !dark
+                      ? "bg-brand-button text-white"
+                      : "text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700",
+                  )}
+                >
+                  <Sun className="size-3.5" />
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={dark}
+                  onClick={() => setTheme(true)}
+                  title="Dark mode"
+                  className={clsx(
+                    "app-sidebar__theme-btn flex size-6 items-center justify-center rounded-[4px] transition-colors",
+                    dark
+                      ? "bg-brand-button text-white"
+                      : "text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700",
+                  )}
+                >
+                  <Moon className="size-3.5" />
+                </button>
+              </div>
+              <span
+                className="app-sidebar__version font-mono text-[10px] text-slate-400"
+                title={`Version ${version}`}
+              >
+                v{version}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
     </aside>
   );

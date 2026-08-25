@@ -5,6 +5,27 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.25.0] — 2026-08-25
+
+### Added
+- **Light/dark theme toggle in the sidebar footer** (adopted from ConfAI2's
+  placement). Expanded: a two-position Sun/Moon pill with the version beside it;
+  collapsed: a round icon button with the version rotated vertically above it.
+  It flips the `.dark` class and writes `localStorage.mm6_theme` per browser —
+  instant, no server round-trip.
+
+### Changed
+- **The theme (colour-mode) switcher moved out of Settings › Design into the
+  sidebar**, and the "System" option was dropped (light/dark only). Design saves
+  no longer touch the colour mode, so changing brand colours can't flip your
+  theme. The version number also moved from the nav into the fixed sidebar
+  footer.
+- **Matrix hover crosshair is now a neutral grey** (was blue) — a mid grey in
+  light mode, a light grey in dark, clearly darker/lighter than the faint
+  gridlines. Single `--mx-cross` token.
+- **Dense-view dot clusters are vertically centred** in the row height instead
+  of top-aligned, so a cell with one or two dots lines up with its neighbours.
+
 ## [6.24.0] — 2026-08-25
 
 ### Added

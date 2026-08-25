@@ -408,8 +408,11 @@ html.dark {
    transitions cleanly. --edge-r paints a column's left+right guide (this and
    the previous column's right border); --edge-b a row's top+bottom guide (this
    and the previous row's bottom border). Toggled in GridView.paintCrosshair. */
-:root { --mx-cross: #0ea5e9; }
-html.dark { --mx-cross: #38bdf8; }
+/* Grey guide, distinctly darker than the faint gridlines (border-default is
+   rgba(0,0,0,0.1) light / rgba(255,255,255,0.1) dark) — ~a mid grey in light,
+   a light grey in dark. Not a brand colour. */
+:root { --mx-cross: rgba(0, 0, 0, 0.4); }
+html.dark { --mx-cross: rgba(255, 255, 255, 0.4); }
 .matrix-grid__cell,
 .matrix-grid__col-header,
 .matrix-grid__row-header { transition: border-color 140ms ease; }

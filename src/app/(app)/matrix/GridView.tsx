@@ -723,10 +723,11 @@ function PlainCell({
       data-col-key={colKey}
       data-row-key={rowKey}
       className={clsx(
-        "matrix-grid__cell border-b border-r border-border align-top",
+        "matrix-grid__cell border-b border-r border-border",
         density === "dense"
-          ? "matrix-grid__cell--dense w-7 min-w-7 max-w-7 p-0.5"
-          : "min-w-[160px] p-1.5",
+          ? // dense: vertically centre the dot cluster in the row height
+            "matrix-grid__cell--dense w-7 min-w-7 max-w-7 p-0.5 align-middle"
+          : "min-w-[160px] p-1.5 align-top",
         // M3: uniform cell background (empty and filled alike) so the M1
         // "Color by" band sits on a clean base; the has-messages class stays
         // as a semantic hook (no CSS of its own).
@@ -799,10 +800,11 @@ function EditableCell({
       data-col-key={colKey}
       data-row-key={rowKey}
       className={clsx(
-        "matrix-grid__cell group border-b border-r border-border align-top",
+        "matrix-grid__cell group border-b border-r border-border",
         density === "dense"
-          ? "matrix-grid__cell--dense w-7 min-w-7 max-w-7 p-0.5"
-          : "min-w-[160px] p-1.5",
+          ? // dense: vertically centre the dot cluster in the row height
+            "matrix-grid__cell--dense w-7 min-w-7 max-w-7 p-0.5 align-middle"
+          : "min-w-[160px] p-1.5 align-top",
         // M3: uniform cell background (see PlainCell) — filled cells keep the
         // has-messages hook; the drop-target rings below are unaffected.
         "bg-surface",

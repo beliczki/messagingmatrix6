@@ -1,6 +1,6 @@
 {
   "name": "messagingmatrix",
-  "version": "6.26.0",
+  "version": "6.27.0",
   "private": true,
   "scripts": {
     "dev": "PORT=6001 ACTIVE_CLIENT_KEY=erste next dev",
@@ -14,7 +14,7 @@
     "start:telekom": "PORT=6002 ACTIVE_CLIENT_KEY=telekom next start",
     "start:proficio": "PORT=6003 ACTIVE_CLIENT_KEY=proficio next start",
     "start:demo": "PORT=6000 ACTIVE_CLIENT_KEY=demo next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

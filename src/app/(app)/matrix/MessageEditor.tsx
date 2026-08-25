@@ -709,7 +709,7 @@ export default function MessageEditor({
               flexShrink: 0,
             }}
           >
-            <nav className="tab-bar flex h-10 shrink-0 items-stretch border-b border-slate-100 bg-slate-50/60 px-2">
+            <nav className="tab-bar flex h-10 shrink-0 items-stretch border-b border-slate-100 bg-slate-50 px-2">
               <TabBtn active={tab === "naming"} onClick={() => setTab("naming")} icon={<Tag className="size-3.5" />}>
                 Naming
               </TabBtn>
@@ -1027,7 +1027,7 @@ function topicRows(top: Topic | undefined): EntityRow[] {
 
 function EntityBlock({ title, rows }: { title: string; rows: EntityRow[] }) {
   return (
-    <div className="naming-tab__entity-block rounded-md border border-slate-200 bg-slate-50/50 p-3">
+    <div className="naming-tab__entity-block rounded-md border border-slate-200 bg-slate-50 p-3">
       <div className="naming-tab__entity-title mb-2 text-[10px] font-medium uppercase tracking-wider text-slate-500">
         {title}
       </div>

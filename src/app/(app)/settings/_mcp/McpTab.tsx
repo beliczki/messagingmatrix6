@@ -130,7 +130,7 @@ export function McpTab() {
         </DefRow>
         <DefRow label="claude.ai connector">
           <code className="font-mono text-xs">/mcp?secret=mcp_…</code> (URL
-          param fallback for clients that can't set a header)
+          param fallback for clients that can&apos;t set a header)
         </DefRow>
         <DefRow label="Mismatch">
           Bearer resolves to client ≠ active client → <code>401</code>

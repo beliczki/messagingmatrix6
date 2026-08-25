@@ -78,12 +78,14 @@ export function MatrixIframePreview({
   size,
   mode,
   templateMeta,
+  quietConsole,
 }: {
   message: Message;
   templateName: string;
   size: string;
   mode: "fill-width" | "fit-rect";
   templateMeta?: TemplatePreviewMeta;
+  quietConsole?: boolean;
 }) {
   // nonDCO static-image MC: no template, a creative image in image1. Show the
   // image directly instead of iframe-rendering (which would POST /api/render
@@ -115,6 +117,7 @@ export function MatrixIframePreview({
       templateName={templateName}
       size={size}
       mode={mode}
+      quietConsole={quietConsole}
     />
   );
 }
@@ -161,11 +164,13 @@ function MatrixIframeRender({
   templateName,
   size,
   mode,
+  quietConsole,
 }: {
   message: Message;
   templateName: string;
   size: string;
   mode: "fill-width" | "fit-rect";
+  quietConsole?: boolean;
 }) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
@@ -215,6 +220,7 @@ function MatrixIframeRender({
         message,
         inline: true,
         skipAnimations: false,
+        quietConsole: quietConsole === true,
       }),
     })
       .then(async (r) => {
@@ -241,7 +247,7 @@ function MatrixIframeRender({
     return () => {
       cancelled = true;
     };
-  }, [visible, html, message.id, message.version, templateName, size]);
+  }, [visible, html, message.id, message.version, templateName, size, quietConsole]);
 
   function retry() {
     setHtml(null);
@@ -317,12 +323,14 @@ export function MatrixIframeTile({
   templateName,
   size,
   templateMeta,
+  quietConsole,
   onOpen,
 }: {
   message: Message;
   templateName: string;
   size: string;
   templateMeta?: TemplatePreviewMeta;
+  quietConsole?: boolean;
   onOpen: () => void;
 }) {
   return (
@@ -337,6 +345,7 @@ export function MatrixIframeTile({
         size={size}
         mode="fill-width"
         templateMeta={templateMeta}
+        quietConsole={quietConsole}
       />
     </button>
   );
@@ -349,6 +358,7 @@ export function MatrixIframeCard({
   size,
   product,
   templateMeta,
+  quietConsole,
   onOpen,
 }: {
   message: Message;
@@ -356,6 +366,7 @@ export function MatrixIframeCard({
   size: string;
   product: string | null;
   templateMeta?: TemplatePreviewMeta;
+  quietConsole?: boolean;
   onOpen: () => void;
 }) {
   const mcLabel = `MC${message.number}${message.variant ?? ""}`;
@@ -372,6 +383,7 @@ export function MatrixIframeCard({
           size={size}
           mode="fit-rect"
           templateMeta={templateMeta}
+          quietConsole={quietConsole}
         />
       </div>
       <div className="creative-card__meta p-2 text-xs">
@@ -403,6 +415,7 @@ export function MatrixIframeListRow({
   createdAt,
   updatedAt,
   templateMeta,
+  quietConsole,
   onOpen,
 }: {
   message: Message;
@@ -412,6 +425,7 @@ export function MatrixIframeListRow({
   createdAt: string;
   updatedAt: string;
   templateMeta?: TemplatePreviewMeta;
+  quietConsole?: boolean;
   onOpen: () => void;
 }) {
   const mcLabel = `MC${message.number}${message.variant ?? ""}`;
@@ -432,6 +446,7 @@ export function MatrixIframeListRow({
           size={size}
           mode="fit-rect"
           templateMeta={templateMeta}
+          quietConsole={quietConsole}
         />
       </div>
       <div className="creative-row__mc truncate border-r border-slate-100 px-3 py-2 font-mono text-[11px] font-semibold text-slate-900">

@@ -23,6 +23,7 @@ export const POST = withSession(async ({ req, claims }) => {
 
   const inline = body?.inline === true;
   const skipAnimations = body?.skipAnimations === true;
+  const quietConsole = body?.quietConsole === true;
 
   try {
     const { html } = renderTemplate({
@@ -32,6 +33,7 @@ export const POST = withSession(async ({ req, claims }) => {
       textFormatting,
       inline,
       skipAnimations,
+      quietConsole,
     });
     return new NextResponse(html, {
       status: 200,

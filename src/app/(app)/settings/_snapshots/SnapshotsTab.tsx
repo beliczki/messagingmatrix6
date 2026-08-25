@@ -251,7 +251,8 @@ function RestoreConfirmModal({
           messages, assets, creatives, text-formatting rules, reporting, share
           galleries, files and users for this client, then re-insert{" "}
           {totalRows} rows from snapshot{" "}
-          <strong>"{snapshot.label}"</strong> ({snapshot.createdAt.slice(0, 19)}).
+          <strong>&quot;{snapshot.label}&quot;</strong> (
+          {snapshot.createdAt.slice(0, 19)}).
         </p>
         <p className="mt-2 text-xs text-slate-500">
           Both archived and live rows are replaced. Config (look-and-feel,

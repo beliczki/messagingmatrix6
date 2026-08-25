@@ -5,6 +5,36 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.27.0] — 2026-08-25
+
+### Fixed
+- **CRITICAL: the matrix no longer crashes the whole app when a filter matches
+  zero rows/columns.** A `t:`/`a:`/`p:`/`s:`/`mc:` filter that pruned an axis to
+  empty hit a React "rendered fewer hooks" crash (two `useRef`s sat below the
+  empty-axis early return, added in 6.24.0) that white-screened the entire app.
+  The refs now sit above the return. (Bug hunt Finding 1)
+- **Dark mode gaps closed:** the DCO/nonDCO toggle, the MC-editor tab row, the
+  audience/topic property panels, and the feed-export warning/success boxes now
+  adapt to dark mode. The feed "Build & Download XLSX" button inverts to white
+  in dark like the Creative Library upload button. The sidebar version is grey
+  (was a bluish `slate-400`) and the switcher/version sit above the user block
+  with no divider line.
+- **"N MCs missing previews" badge counts distinct MC labels**, not message
+  rows — a single MC spans many rows (one per audience), so the count was
+  massively inflated. (Bug hunt Finding 6)
+
+### Added
+- **Route-level error boundary** (`(app)/error.tsx`): a render crash on a page
+  now keeps the sidebar/shell alive and offers Try-again / Reload instead of a
+  blank screen. (Bug hunt Finding 2)
+- **ESLint is wired up** (flat config, `react-hooks/rules-of-hooks` at error) —
+  the static rule that catches the Finding 1 crash pattern. `npm run lint` runs
+  it; the build enforces it. (Bug hunt Finding 3)
+- **Grid previews silence the ad template's own console logging.** Creative
+  Library tiles pass `quietConsole`, so the ~40-50 debug lines each banner
+  prints no longer flood the parent DevTools console (~2400/page). warn/error
+  stay; the editor + share gallery keep full logs. (Bug hunt Finding 4)
+
 ## [6.26.0] — 2026-08-25
 
 ### Added

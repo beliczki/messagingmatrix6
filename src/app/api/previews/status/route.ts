@@ -65,20 +65,24 @@ export const GET = withSession(async ({ req, claims }) => {
 
   const { stale, fresh } = await collectStalePreviews(claims.cid);
 
-  const byMessage = new Map<number, { mcLabel: string; sizes: string[] }>();
+  // Group by MC LABEL, not by message row. A single MC number+variant
+  // legitimately exists as many `messages` rows (one per audience column — card
+  // fan-out = copy), so keying by message.id counted the same MC many times and
+  // the "N MCs missing previews" badge over-reported. Union the sizes per label.
+  const byLabel = new Map<string, Set<string>>();
   for (const item of stale) {
-    const entry = byMessage.get(item.message.id) ?? {
-      mcLabel: mcLabelFor(item.message),
-      sizes: [],
-    };
-    entry.sizes.push(item.size);
-    byMessage.set(item.message.id, entry);
+    const label = mcLabelFor(item.message);
+    const sizes = byLabel.get(label) ?? new Set<string>();
+    sizes.add(item.size);
+    byLabel.set(label, sizes);
   }
-  const offenders = [...byMessage.values()].sort((a, b) =>
-    a.mcLabel.localeCompare(b.mcLabel),
-  );
+  const offenders = [...byLabel.entries()]
+    .map(([mcLabel, sizes]) => ({ mcLabel, sizes: [...sizes].sort() }))
+    .sort((a, b) => a.mcLabel.localeCompare(b.mcLabel));
 
   return NextResponse.json({
+    // staleCount stays a per-row-per-size count (genuine); mcCount is now the
+    // number of DISTINCT MC labels with at least one absent/stale size.
     staleCount: stale.length,
     freshCount: fresh,
     mcCount: offenders.length,

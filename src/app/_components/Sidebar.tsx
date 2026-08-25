@@ -159,7 +159,7 @@ export function Sidebar({ user, client, version, onOpenUsers, onOpenSettings }: 
           collapsed ? "p-2 pb-12" : "p-3 pb-12",
         )}
       >
-        <div className="app-sidebar__theme mb-2 border-b border-slate-100 pb-2 dark:border-slate-800">
+        <div className="app-sidebar__theme mb-3">
           {collapsed ? (
             <div className="flex flex-col items-center gap-3">
               {/* rotated version — the outer span reserves layout height (CSS

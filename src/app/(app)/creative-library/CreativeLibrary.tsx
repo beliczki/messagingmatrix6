@@ -595,6 +595,7 @@ export default function CreativeLibrary() {
                             templateName={c.liveTemplateName}
                             size={c.liveSize}
                             templateMeta={templateMetaFor(templateMap.get(c.liveTemplateName))}
+                            quietConsole
                             onOpen={() => setDetailId(c.id)}
                           />
                         ) : (
@@ -626,6 +627,7 @@ export default function CreativeLibrary() {
                           size={c.liveSize}
                           product={c.product}
                           templateMeta={templateMetaFor(templateMap.get(c.liveTemplateName))}
+                          quietConsole
                           onOpen={() => setDetailId(c.id)}
                         />
                       ) : (
@@ -659,6 +661,7 @@ export default function CreativeLibrary() {
                           createdAt={c.createdAt}
                           updatedAt={c.updatedAt}
                           templateMeta={templateMetaFor(templateMap.get(c.liveTemplateName))}
+                          quietConsole
                           onOpen={() => setDetailId(c.id)}
                         />
                       ) : (

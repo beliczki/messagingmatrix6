@@ -52,7 +52,7 @@ function categoryDir(cat: StorageCategory): string {
 
 // --- Object-store driver -------------------------------------------------
 
-function useS3(): boolean {
+function s3Enabled(): boolean {
   return !!process.env.S3_BUCKET;
 }
 
@@ -62,7 +62,7 @@ function s3(): S3Client {
     const endpoint = process.env.S3_ENDPOINT;
     const accessKeyId = process.env.S3_ACCESS_KEY_ID;
     const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY;
-    // S3_BUCKET is set (useS3 is true) but the rest of the config is missing —
+    // S3_BUCKET is set (s3Enabled is true) but the rest of the config is missing —
     // fail loud rather than build a client that 403s with a cryptic message.
     if (!endpoint || !accessKeyId || !secretAccessKey) {
       throw new Error(
@@ -121,7 +121,7 @@ export async function writeFile(
   const filename = `${sha.slice(0, 16)}-${crypto.randomBytes(4).toString("hex")}${ext}`;
   const rel = path.join(dir, filename);
 
-  if (useS3()) {
+  if (s3Enabled()) {
     await s3().send(
       new PutObjectCommand({ Bucket: bucket(), Key: toKey(rel), Body: buffer }),
     );
@@ -142,7 +142,7 @@ export function resolveStoragePath(rel: string): string {
 }
 
 export async function readFileBytes(rel: string): Promise<Buffer> {
-  if (useS3()) {
+  if (s3Enabled()) {
     const res = await s3().send(
       new GetObjectCommand({ Bucket: bucket(), Key: toKey(rel) }),
     );
@@ -153,7 +153,7 @@ export async function readFileBytes(rel: string): Promise<Buffer> {
 }
 
 export async function deleteStorageFile(rel: string): Promise<void> {
-  if (useS3()) {
+  if (s3Enabled()) {
     // S3 DeleteObject is idempotent — no error on a missing key.
     await s3().send(
       new DeleteObjectCommand({ Bucket: bucket(), Key: toKey(rel) }),

@@ -47,7 +47,7 @@ export default function MatrixToolbar(p: Props) {
             onClick={() => p.setFilters({ ...p.filters, axis: ax.key })}
             className={`matrix-axis-toggle__btn px-2.5 py-1 ${
               p.filters.axis === ax.key
-                ? "bg-slate-800 text-white"
+                ? "bg-slate-900 text-white"
                 : "bg-white text-slate-600 hover:bg-slate-100"
             }`}
           >

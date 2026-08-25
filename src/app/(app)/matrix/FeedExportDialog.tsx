@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, AlertTriangle, CheckCircle2 } from "lucide-react";
@@ -148,7 +149,7 @@ export default function FeedExportDialog({
               type="button"
               onClick={() => createM.mutate()}
               disabled={createM.isPending || previewQ.isLoading}
-              className="toolbar-btn--primary flex items-center gap-2 rounded-md bg-brand-button px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
+              className="toolbar-btn--primary flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
             >
               <Download className="size-4" />
               {createM.isPending ? "Building…" : "Build & Download XLSX"}
@@ -307,8 +308,8 @@ function PreviewBlock({
       <div
         className={
           action.tone === "ok"
-            ? "rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
-            : "rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+            ? "rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
+            : "rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
         }
       >
         <div className="flex items-center gap-2 font-medium">
@@ -375,8 +376,8 @@ function PostEmitView({
       <div
         className={
           action.tone === "ok"
-            ? "rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800"
-            : "rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+            ? "rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-200"
+            : "rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200"
         }
       >
         <div className="flex items-center gap-2 font-medium">
@@ -450,9 +451,9 @@ function PostEmitView({
             its detail page
           </button>{" "}
           or the{" "}
-          <a href="/feeds" className="font-medium text-blue-600 hover:underline">
+          <Link href="/feeds" className="font-medium text-blue-600 hover:underline">
             Feeds list
-          </a>
+          </Link>
           .
         </p>
       </div>

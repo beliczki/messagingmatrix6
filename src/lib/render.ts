@@ -36,6 +36,14 @@ export type RenderInput = {
    * editor preview "skip animation" toggle. Spec §6.3.
    */
   skipAnimations?: boolean;
+  /**
+   * Silence the template's own console.log/debug/info in the rendered output
+   * (console.warn / console.error are kept). Used by grid previews (Creative
+   * Library) where hundreds of same-origin `srcDoc` iframes would otherwise
+   * flood the parent DevTools console. Off for the editor + share gallery,
+   * where the template's logs are useful.
+   */
+  quietConsole?: boolean;
 };
 
 export type RenderResult = {
@@ -155,6 +163,10 @@ export function renderTemplate(input: RenderInput): RenderResult {
     html = injectSkipAnimations(html);
   }
 
+  if (input.quietConsole) {
+    html = injectQuietConsole(html);
+  }
+
   return { html };
 }
 
@@ -205,6 +217,19 @@ function injectSkipAnimations(html: string): string {
 </style>`;
   if (/<\/head>/i.test(html)) {
     return html.replace(/<\/head>/i, `${block}\n</head>`);
+  }
+  return block + html;
+}
+
+// No-ops console.log/debug/info inside the preview iframe so the ad template's
+// own verbose instrumentation (~40-50 lines/banner) doesn't reach the parent
+// console — the grid renders hundreds of these same-origin srcDoc iframes.
+// warn/error stay so genuine template failures still surface. Injected at the
+// very start of <head> so it runs before any template script logs.
+function injectQuietConsole(html: string): string {
+  const block = `<script data-mm6-quiet-console>(function(){var n=function(){};console.log=n;console.debug=n;console.info=n;})();</script>`;
+  if (/<head[^>]*>/i.test(html)) {
+    return html.replace(/(<head[^>]*>)/i, `$1\n${block}`);
   }
   return block + html;
 }

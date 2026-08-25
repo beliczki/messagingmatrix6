@@ -205,6 +205,16 @@ export default function GridView({
     return s;
   }, [editApi.selection.mcIds, messageById]);
 
+  // Hover-crosshair refs. These MUST stay above the empty-axis early return
+  // below: a filter that prunes an axis to zero rows/cols re-renders this same
+  // instance down the early-return path, and any hook declared *after* the
+  // return would change the hook count → React #300 ("rendered fewer hooks").
+  const tableRef = useRef<HTMLTableElement>(null);
+  const crossRef = useRef<{ col: string | null; row: string | null }>({
+    col: null,
+    row: null,
+  });
+
   if (audiences.length === 0 || topics.length === 0) {
     return (
       <div className="p-8 text-center text-sm text-slate-500">
@@ -259,12 +269,8 @@ export default function GridView({
   // headers. Only border-COLOR changes on already-present borders → zero layout
   // shift, a clean CSS transition, and no conflict with edit-mode drop rings
   // (those are box-shadow). Driven imperatively so hovering never re-renders the
-  // grid. Hovering a header alone lights just that one column/row.
-  const tableRef = useRef<HTMLTableElement>(null);
-  const crossRef = useRef<{ col: string | null; row: string | null }>({
-    col: null,
-    row: null,
-  });
+  // grid. Hovering a header alone lights just that one column/row. (The refs are
+  // declared above the empty-axis early return — see the note there.)
   const colKeyList = cols.map((c) => c.key);
   const rowKeyList = rows.map((r) => r.key);
 

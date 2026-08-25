@@ -199,7 +199,7 @@ export function Sidebar({ user, client, version, onOpenUsers, onOpenSettings }: 
                   className={clsx(
                     "app-sidebar__theme-btn flex size-6 items-center justify-center rounded-[4px] transition-colors",
                     !dark
-                      ? "bg-brand-button text-white"
+                      ? "bg-slate-900 text-white"
                       : "text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700",
                   )}
                 >
@@ -214,7 +214,7 @@ export function Sidebar({ user, client, version, onOpenUsers, onOpenSettings }: 
                   className={clsx(
                     "app-sidebar__theme-btn flex size-6 items-center justify-center rounded-[4px] transition-colors",
                     dark
-                      ? "bg-brand-button text-white"
+                      ? "bg-slate-900 text-white"
                       : "text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700",
                   )}
                 >

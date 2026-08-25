@@ -5,6 +5,15 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.27.3] — 2026-08-25
+
+### Changed
+- **Two more buttons follow the dark-conform primary style:** the Feed "Preview
+  & Export" button and the sidebar theme-switcher's active pill now use the
+  invert-in-dark `bg-slate-900` treatment (dark in light, white in dark) instead
+  of the brand-blue that didn't adapt. The Feed export gated-warning box also
+  gets dark-mode amber variants.
+
 ## [6.27.2] — 2026-08-25
 
 ### Fixed

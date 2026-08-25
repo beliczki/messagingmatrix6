@@ -5,6 +5,22 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.26.0] — 2026-08-25
+
+### Added
+- **Concentric-circle reveal when switching theme.** Toggling light/dark now
+  freezes the page and paints the new theme under a circle that grows from the
+  exact point you clicked out to the whole viewport (~0.5s), via the View
+  Transitions API. Skipped under `prefers-reduced-motion`, and on browsers
+  without the API the theme just flips instantly.
+
+### Changed
+- **Sidebar theme toggle + version moved above the user block** (was below Sign
+  out); they now sit just above `admin@local`.
+- **Sidebar version is a neutral grey again** — it was `text-slate-400`, which
+  (unlike the other muted labels at `slate-500`) isn't remapped in dark mode, so
+  it kept a bluish tint. Now `text-slate-500`, matching every other muted label.
+
 ## [6.25.0] — 2026-08-25
 
 ### Added

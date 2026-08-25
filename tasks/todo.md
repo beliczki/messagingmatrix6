@@ -475,3 +475,11 @@ Séma-migráció (channels tábla) → **migrate+kód egy passzban a boxon** (`d
 - **Verifikáció:** `tsc --noEmit` exit 0, `npm run build` exit 0. Böngészős smoke a userre vár (dark/light váltás + collapsed sidebar + crosshair szürke + dense pöttyök).
 - **Bump:** `6.24.0` → `6.25.0` (minor — új sidebar feature + user-látható theme-áthelyezés). CHANGELOG + component-inventory frissítve. Nincs séma-migráció.
 - **Deferred/megjegyzés:** Confai2 view-transition circle-reveal animáció (startViewTransition) NEM került át — plain instant váltás + color-transition; külön kérésre hozzáadható. A sidebar teljes dark-polish a külön WP-sweep tárgya (a bg-white/border-slate utilityk már remappeltek dark-ban).
+
+### 2026-08-25 — Sidebar theme finomítás: kör-reveal animáció + verzió-szín + reorder — 6.26.0
+- **User-észrevételek (3):** (1) miért színes a verzió? → legyen szürke mint minden más; (2) a switcher + verzió az admin@local FÖLÉ; (3) a switcher a Confai2 masked-animációja helyett koncentrikus kör-animáció a kattintás helyétől a teljes felületre, a megjelenés rögzítésével az animáció idejére.
+- **(1) Verzió-szín:** `text-slate-400` → `text-slate-500`. Ok: a `slate-500/600` át van kötve dark-ban `--text-secondary`-re (semleges #999), a `slate-400` NEM → nyers Tailwind slate-400 (#94a3b8, kékes) → színesnek látszott. Most a többi muted label-lel egyezik.
+- **(2) Reorder:** a `app-sidebar__theme` blokk a footer TETEJÉRE került (a user/`admin@local` blokk fölé), `border-b` elválasztóval (`border-t` helyett).
+- **(3) Kör-reveal animáció:** `Sidebar.setTheme(next, e)` a class-flipet `document.startViewTransition`-be csomagolja; a kattintás `clientX/clientY`-ből `--theme-switch-x/y` a `<html>`-en; globals.css `::view-transition-new(mm-theme)` `clip-path: circle(0%→150% at var(...))` 0.5s, az `::view-transition-old` `animation:none` (befagyasztva). `prefers-reduced-motion` → JS kihagyja a view transitiont (azonnali flip); API nélküli böngészőn is azonnali flip. `html { view-transition-name: mm-theme }` (a Next router nem trigger-el view transitiont, biztonságos).
+- **Verifikáció:** `tsc` exit 0, `npm run build` exit 0. Böngészős smoke a userre vár (kör-animáció a kattintás helyétől; verzió szürke; sorrend admin@local fölött).
+- **Bump:** `6.25.0` → `6.26.0` (minor — új kör-reveal animáció-viselkedés). CHANGELOG frissítve. Nincs séma-migráció.

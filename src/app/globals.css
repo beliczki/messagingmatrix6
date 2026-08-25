@@ -418,3 +418,24 @@ html.dark { --mx-cross: rgba(255, 255, 255, 0.4); }
 .matrix-grid__row-header { transition: border-color 140ms ease; }
 .matrix-grid__x--edge-r { border-right-color: var(--mx-cross); }
 .matrix-grid__x--edge-b { border-bottom-color: var(--mx-cross); }
+
+/* Theme-switch concentric-circle reveal (View Transitions API). Sidebar.setTheme
+   wraps the class flip in document.startViewTransition, which freezes the whole
+   page as a static snapshot; the NEW theme is then painted under a circle that
+   grows from the click point (--theme-switch-x/y, set on <html>) out to cover
+   the viewport, while the OLD snapshot stays put underneath (animation: none) —
+   so the page appearance is locked for the ~0.5s of the animation. JS skips the
+   view transition entirely under prefers-reduced-motion. */
+html { view-transition-name: mm-theme; }
+::view-transition-old(mm-theme) { animation: none; }
+::view-transition-new(mm-theme) {
+  animation: mm-theme-reveal 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+  clip-path: circle(0% at var(--theme-switch-x, 50%) var(--theme-switch-y, 50%));
+}
+@keyframes mm-theme-reveal {
+  to {
+    clip-path: circle(
+      150% at var(--theme-switch-x, 50%) var(--theme-switch-y, 50%)
+    );
+  }
+}

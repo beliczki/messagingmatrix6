@@ -5,6 +5,15 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.28.2] — 2026-08-29
+
+### Fixed
+- **Edit-mode MC selection was invisible in dark mode.** The selection ring is
+  `ring-slate-900`, and unlike the rest of the slate-900 family it had no dark
+  remap — a near-black ring on a near-black cell. It now flips to
+  `--text-primary` in dark, which also fixes the creative-library tile selection
+  ring and the library drop-target rings.
+
 ## [6.28.1] — 2026-08-29
 
 ### Changed

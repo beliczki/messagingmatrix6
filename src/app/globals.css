@@ -131,6 +131,10 @@ html.dark {
   html.dark .hover\:bg-slate-800:hover { background-color: var(--text-primary); }
   html.dark .border-slate-900 { border-color: var(--text-primary); }
   html.dark .text-slate-900 { color: var(--text-primary); }
+  /* Selection ring (matrix MC chips, creative-library tiles, drop targets):
+     a near-black ring is invisible on the dark surface, so it flips with the
+     rest of the slate-900 family. */
+  html.dark .ring-slate-900 { --tw-ring-color: var(--text-primary); }
   /* Inverted-context border (e.g. inner check-box of an active autosave btn:
      `bg-white border-white` on top of a dark filled button). In dark mode the
      outer flips to light, so the inner border needs to be dark for contrast. */

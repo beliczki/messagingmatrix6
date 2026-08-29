@@ -5,6 +5,14 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.28.1] — 2026-08-29
+
+### Changed
+- The header dialog's Delete moved to the far left of the action row, away from
+  Close, and is now a small grey icon-link instead of a red button — a
+  destructive action should not sit under the cursor's path to Close, and the
+  smaller hit area makes a stray click less likely.
+
 ## [6.28.0] — 2026-08-29
 
 ### Added

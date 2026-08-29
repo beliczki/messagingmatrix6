@@ -615,6 +615,24 @@ export default function HeaderDetailDialog({
           <SaveIndicator state={saveState} />
 
           <div className="matrix-header-dialog__header-actions ml-auto flex items-center gap-2">
+            {/* Leftmost and link-sized on purpose: a destructive action does
+                not belong next to Close, and the smaller hit area makes a
+                stray click less likely. */}
+            {!isChannelRow ? (
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                title={`Delete this ${kind}`}
+                className="matrix-header-dialog__delete inline-flex items-center gap-1 text-xs text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {deleting ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <Trash2 className="size-3" />
+                )}
+                Delete
+              </button>
+            ) : null}
             <button
               onClick={() => setAutoSave((v) => !v)}
               className={clsx(
@@ -659,21 +677,6 @@ export default function HeaderDetailDialog({
                   Cancel
                 </button>
               </>
-            ) : null}
-            {!isChannelRow ? (
-              <button
-                onClick={handleDelete}
-                disabled={deleting}
-                title={`Delete this ${kind}`}
-                className="matrix-header-dialog__delete toolbar-btn inline-flex items-center gap-1 rounded border border-rose-300 bg-white px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {deleting ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <Trash2 className="size-3.5" />
-                )}
-                Delete
-              </button>
             ) : null}
             <button
               onClick={onClose}

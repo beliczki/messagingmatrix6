@@ -368,7 +368,7 @@ A row/col header kattintásra nyíló osztott modal: bal pane szerkeszthető aud
 | SaveIndicator | `save-indicator` (globalis, lásd 3e) | – |
 | Autosave toggle | `matrix-header-dialog__autosave-toggle` | – |
 | Manual Save / Cancel gombok | `toolbar-btn--primary` / `toolbar-btn` | – |
-| Delete (hard delete, rose outline) | `matrix-header-dialog__delete toolbar-btn` | – |
+| Delete (hard delete, szürke ikon-link, a sor elején) | `matrix-header-dialog__delete` | – |
 | Delete-blokkoló MC-lista (AlertDialog message) | `matrix-header-dialog__blockers` / `__blockers-list` | – |
 | Close (X) | `modal__close` | – |
 | Body flex container | `matrix-header-dialog__body` | – |

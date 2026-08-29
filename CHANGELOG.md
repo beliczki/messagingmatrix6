@@ -5,6 +5,34 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.28.0] — 2026-08-29
+
+### Added
+- **Delete an audience or topic straight from the matrix header dialog.** A
+  Delete button sits next to the Autosave toggle. It refuses while any messaging
+  card of any status (archived included) is still attached, and says which ones:
+  the warning lists each blocker as `MC<number><variant> — name — status` and
+  offers only Cancel. With no cards attached it asks for confirmation first, then
+  hard-deletes. Channel-derived rows on the nonDCO axis have no Delete button —
+  they are not audiences and cannot be removed through that route.
+
+### Changed
+- The `in_use` refusal from `/api/{topics,audiences}/[id]/hard-delete` now
+  returns `referencedBy` as MC objects (`id`, `number`, `variant`, `status`,
+  `name`) instead of bare ids, so the UI can name what blocks the delete.
+- **The unnumbered `Tag` field is gone from the topic dialog.** Tag 1–4 are the
+  fields that feed the generated key; the legacy `tag` column stays in the
+  database and on the Topics grid, it is simply no longer offered in the matrix
+  form where it read as a fifth, key-less tag.
+
+### Fixed
+- **`generateAudienceKey()` had the topic bug from 6.27.4.** A pattern that
+  collapses to bare separators now falls back to `aud{N}`, and a generated key
+  that is already taken is suffixed instead of failing the insert.
+- The matrix header dialog resolves audience rows by id **and** channel. Channel
+  rows are merged into the audience axis carrying ids from their own table, so
+  an id alone could match the wrong row.
+
 ## [6.27.4] — 2026-08-29
 
 ### Fixed

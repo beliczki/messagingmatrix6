@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import { Pencil, Copy, Trash2, Loader2 } from "lucide-react";
 import { type Column } from "./columns";
+import { type BlockingMc } from "@/lib/entities/mc-refs";
 import { type Versioned } from "./useRowAutosave";
 
 type Mode = "bulk-set" | "duplicate" | "delete";
@@ -13,7 +14,7 @@ type RowResult = {
   id: number;
   ok: boolean;
   reason?: string;
-  referencedBy?: number[];
+  referencedBy?: BlockingMc[];
 };
 
 type Props<T extends Versioned> = {
@@ -159,7 +160,7 @@ export default function DimensionEditPanel<T extends Versioned>({
         if (r.status === 409) {
           const body = (await r.json().catch(() => null)) as {
             error?: string;
-            referencedBy?: number[];
+            referencedBy?: BlockingMc[];
           } | null;
           if (body?.error === "in_use") {
             return {

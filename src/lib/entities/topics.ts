@@ -2,6 +2,7 @@ import { and, count, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { config, messages, topics, nowUtc, type Topic } from "@/db/schema";
 import { evaluatePattern } from "@/lib/patterns";
+import { blockingMcs, type BlockingMc } from "@/lib/entities/mc-refs";
 
 const WRITABLE_FIELDS = [
   "key",
@@ -387,7 +388,7 @@ export type DeleteTopicResult =
   | { ok: true }
   | { ok: false; reason: "not_found" }
   | { ok: false; reason: "version_mismatch"; current: Topic }
-  | { ok: false; reason: "in_use"; referencedBy: number[] };
+  | { ok: false; reason: "in_use"; referencedBy: BlockingMc[] };
 
 export async function deleteTopic(
   clientId: number,
@@ -399,13 +400,9 @@ export async function deleteTopic(
   if (current.version !== expectedVersion) {
     return { ok: false, reason: "version_mismatch", current };
   }
-  const refs = await db
-    .select({ id: messages.id })
-    .from(messages)
-    .where(and(eq(messages.clientId, clientId), eq(messages.topic, current.key)))
-    .limit(50);
+  const refs = await blockingMcs(clientId, "topic", current.key);
   if (refs.length > 0) {
-    return { ok: false, reason: "in_use", referencedBy: refs.map((r) => r.id) };
+    return { ok: false, reason: "in_use", referencedBy: refs };
   }
   await db
     .delete(topics)

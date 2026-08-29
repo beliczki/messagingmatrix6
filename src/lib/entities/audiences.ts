@@ -2,6 +2,7 @@ import { and, count, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { audiences, config, messages, nowUtc, type Audience } from "@/db/schema";
 import { evaluatePattern } from "@/lib/patterns";
+import { blockingMcs, type BlockingMc } from "@/lib/entities/mc-refs";
 
 const WRITABLE_FIELDS = [
   "key",
@@ -118,6 +119,14 @@ async function readAudienceKeyPattern(
   }
 }
 
+// A key pattern such as "{{product}}_{{tag1}}_{{tag2}}_{{tag3}}_{{tag4}}"
+// collapses to bare separators ("____") while every field it reads is still
+// empty — the normal state of a freshly added row. That is not a usable key,
+// so treat a separator-only result the same as an empty one and fall back.
+function hasKeyContent(s: string): boolean {
+  return /[a-z0-9]/i.test(s);
+}
+
 // If config.patterns.audienceKey is set, evaluate it. Otherwise: aud{N+1}.
 // Pattern context includes product + strategy + buyingPlatform + device + tag.
 export async function generateAudienceKey(
@@ -131,9 +140,26 @@ export async function generateAudienceKey(
   const pattern = await readAudienceKeyPattern(clientId);
   if (pattern) {
     const out = evaluatePattern(pattern, context as Record<string, unknown>);
-    if (out.trim() !== "") return out;
+    if (hasKeyContent(out)) return out;
   }
   return `aud${orderIndex + 1}`;
+}
+
+// (client_id, key) is unique, so a generated key that is already taken — two
+// audiences with the same product/strategy/…, or a reused order_index after
+// the last row was deleted — must be suffixed instead of blowing up the insert.
+async function ensureUniqueKey(
+  clientId: number,
+  candidate: string,
+  excludeId?: number,
+): Promise<string> {
+  const clash = await db
+    .select({ id: audiences.id })
+    .from(audiences)
+    .where(and(eq(audiences.clientId, clientId), eq(audiences.key, candidate)))
+    .limit(1);
+  if (clash.length === 0 || clash[0].id === excludeId) return candidate;
+  return nextKeyForDuplicate(clientId, candidate);
 }
 
 export async function createAudience(
@@ -141,19 +167,21 @@ export async function createAudience(
   input: AudienceInput,
 ): Promise<Audience> {
   const orderIndex = input.orderIndex ?? (await nextOrderIndex(clientId));
-  const key =
+  const key = await ensureUniqueKey(
+    clientId,
     input.key ??
-    (await generateAudienceKey(
-      clientId,
-      {
-        product: input.product ?? null,
-        strategy: input.strategy ?? null,
-        buyingPlatform: input.buyingPlatform ?? null,
-        device: input.device ?? null,
-        tag: input.tag ?? null,
-      },
-      orderIndex,
-    ));
+      (await generateAudienceKey(
+        clientId,
+        {
+          product: input.product ?? null,
+          strategy: input.strategy ?? null,
+          buyingPlatform: input.buyingPlatform ?? null,
+          device: input.device ?? null,
+          tag: input.tag ?? null,
+        },
+        orderIndex,
+      )),
+  );
   if (!input.name) {
     throw new BadRequest("name is required");
   }
@@ -230,16 +258,20 @@ export async function updateAudience(
     (await countMessagesByAudience(clientId, current.key)) === 0
   ) {
     const merged = { ...current, ...input } as Audience;
-    key = await generateAudienceKey(
+    key = await ensureUniqueKey(
       clientId,
-      {
-        product: merged.product,
-        strategy: merged.strategy,
-        buyingPlatform: merged.buyingPlatform,
-        device: merged.device,
-        tag: merged.tag,
-      },
-      merged.orderIndex,
+      await generateAudienceKey(
+        clientId,
+        {
+          product: merged.product,
+          strategy: merged.strategy,
+          buyingPlatform: merged.buyingPlatform,
+          device: merged.device,
+          tag: merged.tag,
+        },
+        merged.orderIndex,
+      ),
+      id,
     );
   }
 
@@ -396,7 +428,7 @@ export type DeleteResult<T> =
   | { ok: true }
   | { ok: false; reason: "not_found" }
   | { ok: false; reason: "version_mismatch"; current: T }
-  | { ok: false; reason: "in_use"; referencedBy: number[] };
+  | { ok: false; reason: "in_use"; referencedBy: BlockingMc[] };
 
 export async function deleteAudience(
   clientId: number,
@@ -408,15 +440,9 @@ export async function deleteAudience(
   if (current.version !== expectedVersion) {
     return { ok: false, reason: "version_mismatch", current };
   }
-  const refs = await db
-    .select({ id: messages.id })
-    .from(messages)
-    .where(
-      and(eq(messages.clientId, clientId), eq(messages.audience, current.key)),
-    )
-    .limit(50);
+  const refs = await blockingMcs(clientId, "audience", current.key);
   if (refs.length > 0) {
-    return { ok: false, reason: "in_use", referencedBy: refs.map((r) => r.id) };
+    return { ok: false, reason: "in_use", referencedBy: refs };
   }
   await db
     .delete(audiences)

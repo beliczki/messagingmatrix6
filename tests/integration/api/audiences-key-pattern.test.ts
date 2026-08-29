@@ -133,6 +133,28 @@ describe("createAudience uses the configured key pattern", () => {
     expect(a.key).toBe("sza_prospecting_mobile");
   });
 
+  it("falls back when the pattern collapses to bare separators", async () => {
+    // Erste's live audienceKey shape; a brand-new audience fills none of it,
+    // so the pattern yields "____" and every such row would collide on
+    // (client_id, key).
+    await writeAudiencePattern(
+      erste.id,
+      "{{product}}_{{tag1}}_{{tag2}}_{{tag3}}_{{tag4}}",
+    );
+    const a = await createAudience(erste.id, { name: "New audience" });
+    const b = await createAudience(erste.id, { name: "New audience" });
+    expect(a.key).toBe("aud1");
+    expect(b.key).toBe("aud2");
+  });
+
+  it("suffixes a generated key that is already taken", async () => {
+    await writeAudiencePattern(erste.id, "join({{product|lower}})");
+    const a = await createAudience(erste.id, { name: "A", product: "SZA" });
+    const b = await createAudience(erste.id, { name: "B", product: "SZA" });
+    expect(a.key).toBe("sza");
+    expect(b.key).toBe("sza_1");
+  });
+
   it("explicit input.key always wins over pattern", async () => {
     await writeAudiencePattern(
       erste.id,

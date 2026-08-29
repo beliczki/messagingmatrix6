@@ -112,7 +112,11 @@ describe("deleteTopic", () => {
     const result = await deleteTopic(erste.id, t.id, 1);
     expect(result.ok).toBe(false);
     if (!result.ok && result.reason === "in_use") {
-      expect(result.referencedBy).toContain(m.id);
+      // referencedBy carries enough detail for the UI to name the blockers.
+      expect(result.referencedBy.map((r) => r.id)).toContain(m.id);
+      const blocker = result.referencedBy.find((r) => r.id === m.id)!;
+      expect(blocker.number).toBe(m.number);
+      expect(blocker.variant).toBe(m.variant);
     } else {
       throw new Error("expected in_use refusal");
     }

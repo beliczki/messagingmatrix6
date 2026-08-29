@@ -17,6 +17,7 @@ import {
   CircleAlert,
   Users,
   ListTree,
+  Trash2,
 } from "lucide-react";
 import clsx from "clsx";
 import {
@@ -27,6 +28,7 @@ import {
 } from "./types";
 import PreviewPane, { type PreviewBg } from "../_components/PreviewPane";
 import ModalBackdrop from "../_components/ModalBackdrop";
+import { useAlertDialog } from "../_components/AlertDialog";
 import { usePersistent, type Codec } from "../_components/usePersistent";
 import { AutocompleteField } from "../_components/AutocompleteField";
 import { templateMetaFor } from "../_components/MatrixIframeTile";
@@ -46,9 +48,28 @@ type Props = {
   kind: EntityKind;
   entity: Audience | Topic;
   messages: Message[];
+  /** Every MC on this row/column, ignoring the matrix filters — the delete
+   *  guard must see cards of any status, not just the ones on screen. */
+  allMessages: Message[];
   templates: TemplateInfo[];
   onClose: () => void;
+  onDeleted: () => void;
 };
+
+/** The subset of an MC the delete guard reports back. */
+type BlockingMc = {
+  id: number;
+  number: number;
+  variant: string;
+  status: string | null;
+  name: string | null;
+};
+
+function mcLabel(m: BlockingMc): string {
+  return `MC${m.number}${m.variant} — ${m.name?.trim() || "(no name)"} — ${
+    m.status || "no status"
+  }`;
+}
 
 const PREVIEW_BG_CODEC: Codec<PreviewBg> = {
   parse: (s) => (s === "light" || s === "dark" || s === "checker" ? s : "checker"),
@@ -184,8 +205,10 @@ export default function HeaderDetailDialog({
   kind,
   entity,
   messages,
+  allMessages,
   templates,
   onClose,
+  onDeleted,
 }: Props) {
   // ── Persisted preview settings (shared bg key with MatrixDetailDialog) ──
   const [bg, setBg] = usePersistent<PreviewBg>(
@@ -419,6 +442,93 @@ export default function HeaderDetailDialog({
     setSaveState({ kind: "idle" });
   }
 
+  // ── Hard delete (edit mode) ──
+  // Channel rows are only presented as audiences; they live in their own table
+  // and must not be deleted through /api/audiences.
+  const isChannelRow =
+    kind === "audience" && ((committed as Audience).channel ?? null) !== null;
+  const { confirm, alert } = useAlertDialog();
+  const [deleting, setDeleting] = useState(false);
+
+  async function warnBlocked(blockers: BlockingMc[]) {
+    const many = blockers.length !== 1;
+    await alert({
+      title: `This ${kind} still has messaging cards`,
+      message: (
+        <div className="matrix-header-dialog__blockers">
+          <p>
+            {blockers.length} card{many ? "s are" : " is"} attached to{" "}
+            <span className="font-mono">{committed.key}</span>. Deleting the{" "}
+            {kind} would orphan {many ? "them" : "it"}, so move or delete{" "}
+            {many ? "them" : "it"} first.
+          </p>
+          <ul className="matrix-header-dialog__blockers-list mt-2 max-h-48 list-disc overflow-y-auto pl-4 font-mono text-[11px]">
+            {blockers.map((m) => (
+              <li key={m.id}>{mcLabel(m)}</li>
+            ))}
+          </ul>
+          {blockers.length >= 50 ? (
+            <p className="mt-2">First 50 shown.</p>
+          ) : null}
+        </div>
+      ),
+      variant: "warning",
+      confirmLabel: "Cancel",
+    });
+  }
+
+  async function handleDelete() {
+    // Pre-check against every card on this row/column, whatever its status.
+    if (allMessages.length > 0) {
+      await warnBlocked(allMessages.slice(0, 50));
+      return;
+    }
+    const ok = await confirm({
+      title: `Delete ${kind}?`,
+      message: `"${committed.name}" (${committed.key}) is removed permanently. It has no messaging cards.`,
+      variant: "danger",
+      confirmLabel: "Delete",
+    });
+    if (!ok) return;
+    setDeleting(true);
+    try {
+      const entityPath = kind === "audience" ? "audiences" : "topics";
+      const r = await fetch(
+        `/api/${entityPath}/${committed.id}/hard-delete`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+            "If-Match": String(committed.version),
+          },
+          body: JSON.stringify({}),
+        },
+      );
+      if (r.ok) {
+        onDeleted();
+        return;
+      }
+      const body = (await r.json().catch(() => null)) as {
+        error?: string;
+        referencedBy?: BlockingMc[];
+      } | null;
+      // The server sees archived cards the grid never loaded, so a refusal
+      // here is authoritative even when the pre-check found nothing.
+      if (r.status === 409 && body?.error === "in_use") {
+        await warnBlocked(body.referencedBy ?? []);
+        return;
+      }
+      await alert({
+        title: "Delete failed",
+        message: body?.error ?? `${r.status} ${r.statusText}`,
+        variant: "danger",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   // ── ESC closes; arrow keys step ──
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -549,6 +659,21 @@ export default function HeaderDetailDialog({
                   Cancel
                 </button>
               </>
+            ) : null}
+            {!isChannelRow ? (
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
+                title={`Delete this ${kind}`}
+                className="matrix-header-dialog__delete toolbar-btn inline-flex items-center gap-1 rounded border border-rose-300 bg-white px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {deleting ? (
+                  <Loader2 className="size-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="size-3.5" />
+                )}
+                Delete
+              </button>
             ) : null}
             <button
               onClick={onClose}
@@ -947,13 +1072,6 @@ function TopicForm({
       </Field>
 
       <SectionHeader>Tags</SectionHeader>
-      <Field label="Tag">
-        <input
-          value={draft.tag ?? ""}
-          onChange={(e) => set("tag", e.target.value || null)}
-          className={inputCls}
-        />
-      </Field>
       <Field label="Tag 1">
         <AutocompleteField
           form="topics"

@@ -169,9 +169,11 @@ export default function MatrixWorkspace() {
   );
   // Identified by id, never by key: editing product/tag1..4 regenerates the
   // audience/topic key server-side, and a key-based lookup would then find
-  // nothing and unmount the dialog mid-edit.
+  // nothing and unmount the dialog mid-edit. `channel` disambiguates the id:
+  // the audience axis also carries channel-derived rows, whose ids come from
+  // the channels table and can collide with real audience ids.
   const [headerDialog, setHeaderDialog] = useState<
-    { kind: "audience" | "topic"; id: number } | null
+    { kind: "audience" | "topic"; id: number; channel: string | null } | null
   >(null);
   const [hydrated, setHydrated] = useState(false);
 
@@ -654,7 +656,9 @@ export default function MatrixWorkspace() {
         );
         await queryClient.invalidateQueries({ queryKey: [entity] });
         const created = res[kind];
-        if (created?.id) setHeaderDialog({ kind, id: created.id });
+        if (created?.id) {
+          setHeaderDialog({ kind, id: created.id, channel: null });
+        }
       } catch (e) {
         const body = (e as Error).message.replace(/^\d+:\s*/, "");
         try {
@@ -862,7 +866,13 @@ export default function MatrixWorkspace() {
   const headerEntity = useMemo(() => {
     if (!headerDialog) return null;
     if (headerDialog.kind === "audience") {
-      return audiences.find((a) => a.id === headerDialog.id) ?? null;
+      return (
+        audiences.find(
+          (a) =>
+            a.id === headerDialog.id &&
+            (a.channel ?? null) === headerDialog.channel,
+        ) ?? null
+      );
     }
     return topics.find((t) => t.id === headerDialog.id) ?? null;
   }, [headerDialog, audiences, topics]);
@@ -875,6 +885,17 @@ export default function MatrixWorkspace() {
         : m.topic === headerEntity.key,
     );
   }, [headerDialog, headerEntity, filtered.msgs]);
+
+  // Same rows, but before the matrix filters — the dialog's delete guard has to
+  // count cards of every status, not only the ones currently on screen.
+  const headerAllMessages = useMemo(() => {
+    if (!headerDialog || !headerEntity) return [];
+    return messages.filter((m) =>
+      headerDialog.kind === "audience"
+        ? m.audience === headerEntity.key
+        : m.topic === headerEntity.key,
+    );
+  }, [headerDialog, headerEntity, messages]);
 
   const loading = audiencesQ.isLoading || topicsQ.isLoading || messagesQ.isLoading;
   const error = audiencesQ.error || topicsQ.error || messagesQ.error;
@@ -931,7 +952,13 @@ export default function MatrixWorkspace() {
               topicReorderable={filters.axis === "dco"}
               onReorder={handleReorder}
               onOpenMessage={(id) => setOpenMessageId(id)}
-              onOpenHeader={(kind, id) => setHeaderDialog({ kind, id })}
+              onOpenHeader={(kind, row) =>
+                setHeaderDialog({
+                  kind,
+                  id: row.id,
+                  channel: ("channel" in row ? row.channel : null) ?? null,
+                })
+              }
               editApi={editApi}
               onDndDrop={handleDndDrop}
               onDuplicateHeader={duplicateHeader}
@@ -1085,8 +1112,15 @@ export default function MatrixWorkspace() {
           kind={headerDialog.kind}
           entity={headerEntity}
           messages={headerMessages}
+          allMessages={headerAllMessages}
           templates={templates}
           onClose={() => setHeaderDialog(null)}
+          onDeleted={() => {
+            const entity =
+              headerDialog.kind === "audience" ? "audiences" : "topics";
+            setHeaderDialog(null);
+            void queryClient.invalidateQueries({ queryKey: [entity] });
+          }}
         />
       ) : null}
 

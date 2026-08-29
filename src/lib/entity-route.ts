@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import { denyDemo, withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
+import { type BlockingMc } from "@/lib/entities/mc-refs";
 import {
   missingVersion,
   readClientVersion,
@@ -33,7 +34,7 @@ type DeleteRes<R> =
   | { ok: true }
   | { ok: false; reason: "not_found" }
   | { ok: false; reason: "version_mismatch"; current: R }
-  | { ok: false; reason: "in_use"; referencedBy: number[] };
+  | { ok: false; reason: "in_use"; referencedBy: BlockingMc[] };
 
 // GET (list) + POST (create)
 export function makeCollectionRoute<R extends Row, I>(cfg: {

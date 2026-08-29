@@ -80,7 +80,7 @@ export default function GridView({
   topicReorderable: boolean;
   onReorder: (kind: "audience" | "topic", ids: number[]) => void;
   onOpenMessage: (id: number) => void;
-  onOpenHeader: (kind: "audience" | "topic", key: string) => void;
+  onOpenHeader: (kind: "audience" | "topic", id: number) => void;
   editApi: EditApi;
   onDndDrop: (args: {
     draggedId: number;
@@ -379,7 +379,7 @@ export default function GridView({
                       if (isPickable && !isDisabled) {
                         editApi.toggleTargetAudience(c.key);
                       } else {
-                        onOpenHeader(colKind, c.key);
+                        onOpenHeader(colKind, c.id);
                       }
                     }}
                     disabled={isDisabled}
@@ -486,7 +486,7 @@ export default function GridView({
               >
                 <button
                   type="button"
-                  onClick={() => onOpenHeader(rowKind, r.key)}
+                  onClick={() => onOpenHeader(rowKind, r.id)}
                   className={clsx(
                     "matrix-grid__row-header-btn block size-full text-left transition hover:bg-black/5 dark:hover:bg-white/10",
                     density === "dense" ? "p-1" : "p-2",

@@ -5,6 +5,23 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.27.4] — 2026-08-29
+
+### Fixed
+- **Adding a topic 500'd.** Erste's `topicKey` pattern
+  (`{{product}}_{{tag1}}_…`) evaluates to `____` while a brand-new topic still
+  has every field empty, and the "pattern produced nothing" fallback only fired
+  on a strictly empty result — so every new topic tried to insert the same key
+  and hit the `(client_id, key)` unique index. A separator-only result now counts
+  as empty and falls back to `top{N}`, and a generated key that is already taken
+  is suffixed (`_1`, the existing duplicate convention) instead of failing the
+  insert — which also closes the same crash for two topics sharing product/tags.
+- **Editing a topic's tag closed the detail dialog.** The matrix tracked the open
+  header dialog by `key`, but saving product/tag1–4 regenerates that key
+  server-side, so the post-save refetch could no longer find the row and the
+  dialog unmounted mid-edit. The dialog is now keyed by `id`. Audience headers
+  were affected the same way and are fixed by the same change.
+
 ## [6.27.3] — 2026-08-25
 
 ### Changed

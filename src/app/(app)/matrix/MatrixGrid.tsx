@@ -167,8 +167,11 @@ export default function MatrixWorkspace() {
   const [headerActionError, setHeaderActionError] = useState<string | null>(
     null,
   );
+  // Identified by id, never by key: editing product/tag1..4 regenerates the
+  // audience/topic key server-side, and a key-based lookup would then find
+  // nothing and unmount the dialog mid-edit.
   const [headerDialog, setHeaderDialog] = useState<
-    { kind: "audience" | "topic"; key: string } | null
+    { kind: "audience" | "topic"; id: number } | null
   >(null);
   const [hydrated, setHydrated] = useState(false);
 
@@ -645,13 +648,13 @@ export default function MatrixWorkspace() {
       const name = kind === "audience" ? "New audience" : "New topic";
       setHeaderActionError(null);
       try {
-        const res = await postJSON<Record<string, { key: string }>>(
+        const res = await postJSON<Record<string, { id: number }>>(
           `/api/${entity}`,
           { name },
         );
         await queryClient.invalidateQueries({ queryKey: [entity] });
         const created = res[kind];
-        if (created?.key) setHeaderDialog({ kind, key: created.key });
+        if (created?.id) setHeaderDialog({ kind, id: created.id });
       } catch (e) {
         const body = (e as Error).message.replace(/^\d+:\s*/, "");
         try {
@@ -859,19 +862,19 @@ export default function MatrixWorkspace() {
   const headerEntity = useMemo(() => {
     if (!headerDialog) return null;
     if (headerDialog.kind === "audience") {
-      return audiences.find((a) => a.key === headerDialog.key) ?? null;
+      return audiences.find((a) => a.id === headerDialog.id) ?? null;
     }
-    return topics.find((t) => t.key === headerDialog.key) ?? null;
+    return topics.find((t) => t.id === headerDialog.id) ?? null;
   }, [headerDialog, audiences, topics]);
 
   const headerMessages = useMemo(() => {
-    if (!headerDialog) return [];
+    if (!headerDialog || !headerEntity) return [];
     return filtered.msgs.filter((m) =>
       headerDialog.kind === "audience"
-        ? m.audience === headerDialog.key
-        : m.topic === headerDialog.key,
+        ? m.audience === headerEntity.key
+        : m.topic === headerEntity.key,
     );
-  }, [headerDialog, filtered.msgs]);
+  }, [headerDialog, headerEntity, filtered.msgs]);
 
   const loading = audiencesQ.isLoading || topicsQ.isLoading || messagesQ.isLoading;
   const error = audiencesQ.error || topicsQ.error || messagesQ.error;
@@ -928,7 +931,7 @@ export default function MatrixWorkspace() {
               topicReorderable={filters.axis === "dco"}
               onReorder={handleReorder}
               onOpenMessage={(id) => setOpenMessageId(id)}
-              onOpenHeader={(kind, key) => setHeaderDialog({ kind, key })}
+              onOpenHeader={(kind, id) => setHeaderDialog({ kind, id })}
               editApi={editApi}
               onDndDrop={handleDndDrop}
               onDuplicateHeader={duplicateHeader}

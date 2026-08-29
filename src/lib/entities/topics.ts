@@ -106,6 +106,14 @@ async function readTopicKeyPattern(clientId: number): Promise<string | null> {
   }
 }
 
+// A key pattern such as "{{product}}_{{tag1}}_{{tag2}}_{{tag3}}_{{tag4}}"
+// collapses to bare separators ("____") while every field is still empty — the
+// normal state of a freshly added row. That is not a usable key, so treat a
+// separator-only result the same as an empty one and fall back.
+function hasKeyContent(s: string): boolean {
+  return /[a-z0-9]/i.test(s);
+}
+
 // Spec §3.2:
 //   If config.patterns.topicKey is set, evaluate it.
 //   Otherwise: top{order_index+1}.
@@ -117,9 +125,26 @@ export async function generateTopicKey(
   const pattern = await readTopicKeyPattern(clientId);
   if (pattern) {
     const out = evaluatePattern(pattern, context as Record<string, unknown>);
-    if (out.trim() !== "") return out;
+    if (hasKeyContent(out)) return out;
   }
   return `top${orderIndex + 1}`;
+}
+
+// (client_id, key) is unique, so a generated key that is already taken — two
+// topics with the same product/tags, or a reused order_index after the last row
+// was deleted — must be suffixed instead of blowing up the insert.
+async function ensureUniqueKey(
+  clientId: number,
+  candidate: string,
+  excludeId?: number,
+): Promise<string> {
+  const clash = await db
+    .select({ id: topics.id })
+    .from(topics)
+    .where(and(eq(topics.clientId, clientId), eq(topics.key, candidate)))
+    .limit(1);
+  if (clash.length === 0 || clash[0].id === excludeId) return candidate;
+  return nextKeyForDuplicate(clientId, candidate);
 }
 
 const KEY_REGEN_FIELDS: ReadonlyArray<keyof Topic> = [
@@ -148,19 +173,21 @@ export async function createTopic(
   if (!input.name) throw new TopicError("name is required");
   const orderIndex = input.orderIndex ?? (await nextOrderIndex(clientId));
 
-  const key =
+  const key = await ensureUniqueKey(
+    clientId,
     input.key ??
-    (await generateTopicKey(
-      clientId,
-      {
-        product: input.product ?? null,
-        tag1: input.tag1 ?? null,
-        tag2: input.tag2 ?? null,
-        tag3: input.tag3 ?? null,
-        tag4: input.tag4 ?? null,
-      },
-      orderIndex,
-    ));
+      (await generateTopicKey(
+        clientId,
+        {
+          product: input.product ?? null,
+          tag1: input.tag1 ?? null,
+          tag2: input.tag2 ?? null,
+          tag3: input.tag3 ?? null,
+          tag4: input.tag4 ?? null,
+        },
+        orderIndex,
+      )),
+  );
 
   const [row] = await db
     .insert(topics)
@@ -204,16 +231,20 @@ export async function updateTopic(
     shouldRegenerateKey(current, input) &&
     (await countMessagesByTopic(clientId, current.key)) === 0
   ) {
-    key = await generateTopicKey(
+    key = await ensureUniqueKey(
       clientId,
-      {
-        product: merged.product,
-        tag1: merged.tag1,
-        tag2: merged.tag2,
-        tag3: merged.tag3,
-        tag4: merged.tag4,
-      },
-      merged.orderIndex,
+      await generateTopicKey(
+        clientId,
+        {
+          product: merged.product,
+          tag1: merged.tag1,
+          tag2: merged.tag2,
+          tag3: merged.tag3,
+          tag4: merged.tag4,
+        },
+        merged.orderIndex,
+      ),
+      id,
     );
   }
 

@@ -116,6 +116,24 @@ describe("topic key generation", () => {
     }
   });
 
+  it("falls back when the pattern collapses to bare separators", async () => {
+    // Erste's live pattern; a brand-new topic has no product/tags yet, so the
+    // pattern yields "____" — every such topic would collide on (client, key).
+    await setPattern(erste.id, "{{product}}_{{tag1}}_{{tag2}}_{{tag3}}_{{tag4}}");
+    const a = await createTopic(erste.id, { name: "New topic" });
+    const b = await createTopic(erste.id, { name: "New topic" });
+    expect(a.key).toBe("top1");
+    expect(b.key).toBe("top2");
+  });
+
+  it("suffixes a generated key that is already taken", async () => {
+    await setPattern(erste.id, "{{product}}_{{tag1}}");
+    const a = await createTopic(erste.id, { name: "A", product: "loans", tag1: "a" });
+    const b = await createTopic(erste.id, { name: "B", product: "loans", tag1: "a" });
+    expect(a.key).toBe("loans_a");
+    expect(b.key).toBe("loans_a_1");
+  });
+
   it("generateTopicKey() returns the fallback when the pattern evaluates empty", async () => {
     await setPattern(erste.id, "{{nope}}");
     expect(

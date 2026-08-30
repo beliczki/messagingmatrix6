@@ -120,6 +120,51 @@ describe("buildTree", () => {
     ).toEqual({ nodes: [], edges: [] });
   });
 
+  it("tags a node with the platform when its whole subtree shares one", () => {
+    const auds = [
+      aud({ key: "a1", name: "A1", buyingPlatform: "adform" }),
+      aud({ key: "a2", name: "A2", buyingPlatform: "adform" }),
+    ];
+    const tops = [top({ key: "topX", name: "X" })];
+    const msgs = [
+      msg({ id: 1, audience: "a1", topic: "topX" }),
+      msg({ id: 2, audience: "a2", topic: "topX" }),
+    ];
+    const levels = parseTreeStructure("Topic → Audience → Messages");
+    const { nodes } = buildTree({ auds, tops, msgs }, levels);
+    // The topic root sits above both audiences; they are both adform, so it
+    // inherits the platform too.
+    for (const n of nodes) expect(n.platform).toBe("adform");
+  });
+
+  it("leaves platform undefined when the subtree mixes platforms", () => {
+    const auds = [
+      aud({ key: "a1", name: "A1", buyingPlatform: "adform" }),
+      aud({ key: "a2", name: "A2", buyingPlatform: "dv360" }),
+    ];
+    const tops = [top({ key: "topX", name: "X" })];
+    const msgs = [
+      msg({ id: 1, audience: "a1", topic: "topX" }),
+      msg({ id: 2, audience: "a2", topic: "topX" }),
+    ];
+    const levels = parseTreeStructure("Topic → Audience → Messages");
+    const { nodes } = buildTree({ auds, tops, msgs }, levels);
+    const root = nodes.find((n) => n.level === 0)!;
+    expect(root.platform).toBeUndefined();
+    // The audience nodes below it are each single-platform, so they keep theirs.
+    const a1 = nodes.find((n) => n.label === "A1")!;
+    expect(a1.platform).toBe("adform");
+  });
+
+  it("leaves platform undefined when no audience carries one", () => {
+    const auds = [aud({ key: "a1", name: "A1" })];
+    const tops = [top({ key: "topX", name: "X" })];
+    const msgs = [msg({ id: 1, audience: "a1", topic: "topX" })];
+    const levels = parseTreeStructure("Audience → Messages");
+    const { nodes } = buildTree({ auds, tops, msgs }, levels);
+    for (const n of nodes) expect(n.platform).toBeUndefined();
+  });
+
   it("groups two messages into one Audience node", () => {
     const auds = [aud({ key: "audA", name: "A" })];
     const tops = [top({ key: "topX", name: "X" })];

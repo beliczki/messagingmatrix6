@@ -28,6 +28,11 @@ type Props = {
   // Optional per-option color (Tailwind bg-* class) shown as a leading dot —
   // used by the Status filter to tint each option with its status color.
   optionColors?: Record<string, string>;
+  // Optional per-option count shown right-aligned in muted grey. The caller is
+  // responsible for computing these against the result set *before* this pill's
+  // own filter is applied — otherwise every selected option would just count
+  // itself and every unselected one would read 0.
+  optionCounts?: Record<string, number>;
   // Optional quick-select row at the top of the menu. Omit for a plain list.
   quickSelect?: { prefix?: string; presets: QuickPreset[] };
 };
@@ -38,6 +43,7 @@ export default function MultiPill({
   options,
   onChange,
   optionColors,
+  optionCounts,
   quickSelect,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -145,6 +151,11 @@ export default function MultiPill({
                   />
                 ) : null}
                 <span className="truncate">{opt}</span>
+                {optionCounts ? (
+                  <span className="multi-pill__count ml-auto pl-2 text-xs tabular-nums text-slate-400">
+                    {optionCounts[opt] ?? 0}
+                  </span>
+                ) : null}
               </label>
             );
           })}

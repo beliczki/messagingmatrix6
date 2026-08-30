@@ -261,8 +261,8 @@ html.dark {
   /* Decision Tree view (xyflow-backed). Nodes are themed via .tree-view__node-wrap
      (xyflow's outer wrapper, via the Node.className prop). The inner content
      div uses .tree-view__node and hosts the chevron/label/count layout.
-     Level colours MUST stay in sync with the LEVEL_COLORS array in TreeView.tsx
-     — the MiniMap reads them from there, the canvas reads them from here. */
+     Stripe colours live here only; TreeView picks the class, not the colour.
+     (The MiniMap paints its own flat nodeColor and ignores these.) */
   .tree-view {
     background: var(--surface, #f8fafc);
   }
@@ -279,13 +279,18 @@ html.dark {
     border-color: #334155;
   }
   /* Level-coloured left stripe — overrides the generic 1px border-left so the
-     stripe is the same width across themes. */
+     stripe is the same width across themes. A node whose whole subtree shares
+     one recognised buying platform gets the --plat-* stripe below INSTEAD of
+     the level one (TreeView emits exactly one of the two classes), so the tree
+     and the matrix audience header encode platform with the same colours. */
   .tree-view__node-wrap--lvl-0 { border-left: 4px solid #3b82f6; }
   .tree-view__node-wrap--lvl-1 { border-left: 4px solid #8b5cf6; }
   .tree-view__node-wrap--lvl-2 { border-left: 4px solid #10b981; }
   .tree-view__node-wrap--lvl-3 { border-left: 4px solid #f59e0b; }
   .tree-view__node-wrap--lvl-4 { border-left: 4px solid #f43f5e; }
   .tree-view__node-wrap--lvl-5 { border-left: 4px solid #0ea5e9; }
+  .tree-view__node-wrap--plat-dv360 { border-left: 4px solid var(--plat-dv360); }
+  .tree-view__node-wrap--plat-adform { border-left: 4px solid var(--plat-adform); }
   .tree-view__node-wrap--leaf {
     cursor: pointer;
   }
@@ -387,6 +392,16 @@ html.dark {
   }
 }
 
+/* Buying-platform colours — the single place the values live. Consumed by the
+   matrix audience-header edge (below) and the tree-view node stripe. Which
+   platform strings map to a colour is listed once in matrix/types.ts
+   (PLATFORM_TOKENS); adding one means a var here, the two rules in each
+   consumer, and the entry there. */
+:root {
+  --plat-dv360: #43970b;
+  --plat-adform: #03c9ab;
+}
+
 /* Matrix audience-header strategy/platform edge. Unlayered ON PURPOSE: these
    must out-cascade the border-b / border-border utilities sitting on the same
    <th> (tailwind hoists @layer components above utilities, which would lose).
@@ -396,15 +411,15 @@ html.dark {
    plain 1px border. */
 .matrix-grid__header--strat-pro { border-bottom-width: 3px; }
 .matrix-grid__header--strat-rem { border-bottom-width: 5px; }
-.matrix-grid__header--plat-dv360 { border-bottom-color: #43970b; }
-.matrix-grid__header--plat-adform { border-bottom-color: #03c9ab; }
+.matrix-grid__header--plat-dv360 { border-bottom-color: var(--plat-dv360); }
+.matrix-grid__header--plat-adform { border-bottom-color: var(--plat-adform); }
 /* Right-edge variants — used when audiences sit in ROWS (transposed view), so
    the strip lands on the edge adjacent to the cells (their right) instead of
    the bottom. Same width/colour encoding. */
 .matrix-grid__header--strat-pro-r { border-right-width: 3px; }
 .matrix-grid__header--strat-rem-r { border-right-width: 5px; }
-.matrix-grid__header--plat-dv360-r { border-right-color: #43970b; }
-.matrix-grid__header--plat-adform-r { border-right-color: #03c9ab; }
+.matrix-grid__header--plat-dv360-r { border-right-color: var(--plat-dv360); }
+.matrix-grid__header--plat-adform-r { border-right-color: var(--plat-adform); }
 
 /* Hover crosshair rails. Unlayered (same reason as above — must beat the
    border-border utility on the cells/headers). Only border-COLOR changes, on

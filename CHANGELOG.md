@@ -5,6 +5,31 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.31.0] — 2026-08-30
+
+### Added
+- **The Status filter counts what it would show you.** Each option in the
+  Status dropdown now carries a small grey number on the right: how many MCs
+  in the current result set have that status. The counts are measured with
+  every *other* filter applied but the status filter itself still pending —
+  count after it and each selected status would only ever count itself while
+  the unselected ones all read 0. The count is an optional `optionCounts` prop
+  on the shared `MultiPill`, so any other filter can opt in with one line.
+- **The tree view colours nodes by buying platform.** A node whose entire
+  subtree shares one recognised platform gets that platform's stripe (dv360
+  green, adform teal — the same colours the matrix audience header already
+  uses); a node that mixes platforms, or carries none, keeps its depth colour,
+  so "no colour" never reads as a platform.
+
+### Changed
+- **Platform colours have one home.** The two hex values lived twice in
+  `globals.css` (bottom-edge and right-edge variants) and the platform→colour
+  branch was hardcoded in `GridView`. The values are now `--plat-*` custom
+  properties defined once, and which platform strings get a colour is listed
+  once in `matrix/types.ts` (`PLATFORM_TOKENS`). Matching is now trimmed and
+  case-insensitive, which `buyingPlatform` being a free-text field warrants.
+  No visual change to the matrix header.
+
 ## [6.30.2] — 2026-08-30
 
 ### Fixed

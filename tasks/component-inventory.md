@@ -68,6 +68,7 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `multi-pill__badge` | A számláló badge | MultiPill.tsx 44–48 | – |
 | `multi-pill__menu` | Lefelé nyíló popover | MultiPill.tsx 50–74 | – |
 | `multi-pill__option` | Egy checkbox + label sor | MultiPill.tsx 55–70 | – |
+| `multi-pill__count` | Opciónkénti darabszám a sor jobb szélén (`ml-auto text-xs tabular-nums text-slate-400`) | MultiPill.tsx | csak ha `optionCounts` prop van; Status-szűrő: MC-szám a szűrt eredményben |
 | `multi-pill__bulk` | Quick-select fejlécsor a menü tetején (`text-[10px] text-slate-500`, alul `border-slate-100`) | MultiPill.tsx | csak ha `quickSelect` prop van |
 | `multi-pill__bulk-link` | Egy kattintható link (`underline hover:text-slate-900`), ` / ` elválasztóval | MultiPill.tsx | Status: "Select all / none"; Creative library Size: "default / social / iab / none" |
 | `custom-dropdown` | Stílusozott `<select>` (státusz, méret, template, MC stepper) | sok helyen raw `<select>` Tailwind class-okkal | most felkerül mindenre |
@@ -739,6 +740,8 @@ Added an 11th workflow status `ARCHIVED`, sitting next to `INACTIVE` semanticall
 **Új tiszta segéd modulok:** `_tree/parseTreeStructure.ts` (arrow-string → `TreeLevel[]`), `_tree/buildTree.ts` (`{auds, tops, msgs}` × `TreeLevel[]` → xyflow `{nodes, edges}`). Mindkettő pure-fn, unit-tesztelt (`tests/unit/parse-tree-structure.test.ts`, `tests/unit/build-tree.test.ts` — 12 új teszt).
 
 **Új semantic class-ok:** `tree-view`, `tree-view--loading`, `tree-view--error`, `tree-view--empty`, `tree-view__node`, `tree-view__node--leaf`, `tree-view__node-label`, `tree-view__node-count` (`app/globals.css` `@layer components`).
+
+**Node-csík (`tree-view__node-wrap--*`):** a node bal oldali 4px-es csíkja vagy a mélységet kódolja (`--lvl-0..5`), vagy — ha a node alatti ÖSSZES üzenet ugyanazt a felismert buying platformot hozza — a platformot (`--plat-dv360`, `--plat-adform`). A `TreeView` pontosan az egyiket adja rá, nem mindkettőt. A platform-színek ugyanazok a `--plat-*` CSS-változók, amiket a mátrix audience-header éle használ; hogy melyik platform-string kap színt, egy helyen dől el: `matrix/types.ts` `PLATFORM_TOKENS`.
 
 **Settings bővítés:** Settings → Structure tab új section "Decision tree structure" (`_structure/StructureTab.tsx`). Új semantic class `structure-tab__section--tree`. Persistence a meglévő `config` táblába key=`treeStructure`, category=`structure` (semmi új API route, a generikus `/api/config` GET/PUT-on megy). Default seed (`db/defaults.ts`): `"Product → Strategy → Audience → Topic → Messages"`.
 

@@ -23,6 +23,10 @@ export type TreeNode = {
   // For headline node rendering (audience, topic): the originating entity key,
   // so consumers can look up the full row if needed.
   entityKey?: string;
+  // The buying platform shared by EVERY message under this node, when they all
+  // share one. Absent when the subtree mixes platforms or carries none, so a
+  // consumer can tell "all adform" apart from "mixed" and fall back.
+  platform?: string;
 };
 
 export type TreeEdge = {
@@ -80,6 +84,7 @@ export function buildTree(
     level: number;
     label: string;
     rows: Set<number>; // message ids that pass through this node
+    platforms: Set<string>; // distinct audience buying platforms below this node
     parentId: string | null;
     messageId?: number;
     entityKey?: string;
@@ -108,6 +113,7 @@ export function buildTree(
           level: i,
           label: gv.label,
           rows: new Set(),
+          platforms: new Set(),
           parentId,
         };
         if (level.kind === "messages") agg.messageId = row.message.id;
@@ -116,6 +122,9 @@ export function buildTree(
         nodeMap.set(nodeId, agg);
       }
       agg.rows.add(row.message.id);
+      if (row.audience.buyingPlatform) {
+        agg.platforms.add(row.audience.buyingPlatform);
+      }
 
       if (parentId !== null) {
         edgeSet.add(`${parentId}->${nodeId}`);
@@ -137,6 +146,7 @@ export function buildTree(
       };
       if (n.messageId !== undefined) out.messageId = n.messageId;
       if (n.entityKey !== undefined) out.entityKey = n.entityKey;
+      if (n.platforms.size === 1) out.platform = [...n.platforms][0];
       return out;
     });
 

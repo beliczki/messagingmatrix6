@@ -14,6 +14,8 @@ type Props = {
   setFilters: (f: Filters) => void;
   productOptions: string[];
   statusOptions: string[];
+  // MC count per status in the current result set (status filter excluded).
+  statusCounts: Record<string, number>;
   counts: {
     audiences: number;
     topics: number;
@@ -81,6 +83,7 @@ export default function MatrixToolbar(p: Props) {
         values={p.filters.statuses}
         options={p.statusOptions}
         optionColors={STATUS_COLOR}
+        optionCounts={p.statusCounts}
         quickSelect={STATUS_QUICK_SELECT}
         onChange={(s) => p.setFilters({ ...p.filters, statuses: s })}
       />

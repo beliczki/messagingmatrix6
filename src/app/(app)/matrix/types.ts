@@ -187,6 +187,21 @@ export const STATUS_COLOR: Record<string, string> = {
   MEMORY: "status-dot--memory",
 };
 
+// Buying-platform colours. The colour VALUES live once in globals.css as
+// --plat-* custom properties; this list is the single source for which platform
+// values have one. Two consumers: the matrix audience-header edge strip
+// (GridView) and the tree-view node stripe. buyingPlatform is a free-text
+// field, so an unrecognised value gets no platform colour and the consumer
+// keeps its default — giving a new platform (youtube, meta, …) a colour is one
+// entry here plus one --plat-* var and its two class rules.
+export const PLATFORM_TOKENS = ["dv360", "adform"] as const;
+
+export function platformToken(p: string | null | undefined): string | null {
+  if (!p) return null;
+  const v = p.trim().toLowerCase();
+  return (PLATFORM_TOKENS as readonly string[]).includes(v) ? v : null;
+}
+
 export type View = "grid" | "feed" | "tree";
 export type Density = "detailed" | "compact" | "dense";
 

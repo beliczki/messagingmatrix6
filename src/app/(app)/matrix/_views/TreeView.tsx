@@ -14,7 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, ChevronDown } from "lucide-react";
 import { parseTreeStructure } from "../_tree/parseTreeStructure";
 import { buildTree, type TreeNode } from "../_tree/buildTree";
-import type { Audience, Message, Topic } from "../types";
+import { platformToken, type Audience, type Message, type Topic } from "../types";
 import { useIsDarkMode } from "./useIsDarkMode";
 
 type ConfigRow = { key: string; value: unknown };
@@ -238,6 +238,14 @@ export default function TreeView({
           const hasChildren = (childrenOf.get(n.id) ?? 0) > 0;
           const isExpanded = effectiveExpanded.has(n.id);
           const lvl = levelOf(n.id) % LEVEL_COLOR_CYCLE;
+          // Platform colour wins over the depth colour when every message under
+          // the node shares one recognised buying platform — the same encoding
+          // the matrix audience header uses. A mixed or unknown platform keeps
+          // the depth stripe, so "no colour" never reads as a platform.
+          const plat = platformToken(n.platform);
+          const stripe = plat
+            ? `tree-view__node-wrap--plat-${plat}`
+            : `tree-view__node-wrap--lvl-${lvl}`;
           return {
             id: n.id,
             position: pos,
@@ -246,7 +254,7 @@ export default function TreeView({
             // measure the DOM, and the thumbnail starts empty).
             width: NODE_WIDTH,
             height: NODE_HEIGHT,
-            className: `tree-view__node-wrap tree-view__node-wrap--lvl-${lvl}${
+            className: `tree-view__node-wrap ${stripe}${
               isLeaf ? " tree-view__node-wrap--leaf" : ""
             }${isArchived ? " tree-view__node-wrap--archived row--archived" : ""}`,
             data: {

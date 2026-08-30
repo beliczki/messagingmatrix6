@@ -20,6 +20,7 @@ import {
   type Message,
   type Topic,
   STATUS_COLOR,
+  platformToken,
 } from "./types";
 import { type EditApi } from "./MatrixGrid";
 import { useLongPress } from "@/app/_components/useLongPress";
@@ -41,12 +42,8 @@ function audienceEdgeClasses(
       : a.strategy === "rem"
         ? `matrix-grid__header--strat-rem${s}`
         : null;
-  const plat =
-    a.buyingPlatform === "dv360"
-      ? `matrix-grid__header--plat-dv360${s}`
-      : a.buyingPlatform === "adform"
-        ? `matrix-grid__header--plat-adform${s}`
-        : null;
+  const token = platformToken(a.buyingPlatform);
+  const plat = token ? `matrix-grid__header--plat-${token}${s}` : null;
   return strat && plat ? `${strat} ${plat}` : null;
 }
 

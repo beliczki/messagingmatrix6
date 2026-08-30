@@ -806,7 +806,6 @@ export default function MatrixWorkspace() {
     const audKeys = new Set(auds.map((a) => a.key));
     const topKeys = new Set(tops.map((t) => t.key));
     let msgs = messages.filter((m) => audKeys.has(m.audience) && topKeys.has(m.topic));
-    if (ss.size > 0) msgs = msgs.filter((m) => m.status && ss.has(m.status));
     if (filters.search.trim()) {
       msgs = msgs.filter((m) => {
         const a = audienceById.get(m.audience);
@@ -820,6 +819,17 @@ export default function MatrixWorkspace() {
         return predicate({ audience, topic, strategy, platform, mc, free });
       });
     }
+    // Per-status MC counts for the Status filter menu. Measured here, with
+    // every OTHER filter applied but the status filter itself still pending —
+    // count after it and each selected status would only ever count itself
+    // while the unselected ones all read 0. Status and search are independent
+    // row predicates, so applying status after search (it used to run before)
+    // yields the same set.
+    const statusCounts: Record<string, number> = {};
+    for (const m of msgs) {
+      if (m.status) statusCounts[m.status] = (statusCounts[m.status] ?? 0) + 1;
+    }
+    if (ss.size > 0) msgs = msgs.filter((m) => m.status && ss.has(m.status));
     // Prune each axis independently: an audience-axis prefix (a:/p:/s:) trims
     // the visible columns, a topic-axis prefix (t:) trims the visible rows, and
     // mc: trims both. The unpruned axis keeps its full set, so e.g. p:adform
@@ -830,7 +840,7 @@ export default function MatrixWorkspace() {
       if (axes.audience) auds = auds.filter((a) => usedAudKeys.has(a.key));
       if (axes.topic) tops = tops.filter((t) => usedTopKeys.has(t.key));
     }
-    return { auds, tops, msgs, axisAudienceCount: axisAuds.length };
+    return { auds, tops, msgs, statusCounts, axisAudienceCount: axisAuds.length };
   }, [audiences, topics, nonDcoTopics, messages, filters, hideInactive, audienceById, topicById]);
 
   // Feed export must never see archived rows — the client message list acts
@@ -928,6 +938,7 @@ export default function MatrixWorkspace() {
           setFilters={setFilters}
           productOptions={productOptions}
           statusOptions={statusOptions}
+          statusCounts={filtered.statusCounts}
           counts={{
             audiences: filtered.axisAudienceCount,
             topics: topics.length,

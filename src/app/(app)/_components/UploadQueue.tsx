@@ -68,13 +68,15 @@ export function useDropTarget(onFiles: (files: File[]) => void) {
   return { over, handlers: { onDragEnter, onDragOver, onDragLeave, onDrop } };
 }
 
-export default function UploadQueue({
+/** The queue state machine — upload, per-item metadata, commit — with no UI of
+ *  its own. `UploadQueue` below renders it as the floating panel; the assets
+ *  batch dialog renders the same state as a table. */
+export function useUploadQueue({
   category,
   parsingRules,
-  renderForm,
   commitItem,
   onAllDone,
-}: Props) {
+}: Pick<Props, "category" | "parsingRules" | "commitItem" | "onAllDone">) {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [open, setOpen] = useState(false);
 
@@ -182,6 +184,75 @@ export default function UploadQueue({
   const errored = items.filter((i) => i.status === "error").length;
   const ready = items.filter((i) => i.status === "metadata").length;
 
+  /** Patch one item's metadata (merge, not replace). */
+  const updateMetadata = useCallback(
+    (id: string, patch: Record<string, string>) => {
+      setItems((prev) =>
+        prev.map((it) =>
+          it.localId === id
+            ? { ...it, metadata: { ...it.metadata, ...patch } }
+            : it,
+        ),
+      );
+    },
+    [],
+  );
+
+  /** Write the non-empty fields of `patch` onto every item still editable. */
+  const applyToAll = useCallback((patch: Record<string, string>) => {
+    const fields = Object.entries(patch).filter(([, v]) => v.trim() !== "");
+    if (fields.length === 0) return;
+    setItems((prev) =>
+      prev.map((it) =>
+        it.status === "metadata" || it.status === "error"
+          ? { ...it, metadata: { ...it.metadata, ...Object.fromEntries(fields) } }
+          : it,
+      ),
+    );
+  }, []);
+
+  function reset() {
+    setItems([]);
+    setOpen(false);
+  }
+
+  return {
+    items,
+    addFiles,
+    update,
+    updateMetadata,
+    applyToAll,
+    commitAll,
+    discard,
+    clearDone,
+    reset,
+    open,
+    setOpen,
+    total,
+    done,
+    errored,
+    ready,
+  };
+}
+
+export default function UploadQueue(props: Props) {
+  const { renderForm } = props;
+  const {
+    items,
+    addFiles,
+    update,
+    commitAll,
+    discard,
+    clearDone,
+    reset,
+    open,
+    setOpen,
+    total,
+    done,
+    errored,
+    ready,
+  } = useUploadQueue(props);
+
   return {
     addFiles,
     panel: total === 0 ? null : (
@@ -227,8 +298,7 @@ export default function UploadQueue({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              setItems([]);
-              setOpen(false);
+              reset();
             }}
             aria-label="Close queue"
             className="rounded p-1 text-slate-500 hover:bg-slate-100"

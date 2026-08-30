@@ -824,3 +824,17 @@ Added an 11th workflow status `ARCHIVED`, sitting next to `INACTIVE` semanticall
 **Bulk Delete a mátrix edit-módban (2026-08-17):**
 - `delete-mc-dialog` — a kijelölés archive-vagy-delete választója (`modal` shell, `max-w-sm`, `create-mc-dialog` mintája): `__hint` (a kijelölés = audience-másolat, nem kártya), `__groups` / `__group` (kártyánként egy sor) `__label` (MC-pill slate chipben) + `__count` („4 of 32 audience copies") + `__last` (rose „LAST COPY" badge), `__warning` (rose doboz: az utolsó másolat törlése a kártya tartalmát is viszi), `__locked` (amber figyelmeztetés a mérés-zárolt sorokról, `ShieldAlert`), `__actions` (gomb-oszlop), `__action--archive` (`toolbar-btn--primary` slate), `__action--delete` (rose `bg-rose-600`, disabled ha van zárolt sor), `__action--cancel` (`toolbar-btn`), `__error` (rose hibadoboz, `create-mc-dialog__error`-ral azonos).
 - `selection-actions__btn--delete` már nem disabled placeholder: rose szöveg + `hover:bg-rose-50`, megnyitja a `delete-mc-dialog`-ot.
+
+### Asset batch upload (AssetUploadDialog.tsx)
+
+| Mi | Class | Megjegyzés |
+| --- | --- | --- |
+| Modal root | `asset-upload-dialog modal` | 90vw × 90vh, max-w-6xl (header-dialog méret) |
+| Header strip | `asset-upload-dialog__header modal__header` | – |
+| Cím / fájlszámláló | `asset-upload-dialog__title` / `__count` | – |
+| Üres dropzone | `asset-upload-dialog__dropzone` | dashed, drag-over-ra `border-slate-900` |
+| Táblázat | `asset-upload-table` | – |
+| Sticky fejléc | `asset-upload-table__head` | – |
+| Batch-sor (oszloponkénti „set for all") | `asset-upload-table__batch` + `__apply` | – |
+| Sor / kész sor | `asset-upload-table__row` / `--done` | – |
+| Thumbnail / fájlnév / discard | `asset-upload-table__thumb` / `__filename` / `__discard` | – |

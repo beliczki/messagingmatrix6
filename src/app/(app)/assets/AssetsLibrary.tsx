@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Upload as UploadIcon,
@@ -12,11 +12,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { Masonry } from "../_components/Masonry";
-import UploadDialog, { type UploadResult } from "../_components/UploadDialog";
-import UploadQueue, {
-  useDropTarget,
-  type QueueItem,
-} from "../_components/UploadQueue";
+import AssetUploadDialog from "./AssetUploadDialog";
+import { useDropTarget, type QueueItem } from "../_components/UploadQueue";
 import MultiPill from "../_components/MultiPill";
 import ArchiveToggle from "../_components/ArchiveToggle";
 import RightToolbar from "../_components/RightToolbar";
@@ -92,6 +89,9 @@ export default function AssetsLibrary() {
     SET_CODEC,
   );
   const [uploadOpen, setUploadOpen] = useState(false);
+  // Files a drop handed over, passed to the dialog when it opens. The button
+  // opens the same dialog with an empty list (its own dropzone takes over).
+  const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [view, setView] = usePersistent<LibraryViewMode>(
@@ -128,38 +128,34 @@ export default function AssetsLibrary() {
   });
   const parsingRules = rulesQ.data?.rules ?? {};
 
-  const queue = UploadQueue({
-    category: "asset",
-    parsingRules,
-    renderForm: ({ item, update }) => (
-      <QueueItemForm item={item} update={update} />
-    ),
-    commitItem: async (item: QueueItem) => {
-      if (!item.uploadedFileId) throw new Error("file not uploaded");
-      const r = await fetch("/api/assets", {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          brand: item.metadata.brand || null,
-          product: item.metadata.product || null,
-          type: item.metadata.type || null,
-          visualKeyword: item.metadata.visualKeyword || null,
-          comment: item.metadata.comment || null,
-          fileId: item.uploadedFileId,
-          fileName: item.uploadedFilename,
-          fileSize: item.uploadedSize ? String(item.uploadedSize) : null,
-          fileDimensions: item.uploadedDimensions,
-        }),
-      });
-      if (!r.ok) throw new Error(await r.text());
-    },
-    onAllDone: () => {
-      qc.invalidateQueries({ queryKey: ["assets"] });
-      qc.invalidateQueries({ queryKey: ["files", "asset"] });
-    },
-  });
-  const drop = useDropTarget(queue.addFiles);
+  const commitAsset = useCallback(async (item: QueueItem) => {
+    if (!item.uploadedFileId) throw new Error("file not uploaded");
+    const r = await fetch("/api/assets", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        brand: item.metadata.brand || null,
+        product: item.metadata.product || null,
+        type: item.metadata.type || null,
+        visualKeyword: item.metadata.visualKeyword || null,
+        comment: item.metadata.comment || null,
+        fileId: item.uploadedFileId,
+        fileName: item.uploadedFilename,
+        fileSize: item.uploadedSize ? String(item.uploadedSize) : null,
+        fileDimensions: item.uploadedDimensions,
+      }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+  }, []);
+
+  // Dropping files anywhere on the grid opens the batch dialog with them.
+  const drop = useDropTarget(
+    useCallback((files: File[]) => {
+      setDroppedFiles(files);
+      setUploadOpen(true);
+    }, []),
+  );
 
   const productOptions = useMemo(() => {
     const s = new Set<string>();
@@ -270,7 +266,10 @@ export default function AssetsLibrary() {
               </p>
               {assets.length === 0 ? (
                 <button
-                  onClick={() => setUploadOpen(true)}
+                  onClick={() => {
+                    setDroppedFiles([]);
+                    setUploadOpen(true);
+                  }}
                   className="toolbar-btn--primary mt-4 inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
                 >
                   <UploadIcon className="size-3.5" />
@@ -319,14 +318,21 @@ export default function AssetsLibrary() {
         )}
       </div>
 
-      <UploadDialog
+      <AssetUploadDialog
         open={uploadOpen}
-        category="asset"
-        onClose={() => setUploadOpen(false)}
-        onUploaded={() => qc.invalidateQueries({ queryKey: ["files", "asset"] })}
-        metadataForm={({ file, submit, submitting }) => (
-          <AssetMetadataForm file={file} submit={submit} submitting={submitting} />
-        )}
+        initialFiles={droppedFiles}
+        parsingRules={parsingRules}
+        productOptions={productOptions}
+        typeOptions={typeOptions}
+        commitItem={commitAsset}
+        onAllDone={() => {
+          qc.invalidateQueries({ queryKey: ["assets"] });
+          qc.invalidateQueries({ queryKey: ["files", "asset"] });
+        }}
+        onClose={() => {
+          setUploadOpen(false);
+          setDroppedFiles([]);
+        }}
       />
 
       {detailId !== null
@@ -346,7 +352,6 @@ export default function AssetsLibrary() {
           })()
         : null}
 
-      {queue.panel}
       </div>
 
       <RightToolbar storageKey="mm6_assets_right_toolbar_open">
@@ -362,7 +367,10 @@ export default function AssetsLibrary() {
               />
               <button
                 type="button"
-                onClick={() => setUploadOpen(true)}
+                onClick={() => {
+                  setDroppedFiles([]);
+                  setUploadOpen(true);
+                }}
                 title="Upload"
                 aria-label="Upload"
                 className={clsx(
@@ -378,39 +386,6 @@ export default function AssetsLibrary() {
           return collapsed ? content : <div className="flex h-full flex-col gap-3">{content}</div>;
         }}
       </RightToolbar>
-    </div>
-  );
-}
-
-function QueueItemForm({
-  item,
-  update,
-}: {
-  item: QueueItem;
-  update: (patch: Partial<QueueItem["metadata"]>) => void;
-}) {
-  const cellCls =
-    "input-box rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs focus:border-slate-500 focus:outline-none";
-  const fields: Array<{ k: string; label: string }> = [
-    { k: "brand", label: "Brand" },
-    { k: "product", label: "Product" },
-    { k: "type", label: "Type" },
-    { k: "visualKeyword", label: "Keyword" },
-  ];
-  return (
-    <div className="upload-queue__item-form form-grid grid grid-cols-4 gap-1.5">
-      {fields.map((f) => (
-        <label key={f.k} className="form-field block">
-          <div className="form-field__label mb-0.5 text-[9px] uppercase tracking-wide text-slate-500">
-            {f.label}
-          </div>
-          <input
-            value={item.metadata[f.k] ?? ""}
-            onChange={(e) => update({ [f.k]: e.target.value })}
-            className={cellCls}
-          />
-        </label>
-      ))}
     </div>
   );
 }
@@ -606,105 +581,5 @@ function ListRow({
         {formatListDate(asset.updatedAt)}
       </div>
     </button>
-  );
-}
-
-function AssetMetadataForm({
-  file,
-  submit,
-  submitting,
-}: {
-  file: UploadResult | null;
-  submit: (extra: Record<string, unknown>) => Promise<void>;
-  submitting: boolean;
-}) {
-  const [brand, setBrand] = useState("");
-  const [product, setProduct] = useState("");
-  const [type, setType] = useState("");
-  const [visualKeyword, setVisualKeyword] = useState("");
-  const [comment, setComment] = useState("");
-  const qc = useQueryClient();
-
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!file) return;
-    const r = await fetch("/api/assets", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        brand: brand || null,
-        product: product || null,
-        type: type || null,
-        visualKeyword: visualKeyword || null,
-        comment: comment || null,
-        fileId: file.fileId,
-        fileName: file.filename,
-        fileSize: file.sizeBytes ? String(file.sizeBytes) : null,
-        fileDimensions: file.dimensions,
-      }),
-    });
-    if (!r.ok) {
-      alert(await r.text());
-      return;
-    }
-    qc.invalidateQueries({ queryKey: ["assets"] });
-    await submit({});
-  }
-
-  const inputCls =
-    "input-box w-full rounded border border-slate-300 px-2 py-1 text-xs focus:border-slate-500 focus:outline-none";
-  return (
-    <form onSubmit={onSubmit} className="asset-metadata-form space-y-2 text-xs">
-      <div className="form-grid grid grid-cols-2 gap-2">
-        <Field label="Brand">
-          <input value={brand} onChange={(e) => setBrand(e.target.value)} className={inputCls} />
-        </Field>
-        <Field label="Product">
-          <input value={product} onChange={(e) => setProduct(e.target.value)} className={inputCls} />
-        </Field>
-        <Field label="Type">
-          <input value={type} onChange={(e) => setType(e.target.value)} className={inputCls} />
-        </Field>
-        <Field label="Visual keyword">
-          <input
-            value={visualKeyword}
-            onChange={(e) => setVisualKeyword(e.target.value)}
-            className={inputCls}
-          />
-        </Field>
-      </div>
-      <Field label="Comment">
-        <input value={comment} onChange={(e) => setComment(e.target.value)} className={inputCls} />
-      </Field>
-      <button
-        type="submit"
-        disabled={submitting}
-        className={clsx(
-          "toolbar-btn--primary mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white",
-          submitting && "opacity-50",
-        )}
-      >
-        {submitting ? <Loader2 className="size-3.5 animate-spin" /> : null}
-        Save asset
-      </button>
-    </form>
-  );
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <label className="form-field block">
-      <div className="form-field__label mb-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-500">
-        {label}
-      </div>
-      {children}
-    </label>
   );
 }

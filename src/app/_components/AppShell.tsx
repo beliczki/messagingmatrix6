@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { usePresenceConnection } from "./usePresenceConnection";
 import UsersDialog from "../(app)/_components/UsersDialog";
@@ -28,6 +28,20 @@ export default function AppShell({ user, client, aboutInfo, children }: Props) {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   usePresenceConnection();
+
+  // A file dropped anywhere without its own drop target is otherwise opened by
+  // the browser, which navigates the app away mid-session. Drop targets keep
+  // working: their React handler runs before this document-level listener,
+  // which only cancels the default.
+  useEffect(() => {
+    const cancel = (e: DragEvent) => e.preventDefault();
+    document.addEventListener("dragover", cancel);
+    document.addEventListener("drop", cancel);
+    return () => {
+      document.removeEventListener("dragover", cancel);
+      document.removeEventListener("drop", cancel);
+    };
+  }, []);
 
   const isAdmin = user.role === "admin";
 

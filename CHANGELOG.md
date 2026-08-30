@@ -5,6 +5,30 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.29.0] — 2026-08-30
+
+### Added
+- **Batch asset upload with a real table.** The Assets Upload button now opens a
+  full-size overlay: one row per file with a thumbnail, and above the rows a
+  "set for all" header row — type brand / product / type / keywords once, hit
+  Apply (or Enter), then override any single row. Filenames still pre-fill the
+  fields through the parsing rules, product and type offer the values already in
+  use, and Save commits every row. Files can be dropped onto the dialog itself
+  to add more.
+
+### Changed
+- Dropping files on the Assets grid opens that dialog instead of the floating
+  queue panel, so drag-drop and the Upload button lead to the same place. The
+  single-file "Upload asset" dialog is gone from Assets (Creative Library keeps
+  it). The queue state machine moved into a `useUploadQueue` hook shared by both
+  presentations.
+
+### Fixed
+- **A file dropped anywhere outside a drop target no longer navigates the app
+  away.** The browser's default is to open the file, which is what happened when
+  files were dropped on the upload dialog (the modal covered the grid's drop
+  target). The shell now cancels stray drops document-wide.
+
 ## [6.28.2] — 2026-08-29
 
 ### Fixed

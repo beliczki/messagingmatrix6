@@ -28,6 +28,13 @@ export type AuditInput = {
   action: AuditAction;
   before?: unknown;
   after?: unknown;
+  /**
+   * Record the entry but skip its SSE broadcast. For a cascade that writes one
+   * audit row per affected entity (so each keeps its own history) while the
+   * caller sends a single batched broadcast — 120 rows must not mean 120
+   * refetch signals.
+   */
+  silent?: boolean;
 };
 
 export async function writeAudit(input: AuditInput): Promise<void> {
@@ -40,6 +47,7 @@ export async function writeAudit(input: AuditInput): Promise<void> {
     before: input.before === undefined ? null : JSON.stringify(input.before),
     after: input.after === undefined ? null : JSON.stringify(input.after),
   });
+  if (input.silent) return;
   broadcast(input.clientId, {
     entity: input.entityType,
     ids: [input.entityId],

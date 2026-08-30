@@ -18,6 +18,7 @@ import {
   Users,
   ListTree,
   Trash2,
+  RefreshCw,
 } from "lucide-react";
 import clsx from "clsx";
 import {
@@ -54,6 +55,36 @@ type Props = {
   templates: TemplateInfo[];
   onClose: () => void;
   onDeleted: () => void;
+};
+
+/** Why a key regeneration is refused — mirrors entities/rekey.ts. */
+type RekeyBlocker =
+  | { kind: "key_taken"; byId: number; byName: string }
+  | {
+      kind: "shipped_feed";
+      feedExportId: number;
+      product: string;
+      feedVersion: number;
+      uploadedAt: string;
+    }
+  | { kind: "monitoring_rows"; count: number };
+
+type RekeyPreview = {
+  currentKey: string;
+  generatedKey: string;
+  stale: boolean;
+  mcCount: number;
+  samplePmmidBefore: string | null;
+  samplePmmidAfter: string | null;
+  blockers: RekeyBlocker[];
+};
+
+/** What the Key field needs to render its own state and action. */
+type KeyStatus = {
+  stale: boolean;
+  generatedKey: string | null;
+  busy: boolean;
+  onRegenerate: () => void;
 };
 
 /** The subset of an MC the delete guard reports back. */
@@ -529,6 +560,148 @@ export default function HeaderDetailDialog({
     }
   }
 
+  // ── Regenerate the key from the pattern (edit mode) ──
+  // updateTopic/updateAudience freeze the auto-key once any MC references it,
+  // so a tag edit on a populated row leaves key + PMMIDs stale. This is the
+  // explicit way out: preview first, then cascade.
+  const [rekeying, setRekeying] = useState(false);
+  const entityPath = kind === "audience" ? "audiences" : "topics";
+  // From the list-backed `entity` prop, NOT from `committed`: generatedKey /
+  // keyStale are computed at list time, so a PATCH response (a bare row) would
+  // blank them out — hiding the badge at exactly the moment the tag edit
+  // created the drift. Every save invalidates the list, so this refreshes on
+  // its own one refetch later.
+  const keyStale = entity.keyStale === true;
+
+  function blockerLine(b: RekeyBlocker): string {
+    if (b.kind === "key_taken") {
+      return `The generated key is already used by "${b.byName}" (#${b.byId}).`;
+    }
+    if (b.kind === "shipped_feed") {
+      return `Feed v${b.feedVersion} (${b.product}) was uploaded to Adform on ${b.uploadedAt} carrying this key.`;
+    }
+    return `${b.count} monitoring row${b.count === 1 ? "" : "s"} already reference this key.`;
+  }
+
+  async function handleRegenerateKey() {
+    setRekeying(true);
+    try {
+      const pr = await fetch(`/api/${entityPath}/${committed.id}/rekey`, {
+        credentials: "include",
+      });
+      if (!pr.ok) {
+        await alert({
+          title: "Could not read the key preview",
+          message: `${pr.status} ${pr.statusText}`,
+          variant: "danger",
+        });
+        return;
+      }
+      const { preview } = (await pr.json()) as { preview: RekeyPreview };
+
+      if (!preview.stale) {
+        await alert({
+          title: "Key is already up to date",
+          message: `"${preview.currentKey}" already matches the configured pattern.`,
+          confirmLabel: "Close",
+        });
+        return;
+      }
+      if (preview.blockers.length > 0) {
+        await alert({
+          title: "This key has already left the building",
+          message: (
+            <div className="matrix-header-dialog__blockers">
+              <p>
+                The PMMIDs built from{" "}
+                <span className="font-mono">{preview.currentKey}</span> are
+                already in use downstream, so renaming it now would break the
+                measurement trail:
+              </p>
+              <ul className="matrix-header-dialog__blockers-list mt-2 max-h-48 list-disc overflow-y-auto pl-4 text-[11px]">
+                {preview.blockers.map((b, i) => (
+                  <li key={i}>{blockerLine(b)}</li>
+                ))}
+              </ul>
+            </div>
+          ),
+          variant: "warning",
+          confirmLabel: "Cancel",
+        });
+        return;
+      }
+
+      const many = preview.mcCount !== 1;
+      const ok = await confirm({
+        title: `Regenerate ${kind} key?`,
+        message: (
+          <div className="matrix-header-dialog__rekey-preview space-y-2 text-xs">
+            <div className="font-mono">
+              <div className="text-slate-500 line-through">
+                {preview.currentKey}
+              </div>
+              <div className="text-slate-900">{preview.generatedKey}</div>
+            </div>
+            <p>
+              {preview.mcCount} messaging card{many ? "s" : ""} move{many ? "" : "s"}{" "}
+              with it. Each one&apos;s PMMID and trafficking fields are
+              regenerated, because the PMMID embeds this key.
+            </p>
+            {preview.samplePmmidBefore && preview.samplePmmidAfter ? (
+              <div className="matrix-header-dialog__rekey-sample rounded border border-slate-200 bg-slate-50 p-2 font-mono text-[10px]">
+                <div className="text-slate-500 line-through">
+                  {preview.samplePmmidBefore}
+                </div>
+                <div className="text-slate-900">
+                  {preview.samplePmmidAfter}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        ),
+        variant: "danger",
+        confirmLabel: "Regenerate",
+      });
+      if (!ok) return;
+
+      const r = await fetch(`/api/${entityPath}/${committed.id}/rekey`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "If-Match": String(committed.version),
+        },
+        body: JSON.stringify({}),
+      });
+      if (r.ok) {
+        const body = (await r.json()) as
+          | { audience: Audience }
+          | { topic: Topic };
+        setCommitted("audience" in body ? body.audience : body.topic);
+        qc.invalidateQueries({ queryKey: [entityPath] });
+        qc.invalidateQueries({ queryKey: ["messages"] });
+        return;
+      }
+      const body = (await r.json().catch(() => null)) as {
+        error?: string;
+      } | null;
+      await alert({
+        title: "Key regeneration failed",
+        message: body?.error ?? `${r.status} ${r.statusText}`,
+        variant: "danger",
+      });
+    } finally {
+      setRekeying(false);
+    }
+  }
+
+  const keyStatus: KeyStatus = {
+    stale: keyStale,
+    generatedKey: entity.generatedKey ?? null,
+    busy: rekeying,
+    onRegenerate: handleRegenerateKey,
+  };
+
   // ── ESC closes; arrow keys step ──
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -712,6 +885,7 @@ export default function HeaderDetailDialog({
                   setDraft={(d) => setDraft(d)}
                   committed={committed as Audience}
                   mcCount={steppable.length}
+                  keyStatus={keyStatus}
                 />
               ) : (
                 <TopicForm
@@ -720,6 +894,7 @@ export default function HeaderDetailDialog({
                   committed={committed as Topic}
                   mcCount={totalMcCount}
                   uniqueMcCount={steppable.length}
+                  keyStatus={keyStatus}
                 />
               )}
             </div>
@@ -847,20 +1022,20 @@ function AudienceForm({
   setDraft,
   committed,
   mcCount,
+  keyStatus,
 }: {
   draft: AudienceDraft;
   setDraft: (d: AudienceDraft) => void;
   committed: Audience;
   mcCount: number;
+  keyStatus: KeyStatus;
 }) {
   function set<K extends keyof AudienceDraft>(k: K, v: AudienceDraft[K]) {
     setDraft({ ...draft, [k]: v });
   }
   return (
     <div className="matrix-header-form form-grid grid grid-cols-2 gap-x-4">
-      <Field label="Key" hint="Read-only — renaming would orphan messages.">
-        <input readOnly value={committed.key} className={readOnlyCls} />
-      </Field>
+      <KeyField committed={committed} keyStatus={keyStatus} />
       <Field label="MC count">
         <input readOnly value={String(mcCount)} className={readOnlyCls} />
       </Field>
@@ -1006,21 +1181,21 @@ function TopicForm({
   committed,
   mcCount,
   uniqueMcCount,
+  keyStatus,
 }: {
   draft: TopicDraft;
   setDraft: (d: TopicDraft) => void;
   committed: Topic;
   mcCount: number;
   uniqueMcCount: number;
+  keyStatus: KeyStatus;
 }) {
   function set<K extends keyof TopicDraft>(k: K, v: TopicDraft[K]) {
     setDraft({ ...draft, [k]: v });
   }
   return (
     <div className="matrix-header-form form-grid grid grid-cols-2 gap-x-4">
-      <Field label="Key" hint="Read-only — renaming would orphan messages.">
-        <input readOnly value={committed.key} className={readOnlyCls} />
-      </Field>
+      <KeyField committed={committed} keyStatus={keyStatus} />
       <Field label="MC count">
         <input
           readOnly
@@ -1158,6 +1333,59 @@ function Field({
         </div>
       ) : null}
     </label>
+  );
+}
+
+// The key stays read-only — it is the join column every MC, PMMID and UTM is
+// built from, so free-text editing would orphan cards. What IS offered here is
+// the one safe transition: regenerate it from the configured pattern and carry
+// the cards along. Without this the drift is invisible, since updateTopic /
+// updateAudience silently skip the auto-key once any MC references it.
+function KeyField({
+  committed,
+  keyStatus,
+}: {
+  committed: Audience | Topic;
+  keyStatus: KeyStatus;
+}) {
+  if (!keyStatus.stale) {
+    return (
+      <Field label="Key" hint="Read-only — renaming would orphan messages.">
+        <input readOnly value={committed.key} className={readOnlyCls} />
+      </Field>
+    );
+  }
+  return (
+    <Field
+      label="Key"
+      hint="A tag edit moved on without the key, because messages reference it."
+    >
+      <input readOnly value={committed.key} className={readOnlyCls} />
+      <div className="key-field__stale mt-1 flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 dark:border-amber-500/30 dark:bg-amber-500/10">
+        <span className="key-field__stale-badge status-badge text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-200">
+          out of date
+        </span>
+        <span
+          className="key-field__stale-key truncate font-mono text-[10px] text-amber-800 dark:text-amber-200"
+          title={keyStatus.generatedKey ?? ""}
+        >
+          {keyStatus.generatedKey}
+        </span>
+        <button
+          type="button"
+          onClick={keyStatus.onRegenerate}
+          disabled={keyStatus.busy}
+          className="key-field__regenerate ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-amber-800 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-40 dark:text-amber-200"
+        >
+          {keyStatus.busy ? (
+            <Loader2 className="size-3 animate-spin" />
+          ) : (
+            <RefreshCw className="size-3" />
+          )}
+          Regenerate
+        </button>
+      </div>
+    </Field>
   );
 }
 

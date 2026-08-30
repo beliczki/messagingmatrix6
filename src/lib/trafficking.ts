@@ -36,14 +36,14 @@ export type TraffickingPatternBag = {
   trafficking?: TraffickingPatterns;
 };
 
-type AudienceFlat = {
+export type AudienceFlat = {
   product?: string | null;
   strategy?: string | null;
   device?: string | null;
   targetingType?: string | null;
 } | null;
 
-type TopicFlat = {
+export type TopicFlat = {
   product?: string | null;
 } | null;
 

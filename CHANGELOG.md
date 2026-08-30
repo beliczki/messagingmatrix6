@@ -5,6 +5,35 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.30.0] — 2026-08-30
+
+### Added
+- **Regenerate a topic's or audience's key from its pattern, and carry every MC
+  along.** Editing a tag on a dimension that already has messaging cards has
+  always left the key behind — the auto-key is frozen so a rename cannot orphan
+  cards — but it did so silently, and every PMMID built from that key stayed
+  stale. The header dialog now marks such a key "out of date", shows what the
+  pattern would produce, and offers a Regenerate action. It previews the change
+  first (old → new key, how many cards move, one sample PMMID before/after),
+  then rewrites the key, each card's topic/audience, and each card's PMMID and
+  trafficking fields in a single transaction.
+- The rekey refuses rather than rewriting history: if the old key already
+  shipped in a feed export that was uploaded to Adform, if monitoring rows
+  reference it, or if the generated key is taken by another row. Feed export
+  payloads, monitoring rows and audit snapshots are never rewritten — they
+  record what actually shipped or was reported.
+- `GET`/`POST /api/topics/[id]/rekey` and `/api/audiences/[id]/rekey` (preview /
+  apply). The list endpoints now return `generatedKey` and `keyStale` per row.
+
+### Changed
+- The PMMID + trafficking regeneration that create / copy / move / update /
+  propagate each open-coded is now one shared `message-identity` helper, so the
+  "PMMID first, then trafficking reads it via utm_cd26" ordering exists in one
+  place instead of five.
+- A cascade writes one audit row per affected card (each keeps its own history)
+  but a single SSE broadcast — 120 rewritten cards no longer mean 120 refetch
+  signals. `writeAudit` takes a `silent` flag for this.
+
 ## [6.29.0] — 2026-08-30
 
 ### Added

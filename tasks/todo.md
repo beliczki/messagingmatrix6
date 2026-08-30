@@ -522,3 +522,34 @@ Séma-migráció (channels tábla) → **migrate+kód egy passzban a boxon** (`d
 - **(4) AssetsLibrary:** az Upload gomb és a rácsra dobás UGYANOTT köt ki (`droppedFiles` state → `initialFiles`). A régi egyfájlos `UploadDialog` + `AssetMetadataForm` + `QueueItemForm` + a csak ezekhez használt `Field` törölve az assets oldalról (a `UploadDialog` komponens marad a Creative Library-nek).
 - **Verifikáció:** `tsc` 0, `npm run build` 0, `npx vitest run` 585/585, eslint 0 error. Component-inventory új szekció (`asset-upload-dialog`, `asset-upload-table`).
 - **Bump:** `6.28.2` → `6.29.0` (minor — új user-látható feltöltő felület).
+
+### 2026-08-30 — TERV: Dimenzió-kulcs újragenerálás + kaszkád (topic/audience rekey)
+**Kiváltó ok:** két nap alatt kétszer kellett kézzel rekulcsolni (topic 261 `…individual`→`…valtscsapatot`, topic 266 `…150e`→`…120e`). Az `updateTopic`/`updateAudience` MC-guardja (`topics.ts:228`, `audiences.ts:257`) NÉMÁN kihagyja a kulcs-regent, ha bármelyik MC hivatkozik a kulcsra → a tag4 elmozdul, a kulcs nem, a PMMID pedig beégve viszi a régi kulcsot. A guard helyes; a némaság a hiba.
+
+- [x] 1. `src/lib/message-identity.ts` — tiszta fv: PMMID + 7 trafficking oszlop db-oszlop alakban (`regeneratedIdentity` / `traffickingColumns`). Nincs db-import → nincs ciklus (a `mc-refs.ts` precedens).
+- [x] 2. `createMessage` átkötése a helperre (tsc + tesztek)
+- [x] 3. `copyMessages` átkötése (tsc + tesztek)
+- [x] 4. `moveMessages` átkötése (tsc + tesztek)
+- [x] 5. `updateMessage` átkötése (csak trafficking, PMMID marad) (tsc + tesztek)
+- [x] 6. `writeAudit` `silent` opció → a kaszkád soronként auditál, de EGY broadcastot küld
+- [x] 7. `src/lib/entities/rekey.ts` — `previewRekey` + `rekeyDimension("topic"|"audience")`, tranzakcióban
+- [x] 8. Stale-kulcs jelzés: `listTopics`/`listAudiences` → `generatedKey` + `keyStale`
+- [x] 9. `makeRekeyRoute` az `entity-route.ts`-ben + `/api/{topics,audiences}/[id]/rekey`
+- [x] 10. `HeaderDetailDialog` — a read-only Key mező mellé stale-badge + akció + preview (régi→új kulcs, érintett MC-szám, minta-PMMID előtte/utána)
+- [x] 11. Integrációs teszt (rekey + no-op másodszorra + guard-elutasítás)
+- [x] 12. component-inventory + CHANGELOG + verzióbump
+
+**Lezárt döntések (user: „close along your intuition"):**
+- **Audit:** soronkénti audit-bejegyzés (MC-history megmarad) + EGY összevont SSE broadcast (nem 120).
+- **Nem automatikus:** a guard marad, az akció explicit — a drift láthatóvá tétele volt a hiányzó darab.
+- **Árvákat nem javít:** csak létező dimenzió kulcsát írja át; a 641 árva MC külön ügy.
+- **Guard = „elszállt-e már?", nem „ACTIVE-e?"** — a 120 db ACTIVE MC336 rekulcsolása biztonságos volt, mert semmi nem fogyasztotta még a PMMID-eket. Elutasít, ha a régi kulcs szerepel egy **feltöltött** feed exportban, vagy ha van rá monitoring sor.
+- **Történelmet NEM ír át** (korrekció az első vázlathoz képest): a `monitoring` sorok a platform-riportból parse-olt tények, ahogy a `feed_exports.payload_json` is — ezért ezek nem átírandók, hanem a guard részei. A guard miatt a kérdés amúgy is majdnem tárgytalan: ha semmi nem szállt el, monitoring sor sem létezhet a kulcsra.
+- **Kulcs-ütközés:** nem suffixel némán (`_2`), hanem elutasít.
+
+**Eredmény (2026-08-30):**
+- **Új:** `src/lib/message-identity.ts` (tiszta PMMID+trafficking builder), `src/lib/entities/rekey.ts` (preview + kaszkád), `makeRekeyRoute` + `/api/{topics,audiences}/[id]/rekey`, `KeyField` a header-dialogban, `tests/integration/api/rekey.test.ts` (11 teszt).
+- **Refaktor:** a „PMMID először, utána trafficking (utm_cd26 = {{PMMID}})" blokk **5 helyen** volt kimásolva (`createMessage`, `copyMessages`, `moveMessages`, `updateMessage`, `propagateToSiblings`) — mind az öt a közös helperre kötve, egyesével, tesztfuttatással a lépések között. A `propagateToSiblings` az ötödik példány volt, a tervezéskor csak hármat számoltam.
+- **UI-gap javítva menet közben:** a stale-badge a `committed`-ből olvasott volna, amit a PATCH-válasz (nyers sor, `generatedKey`/`keyStale` nélkül) felülír → pont a tag-szerkesztés pillanatában tűnt volna el a jelzés. Most a lista-alapú `entity` propból olvas.
+- **Verifikáció:** `tsc --noEmit` 0, `npm run build` 0, `npx vitest run` **596/596** (585 → +11), eslint 0 error a módosított fájlokon (3 pre-existing warning a HeaderDetailDialogban, nem az új kódban). Böngészős smoke a userre vár.
+- **Bump:** `6.29.0` → `6.30.0` (minor: új user-látható akció + 2 új HTTP route + list-válasz bővülés). CHANGELOG + component-inventory frissítve. Nincs séma-migráció.

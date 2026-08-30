@@ -25,6 +25,11 @@ export type Audience = {
   /** Count of messages (archived OR live) referencing this audience.key.
    *  Computed at list-time, not stored. > 0 means the auto-key is frozen. */
   mcCount?: number;
+  /** The key this row's pattern WOULD produce now (list-time, not stored). */
+  generatedKey?: string;
+  /** generatedKey !== key — a field edit moved on without the key, because the
+   *  MC-guard froze it. Surfaced in the header dialog with a rekey action. */
+  keyStale?: boolean;
 };
 
 // nonDCO channel (own table). Presented to the grid as an Audience with
@@ -97,6 +102,11 @@ export type Topic = {
   /** Count of messages (archived OR live) referencing this topic.key.
    *  Computed at list-time, not stored. > 0 means the auto-key is frozen. */
   mcCount?: number;
+  /** The key this row's pattern WOULD produce now (list-time, not stored). */
+  generatedKey?: string;
+  /** generatedKey !== key — a tag edit moved on without the key, because the
+   *  MC-guard froze it. Surfaced in the header dialog with a rekey action. */
+  keyStale?: boolean;
 };
 
 export type Message = {

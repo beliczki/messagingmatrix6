@@ -11,6 +11,11 @@ import { denyDemo, withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 import { type BlockingMc } from "@/lib/entities/mc-refs";
 import {
+  previewRekey,
+  rekeyDimension,
+  type Dimension,
+} from "@/lib/entities/rekey";
+import {
   missingVersion,
   readClientVersion,
   versionMismatch,
@@ -220,6 +225,61 @@ export function makeDuplicateRoute<R extends Row>(cfg: {
     return NextResponse.json({ [cfg.itemKey]: row }, { status: 201 });
   });
   return { POST };
+}
+
+// GET (preview) + POST (apply) — regenerate the row's key from its pattern and
+// carry every referencing MC along. GET is the preview the UI shows before the
+// user commits; POST refuses on a stale-version, a no-op, or any blocker.
+export function makeRekeyRoute(cfg: {
+  itemKey: string;
+  dimension: Dimension;
+}) {
+  const GET = withSession<Params>(async ({ claims, params }) => {
+    const id = parseId(params.id);
+    if (!id) return badId();
+    const preview = await previewRekey(claims.cid, cfg.dimension, id);
+    if (!preview) return notFound();
+    return NextResponse.json({ preview });
+  });
+
+  const POST = withSession<Params>(async ({ req, claims, params }) => {
+    const denial = denyDemo(claims);
+    if (denial) return denial;
+    const id = parseId(params.id);
+    if (!id) return badId();
+    const body = await req.json().catch(() => null);
+    const expected = readClientVersion(req, body);
+    if (expected === null) return missingVersion();
+    const result = await rekeyDimension(
+      claims.cid,
+      cfg.dimension,
+      id,
+      expected,
+      claims.sub,
+    );
+    if (!result.ok) {
+      if (result.reason === "not_found") return notFound();
+      if (result.reason === "version_mismatch") {
+        return versionMismatch(result.current, result.current.version);
+      }
+      // not_stale is not an error the user caused — the key already matches the
+      // pattern (a peer got there first). Both carry the preview so the client
+      // can show why nothing happened.
+      return NextResponse.json(
+        { error: result.reason, preview: result.preview },
+        { status: 409 },
+      );
+    }
+    // The cascade wrote its own audit rows (one per MC, plus the dimension
+    // row); no writeAudit here or the change would be recorded twice.
+    return NextResponse.json({
+      [cfg.itemKey]: result.row,
+      newKey: result.newKey,
+      messageIds: result.messageIds,
+    });
+  });
+
+  return { GET, POST };
 }
 
 // POST — hard delete (refuses on in_use)

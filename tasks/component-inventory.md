@@ -370,6 +370,8 @@ A row/col header kattintásra nyíló osztott modal: bal pane szerkeszthető aud
 | Manual Save / Cancel gombok | `toolbar-btn--primary` / `toolbar-btn` | – |
 | Delete (hard delete, szürke ikon-link, a sor elején) | `matrix-header-dialog__delete` | – |
 | Delete-blokkoló MC-lista (AlertDialog message) | `matrix-header-dialog__blockers` / `__blockers-list` | – |
+| Rekey preview (AlertDialog message: régi→új kulcs + minta-PMMID) | `matrix-header-dialog__rekey-preview` / `__rekey-sample` | – |
+| Key mező stale-sávja (amber, „out of date" + generált kulcs + Regenerate) | `key-field__stale` / `__stale-badge` / `__stale-key` / `__regenerate` | `KeyField`, HeaderDetailDialog |
 | Close (X) | `modal__close` | – |
 | Body flex container | `matrix-header-dialog__body` | – |
 | Edit form pane | `matrix-header-dialog__pane--form` | – |

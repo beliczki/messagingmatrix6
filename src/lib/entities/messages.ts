@@ -17,11 +17,11 @@ import {
   nextVariantForNumber,
   type ExistingMessage,
 } from "@/lib/numbering";
-import { generatePmmid } from "@/lib/pmmid";
+import { type TraffickingPatterns } from "@/lib/trafficking";
 import {
-  buildTrafficking,
-  type TraffickingPatterns,
-} from "@/lib/trafficking";
+  regeneratedIdentity,
+  traffickingColumns,
+} from "@/lib/message-identity";
 import { listAudiences } from "@/lib/entities/audiences";
 import { listCreativesByMc } from "@/lib/entities/creatives";
 import {
@@ -348,32 +348,16 @@ export async function createMessage(
   const patterns = await readClientPatterns(clientId);
   // The Erste pmmid/trafficking patterns look the audience up by key
   // ({{audiences[Audience_Key].Field}}) — audienceList is resolved above.
-  const pmmid = generatePmmid(
+  const identity = regeneratedIdentity(
     {
       audience: input.audience,
       topic: input.topic,
       number: slot.number,
       variant: slot.variant,
       versionNo: slot.version,
-    },
-    audienceList,
-    [],
-    patterns.pmmid,
-  );
-
-  const traffic = buildTrafficking(
-    {
-      number: slot.number,
-      variant: slot.variant,
-      audience: input.audience,
-      topic: input.topic,
       landingUrl: input.landingUrl,
     },
-    audienceRow,
-    topicRow,
-    patterns,
-    audienceList,
-    pmmid,
+    { audienceRow, topicRow, patterns, audienceList },
   );
 
   // New DCO MCs inherit the client's default template when the caller passes
@@ -401,14 +385,7 @@ export async function createMessage(
       audience: input.audience,
       topic: input.topic,
       versionNo: slot.version,
-      pmmid,
-      utmCampaign: traffic.utm_campaign,
-      utmSource: traffic.utm_source,
-      utmMedium: traffic.utm_medium,
-      utmContent: traffic.utm_content,
-      utmTerm: traffic.utm_term,
-      utmCd26: traffic.utm_cd26,
-      finalTraffickedUrl: traffic.final_trafficked_url,
+      ...identity,
     })
     .returning();
   return row;
@@ -431,31 +408,28 @@ export async function updateMessage(
   // is only (re)generated on create/copy/move.
   const merged = { ...current, ...input };
   const patterns = await readClientPatterns(clientId);
-  const traffic = buildTrafficking(
+  const traffic = traffickingColumns(
     {
       number: merged.number,
       variant: merged.variant,
       audience: merged.audience,
       topic: merged.topic,
+      versionNo: merged.versionNo,
       landingUrl: merged.landingUrl,
     },
-    await findAudienceByKey(clientId, merged.audience),
-    await findTopicByKey(clientId, merged.topic),
-    patterns,
-    await listAudiences(clientId),
+    {
+      audienceRow: await findAudienceByKey(clientId, merged.audience),
+      topicRow: await findTopicByKey(clientId, merged.topic),
+      patterns,
+      audienceList: await listAudiences(clientId),
+    },
     current.pmmid,
   );
   const [updated] = await db
     .update(messages)
     .set({
       ...input,
-      utmCampaign: traffic.utm_campaign,
-      utmSource: traffic.utm_source,
-      utmMedium: traffic.utm_medium,
-      utmContent: traffic.utm_content,
-      utmTerm: traffic.utm_term,
-      utmCd26: traffic.utm_cd26,
-      finalTraffickedUrl: traffic.final_trafficked_url,
+      ...traffic,
       version: sql`${messages.version} + 1`,
       updatedAt: nowUtc,
     })
@@ -588,29 +562,23 @@ export async function propagateToSiblings(
     let trafficFields: Record<string, unknown> = {};
     if (sameVariant) {
       const merged = { ...sib, ...payload } as Message;
-      const traffic = buildTrafficking(
+      trafficFields = traffickingColumns(
         {
           number: merged.number,
           variant: merged.variant,
           audience: merged.audience,
           topic: merged.topic,
+          versionNo: merged.versionNo,
           landingUrl: merged.landingUrl,
         },
-        await findAudienceByKey(clientId, merged.audience),
-        await findTopicByKey(clientId, merged.topic),
-        patterns,
-        audienceList,
+        {
+          audienceRow: await findAudienceByKey(clientId, merged.audience),
+          topicRow: await findTopicByKey(clientId, merged.topic),
+          patterns,
+          audienceList,
+        },
         sib.pmmid,
       );
-      trafficFields = {
-        utmCampaign: traffic.utm_campaign,
-        utmSource: traffic.utm_source,
-        utmMedium: traffic.utm_medium,
-        utmContent: traffic.utm_content,
-        utmTerm: traffic.utm_term,
-        utmCd26: traffic.utm_cd26,
-        finalTraffickedUrl: traffic.final_trafficked_url,
-      };
     }
     const [after] = await db
       .update(messages)
@@ -810,31 +778,16 @@ export async function copyMessages(
     const audienceRow = targetAudienceRows.get(p.targetAud) as Audience;
     const topicRow = await topicFor(p.source.topic);
 
-    const pmmid = generatePmmid(
+    const identity = regeneratedIdentity(
       {
         audience: p.targetAud,
         topic: p.source.topic,
         number: p.number,
         variant: p.variant,
         versionNo: 1,
-      },
-      audienceList,
-      [],
-      patterns.pmmid,
-    );
-    const traffic = buildTrafficking(
-      {
-        number: p.number,
-        variant: p.variant,
-        audience: p.targetAud,
-        topic: p.source.topic,
         landingUrl: { ...cloneable, ...overrides }.landingUrl,
       },
-      audienceRow,
-      topicRow,
-      patterns,
-      audienceList,
-      pmmid,
+      { audienceRow, topicRow, patterns, audienceList },
     );
 
     const [row] = await db
@@ -848,14 +801,7 @@ export async function copyMessages(
         number: p.number,
         variant: p.variant,
         versionNo: 1,
-        pmmid,
-        utmCampaign: traffic.utm_campaign,
-        utmSource: traffic.utm_source,
-        utmMedium: traffic.utm_medium,
-        utmContent: traffic.utm_content,
-        utmTerm: traffic.utm_term,
-        utmCd26: traffic.utm_cd26,
-        finalTraffickedUrl: traffic.final_trafficked_url,
+        ...identity,
       })
       .returning();
     created.push(row);
@@ -1015,32 +961,21 @@ export async function moveMessages(
   // Apply updates.
   const updated: Message[] = [];
   for (const p of plan) {
-    // PMMID first — utm_cd26 = {{PMMID}} reads the regenerated id.
-    const newPmmid = generatePmmid(
+    const identity = regeneratedIdentity(
       {
         audience: targetAudienceKey,
         topic: p.source.topic,
         number: p.number,
         variant: p.variant,
         versionNo: p.source.versionNo,
-      },
-      audienceList,
-      [],
-      patterns.pmmid,
-    );
-    const traffic = buildTrafficking(
-      {
-        number: p.number,
-        variant: p.variant,
-        audience: targetAudienceKey,
-        topic: p.source.topic,
         landingUrl: p.source.landingUrl,
       },
-      targetAudience,
-      p.topicRow,
-      patterns,
-      audienceList,
-      newPmmid,
+      {
+        audienceRow: targetAudience,
+        topicRow: p.topicRow,
+        patterns,
+        audienceList,
+      },
     );
     const [row] = await db
       .update(messages)
@@ -1048,14 +983,7 @@ export async function moveMessages(
         audience: targetAudienceKey,
         number: p.number,
         variant: p.variant,
-        pmmid: newPmmid,
-        utmCampaign: traffic.utm_campaign,
-        utmSource: traffic.utm_source,
-        utmMedium: traffic.utm_medium,
-        utmContent: traffic.utm_content,
-        utmTerm: traffic.utm_term,
-        utmCd26: traffic.utm_cd26,
-        finalTraffickedUrl: traffic.final_trafficked_url,
+        ...identity,
         version: sql`${messages.version} + 1`,
         updatedAt: nowUtc,
       })

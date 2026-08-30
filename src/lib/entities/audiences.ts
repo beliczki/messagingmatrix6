@@ -37,10 +37,19 @@ export function pickWritable(input: unknown): AudienceInput {
   return out as AudienceInput;
 }
 
+// `generatedKey`/`keyStale` expose the drift the MC-guard in updateAudience
+// leaves behind: once an audience has MCs, a product/strategy edit no longer
+// moves the key, and without this the stale key is invisible. See rekey.ts.
+export type AudienceListRow = Audience & {
+  mcCount: number;
+  generatedKey: string;
+  keyStale: boolean;
+};
+
 export async function listAudiences(
   clientId: number,
   opts: { includeArchived?: boolean } = {},
-): Promise<Array<Audience & { mcCount: number }>> {
+): Promise<AudienceListRow[]> {
   const where = opts.includeArchived
     ? eq(audiences.clientId, clientId)
     : and(eq(audiences.clientId, clientId), isNull(audiences.archivedAt));
@@ -50,7 +59,16 @@ export async function listAudiences(
     .where(where)
     .orderBy(audiences.orderIndex);
   const counts = await mcCountsByAudience(clientId);
-  return rows.map((r) => ({ ...r, mcCount: counts.get(r.key) ?? 0 }));
+  const pattern = await readAudienceKeyPattern(clientId);
+  return rows.map((r) => {
+    const generatedKey = keyFromPattern(pattern, r, r.orderIndex);
+    return {
+      ...r,
+      mcCount: counts.get(r.key) ?? 0,
+      generatedKey,
+      keyStale: generatedKey !== r.key,
+    };
+  });
 }
 
 // Map<audience.key, count of messages referencing it (archived OR live)>.
@@ -127,22 +145,37 @@ function hasKeyContent(s: string): boolean {
   return /[a-z0-9]/i.test(s);
 }
 
-// If config.patterns.audienceKey is set, evaluate it. Otherwise: aud{N+1}.
-// Pattern context includes product + strategy + buyingPlatform + device + tag.
-export async function generateAudienceKey(
-  clientId: number,
-  context: Pick<
-    Audience,
-    "product" | "strategy" | "buyingPlatform" | "device" | "tag"
-  >,
+export type AudienceKeyContext = Pick<
+  Audience,
+  "product" | "strategy" | "buyingPlatform" | "device" | "tag"
+>;
+
+// Pattern already in hand — the list path evaluates it for every row and must
+// not re-read config once per audience.
+function keyFromPattern(
+  pattern: string | null,
+  context: AudienceKeyContext,
   orderIndex: number,
-): Promise<string> {
-  const pattern = await readAudienceKeyPattern(clientId);
+): string {
   if (pattern) {
     const out = evaluatePattern(pattern, context as Record<string, unknown>);
     if (hasKeyContent(out)) return out;
   }
   return `aud${orderIndex + 1}`;
+}
+
+// If config.patterns.audienceKey is set, evaluate it. Otherwise: aud{N+1}.
+// Pattern context includes product + strategy + buyingPlatform + device + tag.
+export async function generateAudienceKey(
+  clientId: number,
+  context: AudienceKeyContext,
+  orderIndex: number,
+): Promise<string> {
+  return keyFromPattern(
+    await readAudienceKeyPattern(clientId),
+    context,
+    orderIndex,
+  );
 }
 
 // (client_id, key) is unique, so a generated key that is already taken — two

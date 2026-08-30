@@ -122,11 +122,11 @@ Cél: uploaded creative-ek MC-link nélkül láthatóak/szűrhetőek legyenek. (
 - [ ] **W2.6** `All | Matrixed | Unmatrixed` pill a `CreativeLibrary` toolbarba (`:821-823` mellé), meglévő toolbar-pill stílus. Logika: `kind==='uploaded' && (mcNumber==null || mcVariant==null)`; persist `mm6_creative_library_match_filter`; `(N)` count.
 - [ ] **W2.7** `status-badge--unmatrixed` sarok-badge a tile-on (látszik "All"-ban is).
 
-### D1 — Státusz-szűrő: MC-darabszám opciónként a szűrt eredményben (user, 2026-08-30)
+### D1 — Státusz-szűrő: MC-darabszám opciónként a szűrt eredményben (✅ KÉSZ, 6.31.0, 2026-08-30)
 Cél: a Status legördülőben minden opció jobb szélén **kis szürke szám** = hány MC esik arra a státuszra a JELENLEGI szűrt eredményben. Nem pill, nem badge (a pill a gombon már megvan) — csak jobbra igazított `text-xs text-slate-400`.
 Reuse: a `MultiPill` már fogad opciónkénti extrát és rendereli az opció-sorban (`optionColors` → színpötty, `_components/MultiPill.tsx:140-143`); ugyanoda kerül egy `optionCounts?: Record<string, number>` prop `ml-auto` számmal. Forrás: a `MatrixGrid` `filtered` useMemója.
-- [ ] **D1.1** `optionCounts` prop a `MultiPill`-be + jobbra igazított szürke szám (nincs szám → nem renderel semmit).
-- [ ] **D1.2** `statusCounts` a `MatrixGrid`-ben → `MatrixToolbar` (`:80-85`) → `MultiPill`. **Fontos:** a számot a **státusz-szűrő alkalmazása ELŐTTI** részhalmazon kell képezni (product + search + axis + hide-inactive már ráment), különben minden kiválasztott státusz önmagát számolná, a ki nem választottak meg mindig 0-t mutatnának.
+- [x] **D1.1** `optionCounts` prop a `MultiPill`-be + jobbra igazított szürke szám (nincs szám → nem renderel semmit).
+- [x] **D1.2** `statusCounts` a `MatrixGrid`-ben → `MatrixToolbar` (`:80-85`) → `MultiPill`. **Fontos:** a számot a **státusz-szűrő alkalmazása ELŐTTI** részhalmazon kell képezni (product + search + axis + hide-inactive már ráment), különben minden kiválasztott státusz önmagát számolná, a ki nem választottak meg mindig 0-t mutatnának.
 - ⚠️ Default: ugyanez a prop a Product-szűrőre is rámegy (egy hívási sor), ha a user kéri — nem külön munka.
 
 ---
@@ -179,48 +179,58 @@ Kiváltó: egy agent nem tudott júniusi MC-rangsort csinálni. Két gyökér-ok
 
 ---
 
-## 💡 Ötlet-inbox (2026-08-30, user) — push-back-first
+## 💡 Ötlet-inbox (2026-08-30, user) — döntések lezárva, terv jóváhagyásra vár
 
-Négy ötlet érkezett. A negyedik (státusz-darabszám) triviális és grounded → felkerült a 🟢 NOW-ba **D1**-ként. A maradék három **mind új tárolási réteget vagy új oldal-chrome-ot érint**, ezért a globális szabály szerint 3-kérdéses push-back kell, MIELŐTT bármelyikhez terv készül. Alább: mi létezik MA (felmérve, nem tippelve) + javasolt default.
+Négy ötlet érkezett; a user 2026-08-30-án mindháromra megadta az irányt (a negyedik, **D1**, döntés nélkül indítható és a 🟢 NOW-ban van). Alább: a **lezárt döntés**, a **felmért tények** (DB-ből és kódból, nem tippelve) és a **lépéslista**. Sorrend **lezárva (user, 2026-08-30): D1 + I3 megy elsőként** (a két kicsi, migráció nélkül), utána I1, végül I2.
 
-### I1 — Dashboard felújítás (widgetek + top filter-toolbar + side view-switcher)
-**Kérés:** legfrissebb kreatívok (1080×1080-asok 300×250 / 250×250 méretre kicsinyítve), legfrissebb kommentek, feed exportok, riport-dátum, pár chart a riportokból, olvasható activity log ("ki csinált mit", ne nyers kód) + top toolbar szűrőkkel + side toolbar view-kapcsolókkal.
-**Mi van ma** (`src/app/(app)/page.tsx`, 134 sor, server component): 6 db count-kártya (audiences/topics/messages/assets/creatives/text_formatting) + nyers audit-lista (`entityType#entityId`, nyers `userId`, nyers ISO-timestamp, 15 sor). Semmi más. Nincs toolbar, nincs kliens-state, nincs chart-lib a projektben.
-**Kapcsolódó, MÁR meglévő roadmap-item:** a „ki csinált mit" pont **szó szerint az FR-D** (🔵 LATER): `D.1` = `actor_kind` (`ui|mcp`) oszlop az `audit_log`-ba + badge, `D.2` = users-join a nyers `row.userId` helyett (email/név), `D.3` = utolsó-90-nap count a tile-okra. **Ne szülessen duplikátum item** — az I1 activity-log fele = FR-D előrehozása.
-**Push-back kérdések (terv ELŐTT megválaszolandó):**
-1. A dashboard a **napi belépő képernyőd** lesz (ott kezdesz minden reggel), vagy egy „jó ha van" áttekintő? Ha a második, a 8 widgetből 3 is elég.
-2. **Legolcsóbb 80%:** activity-log humanizálás (FR-D D.1+D.2, kis munka) + egy „legutóbbi kreatívok" csík + egy „utolsó riport dátuma" sor. A chartok és a két toolbar nélkül. Ez megvan-e neked?
-3. A **chartokat** akarod, vagy a bennük lévő **választ**? („mi ment jól múlt héten" → lehet, hogy egy rendezett táblázat vagy egy MCP-kérdés olcsóbban adja, mint egy chart-lib + dashboard-widget.)
-**Felmérés-jegyzetek (ha megy a build):**
-- **Kreatív-csík:** az 1080×1080 → 300×250 **nem transzformáció, hanem illesztés** — más az arány (1:1 vs 1.2:1). Vagy `object-contain` letterbox a 300×250 dobozba, vagy vágás. **Default: `object-contain`** (a Creative Library tile már így csinálja) — a 250×250 doboz viszont arányhelyes az 1080×1080-hoz, ezért **elsődlegesen azt** ajánlom.
-- **Chart-lib:** ma NINCS a projektben. Új függőség = külön döntés (2. push-back kérdés).
-- **Top toolbar + side view-switcher:** ~5 widgetes oldalon a globális szűrősáv új chrome-ot talál ki olyasmire, amiben még nincs mit szűrni. **Default: NEM az első körben** — előbb legyenek widgetek, aztán derüljön ki, mire kell globális szűrő.
-- **Riport-dátum + feed exportok:** olcsó, meglévő táblákból (`reporting`, `monitoring`, `feed_exports`) egy-egy `max(createdAt)` / top-5 lekérdezés.
+### I3 — Tree view: színezés **platform** szerint (✅ KÉSZ, 6.31.0, 2026-08-30)
+**User-döntés:** platform szerint színezzen, „mert az a kisebb egység — pl. dv360 és adform is programmatic", és a mátrix audience-headerben már a platformot színezzük. → **A csatorna-szín (YT/SOC/DISP) NEM ez a feladat**, és a Design-tab kivezetés egyelőre lekerül (lásd lent a tényt).
+**Felmért tények:**
+- A platform-szín ma **`audienceEdgeClasses`** (`GridView.tsx:33-51`): két hardcode-olt ág (`dv360` / `adform`) → CSS-osztályok (`globals.css:397-407`, `#43970b` és `#03c9ab`). A strategy a **vastagságot** kódolja (pro 3px / rem 5px), a platform a **színt**. Fontos részlet: **csak akkor színez, ha strategy ÉS platform is be van állítva** (különben `null`).
+- **DB (2026-08-30): összesen két platform-érték létezik** — `adform` 105, `dv360` 68, `null` 7 audience. **YouTube / meta / egyéb platform-érték ma NINCS.** (A `monitoring` táblában van 16 „platform", de az riport-forrás — publisher-nevekkel, pl. telex/hvgonline —, más fogalom, nem az `audiences.buyingPlatform`.)
+- A `buyingPlatform` **szabad szöveges** mező (autocomplete, `DimensionGrid/columns.ts:32`), nem enum → új platform = adat-kérdés, nem kód-kérdés, HA a színforrás map + fallback.
+- A tree-node ma **mélység szerint** színez (`tree-view__node-wrap--lvl-0..5`, `TreeView.tsx:41,240`). A `buildTree` minden node-on gyűjti az átmenő message-id-ket (`AggNode.rows`), és a `parseTreeStructure` a `buyingPlatform`-ot már ismeri csoportosító mezőként (`:28-29`) → a node-onkénti platform kiszámítható, nincs szükség a fa átstrukturálására.
+- **⇒ A Settings-kivezetés ma megalapozatlan** (két érték, mindkettőnek van színe). Default: **kódban rögzített map + fallback szín az ismeretlen platformra**; a `channels.color` oszlop + ChannelsTab-swatch csak akkor, ha tényleg lesz több csatorna-szín igény. Ha a user mégis most akarja a szerkeszthetőséget, az külön slice (új oszlop + migráció).
+- [x] **I3.1** `PLATFORM_COLOR` map egy helyre (`matrix/types.ts`, a `STATUS_COLOR` mellé — az a bevált precedens), + `PLATFORM_COLOR_FALLBACK`. Az `audienceEdgeClasses` erre kötve: **viselkedés-változás nélkül** (ugyanaz a két osztály áll elő). Ismeretlen platform → fallback-osztály a mai `null` helyett? ⚠️ **NEM**: a mátrix-header maradjon változatlan ebben a slice-ban, a fallback csak a tree-é.
+- [x] **I3.2** `buildTree`: `AggNode`-ra `platforms: Set<string>`, a `TreeNode`-ra `platform?: string` (pontosan egy distinct érték esetén) + `platformMixed?: true` (több esetén). A `rows` gyűjtésével azonos helyen (`buildTree.ts:118`), a row audience-éből.
+- [x] **I3.3** `TreeView`: a node-osztály a platform-színt kapja a `--lvl-N` helyett, ha van egyértelmű platform; `mixed` → semleges (mai lvl-szín); nincs platform (pl. topic-ág) → mai lvl-szín. A `LEVEL_COLOR_CYCLE` marad fallbacknek.
+- [x] **I3.4** `component-inventory` frissítve. **Legend NEM készült, szándékosan:** az appban ma sehol nincs legend-komponens (a mátrix audience-header is legend nélkül színez a platformmal), így a tree-hez építeni új mintát találna ki egy olyan kódoláshoz, ami máshol is magyarázat nélkül él. Külön kérésre, és akkor mindkét helyre egyszerre.
+- ✅ **LEZÁRVA (user, 2026-08-30):** a tree **csak színt** kap; a strategy vastagság-kódolása NEM jön át (a tree-node keretvastagsága ma más célt szolgál).
 
-### I2 — Komment-rendszer: threadelt buborékok minden entitáson, ember-vs-agent szerzővel
-**Kérés:** minden kommentelhető dolog (asset, MC, content, topic, audience) kapjon komment-**szekciót** — mini chat-buborék sorozat, követhető hogy **userhez köthető AI agent** vagy **ember** írta — a mai „adatsorhoz tartozó komment mező" helyett.
-**Mi van ma:**
-- **Egyetlen `comment` text oszlop** (nem thread, nem szerző, nem időbélyeg) ezeken: `audiences:175`, `channels:248`, `topics:311`, `messages` (+45 a blokkján belül), `assets:487`, `creatives:528` — `src/db/schema.ts`.
-- **`share_comments` tábla (`:704-726`) VISZONT már valódi thread-tároló:** `itemKey` diszkriminátor (`"matrix:{messageId}:{size}"` / `"creative:{id}"`), `authorName`, `body`, `annotation` (normalizált point/rect JSON), `createdAt`, `archivedAt`, két index. Ma csak a publikus share-galériákhoz kötve (`shareGalleryId` NOT NULL).
-- **Ember-vs-agent megkülönböztetés:** ma sehol nincs — **de pontosan ez az FR-D `D.1`** (`actor_kind: ui|mcp` az `audit_log`-on). A komment-szerző és az audit-aktor **ugyanaz az egy döntés**, ne szülessen kétféle fogalom.
-**Push-back kérdések:**
-1. Tényleg **thread** kell (több bejegyzés, szerző, idő), vagy a mai egy-mezős `comment` azért fáj, mert **nem látszik ki írta és mikor**? (Utóbbihoz elég lehet append-only szöveg + aláírás — nulla séma.)
-2. **Legolcsóbb 80%:** a `share_comments` **általánosítása** (a `shareGalleryId` nullable-re + `entityType`/`entityId` vagy bővített `itemKey` + `authorKind`+`userId`) — nem új rendszer, egy meglévő tábla kinyitása. Elfogadható-e ez az irány?
-3. **Ki írja az agent-kommenteket?** Ha az MCP-n keresztül az agent, akkor a komment-write MCP tool a lényeg, nem a buborék-UI. Melyik a fájó vég — az írás vagy az olvasás?
-**Javasolt default (ha build):** `share_comments` általánosítása `comments`-szé, `authorKind` (`user|agent`) + `userId`/`mcpTokenId`, a mai `comment` oszlopok **megmaradnak** (nem migrálunk 6 tábla adatát az első körben), a buborék-UI EGY helyen debütál (MC-editor), és csak ha bevált, terjed a többi entitásra. Migráció + kód **egy passzban** a boxon.
+### I1 — Dashboard: hasznos **napi** áttekintő (DÖNTÉS LEZÁRVA)
+**User-döntés:** „ha már van, hasznos áttekintőt szeretnék belőle faragni, **per nap**." → a dashboard **nap-scope-os digest**, nem szabad-szűrős analitika-oldal. Ez egyben megválaszolja a top-toolbar kérdést: a szűrő = **nap-választó** (Ma / Tegnap / utolsó 7 nap), nem generikus filter-sáv.
+**Felmért tények (2026-08-30, prod DB):**
+- **Az activity-log nem listázható nyersen:** ma **904** audit-sor van (tegnap 1754, 2026-08-17-én **5085**) — a mai 15-soros nyers lista (`page.tsx:37-43,105-125`) ebből semmit nem mutat. **A „legyen okosabb" valódi tartalma: aggregálás** (ki / mit / hány darabot), nem szebb sorok.
+- A humanizálás két fele **már roadmap-item**: `FR-D D.1` (`actor_kind` ui|mcp oszlop → ember-vs-agent badge) és `D.2` (users-join a nyers `userId` helyett). **Az I1 ezeket előrehozza, nem duplikálja.**
+- **A `reporting` tábla ÜRES (0 sor)** → a chartok forrása **kizárólag a `monitoring`** (6366 sor: impressions/clicks/cost/conversions, `period_from/to`, `imported_at`, `platform`, `mc_number`).
+- **A monitoring-adat elavult:** a lefedett időszak **2026. május** (`01/05`–`31/05`), az utolsó import **2026-07-16**. ⇒ **A user által kért „report dátum" widget a legértékesebb az egész oldalon** (hangosan kiírja, hogy 6 hete nincs friss adat), a **chartok viszont ma 3 hónapos adatot rajzolnának** — ezért a chart-slice a monitoring-ingest újraindulásáig alacsony hozamú.
+- **`feed_exports`:** 23 sor, oszlopok `exported_at` / `uploaded_to_adform_at` (nincs `created_at`). A legutóbbi három (SZA v2 ma, SZA v1 tegnap) **`uploaded_to_adform_at = NULL`** → az „exportálva, de nincs feltöltve" a legkonkrétabb napi jelzés, és pontosan a lockolt feed-invariánst (uploaded ≠ exported) teszi láthatóvá.
+- **Kreatívok:** az 1080×1080 → 300×250 **arány-eltérés** (1:1 vs 1.2:1) → nem transzformáció, hanem illesztés. **Default: a 250×250 doboz** (arányhelyes), `object-contain`-nel, a Creative Library tile mintájára.
+- Ma nincs chart-lib a projektben (új függőség = külön döntés).
+- [ ] **I1.1 Nap-scope + fejléc:** `?d=YYYY-MM-DD` (default: ma) + Ma / Tegnap / 7 nap kapcsoló. A meglévő toolbar-pill stílust használja, nem új chrome. A page marad server component, a scope URL-ben (nincs kliens-state).
+- [ ] **I1.2 Activity-digest (a nyers lista helyett):** aznapi `audit_log` **aggregálva** — `entityType` × `action` × aktor, darabszámmal, a top-N kibontható. Ide jön be `FR-D D.2` (users-join → email/név) — **`D.1` (`actor_kind`) séma-migráció, ezért külön slice** (lásd I1.6).
+- [ ] **I1.3 Friss kreatívok — horizontális album (user-pontosítás, 2026-08-30):** aznap létrehozott `creatives` vízszintes csíkban. **Normalizálás MAGASSÁGRA, nem fix dobozra:** a 300×250 megy **eredeti méretben**, az 1080×1080 **250×250-re** kicsinyítve → minden tile **250px magas**, a szélesség változó. (Ez feloldja az arány-problémát: nem vágunk és nem letterboxolunk, csak azonos magasságra hozunk.) Vezérlés: **léptető gombok** + **mobil swipe** balra/jobbra, az elején **rugalmas visszapattanás**, a végén **infinite scroll** (lapozva tölt tovább). A Creative Library tile-t újrahasználva, ne szülessen új tile-komponens.
+  - ⚠️ Tisztázandó a slice indulásakor: az „aznapi" halmaz mennyi tile-t jelent (ma 0–56/nap a `creatives` szerint) — ha egy napra kevés, az album scope-ja legyen-e inkább „legutóbbi N" a nap-scope helyett? Az infinite scroll csak akkor keres értelmet, ha van mit tölteni.
+- [ ] **I1.4 Feed-exportok:** aznapi `feed_exports` (product, verzió, `exported_at`) + **„exportálva, nincs feltöltve" figyelmeztetés**, ha `uploaded_to_adform_at IS NULL`.
+- [ ] **I1.5 Riport-frissesség tile:** `monitoring` `max(imported_at)` + a lefedett `period_from..period_to` + „N napja nincs friss import" jelzés. **Ez az egyetlen widget, ami MA is hasznos adatot mutat** — előre veendő.
+- [ ] **I1.6 (külön slice, migrációval) `actor_kind`:** `FR-D D.1` — `ui|mcp` oszlop az `audit_log`-ra + beállítás a két writer-site-on + ember/agent badge a digestben. **Migráció + kód egy passzban a boxon.** Ugyanez az oszlop-fogalom kell az I2-höz → **egyszer szülessen meg.**
+- [ ] **I1.7 (halasztva) Chartok:** amíg a monitoring-import nem indul újra, 3 hónapos adatot rajzolnának. Chart-lib választás + widget csak ezután. ⚠️ **Külön green-light.**
+- ⚠️ **Elvetve az első körből:** side toolbar view-kapcsolókkal — a nap-scope adja a nézetváltást, és 5-6 widgetnél a második toolbar üres chrome.
 
-### I3 — Platform/csatorna színek: Tree view + kivezetés a Settingsbe
-**Kérés:** a tree view-ban látszódjanak a platform szín-jelölések (adform, dv360), és a színek csatorna-customization szinten legyenek kivezetve a Design settings tabra, hogy a youtube és a többiek is kaphassanak színt.
-**Mi van ma:**
-- **`channels` tábla LÉTEZIK** (`schema.ts:207-227`): `key`, `code`, `label`, `orderIndex`, archive — **`color` oszlop NINCS**. És **`ChannelsTab` is létezik** a Settingsben (`settings/_channels/ChannelsTab.tsx`).
-- **A TreeView ma nem tud se platformról, se csatornáról:** a színe tisztán mélység-alapú (`LEVEL_COLOR_CYCLE = 6`, `TreeView.tsx:41,240`).
-- **Az audience-fejléc szín-strip (adform/dv360 = `platform`/`buyingPlatform`) a mátrixban már él** (`audienceEdgeClasses`, 6.23.1 óta a jobb élen transposed nézetben).
-- **`M1 — Matrix „Color by" (Strategy | Platform | Both)`** már bent van a 🟡 NEXT-ben — **ugyanaz a szín-forrás**. Egy közös token-map kell, két fogyasztóval (mátrix + tree), nem két külön színrendszer.
-⚠️ **Tisztázandó fogalom-keveredés:** az „adform / dv360" a **platform** (audience-mező), a „youtube / SOC / DISP" a **csatorna** (`channels` tábla, a nonDCO tengely). Ez **két külön dimenzió** — a kérésben egybecsúszott.
-**Push-back kérdések:**
-1. A tree-t **platform** szerint akarod színezni (adform/dv360), **csatorna** szerint (YT/SOC/DISP…), vagy kapcsolhatóan mindkettő szerint?
-2. A színek **hova kerüljenek**: a user a Design tabot mondta, de a csatorna-sorok a **`ChannelsTab`-ban** élnek — egy `color` oszlop a `channels` táblán + swatch a meglévő tabban közelebb van a „reuse beats invent"-hez. (A platform viszont nem tábla, hanem enum-by-convention → annak tényleg a Design tab a helye.) **Default: csatorna-szín → `channels.color` + ChannelsTab; platform-szín → Design tab token.**
-3. Kell-e **most** perzisztens szín, vagy elég egy kódban rögzített paletta (mint a mai státusz-színek), és a szerkeszthetőség később? **Default: kódban rögzített paletta előbb** (nulla migráció), Settings-kivezetés csak ha tényleg állítgatni akarod.
+### I2 — Komment-thread mint **entitás-provenance** (DÖNTÉS LEZÁRVA)
+**User-döntés:** „thread lenne a legjobb, fáj hogy nem látszik ki mikor mit" + **a cél explicit: az agenteknek kontextust adni** arról, hogy mi változott, milyen kérésre, miért, és **egyáltalán miért hívnak úgy egy topicot / audience-t / MC-t, mi van rajtuk, miért jöttek létre.**
+⇒ **Ez átkeretezi a feladatot:** nem „chat-buborék UI" a fő termék, hanem **entitásonkénti provenance-napló, aminek az agent az elsődleges olvasója és társ-írója**. Az MCP olvasó/író oldal tehát nem opcionális ráadás, hanem a lényeg.
+**Felmért tények:**
+- Ma **egyetlen `comment` text oszlop** van (nincs szerző, idő, thread): `audiences:175`, `channels:248`, `topics:311`, `messages`, `assets:487`, `creatives:528` (`src/db/schema.ts`).
+- **`share_comments` (`:704-726`) viszont már valódi thread-tároló:** `itemKey` diszkriminátor (`"matrix:{messageId}:{size}"` / `"creative:{id}"`), `authorName`, `body`, normalizált `annotation` (point/rect JSON), `createdAt`, `archivedAt`. Ma a publikus share-galériához kötve (`shareGalleryId` NOT NULL).
+- **`share_comments`-ben mindössze 2 sor van** ⇒ az általánosításnak **nincs érdemi adat-migrációs kockázata**.
+- Az „ember vagy agent" **ugyanaz az egy fogalom, mint az `FR-D D.1` `actor_kind`-ja** → **egyszer definiáljuk** (I1.6), és a komment ugyanazt használja.
+- [ ] **I2.1 Séma:** `share_comments` általánosítása — `share_gallery_id` **nullable**, + `entity_type` / `entity_id`, + `author_kind` (`user|agent`), + `user_id` / `mcp_token_id`. A meglévő 2 sor `entity_type='share_item'`-mel back-fillelve. Migráció (`0008+`) **+ kód egy passzban** a boxon. A régi 6 `comment` oszlop **marad** (nem migrálunk adatot az első körben).
+- [ ] **I2.2 Entity-réteg:** `entities/comments.ts` — `listComments(entityType, entityId)` / `addComment` / `archiveComment`. A `keywords`-minta (managed tábla ordering+archive-val) a precedens.
+- [ ] **I2.3 MCP (a lényeg):** `list_comments` (read) + `comment_add` (write, `author_kind='agent'`, a hívó token azonosításával) — így az agent **olvassa a miértet és hozzá is ír**. McpTab „Comments" group + prose (a tool-lista auto-szinkron, a prózát kézzel kell).
+- [ ] **I2.4 UI — EGY helyen debütál:** buborék-thread az **MC-editorban**; ember/agent avatar-jelöléssel, idővel, szerzővel. Csak ha bevált, terjed a topic/audience header-dialogra és az asset/creative detailre.
+- [ ] **I2.5** Tesztek (entity + MCP + route) · component-inventory · CHANGELOG · bump.
+- ✅ **LEZÁRVA (user, 2026-08-30):** a mai egy-mezős `comment` oszlopok **változatlanul maradnak** a thread mellett — az első kör semmit nem vesz el.
 
 ---
 
@@ -612,3 +622,177 @@ Séma-migráció (channels tábla) → **migrate+kód egy passzban a boxon** (`d
 
 - **6.30.2 (UI-nit, user):** a „Generated key" mező **szürkén jelent meg amber helyett** — az ok nem a szándék, hanem a Tailwind: a `clsx(readOnlyCls, "…bg-amber-50…")` két AZONOS rétegbeli utilityt tett egymás mellé (`bg-slate-50` vs `bg-amber-50`), és ilyenkor a stíluslap sorrendje dönt, nem a class-attribútumé. Most saját, explicit osztálylistája van (nincs merge), a labelje is amber (`Field` új opcionális `labelCls` propja). A gomb felirata `Regenerate` → **`Regenerate dependencies`**, amber tónusban.
 - **DEPLOYOLVA 6.30.2 (2026-08-30):** commit `def87db`, box `aea4a66`→`def87db`, build exit 0, `pm2 restart mm6-erste` → **Ready 1341ms**. Health: `/` 307, `/login` 200, `/mcp` 401.
+
+---
+
+## Session 2026-08-30 — MC337a → MC294 átszámozás + tartalom a régi VAL feedből (TERV)
+
+Forrás: `docs/Erste_Vallalkozo_2026 (0508).xlsx` (régi Adform VAL feed, 179 sor: MC1 default 101, MC293 76, MC294 2).
+Cél-sor a mátrixban: **id 35943** — DCO, `MC337a`, audience `VAL_microlp`, topic `VAL_brand_bankvaltas_NA_rem120e`, status `PREVIEW`, minden tartalmi mező üres (a user előkészített helye).
+
+### Feladat 1 — átszámozás + tartalom-feltöltés (VÉGREHAJTÁS)
+- [x] **1.1** `number` 337 → 294. Szabad a DCO tengelyen (294-et csak a nonDCO `ch_soc`/`ch_disp` páros tartja `VAL_Remarketing_Erstes-leszek_120e_rem` topicban — cross-axis párosítás 6.17.0 óta engedett).
+- [x] **1.2** `pmmid` + trafficking ÚJRAGENERÁLÁS `regeneratedIdentity()`-vel (`message-identity.ts`) — az `updateMessage` szándékosan NEM nyúl a pmmidhez, a szám viszont benne van (`-m_337-`), és az `utm_term` (`...!hu!337a`) + `utm_cd26` + `final_trafficked_url` is.
+- [x] **1.3** Tartalmi mezők a feed aktív (2026-os, ADFPLAID 14234692) sorából:
+  - `template` = `html`, `template_variant_classes` = `animated purple fullSurfaceColor objectGfx`
+  - `headline` = `Legyél erstés vállalkozóként is!` (PLAIN — v6-ban egyetlen üzenet sem tárol HTML-t a szövegmezőben)
+  - `copy1` = `Tedd meg az első lépést még most!` (PLAIN)
+  - `headline_style` = `font-size:1.15rem;`, `copy1_style` = `font-size:0.9rem;`
+  - `cta` = `Érdekel!`
+  - `landing_url` = `https://www.erstebank.hu/hu/ebh-business/kisvallalkozasok/szamlak-napi-penzugyek/bankvaltas`
+  - assets a `patterns.feed` map szerint (`image1`→bg1, `image2`→bg2, `image5`→brand, `image6`→sticker): `empty.png` / `erste_vallalkozo_object.png` / `EBH_Logo_screen_white.png` / `empty.png`, `image3` = `empty.png` (MC23/MC108 objectGfx konvenció), `video1` üres.
+- [x] **1.4** A feed HTML-formázása NEM a mezőbe megy, hanem 2 `text_formatting` szabályba (exact-match, universal scope):
+  - `Legyél erstés vállalkozóként is!` → `Legyél erstés<br> vállalkozóként is!`
+  - `Tedd meg az első lépést még most!` → `Tedd meg az első <span style=white-space:nowrap>lépést még most!</span>`
+- **NEM nyúlok hozzá:** `status` (marad PREVIEW), `start_date`/`end_date` (a régi feed 2025-02-02→2026-12-31 flight-dátuma lifecycle-állapot, nem tartalom), `name`, `audience`, `topic`.
+- ⚠️ **Hiányzó asset:** `erste_vallalkozo_object` nincs az `uploaded_files`/`assets` táblában egyik kliensnél sem, és a lokális `~/ERSTE .../assets` mappában sincs. A `.png` kiterjesztés a többi `*_object.png` konvencióból következtetve. A feed-export így a helyes stringet adja, de az in-app preview addig nem oldja fel, amíg a fájl nincs feltöltve a media libarybe.
+
+### Feladat 2 — audience-elemzés (CSAK ELEMZÉS, nincs írás)
+- [x] **2.1** Régi feed MC294 audience-ei vs. mátrix VAL audience-ek — lásd lent.
+
+**Módszer:** a pmmid `-a_...-` szegmens nem elég (a feed két névgeneráció keveréke: az MC1 default sor már az ÚJ `VAL_*` kulcsokat használja, az MC293/294 még a régi Adform-neveket). Megbízható join: **`AdformSignal:ADFPLAID` ↔ `audiences.lineitem_id`**.
+
+**Eredmény — MC294 = 1 audience:**
+| régi név | ADFPLAID | IsActive | DateFrom→DateTo | mátrix audience |
+|---|---|---|---|---|
+| `afwesegall` | 14234692 | TRUE | 2025-02-02 → 2026-12-31 | ✅ `VAL_microlp` — Landing Page Visitors (rem / websiteEvent / segment / all), **ACTIVE** |
+| `afwesegall` | 12994656 | FALSE | 2025-02-02 → 2026-12-31 | ❌ nincs — ez a 2025-ös kampány (`mID25-00101`) line itemje, ugyanaz az audience, leváltva a 2026-osra (`mID26-00016`) |
+
+- A 2 feedsor tehát **ugyanaz az egy audience**, csak két kampányévvel. Élő audience-szám: **1**.
+- Ez pontosan az az audience, amire a user a helyet (MC337a) előkészítette → a placement stimmel, nincs mit pótolni.
+- **Kontroll (MC293, a prospecting kártya): 19/19 audience megvan** a mátrixban (`afadwlall`→`VAL_adaptive`, `afafwldtfindsk`→`VAL_wlfin-findsk`, `afdgsegallincome`→`VAL_wldigiseg-income` stb.), 0 hiányzó. Az audience-migráció tehát teljes volt — a régi feedben nincs olyan VAL audience, ami kimaradt.
+- **Struktúra:** MC293 (19 pro audience) és MC294 (1 rem audience) diszjunkt — `VAL_microlp` NEM szerepel MC293-ban. MC294 a VAL termék **egyetlen remarketing kreatívja** volt, és a `VAL_microlp` az egyetlen ACTIVE `rem`-stratégiájú VAL audience (a `VAL_microtarasaslp` INACTIVE, nincs line itemje).
+
+### Végrehajtva
+Egyszeri script (`scripts/renumber-337-to-294.ts`, dry-run → `--commit`, futás után törölve — nem újrahasznosítható művelet). Utána `version` 3→4 kézzel (az optimistic lockot a direkt UPDATE nem emelte volna, egy nyitott böngészőfül elavult verzióval felülírhatta volna).
+
+**Eredmény (id 35943):** `MC294a` · `VAL_microlp` · `VAL_brand_bankvaltas_NA_rem120e` · PREVIEW · `html` + `animated purple fullSurfaceColor objectGfx` · pmmid `p_adform-s_rem-a_VAL_microlp-m_294-t_VAL_brand_bankvaltas_NA_rem120e-v_a-n_1` · utm_term `con!adform!VAL_microlp!...!hu!294a`. 2 új `text_formatting` szabály (id 228, 229).
+
+**Nyitott:** `erste_vallalkozo_object.png` fel kell tölteni a media libarybe (a mezőben már benne a hivatkozás, a feed-export helyes stringet ad, de a preview addig nem oldja fel). Nincs kódváltozás → nincs verzió-bump.
+
+### 2026-08-30 — Státusz-darabszám a szűrőben (D1) + tree platform-szín (I3) — 6.31.0
+- **Előzmény:** a user négy ötletet adott (dashboard-felújítás, komment-thread, tree platform-színek, státusz-darabszám). Mind a négy felmérve (kód + prod DB), a döntések lezárva, a tervek a **💡 Ötlet-inbox** szekcióban. A user a két kicsit engedte el elsőnek.
+- **D1 ✅ — státusz-darabszám a Status-szűrőben.** `MultiPill` új opcionális `optionCounts` propja (`ml-auto text-xs tabular-nums text-slate-400`, `multi-pill__count`) — az `optionColors` színpötty mellé, ugyanabba az opció-sorba. A `MatrixGrid` `filtered` useMemója számolja és adja tovább a toolbaron át.
+  - **A számolás helye a lényeg:** a státusz-szűrőt **átmozgattam a search-szűrő MÖGÉ**, és a darabszámot a kettő közt veszem — minden más szűrő (product, axis, hide-inactive, search) érvényes, a státusz-szűrő még nem. Utána számolva minden kiválasztott státusz csak önmagát számolná, a kiválasztatlanok meg mind 0-t mutatnának. A státusz és a search független sor-predikátumok, ezért a sorrendcsere azonos `msgs` halmazt ad — a viselkedés nem változik.
+  - A `DimensionGrid` Status-pillje nem ad `optionCounts`-ot → ott nincs szám (a prop opcionális).
+- **I3 ✅ — tree-node színezés platform szerint** (user-döntés: platform, „mert az a kisebb egység"; **csak szín, strategy-vastagság nem**).
+  - `buildTree`: az `AggNode` gyűjti a node alatti distinct `buyingPlatform`-okat; a `TreeNode` **csak akkor** kap `platform`-ot, ha pontosan egy van. Kevert vagy platform nélküli részfa → nincs mező, a node marad a mélység-színénél — így a „nincs szín" sosem olvasódik platformnak.
+  - `TreeView`: pontosan EGYIK osztályt adja rá (`--plat-*` VAGY `--lvl-*`), nem kettőt egymásra — nincs specificitás-játék, a `border-left` shorthand tisztán felülíródik.
+  - **Szín-forrás egy helyre:** a két hex kétszer szerepelt a `globals.css`-ben (alsó- és jobb-él variáns), a platform→szín elágazás pedig be volt drótozva a `GridView`-ba. Most a **`--plat-dv360` / `--plat-adform` CSS-változó** az egyetlen hely, ahol a szín él, és **`matrix/types.ts` `PLATFORM_TOKENS`** az egyetlen hely, ahol az dől el, melyik platform-string kap színt. A `platformToken()` trimmel + kisbetűsít (a `buyingPlatform` szabad szöveges mező) — ez szigorú bővítés, a mátrix-header vizuálisan nem változott.
+  - **Adat-tény:** a prod DB-ben ma **csak két** platform-érték él (adform 105, dv360 68, null 7) — youtube/meta nincs. Ezért a Settings-szintű szín-szerkesztés kimaradt: új platform ma **egy sor** a `PLATFORM_TOKENS`-ben + egy var. Ha tényleg állítgatni kell, az külön slice (új oszlop + migráció).
+  - Menet közben javítva egy **elavult CSS-komment**: a tree-blokk egy `LEVEL_COLORS` tömbre hivatkozott a `TreeView.tsx`-ben, ami nem létezik (a MiniMap saját flat `nodeColor`-t fest).
+- **Verifikáció:** `tsc --noEmit` 0, `npm run build` 0, `npx vitest run` **599/599** (596 → +3 új `build-tree` teszt: egységes platform öröklődik felfelé; kevert részfa nem kap platformot, de az alatta lévő egységes node igen; platform nélküli fa érintetlen), eslint 0 error a módosított fájlokon. **Böngészős smoke a userre vár** (tree platform-csíkok + státusz-számok).
+- **Bump:** `6.30.2` → `6.31.0` (minor — két user-látható feature). CHANGELOG + component-inventory frissítve. Nincs séma-migráció.
+- **⚠️ Menet közben:** a HEAD elmozdult (`def87db`, 6.30.2 a userre) — a `-42` sor a todo.md diffben a saját, commitolatlan v1 ötlet-blokkom lecserélése v2-re, nem elveszett tartalom.
+
+### 2026-08-30 — MC335→398, MC336→399 renumber (DCO tengely) — adatjavítás
+**Kérés:** a DCO kampány-kártyák MC335/MC336 száma ütközik az azonos számú analóg (nonDCO) MARKET témákkal; írjuk át őket. Első javaslat 340/341 volt, de azok a nonDCO tengelyen foglaltak (MARKET_GoApp 340c, SZA_Szamlanyitas 341a) → user döntés: **398 / 399** (a kliens max MC-je 397, tehát mindkét tengelyen szabad).
+
+**Scope (user által megerősítve):** csak a **DCO** oldal mozdul.
+- `SZA_beerste_bankvaltas_NA_valtscsapatot` MC335 a–i, 216 sor (ACTIVE, a c variáns INACTIVE) → **MC398**
+- `VAL_beerste_bankvaltas_NA_valtscsapatot120e` MC336 a–f, 120 sor (ACTIVE) → **MC399**
+- Az analóg `MARKET_MCx_f_genZbefektetes_2026Q1` (335) és `MARKET_MCx_genZbefektetes_2026Q1` (336) **marad**.
+
+- [x] 1. `scripts/renumber-mc-dco.ts` — dry-run alapértelmezett, `--commit` ír
+- [x] 2. Blokkoló-ellenőrzés futás közben: cél-szám foglaltság a DCO tengelyen, feltöltött feed export, monitoring sor
+- [x] 3. Dry-run + PMMID before/after minta bemutatása
+- [x] 4. `--commit` egy tranzakcióban: `number` + `pmmid` + 7 trafficking oszlop + `version+1` + audit sor MC-nként
+- [x] 5. Utóellenőrzés SQL-lel, script törlése (egyszeri művelet)
+
+**Előzetesen ellenőrzött tények:** `monitoring` 0 sor a 335/336-ra; `prodlist_rows` 0 sor; a `creatives` 32 rekordja mind az *analóg* MARKET fájlokhoz tartozik (`ERSTE_MARKET_MC335_a_...`), a DCO kártyákhoz egy sem → creative-link nem szakad el (sőt, a mai téves (mc_number,mc_variant) egyezés megszűnik). 3 feed export (SZA v1, v1, v2) tartalmaz `-m_335-`-öt, de **egyik sincs Adformra feltöltve** → nem blokkoló; a payloadot nem írjuk át (shipped-history invariáns), a következő exportnál újragenerálódik.
+
+### Végrehajtva
+Egyszeri script (`scripts/renumber-mc-dco.ts`, dry-run → `--commit`, futás után törölve — a `renumber-337-to-294.ts` precedensét követve). A `number` szándékosan nem writable mező (`WRITABLE_FIELDS`), ezért nincs támogatott app-útvonal; a script a `entities/rekey.ts` mintáját másolja: ugyanazok a blokkoló-ellenőrzések, ugyanaz a „regeneráld az identitást, de a leszállított history-t soha ne írd át" szabály, MC-nként audit sor.
+
+**Kulcs-kontroll a commit előtt:** mind a 336 sorra lefuttattam a `regeneratedIdentity`-t **változatlan** számmal, és a 8 generált oszlop (`pmmid` + 7 trafficking) **bitre azonosan** reprodukálódott a tároltakkal. Tehát nem volt előzetes pattern-sodródás, amit a javítás csendben behúzott volna — a commit tényleg csak a számot és a belőle képzett részstringeket írta át.
+
+**Eredmény:** 336 sor. `MC335 → MC398` (SZA_beerste_bankvaltas, a–i, 216 sor), `MC336 → MC399` (VAL_beerste_bankvaltas120e, a–f, 120 sor). Pl. `p_adform-s_pro-a_SZA_adaptive_IDF-m_398-t_SZA_beerste_bankvaltas_NA_valtscsapatot-v_a-n_1`, utm_term `...!hu!398a`. 336 audit sor, `version` mindenhol +1. Utóellenőrzés: 0 maradék `m_335`/`m_336` a mozgatott sorok generált oszlopaiban; a 335/336 mostantól kizárólag az analóg MARKET témáké. Adat-only javítás, nincs kódváltozás → **nincs verzió-bump**.
+
+**⚠️ Nyitott — még 20 szám ütközik keresztbe a két tengelyen**, köztük a szomszédos `332` (SZK_emlkezteto ↔ SZK_remarketing) és `334` (SZK_edukacio ↔ MARKET_MCx_e_genZbefektetes), valamint 5, 124, 131, 134, 141, 290, 294, 301, 302, 311, 316–321, 330, 331. A tengelyenkénti számozás ezt megengedi (a DCO kártya és a statikus nonDCO ikre szándékosan oszthat számot), de ha a cél a globálisan egyedi MC-szám, ez külön kör. A `MARKET_MCx_*_genZbefektetes` sorozat amúgy is szét van szórva: b=396, c=397, d=333, e=334, f=335, alap=336.
+
+### 2026-08-30 — MC-ütközés riport (`docs/mc-collisions.html`)
+**Kérés:** gyűjtsük ki az ütközéseket egy statikus HTML-be a `/docs`-ba, a DCO bannereket statikban megépítve, képekkel, 3 oszlopos táblázatban, az ütközés természetének magyarázatával.
+
+- [x] `scripts/gen-collisions-doc.ts` — **megtartva** (a `renumber-*` scriptektől eltérően ez csak olvas: újrafuttatható riport-generátor, ahogy az ütközések fogynak). Dev szerver kell hozzá.
+- [x] 20 DCO banner renderelve az app saját pipeline-jával (`shootItems` → `templates/html`, 300×250, headless Chromium) — nem külön reimplementáció, ugyanaz a kód fut, mint a preview-knál. **A `message_previews` táblához nem nyúl**, a PNG-t a saját `persist` callback kapja el.
+- [x] Statikus kreatívok az objektumtárból (`readFileBytes`), `sips`-szel 440px-re kicsinyítve; minden kép **data URI-ként beágyazva** → a 2.6 MB-os fájl hálózat nélkül is megnyílik.
+- [x] Böngészős ellenőrzés (Playwright screenshot, 1440px).
+
+**Az ütközések természete — 3 kategória, nem egy:**
+- **Szándékos ikerpár (18)** — ugyanaz a kampány két formában; a DCO kártya és a statikus kivágata. A közös szám itt *helyes*, a tengelyenkénti számozás pont ezt engedi meg. A 316–320-nál a kötés a legszorosabb: a DCO háttér maga a statikus precompja (`precomp_ERSTE_MC316_a_..._n7.png`, `preCompBg`).
+- **Valódi ütközés (3)** — két nem összetartozó kampány: **MC5** (VAL Társasházi Számlacsomag ↔ HITEL Babaváró), **MC302** (SZK bankváltás ↔ SZA online számlanyitás — itt *mellette* van egy szabályos iker is), **MC334** (SZK kamatkedvezmény ↔ MARKET genZbefektetes). Ez ugyanaz az eset, mint a ma javított 335/336.
+- **nonDCO duplikáció (2)** — **MC290** és **MC321**: ugyanaz a statikus kreatív kétszer importálva, két téma alatt (`HITEL_*` és `SZK_HITEL_a_*`). Ez nem tengelyek közti ütközés, hanem kétszeres import; érdemes a kettőt együtt rendezni.
+
+**Menet közbeni észrevétel:** a **DCO MC332c** a vizsgálatkor a 332a szó szerinti klónja volt (ugyanaz a headline, flash, class, sőt a 332**a** háttérképe), miközben a valódi 332c más felépítésű kreatív (teal színfelület + kivágott objektum, „Akár 15M Ft kölcsön nagyobb terveidhez is."). **A user ezt közben maga javította az appban** (16:02 UTC) — a riport már a javított állapotot tükrözi. Nem én írtam.
+
+**Nincs verzió-bump:** új doksi + egy `scripts/` riport-generátor, a futó appot nem érinti.
+
+### 2026-08-30 — Társasház DCO kártya: MC5 → MC78
+**Kérés:** a DCO MC5 (VAL Társasházi Számlacsomag) kapjon új számot, mert a HITEL Babaváró statikussal ütközött. Első kör: „keressünk lukat 100 alatt" → MC10. Utána user-korrekció: **MC78**, mert a kártya eredetileg is a meglévő statikus `ERSTE_VAL_MC78_b_Tarsashaz_szamla_pro_b` DCO párja akart lenni, csak sosem készült el.
+
+- **Végrehajtva:** `scripts/renumber-mc-dco.ts` (újra megírva és **most megtartva** — másodszor kellett; a `MAP=from:to` env paraméterezi). 5→10, majd 10→78; mindkettő 3 sor (a,b,c variáns, `VAL_wldigiseg-realestate`, INCOMING). Blokkoló egyik lépésnél sem volt.
+- **Kontroll:** az 5→10 után diffeltem a 8 generált oszlopot úgy, hogy a régi számot előbb kicseréltem az újra — **identikus**, tehát csak a szám és a belőle képzett részstringek mozdultak.
+- **Eredmény:** MC5 mostantól kizárólag a HITEL Babaváró statikusé. MC78 = szándékos ikerpár: DCO a/b/c (`VAL_feature_tarsashaz_szamlacsomag_`) + a meglévő statikus b (`VAL_Tarsashaz_szamla_pro_b`, 4 creative fájl). MC10 újra szabad.
+- **Mellékhatás, ami jó:** a 6 HITEL Babaváró creative (`mc_number=5, mc_variant=c`) eddig tévesen egyezett a DCO MC5c cellával — ez megszűnt.
+- **Számtér-tény 100 alatt:** csak **10, 11, 12** volt teljesen szabad (mindkét tengelyen). Minden más 100 alatti „szabad" szám csak a DCO tengelyen szabad — azokra átírni új keresztirányú ütközést csinálna.
+
+### 2026-08-30 — MC302: megvizsgálva, NEM írjuk át (blokkolt)
+**Kérés:** a DCO MC302 mehetne-e valamilyen 300-as sorozatú számra.
+
+**Van luk** a 300-as tartományban: **300, 312, 353** teljesen szabad. **De a DCO MC302-t nem szabad átírni** — a script blokkolja, jogosan:
+- **Feed export #8 (SZK, v0) 2026-05-03-án fel lett töltve Adformra**, és tartalmazza a DCO 302 pmmid-jét → az átírás hazuggá tenné a leszállított feedet.
+- **540 monitoring sor** ül a 302-n, ebből **529 pontosan a DCO témára** (`SZK_felhaszcelja_..._bankvaltasAdossagrendezes`, b: 273, c: 256) — valós beérkezett riportadat, ami árván maradna.
+
+**A fontosabb felismerés: nem a DCO oldal a hibás.** A 302-n a **nonDCO tengelyen két külön téma** ül — `SZK_bankvalats_hitel` (a,b,c, 6 sor, a DCO kártya szabályos statikus ikre) és `SZA_onlineszamla_2026Q1_fullImageSurface` (a–e, 10 sor, a betolakodó). Egy tengelyen belül egy szám **soha nem léphet át témát** — a rendszer saját szabálya sérül itt, nem a DCO↔nonDCO ikerpár a baj.
+
+**Javaslat (user döntésére vár):** az `SZA_onlineszamla_2026Q1_fullImageSurface` menjen új számra (10 sor, 11 monitoring sor a `onlineszamla_q2` témán, + 56 SZA-nevű creative `mc_number`-ét vinni kell vele), ne a 91 soros, leszállított DCO kártya. Ehhez **nonDCO-tengelyes renumber kell** — a mostani script csak a DCO tengelyt kezeli, és a `creatives.mc_number` átírását sem csinálja. A rokon SZA online számla kártyák: 296, 368–372, 375 — nincs szoros szomszédsági kényszer.
+
+**Döntés (user, 2026-08-30):** az MC302 **marad** — „két külön productban van, nem baj, és a DCO része már inaktív". Helyette magyarázó komment került mind a **107** MC302 sorra (mindkét tengely: 91 DCO + 6 SZK statikus iker + 10 SZA online számla):
+
+> Átálláskor keletkezett azonos MC: a 302 két különböző productban fut — SZK bankváltás/adósságrendezés (DCO, INACTIVE, + statikus ikre) és SZA online számla (statikus). Szándékos, nem javítandó. Átírni amúgy sem lehetne: a v0 SZK feed 2026-05-03-án felment Adformra, és 529 monitoring sor hivatkozik rá.
+
+- Egyszeri script (`scripts/_set-mc302-comment.ts`, dry-run → `--commit`, futás után törölve). **Csak a `comment` mezőt írja** — a komment egyetlen patternbe sem folyik bele (a pmmid/trafficking az audience/topic/number/variant/versionNo/landingUrl-ből épül), így a 107 élő sor UTM-oszlopait nem bolygattuk meg fölöslegesen. Ellenőrizve: mind a 107 pmmid változatlanul `-m_302-`.
+- A `version` viszont **emelve** (1→2), hogy egy nyitott szerkesztőfül elavult verzióval ne írhassa felül a kommentet.
+- A script visszautasítja a futást, ha bármelyik soron már van komment (appendelés emberi döntés) — most mind a 107 üres volt.
+- `docs/mc-collisions.html` frissítve: a 302 sora most rögzíti, hogy megvizsgált és **elfogadott** eset, a blokkoló okokkal együtt.
+
+### 2026-08-30 — MC334 (genZ „e" statikus) → MC312, fájlnevekkel együtt
+**Kérés:** az utolsó tengely-ütközés (334: DCO `SZK_edukacio_NA_NA_kamatkedvezmeny` ↔ nonDCO `MARKET_MCx_e_genZbefektetes_2026Q1`) feloldása; új szám a 300-as tartományból, és a fájlnév átírása a DB-ben **és** a Drive-on (`~/GoogleDrive/Data/ERSTE HU/MARKET/Future befektetés - GenZ`) — leadás fájlok + source PSD.
+
+**Választott szám: MC312** (300, 312, 353 volt a három teljesen szabad a 300-as tartományban).
+
+- **DB:** 2 `messages` (number + name + image1 + pmmid/trafficking regenerálva), 7 `creatives` (mc_number + file_name), 7 `uploaded_files` (filename + original_filename). Az objektumtárhoz **nem** nyúltunk — a storage key content-hash, a fájlnév csak metaadat.
+- **Drive:** 7 leadás fájl + a source PSD átnevezve.
+- **Második kör (user):** a fájlnevekből ki az `_a_MCx` rész → `ERSTE_MARKET_MC312_e_genZbefektetes_2026Q1_n1_<méret>.jpg`. Mind a 7 név egyedi marad (a méret különbözteti meg). Ugyanez a DB-ben, **csak az MC312-es szettre szűkítve** (az első lekérdezésem az egész genZ sorozatot elkapta volna — 42 fájlt 7 helyett).
+- **PSD (user-döntés):** `ERSTE_MARKET_e_...psd` → `ERSTE_MARKET_MC312_e_genZbefektetes_2026Q1_fullImageSurface.psd`. A genZ PSD-kben eredetileg **nem volt** MC-szám (a `vagyonkezelés` mappában van, a `BefCast`/`Go`-ban üres `MC_` placeholder — nincs egységes konvenció).
+
+**⚠️ Következmény, amit tudni kell:** a fájlnév-séma `ERSTE_<PRODUCT>_MC<n>_<variáns>_<kampány>_n<k>_<méret>`. Az `_a_` törlésével a **sorozat-betű (`e`) csúszott a variáns-helyre**, miközben a DB-ben a `variant`/`mc_variant` továbbra is **`a`**. A creative↔cella kötés az oszlopokból dolgozik, nem a fájlnévből, tehát ma jól működik — de a `scripts/scan-creatives.ts` a **fájlnévből** parse-olja a variánst, így egy újraszkennelés `e`-t vezetne le és nem találna rá az `a` sorra. Ha ez a szándékolt végállapot, a `variant`/`mc_variant` oszlopot is `e`-re kell vinni.
+
+**Új lelet a riportban:** a `creatives` táblában egy `(mc_number, mc_variant)` páron **két különböző kampány** fájljai is ülhetnek — a Drive két külön mappájából (`Future befektetés - GenZ` vs `vagyonkezelés`, `BefCast` vs `3D_icon`/`agrarcsalad`). Ez nem tengely-ütközés, hanem creative-szintű átfedés; külön szekciót kapott a riportban. Az első, naiv detektálásom 28 sort dobott, aminek a nagy része hamis (`..._badge`, `...-promo-2`, `..._fullImageSurface` ugyanannak a kampánynak a névváltozatai) — szigorítva: a rendition-jelölő tokenek (`creative`, `asset`, `image`, `only`) kiesnek, és két kampány csak akkor számít külön kampánynak, ha egyik token-halmaza sem tartalmazza a másikat és az első tokenjük is eltér. Így **24 jelölt** maradt, és a riport kimondja, hogy ez **jelöltlista, nem ítélet**. A szemmel is egyértelmű valódi esetek: `BeErste3`↔`WIZZAIR` (MC287), `diakszamla`↔`munkashitel` (MC288, MC289), `genZbefektetes`↔`tengeri_hajozas`/`jazz_piknik` (MC333, MC335), `MCx_BefCast`↔`3D_icon`/`agrarcsalad` (MC337, MC338).
+
+### 2026-08-30 — MARKET konszolidáció: genZ → MC312 a–f, BefCast → MC300 a,b
+**Előzmény:** a PSD-nevek árulkodóak — a `vagyonkezelés` mappa PSD-iben **van** MC-szám (`ERSTE_MARKET_MC333_a_tengeri_hajozas_n1.psd`), a `BefCast` és a genZ PSD-kben **nincs** (`ERSTE_MARKET_MC_a_BefCast…`, `ERSTE_MARKET_a_genZ…`). Vagyis a vagyonkezelés az eredeti tulajdonos, a másik kettő betolakodó. **User-döntés:** egy kampány = egy MC-szám, a renderek variánsok.
+
+- **genZ:** 336a→**312a**, 396a→312b, 397a→312c, 333a→312d, 312a→312e, 335a→312f. Közös téma: `MARKET_genZbefektetes_2026Q1`.
+- **BefCast:** 338a→**300a**, 337a→300b. Közös téma: `MARKET_BefCast_2026Q2`.
+- **Érintetlen** (a vagyonkezelés visszakapta a számait): 333b tengeri_hajozas, 335b jazz_piknik, 337b 3D_icon, 338b buzakalasz, 338c agrarvallakozo.
+- **Volumen:** 16 message (szám + variáns + téma + name/image1 + pmmid/trafficking), 60 creative, 60 uploaded_file, 60 Drive-fájl, 7 PSD.
+- **Nem hoztam létre `topics` sorokat:** a nonDCO témák 230-ból 226 esetben amúgy sem léteznek sorként, csak string-hivatkozások — sorok gyártása itt lenne a kilógó eset.
+- Minden `creatives`/`uploaded_files` egyezés **fájlnév-prefix** szerint szűrve, sosem puszta `mc_number` alapján — különben a vagyonkezelés fájljai is elmozdultak volna ugyanarról a számról.
+
+**⚠️ Saját hiba, javítva:** a Drive-átnevező bash függvényemben egyetlen sorban írtam `local b="${f##*/}" t="…${b#$op}"` — zsh-ban `b` a `t` kiértékelésekor még az **előző iteráció** értékét tartja, így az első fájl neve a puszta prefixre csonkolt, a többi pedig eggyel eltolódott. Nem veszett el fájl (42 + 18 megvan). Helyreállítás **tartalom-hash alapján** (`uploaded_files.sha256`), két menetben (előbb ideiglenes névre, hogy az ütközések feloldódjanak) → **60/60 fájl neve egyezik a DB-vel**. A PSD-k (nincs hash a DB-ben) a csonkolt névben megőrzött betűjel alapján álltak helyre. Tanulság: külön sorban deklaráld a köztes változót, és a rename után **mindig** auditálj.
+
+**⚠️ Nyitott:** a helyben maradt vagyonkezelés-sorok témája még a régi, félrevezető nevet viseli (MC333b `tengeri_hajozas` a `MARKET_MCx_d_genZbefektetes_2026Q1` témában, MC337b/338b/338c a `MARKET_MCx_*BefCast` témákban). A user azt kérte, ezek maradjanak — a **számuk** maradt is, de a téma-nevük külön kört érdemel.
+
+### Riport-átépítés
+- **4 fül** a tetején: Szándékos ikerpár (19) · Valódi ütközés (1) · nonDCO duplikáció (2) · Creative-átfedés (20). Sima JS, panel-váltás `hidden`-nel. Egy sor több fülön is megjelenhet (a 302 ikerpár **és** ütközés).
+- **A creative-átfedés szekció most képes:** kampányonként egy reprezentatív kreatív (a négyzetes 1080x1080-at preferálva) az objektumtárból, 260px-re kicsinyítve, data URI-ként beágyazva. Így ránézésre látszik az ütközés — pl. MC159-nél két Személyi kölcsön kreatív mellett egy **Erste Max Hitelkártya**.
+- A riport 4,4 MB, továbbra is önálló fájl.
+
+### 2026-08-30 — Feed export: DEFAULT sor label-javítás + clickTAG DEFAULT-osítás (6.32.0)
+- **Tünet:** feed 35 (SZA) DEFAULT sorában a `Text:pmmid` és a `ReportingLabel` megtartotta a valódi audience key-t (`-a_SZA_rtg-allvisitors_IDF-`), nem lett `-a_DEFAULT-`. Feed 30-ban ugyanaz a termék még jól működött.
+- **Gyökérok:** `feed-export.ts` → `applyDefaultLabelTransforms` regexe `/(-a_)[^-]*(-m_)/` volt. A `[^-]*` nem tud átlépni az audience key-ben lévő kötőjelen (`SZA_rtg-allvisitors_IDF`), így a csere némán nem talált. A `-l_\d+ → -l_ANY` csere közben lefutott, ezért tűnt úgy, hogy „félig" működik. A 30-as export default üzenetének audience key-e (`SZA_afrtsegallvisitors`) kötőjel nélküli volt.
+- **Fix:** lusta illesztés `/(-a_).*?(-m_)/` — ugyanaz a minta, amit az `adform-snapshot.ts` már használ (`/-a_(.+?)-m_/`).
+- **Teszt:** `tests/unit/feed-default-labels.test.ts` — 7 eset (label: sima key / kötőjeles key / `-l_` szuffix; URL: utm_cd26, utm_term, érintetlen utm_campaign+utm_source, nem-egyező key = no-op).
+- **clickTAG is átírva (user-döntés, új viselkedés):** a DEFAULT sor trafficking URL-jében eddig — a v5-ben és az élő Adform fájlban is — a donor audience key ült, így egy fallback-kattintás az analyticsben megkülönböztethetetlen volt a donor saját sorára érkező kattintástól. Mostantól két helyen DEFAULT: az `utm_cd26` PMMID-jében (`-a_<key>-m_`) és az `utm_term` önálló tokenjében. **Szándékosan érintetlen:** `utm_campaign` / `utm_source`, mert azok `audiences[<key>].Field` lookupok — nincs DEFAULT nevű audience sor, átírva üres paraméterek mennének ki.
+- Kis/nagybetű: mindenhol nagybetűs `DEFAULT` — az `adform-snapshot.ts:105` pont erre a stringre szűri ki a sentinel audience-t visszaimportáláskor.

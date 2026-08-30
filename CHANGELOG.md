@@ -5,6 +5,28 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.32.0] — 2026-08-30
+
+### Fixed
+- **The feed export's DEFAULT row renames the audience again.** The rewrite
+  that turns `-a_<audience>-m_` into `-a_DEFAULT-m_` in the PMMID and the
+  ReportingLabel matched the audience segment with `[^-]*`, so it silently did
+  nothing for any audience key containing a hyphen (`SZA_rtg-allvisitors_IDF`)
+  — the DEFAULT row went out carrying the donor message's real audience. The
+  `-l_<n>` → `-l_ANY` half kept working, which is why it looked half-broken.
+  Now matched lazily, the same way `adform-snapshot.ts` already parses PMMIDs.
+
+### Changed
+- **The DEFAULT row's clickTAG reports as DEFAULT.** The trafficked URL used to
+  carry the donor message's audience key, so a click on the fallback ad was
+  indistinguishable in analytics from a click on the donor's own row. Both
+  places the key appears — the PMMID inside `utm_cd26` and the standalone token
+  in `utm_term` — now read DEFAULT. `utm_campaign` and `utm_source` keep the
+  donor key on purpose: they are `audiences[<key>].Field` lookups, and there is
+  no audience row named DEFAULT, so rewriting them would emit empty parameters.
+  Existing reports segmented on the donor audience will see its numbers drop by
+  the fallback's share.
+
 ## [6.31.0] — 2026-08-30
 
 ### Added

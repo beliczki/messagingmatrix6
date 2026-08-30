@@ -165,10 +165,33 @@ function evaluateRow(
 // whose pattern actually references audience_key (so feeds that don't bake the
 // audience into a label don't get a phantom rewrite).
 
-function applyDefaultLabelTransforms(value: string): string {
+export function applyDefaultLabelTransforms(value: string): string {
   let v = value;
-  v = v.replace(/(-a_)[^-]*(-m_)/, "$1DEFAULT$2");
+  // Lazy match, not [^-]*: audience keys may contain hyphens
+  // (e.g. "SZA_rtg-allvisitors_IDF"), and a greedy-safe [^-]* silently
+  // skipped the rewrite for those.
+  v = v.replace(/(-a_).*?(-m_)/, "$1DEFAULT$2");
   v = v.replace(/-l_\d+$/, "-l_ANY");
+  return v;
+}
+
+// The trafficked URL (clickTAG) bakes the audience key in twice: inside the
+// PMMID that feeds utm_cd26 ("-a_<key>-m_"), and as a standalone token in
+// utm_term ("con!adform!<key>!..."). Both must read DEFAULT on the DEFAULT row
+// or a fallback click is indistinguishable from a click on the donor
+// message's own row in analytics. Everything else in the URL
+// (utm_campaign / utm_source) is an audiences[<key>].Field lookup and MUST
+// keep the donor key — there is no audience row named DEFAULT, so rewriting
+// those would emit empty parameters.
+export function applyDefaultUrlTransforms(url: string, audienceKey: string): string {
+  const esc = audienceKey.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let v = url.replace(new RegExp(`(-a_)${esc}(-m_)`, "g"), "$1DEFAULT$2");
+  // Standalone token: the key may contain hyphens, so the boundary is any
+  // character that cannot appear in a key.
+  v = v.replace(
+    new RegExp(`(^|[^A-Za-z0-9_-])${esc}(?![A-Za-z0-9_-])`, "g"),
+    "$1DEFAULT",
+  );
   return v;
 }
 
@@ -225,6 +248,14 @@ function buildDefaultRow(
     if (lblCol && defaultRow[lblCol]) {
       defaultRow[lblCol] = applyDefaultLabelTransforms(defaultRow[lblCol]);
     }
+  }
+
+  const clickTagCol = findColumnByCleanName(columns, "clicktag");
+  if (clickTagCol && defaultRow[clickTagCol] && defaultMessage.audience) {
+    defaultRow[clickTagCol] = applyDefaultUrlTransforms(
+      defaultRow[clickTagCol],
+      defaultMessage.audience,
+    );
   }
 
   // AdForm-allocated / scheduling fields don't apply to the DEFAULT row —

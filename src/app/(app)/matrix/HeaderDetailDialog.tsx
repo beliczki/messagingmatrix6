@@ -303,7 +303,6 @@ export default function HeaderDetailDialog({
     }
     return out;
   }, [messages, kind]);
-  const totalMcCount = messages.length;
   const [stepIndex, setStepIndex] = useState<number>(0);
   useEffect(() => {
     setStepIndex(0);
@@ -884,7 +883,6 @@ export default function HeaderDetailDialog({
                   draft={draft as AudienceDraft}
                   setDraft={(d) => setDraft(d)}
                   committed={committed as Audience}
-                  mcCount={steppable.length}
                   keyStatus={keyStatus}
                 />
               ) : (
@@ -892,8 +890,6 @@ export default function HeaderDetailDialog({
                   draft={draft as TopicDraft}
                   setDraft={(d) => setDraft(d)}
                   committed={committed as Topic}
-                  mcCount={totalMcCount}
-                  uniqueMcCount={steppable.length}
                   keyStatus={keyStatus}
                 />
               )}
@@ -1021,13 +1017,11 @@ function AudienceForm({
   draft,
   setDraft,
   committed,
-  mcCount,
   keyStatus,
 }: {
   draft: AudienceDraft;
   setDraft: (d: AudienceDraft) => void;
   committed: Audience;
-  mcCount: number;
   keyStatus: KeyStatus;
 }) {
   function set<K extends keyof AudienceDraft>(k: K, v: AudienceDraft[K]) {
@@ -1036,9 +1030,6 @@ function AudienceForm({
   return (
     <div className="matrix-header-form form-grid grid grid-cols-2 gap-x-4">
       <KeyField committed={committed} keyStatus={keyStatus} />
-      <Field label="MC count">
-        <input readOnly value={String(mcCount)} className={readOnlyCls} />
-      </Field>
 
       <SectionHeader>Identity</SectionHeader>
       <div className="col-span-2">
@@ -1179,15 +1170,11 @@ function TopicForm({
   draft,
   setDraft,
   committed,
-  mcCount,
-  uniqueMcCount,
   keyStatus,
 }: {
   draft: TopicDraft;
   setDraft: (d: TopicDraft) => void;
   committed: Topic;
-  mcCount: number;
-  uniqueMcCount: number;
   keyStatus: KeyStatus;
 }) {
   function set<K extends keyof TopicDraft>(k: K, v: TopicDraft[K]) {
@@ -1196,13 +1183,6 @@ function TopicForm({
   return (
     <div className="matrix-header-form form-grid grid grid-cols-2 gap-x-4">
       <KeyField committed={committed} keyStatus={keyStatus} />
-      <Field label="MC count">
-        <input
-          readOnly
-          value={`${mcCount} (Unique: ${uniqueMcCount})`}
-          className={readOnlyCls}
-        />
-      </Field>
 
       <SectionHeader>Identity</SectionHeader>
       <div className="col-span-2">
@@ -1341,6 +1321,10 @@ function Field({
 // the one safe transition: regenerate it from the configured pattern and carry
 // the cards along. Without this the drift is invisible, since updateTopic /
 // updateAudience silently skip the auto-key once any MC references it.
+//
+// Full width, with the generated key stacked directly underneath in the same
+// mono face: the point is to compare the two strings character by character,
+// which side-by-side columns of different widths make harder, not easier.
 function KeyField({
   committed,
   keyStatus,
@@ -1348,44 +1332,57 @@ function KeyField({
   committed: Audience | Topic;
   keyStatus: KeyStatus;
 }) {
-  if (!keyStatus.stale) {
-    return (
-      <Field label="Key" hint="Read-only — renaming would orphan messages.">
+  return (
+    <div className="key-field col-span-2">
+      <Field
+        label="Key"
+        hint={
+          keyStatus.stale
+            ? undefined
+            : "Read-only — renaming would orphan messages."
+        }
+      >
         <input readOnly value={committed.key} className={readOnlyCls} />
       </Field>
-    );
-  }
-  return (
-    <Field
-      label="Key"
-      hint="A tag edit moved on without the key, because messages reference it."
-    >
-      <input readOnly value={committed.key} className={readOnlyCls} />
-      <div className="key-field__stale mt-1 flex items-center gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-1 dark:border-amber-500/30 dark:bg-amber-500/10">
-        <span className="key-field__stale-badge status-badge text-[10px] font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-200">
-          out of date
-        </span>
-        <span
-          className="key-field__stale-key truncate font-mono text-[10px] text-amber-800 dark:text-amber-200"
-          title={keyStatus.generatedKey ?? ""}
-        >
-          {keyStatus.generatedKey}
-        </span>
-        <button
-          type="button"
-          onClick={keyStatus.onRegenerate}
-          disabled={keyStatus.busy}
-          className="key-field__regenerate ml-auto inline-flex shrink-0 items-center gap-1 text-[10px] font-medium text-amber-800 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-40 dark:text-amber-200"
-        >
-          {keyStatus.busy ? (
-            <Loader2 className="size-3 animate-spin" />
-          ) : (
-            <RefreshCw className="size-3" />
-          )}
-          Regenerate
-        </button>
-      </div>
-    </Field>
+      {keyStatus.stale ? (
+        <>
+          <Field label="Generated key">
+            {/* Same width, same mono face, directly under the current key: the
+                two are meant to be diffed by eye, character by character. */}
+            <input
+              readOnly
+              value={keyStatus.generatedKey ?? ""}
+              className={clsx(
+                readOnlyCls,
+                "key-field__generated border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100",
+              )}
+            />
+          </Field>
+          {/* Outside the Field: its <label> must not wrap a button. */}
+          <div className="key-field__explain -mt-2 mb-3 flex items-start gap-3 text-[10px] leading-relaxed text-slate-500">
+            <span>
+              A tag edit moved on without the key, because messages reference
+              it. Regenerating rewrites the key here and on every messaging card
+              that uses it, and rebuilds each card&apos;s PMMID and trafficking
+              fields — you get a preview before anything changes.
+            </span>
+            <button
+              type="button"
+              onClick={keyStatus.onRegenerate}
+              disabled={keyStatus.busy}
+              className="key-field__regenerate inline-flex shrink-0 items-center gap-1 self-start text-[10px] font-medium text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {keyStatus.busy ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <RefreshCw className="size-3" />
+              )}
+              Regenerate
+            </button>
+          </div>
+        </>
+      ) : null}
+    </div>
   );
 }
 

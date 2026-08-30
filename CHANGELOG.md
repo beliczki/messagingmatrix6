@@ -5,6 +5,19 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.30.1] — 2026-08-30
+
+### Changed
+- The header dialog's Key field is full width, with the generated key stacked
+  directly underneath it in the same monospace face — the two are meant to be
+  compared character by character, which two half-width columns made harder.
+  The "out of date" badge is gone; a line under the pair says what Regenerate
+  will do, with the action as a link-style button beside it.
+
+### Removed
+- The read-only "MC count" field in the audience/topic header dialog. The same
+  count is already on screen as the `n/n` next to the MC stepper.
+
 ## [6.30.0] — 2026-08-30
 
 ### Added

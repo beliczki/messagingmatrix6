@@ -5,6 +5,19 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.30.2] — 2026-08-30
+
+### Fixed
+- The generated key rendered slate, not amber: its amber utilities were merged
+  over `readOnlyCls`, and `bg-slate-50` / `bg-amber-50` sit in the same utility
+  layer, so the stylesheet order won rather than the class-attribute order. The
+  field now carries its own explicit class list, and its label shares the amber
+  tone.
+
+### Changed
+- The regenerate action reads "Regenerate dependencies" — it moves the cards,
+  their PMMIDs and their trafficking fields, not just the key.
+
 ## [6.30.1] — 2026-08-30
 
 ### Changed

@@ -1291,19 +1291,28 @@ const inputCls =
   "w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none";
 const readOnlyCls =
   "w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-xs text-slate-700";
+const amberLabelCls = "text-amber-700 dark:text-amber-300";
 
 function Field({
   label,
   children,
   hint,
+  labelCls,
 }: {
   label: string;
   children: ReactNode;
   hint?: string;
+  /** Tone override for the label, e.g. the amber generated-key pair. */
+  labelCls?: string;
 }) {
   return (
     <label className="form-field mb-3 block">
-      <div className="form-field__label mb-1 text-xs font-medium text-slate-700">
+      <div
+        className={clsx(
+          "form-field__label mb-1 text-xs font-medium",
+          labelCls ?? "text-slate-700",
+        )}
+      >
         {label}
       </div>
       {children}
@@ -1346,16 +1355,16 @@ function KeyField({
       </Field>
       {keyStatus.stale ? (
         <>
-          <Field label="Generated key">
+          <Field label="Generated key" labelCls={amberLabelCls}>
             {/* Same width, same mono face, directly under the current key: the
-                two are meant to be diffed by eye, character by character. */}
+                two are meant to be diffed by eye, character by character.
+                Spelled out rather than clsx'd over readOnlyCls: bg-slate-50 and
+                bg-amber-50 are the same utility layer, so the stylesheet order
+                decides the winner, not the class-attribute order. */}
             <input
               readOnly
               value={keyStatus.generatedKey ?? ""}
-              className={clsx(
-                readOnlyCls,
-                "key-field__generated border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100",
-              )}
+              className="key-field__generated w-full rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 font-mono text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100"
             />
           </Field>
           {/* Outside the Field: its <label> must not wrap a button. */}
@@ -1370,14 +1379,14 @@ function KeyField({
               type="button"
               onClick={keyStatus.onRegenerate}
               disabled={keyStatus.busy}
-              className="key-field__regenerate inline-flex shrink-0 items-center gap-1 self-start text-[10px] font-medium text-slate-600 underline-offset-2 hover:text-slate-900 hover:underline disabled:cursor-not-allowed disabled:opacity-40"
+              className="key-field__regenerate inline-flex shrink-0 items-center gap-1 self-start text-[10px] font-medium text-amber-700 underline-offset-2 hover:text-amber-900 hover:underline disabled:cursor-not-allowed disabled:opacity-40 dark:text-amber-300 dark:hover:text-amber-200"
             >
               {keyStatus.busy ? (
                 <Loader2 className="size-3 animate-spin" />
               ) : (
                 <RefreshCw className="size-3" />
               )}
-              Regenerate
+              Regenerate dependencies
             </button>
           </div>
         </>

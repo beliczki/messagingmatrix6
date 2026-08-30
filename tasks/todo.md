@@ -122,6 +122,13 @@ Cél: uploaded creative-ek MC-link nélkül láthatóak/szűrhetőek legyenek. (
 - [ ] **W2.6** `All | Matrixed | Unmatrixed` pill a `CreativeLibrary` toolbarba (`:821-823` mellé), meglévő toolbar-pill stílus. Logika: `kind==='uploaded' && (mcNumber==null || mcVariant==null)`; persist `mm6_creative_library_match_filter`; `(N)` count.
 - [ ] **W2.7** `status-badge--unmatrixed` sarok-badge a tile-on (látszik "All"-ban is).
 
+### D1 — Státusz-szűrő: MC-darabszám opciónként a szűrt eredményben (user, 2026-08-30)
+Cél: a Status legördülőben minden opció jobb szélén **kis szürke szám** = hány MC esik arra a státuszra a JELENLEGI szűrt eredményben. Nem pill, nem badge (a pill a gombon már megvan) — csak jobbra igazított `text-xs text-slate-400`.
+Reuse: a `MultiPill` már fogad opciónkénti extrát és rendereli az opció-sorban (`optionColors` → színpötty, `_components/MultiPill.tsx:140-143`); ugyanoda kerül egy `optionCounts?: Record<string, number>` prop `ml-auto` számmal. Forrás: a `MatrixGrid` `filtered` useMemója.
+- [ ] **D1.1** `optionCounts` prop a `MultiPill`-be + jobbra igazított szürke szám (nincs szám → nem renderel semmit).
+- [ ] **D1.2** `statusCounts` a `MatrixGrid`-ben → `MatrixToolbar` (`:80-85`) → `MultiPill`. **Fontos:** a számot a **státusz-szűrő alkalmazása ELŐTTI** részhalmazon kell képezni (product + search + axis + hide-inactive már ráment), különben minden kiválasztott státusz önmagát számolná, a ki nem választottak meg mindig 0-t mutatnának.
+- ⚠️ Default: ugyanez a prop a Product-szűrőre is rámegy (egy hívási sor), ha a user kéri — nem külön munka.
+
 ---
 
 ## 🟡 NEXT — green-light után, alacsony blokk
@@ -169,6 +176,51 @@ Kiváltó: egy agent nem tudott júniusi MC-rangsort csinálni. Két gyökér-ok
 - [x] **Fix 1 — ISO `from` a riport-toolokban:** a `monitoring.period_from` `"DD/MM/YYYY 00:00:00"` szövegként tárolt; az agent ISO `"2026-06-01"`-et küld → exact `eq()` néma üres. Új közös `resolvePeriodFrom`/`periodDateKey` helper dátum-normalizál (DD/MM/YYYY ↔ ISO). `report_performance` + `get_mc_reporting` fogad ISO `from`-ot; ismeretlen `from` → hiba az elérhető period-listával (nem néma []). Teszt: mindkét tool-nál bare-ISO + unknown-from eset.
 - [x] **Fix 2 — halott `monitoring_status` szűrő eltávolítva `list_mc`-ből:** az üres `reporting.adform_status`-t kérdezte → mindig []; a `monitoring`-ban nincs status oszlop, nem repointolható. Param + kód + description-mention törölve. (A `reporting` import + `matrix_status` olvasó marad — nagy legacy-retire, `:88`.)
 - Verifikáció: `tsc --noEmit` clean, teljes integration suite 265/265 zöld (eldobható docker PG-n futtatva).
+
+---
+
+## 💡 Ötlet-inbox (2026-08-30, user) — push-back-first
+
+Négy ötlet érkezett. A negyedik (státusz-darabszám) triviális és grounded → felkerült a 🟢 NOW-ba **D1**-ként. A maradék három **mind új tárolási réteget vagy új oldal-chrome-ot érint**, ezért a globális szabály szerint 3-kérdéses push-back kell, MIELŐTT bármelyikhez terv készül. Alább: mi létezik MA (felmérve, nem tippelve) + javasolt default.
+
+### I1 — Dashboard felújítás (widgetek + top filter-toolbar + side view-switcher)
+**Kérés:** legfrissebb kreatívok (1080×1080-asok 300×250 / 250×250 méretre kicsinyítve), legfrissebb kommentek, feed exportok, riport-dátum, pár chart a riportokból, olvasható activity log ("ki csinált mit", ne nyers kód) + top toolbar szűrőkkel + side toolbar view-kapcsolókkal.
+**Mi van ma** (`src/app/(app)/page.tsx`, 134 sor, server component): 6 db count-kártya (audiences/topics/messages/assets/creatives/text_formatting) + nyers audit-lista (`entityType#entityId`, nyers `userId`, nyers ISO-timestamp, 15 sor). Semmi más. Nincs toolbar, nincs kliens-state, nincs chart-lib a projektben.
+**Kapcsolódó, MÁR meglévő roadmap-item:** a „ki csinált mit" pont **szó szerint az FR-D** (🔵 LATER): `D.1` = `actor_kind` (`ui|mcp`) oszlop az `audit_log`-ba + badge, `D.2` = users-join a nyers `row.userId` helyett (email/név), `D.3` = utolsó-90-nap count a tile-okra. **Ne szülessen duplikátum item** — az I1 activity-log fele = FR-D előrehozása.
+**Push-back kérdések (terv ELŐTT megválaszolandó):**
+1. A dashboard a **napi belépő képernyőd** lesz (ott kezdesz minden reggel), vagy egy „jó ha van" áttekintő? Ha a második, a 8 widgetből 3 is elég.
+2. **Legolcsóbb 80%:** activity-log humanizálás (FR-D D.1+D.2, kis munka) + egy „legutóbbi kreatívok" csík + egy „utolsó riport dátuma" sor. A chartok és a két toolbar nélkül. Ez megvan-e neked?
+3. A **chartokat** akarod, vagy a bennük lévő **választ**? („mi ment jól múlt héten" → lehet, hogy egy rendezett táblázat vagy egy MCP-kérdés olcsóbban adja, mint egy chart-lib + dashboard-widget.)
+**Felmérés-jegyzetek (ha megy a build):**
+- **Kreatív-csík:** az 1080×1080 → 300×250 **nem transzformáció, hanem illesztés** — más az arány (1:1 vs 1.2:1). Vagy `object-contain` letterbox a 300×250 dobozba, vagy vágás. **Default: `object-contain`** (a Creative Library tile már így csinálja) — a 250×250 doboz viszont arányhelyes az 1080×1080-hoz, ezért **elsődlegesen azt** ajánlom.
+- **Chart-lib:** ma NINCS a projektben. Új függőség = külön döntés (2. push-back kérdés).
+- **Top toolbar + side view-switcher:** ~5 widgetes oldalon a globális szűrősáv új chrome-ot talál ki olyasmire, amiben még nincs mit szűrni. **Default: NEM az első körben** — előbb legyenek widgetek, aztán derüljön ki, mire kell globális szűrő.
+- **Riport-dátum + feed exportok:** olcsó, meglévő táblákból (`reporting`, `monitoring`, `feed_exports`) egy-egy `max(createdAt)` / top-5 lekérdezés.
+
+### I2 — Komment-rendszer: threadelt buborékok minden entitáson, ember-vs-agent szerzővel
+**Kérés:** minden kommentelhető dolog (asset, MC, content, topic, audience) kapjon komment-**szekciót** — mini chat-buborék sorozat, követhető hogy **userhez köthető AI agent** vagy **ember** írta — a mai „adatsorhoz tartozó komment mező" helyett.
+**Mi van ma:**
+- **Egyetlen `comment` text oszlop** (nem thread, nem szerző, nem időbélyeg) ezeken: `audiences:175`, `channels:248`, `topics:311`, `messages` (+45 a blokkján belül), `assets:487`, `creatives:528` — `src/db/schema.ts`.
+- **`share_comments` tábla (`:704-726`) VISZONT már valódi thread-tároló:** `itemKey` diszkriminátor (`"matrix:{messageId}:{size}"` / `"creative:{id}"`), `authorName`, `body`, `annotation` (normalizált point/rect JSON), `createdAt`, `archivedAt`, két index. Ma csak a publikus share-galériákhoz kötve (`shareGalleryId` NOT NULL).
+- **Ember-vs-agent megkülönböztetés:** ma sehol nincs — **de pontosan ez az FR-D `D.1`** (`actor_kind: ui|mcp` az `audit_log`-on). A komment-szerző és az audit-aktor **ugyanaz az egy döntés**, ne szülessen kétféle fogalom.
+**Push-back kérdések:**
+1. Tényleg **thread** kell (több bejegyzés, szerző, idő), vagy a mai egy-mezős `comment` azért fáj, mert **nem látszik ki írta és mikor**? (Utóbbihoz elég lehet append-only szöveg + aláírás — nulla séma.)
+2. **Legolcsóbb 80%:** a `share_comments` **általánosítása** (a `shareGalleryId` nullable-re + `entityType`/`entityId` vagy bővített `itemKey` + `authorKind`+`userId`) — nem új rendszer, egy meglévő tábla kinyitása. Elfogadható-e ez az irány?
+3. **Ki írja az agent-kommenteket?** Ha az MCP-n keresztül az agent, akkor a komment-write MCP tool a lényeg, nem a buborék-UI. Melyik a fájó vég — az írás vagy az olvasás?
+**Javasolt default (ha build):** `share_comments` általánosítása `comments`-szé, `authorKind` (`user|agent`) + `userId`/`mcpTokenId`, a mai `comment` oszlopok **megmaradnak** (nem migrálunk 6 tábla adatát az első körben), a buborék-UI EGY helyen debütál (MC-editor), és csak ha bevált, terjed a többi entitásra. Migráció + kód **egy passzban** a boxon.
+
+### I3 — Platform/csatorna színek: Tree view + kivezetés a Settingsbe
+**Kérés:** a tree view-ban látszódjanak a platform szín-jelölések (adform, dv360), és a színek csatorna-customization szinten legyenek kivezetve a Design settings tabra, hogy a youtube és a többiek is kaphassanak színt.
+**Mi van ma:**
+- **`channels` tábla LÉTEZIK** (`schema.ts:207-227`): `key`, `code`, `label`, `orderIndex`, archive — **`color` oszlop NINCS**. És **`ChannelsTab` is létezik** a Settingsben (`settings/_channels/ChannelsTab.tsx`).
+- **A TreeView ma nem tud se platformról, se csatornáról:** a színe tisztán mélység-alapú (`LEVEL_COLOR_CYCLE = 6`, `TreeView.tsx:41,240`).
+- **Az audience-fejléc szín-strip (adform/dv360 = `platform`/`buyingPlatform`) a mátrixban már él** (`audienceEdgeClasses`, 6.23.1 óta a jobb élen transposed nézetben).
+- **`M1 — Matrix „Color by" (Strategy | Platform | Both)`** már bent van a 🟡 NEXT-ben — **ugyanaz a szín-forrás**. Egy közös token-map kell, két fogyasztóval (mátrix + tree), nem két külön színrendszer.
+⚠️ **Tisztázandó fogalom-keveredés:** az „adform / dv360" a **platform** (audience-mező), a „youtube / SOC / DISP" a **csatorna** (`channels` tábla, a nonDCO tengely). Ez **két külön dimenzió** — a kérésben egybecsúszott.
+**Push-back kérdések:**
+1. A tree-t **platform** szerint akarod színezni (adform/dv360), **csatorna** szerint (YT/SOC/DISP…), vagy kapcsolhatóan mindkettő szerint?
+2. A színek **hova kerüljenek**: a user a Design tabot mondta, de a csatorna-sorok a **`ChannelsTab`-ban** élnek — egy `color` oszlop a `channels` táblán + swatch a meglévő tabban közelebb van a „reuse beats invent"-hez. (A platform viszont nem tábla, hanem enum-by-convention → annak tényleg a Design tab a helye.) **Default: csatorna-szín → `channels.color` + ChannelsTab; platform-szín → Design tab token.**
+3. Kell-e **most** perzisztens szín, vagy elég egy kódban rögzített paletta (mint a mai státusz-színek), és a szerkeszthetőség később? **Default: kódban rögzített paletta előbb** (nulla migráció), Settings-kivezetés csak ha tényleg állítgatni akarod.
 
 ---
 
@@ -557,3 +609,5 @@ Séma-migráció (channels tábla) → **migrate+kód egy passzban a boxon** (`d
 
 - **6.30.1 (UI-nit, user):** a header-dialog Key mezője **teljes szélességű**, alatta ugyanabban a mono betűtípusban a **generált kulcs** — a kettő karakterről karakterre összevethető, amit a két féloszlopos elrendezés pont nehezített. Az „out of date" badge kikerült; helyette a pár alatt egy sor magyarázza, mit csinál a Regenerate, mellette link-stílusú gombbal. A **„MC count" mező törölve** (audience + topic form): ugyanaz a szám ott van a jobb felső MC-léptető mellett `n/n` alakban. A `mcCount`/`uniqueMcCount`/`totalMcCount` plumbing is kivezetve. A Regenerate gomb kikerült a `Field` `<label>`-jéből (label nem foghat interaktív elemet).
 - **DEPLOYOLVA 6.30.1 (2026-08-30):** commit `aea4a66`, push origin main, box `/var/www/mm6-erste` git pull `4008914`→`aea4a66` + `npm run build` (exit 0) + `pm2 restart mm6-erste` → **Ready 1353ms**. Séma-migráció nincs. Health: `/` 307, `/login` 200, `/mcp` 401, `GET /api/topics/[id]/rekey` 401. Böngészős smoke (teljes szélességű Key + generált kulcs összevetése + Regenerate preview) a userre vár.
+
+- **6.30.2 (UI-nit, user):** a „Generated key" mező **szürkén jelent meg amber helyett** — az ok nem a szándék, hanem a Tailwind: a `clsx(readOnlyCls, "…bg-amber-50…")` két AZONOS rétegbeli utilityt tett egymás mellé (`bg-slate-50` vs `bg-amber-50`), és ilyenkor a stíluslap sorrendje dönt, nem a class-attribútumé. Most saját, explicit osztálylistája van (nincs merge), a labelje is amber (`Field` új opcionális `labelCls` propja). A gomb felirata `Regenerate` → **`Regenerate dependencies`**, amber tónusban.

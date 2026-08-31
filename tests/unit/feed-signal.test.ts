@@ -9,7 +9,10 @@ import {
   signalColumnForPlatform,
   SIGNAL_COLUMN_OPTIONS,
 } from "@/lib/feed-signal";
-import { feedExportFilename } from "@/lib/feed-filename";
+import {
+  feedExportDisplayName,
+  feedExportFilename,
+} from "@/lib/feed-filename";
 
 const ADFORM = "AdformSignal:ADFPLAID";
 const DV360 = "ExternalSignal:ExternalSignal";
@@ -91,5 +94,46 @@ describe("platform <-> signal column", () => {
     expect(feedExportFilename("erste", "SZA", "dv360", 1, 41)).toBe(
       "erste-SZA-dv360-feed-v1-41.xlsx",
     );
+  });
+});
+
+describe("feed export display name", () => {
+  const base = {
+    id: 42,
+    product: "SZK",
+    platform: "adform",
+    feedVersion: 0,
+    notes: null as string | null,
+  };
+
+  it("shows the uploaded file's own name for a reference", () => {
+    // The name a person will look for in the list is the one they uploaded,
+    // not a name we generated for a file they never downloaded.
+    expect(
+      feedExportDisplayName(
+        {
+          ...base,
+          source: "adform_snapshot",
+          notes:
+            "Uploaded from AdForm: erste-SZK-feed-v1-27-merged-adform-mc332c-fixed.xlsx",
+        },
+        "erste",
+      ),
+    ).toBe("erste-SZK-feed-v1-27-merged-adform-mc332c-fixed.xlsx");
+  });
+
+  it("falls back to the generated name when a reference has no notes", () => {
+    expect(
+      feedExportDisplayName({ ...base, source: "adform_snapshot" }, "erste"),
+    ).toBe("erste-SZK-adform-feed-v0-42.xlsx");
+  });
+
+  it("keeps the generated name for a real export", () => {
+    expect(
+      feedExportDisplayName(
+        { ...base, feedVersion: 1, source: "export", notes: "some note" },
+        "erste",
+      ),
+    ).toBe("erste-SZK-adform-feed-v1-42.xlsx");
   });
 });

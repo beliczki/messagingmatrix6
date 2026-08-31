@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import clsx from "clsx";
+import ImagePreviewToggle from "./ImagePreviewToggle";
 import AnnotationLayer, {
   type Annotation,
   type AnnotationMode,
@@ -91,6 +92,13 @@ type Props = {
   navIndex: number;
   onJump: (i: number) => void;
   onClose: () => void;
+  // The gallery's own image-preview switch, handed down rather than duplicated:
+  // one piece of state behind both controls, so flipping either is immediately
+  // true of the other with no syncing effect to get wrong.
+  imageMode: boolean;
+  setImageMode: (v: boolean) => void;
+  /** Stored preview image for the item on screen; null when it has none. */
+  imageSrc: string | null;
   comments: ShareCommentRow[];
   authorName: string;
   setAuthorName: (s: string) => void;
@@ -157,6 +165,9 @@ export default function ShareDetailDialog({
   navIndex,
   onJump,
   onClose,
+  imageMode,
+  setImageMode,
+  imageSrc,
   comments,
   authorName,
   setAuthorName,
@@ -267,6 +278,13 @@ export default function ShareDetailDialog({
             {navIndex + 1}/{navItems.length}
           </span>
           <div className="share-detail-dialog__header-actions ml-auto flex items-center gap-2">
+            {item.kind === "matrix" ? (
+              <ImagePreviewToggle
+                on={imageMode}
+                onChange={setImageMode}
+                compact
+              />
+            ) : null}
             <BgToggle bg={bg} setBg={setBg} />
             <DownloadAction item={item} shareId={shareId} />
             <button
@@ -288,6 +306,8 @@ export default function ShareDetailDialog({
               <PreviewBody
                 item={item}
                 shareId={shareId}
+                imageMode={imageMode}
+                imageSrc={imageSrc}
                 overlays={overlays}
                 pending={pending}
                 annotationMode={annotationMode}
@@ -337,6 +357,8 @@ export default function ShareDetailDialog({
 function PreviewBody({
   item,
   shareId,
+  imageMode,
+  imageSrc,
   overlays,
   pending,
   annotationMode,
@@ -346,6 +368,8 @@ function PreviewBody({
 }: {
   item: DialogItem;
   shareId: string;
+  imageMode: boolean;
+  imageSrc: string | null;
   overlays: CommentAnnotation[];
   pending: Annotation | null;
   annotationMode: AnnotationMode;
@@ -363,6 +387,8 @@ function PreviewBody({
         messageId={item.message.id}
         templateName={item.message.template}
         size={item.size}
+        imageMode={imageMode}
+        imageSrc={imageSrc}
         title={`${labelFor(item)} ${item.size}`}
         overlays={overlays}
         pending={pending}
@@ -392,6 +418,8 @@ function MatrixPreviewStage({
   messageId,
   templateName,
   size,
+  imageMode,
+  imageSrc,
   title,
   overlays,
   pending,
@@ -404,6 +432,8 @@ function MatrixPreviewStage({
   messageId: number;
   templateName: string;
   size: string;
+  imageMode: boolean;
+  imageSrc: string | null;
   title: string;
   overlays: CommentAnnotation[];
   pending: Annotation | null;
@@ -417,7 +447,15 @@ function MatrixPreviewStage({
   const dims = useMemo(() => parseSize(size), [size]);
   const [html, setHtml] = useState<string | null>(null);
 
+  // Image mode swaps the live render for the stored PNG. Geometry is untouched
+  // — same scaled box, same AnnotationLayer — so existing pin/box coordinates
+  // keep pointing at the same spot on the banner. Falling back to the live
+  // render when this item has no stored image is deliberate: a blank stage
+  // would read as "this ad is broken" rather than "no preview generated yet".
+  const useImage = imageMode && !!imageSrc;
+
   useEffect(() => {
+    if (useImage) return;
     setHtml(null);
     let cancelled = false;
     fetch("/api/render/public", {
@@ -435,7 +473,7 @@ function MatrixPreviewStage({
     return () => {
       cancelled = true;
     };
-  }, [shareId, messageId, size, templateName]);
+  }, [shareId, messageId, size, templateName, useImage]);
 
   useEffect(() => {
     const el = stageRef.current;
@@ -462,12 +500,12 @@ function MatrixPreviewStage({
 
   return (
     <div ref={stageRef} className="relative flex size-full items-center justify-center">
-      {html === null ? (
+      {!useImage && html === null ? (
         <div className="flex items-center gap-1 text-xs text-slate-400">
           <Loader2 className="size-3 animate-spin" />
           loading…
         </div>
-      ) : html === "" ? (
+      ) : !useImage && html === "" ? (
         <div className="text-xs text-rose-500">render failed</div>
       ) : scale > 0 ? (
         <div style={{ width: scaledW, height: scaledH, position: "relative" }}>
@@ -479,21 +517,39 @@ function MatrixPreviewStage({
             onAnnotationHover={setHighlightId}
             onDraw={onDraw}
           >
-            <iframe
-              title={title}
-              srcDoc={html}
-              sandbox="allow-scripts allow-same-origin"
-              className="block border-0 bg-white"
-              style={{
-                width: dims.w,
-                height: dims.h,
-                transform: `scale(${scale})`,
-                transformOrigin: "top left",
-                position: "absolute",
-                top: 0,
-                left: 0,
-              }}
-            />
+            {useImage ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={imageSrc!}
+                alt={title}
+                className="block bg-white"
+                style={{
+                  width: dims.w,
+                  height: dims.h,
+                  transform: `scale(${scale})`,
+                  transformOrigin: "top left",
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                }}
+              />
+            ) : (
+              <iframe
+                title={title}
+                srcDoc={html!}
+                sandbox="allow-scripts allow-same-origin"
+                className="block border-0 bg-white"
+                style={{
+                  width: dims.w,
+                  height: dims.h,
+                  transform: `scale(${scale})`,
+                  transformOrigin: "top left",
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                }}
+              />
+            )}
           </AnnotationLayer>
         </div>
       ) : null}

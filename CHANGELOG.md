@@ -5,6 +5,24 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.35.0] — 2026-08-31
+
+### Added
+- **The image-preview switch is in the detail dialog too, and it is the same
+  switch.** Flipping it in the gallery toolbar or inside the lightbox changes
+  both, because the dialog is handed the gallery's own state rather than
+  keeping a copy in sync. In image mode the lightbox shows the stored PNG in
+  place of the live render, in the same scaled box and inside the same
+  annotation layer — so existing pins and boxes keep pointing at the same spot
+  on the banner. An item with no stored image falls back to the live render: a
+  blank stage would read as "this ad is broken" rather than "no preview yet".
+
+### Changed
+- **An uploaded feed reference is listed under its own filename.** The File
+  column showed a generated name (`erste-SZK-adform-feed-v0-42.xlsx`) for files
+  nobody downloaded from us; it now shows the name of the file that was
+  uploaded, which is the one you will look for. Exports are unchanged.
+
 ## [6.34.0] — 2026-08-31
 
 ### Fixed

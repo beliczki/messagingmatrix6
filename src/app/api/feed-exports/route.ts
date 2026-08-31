@@ -13,7 +13,7 @@ import {
   pmmidRowKey,
   serializePayload,
 } from "@/lib/feed-export";
-import { feedExportFilename } from "@/lib/feed-filename";
+import { feedExportDisplayName } from "@/lib/feed-filename";
 import {
   DEFAULT_SIGNAL_COLUMN,
   isValidSignalColumn,
@@ -58,13 +58,7 @@ function shapeRow(
     uploadedBy: r.uploadedBy,
     uploadedByEmail: r.uploadedBy ? emailById.get(r.uploadedBy) ?? null : null,
     platform: r.platform,
-    filename: feedExportFilename(
-      clientKey,
-      r.product,
-      r.platform,
-      r.feedVersion,
-      r.id,
-    ),
+    filename: feedExportDisplayName(r, clientKey),
     defaultMessageId: r.defaultMessageId,
     defaultLabel: r.defaultLabel,
     rowCount: r.rowCount,

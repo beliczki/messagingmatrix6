@@ -19,6 +19,7 @@ import {
 import { serializePayload } from "@/lib/feed-export";
 import { parseFeedColumns } from "@/lib/feed-patterns";
 import { isSignalColumn, platformForSignalColumn } from "@/lib/feed-signal";
+import { filenameFromNotes } from "@/lib/feed-filename";
 
 // Snapshots live in `feed_exports` with source='adform_snapshot'. The XLSX
 // notes column carries the original filename ("Uploaded from AdForm: <name>").
@@ -37,12 +38,6 @@ type SnapshotOut = {
   filename: string;
   rowCount: number;
 };
-
-function filenameFromNotes(notes: string | null): string {
-  if (!notes) return "";
-  const m = notes.match(/^Uploaded from AdForm:\s*(.*)$/);
-  return m ? m[1] : notes;
-}
 
 function shape(
   r: typeof feedExports.$inferSelect,

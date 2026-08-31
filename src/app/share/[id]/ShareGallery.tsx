@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import PublicMatrixPreview from "./PublicMatrixPreview";
+import ImagePreviewToggle from "./ImagePreviewToggle";
 import { Masonry } from "../../(app)/_components/Masonry";
 import ShareDetailDialog, {
   type DialogItem,
@@ -547,6 +548,9 @@ export default function ShareGallery({
           navIndex={detailIndex}
           onJump={jumpDetail}
           onClose={() => setDetailKey(null)}
+          imageMode={imagePreview}
+          setImageMode={setImagePreview}
+          imageSrc={imageSrcFor(detailItem)}
           comments={comments}
           authorName={authorName}
           setAuthorName={setAuthorName}
@@ -599,60 +603,6 @@ function ViewSwitcher({
 // items on screen actually have a stored PNG, so a mismatch with the Download
 // all count is visible without switching modes. Amber when they disagree —
 // same language the Creative Library uses for missing previews.
-function ImagePreviewToggle({
-  on,
-  onChange,
-  ready,
-  total,
-}: {
-  on: boolean;
-  onChange: (v: boolean) => void;
-  ready: number;
-  total: number;
-}) {
-  const complete = ready === total;
-  return (
-    <button
-      type="button"
-      onClick={() => onChange(!on)}
-      title={
-        complete
-          ? `All ${total} items have a stored preview image`
-          : `${ready} of ${total} items have a stored preview image — the rest have no preview yet and stay out of the download`
-      }
-      className={clsx(
-        "share-gallery__image-toggle inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition",
-        on
-          ? "share-gallery__image-toggle--active border-slate-900 bg-slate-900 text-white"
-          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-      )}
-    >
-      <span
-        className={clsx(
-          "flex size-3.5 items-center justify-center rounded-sm border",
-          on ? "border-white bg-white text-slate-900" : "border-slate-300",
-        )}
-      >
-        {on ? <Check className="size-2.5" strokeWidth={3} /> : null}
-      </span>
-      <ImageIcon className="size-3.5" />
-      Image preview
-      <span
-        className={clsx(
-          "share-gallery__image-toggle-count rounded-full px-1.5 text-[10px] font-medium",
-          complete
-            ? on
-              ? "bg-white/20 text-white"
-              : "bg-slate-100 text-slate-600"
-            : "bg-amber-100 text-amber-700",
-        )}
-      >
-        {ready}
-      </span>
-    </button>
-  );
-}
-
 function SizePill({
   options,
   counts,

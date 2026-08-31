@@ -799,3 +799,68 @@ Egyszeri script (`scripts/renumber-mc-dco.ts`, dry-run → `--commit`, futás ut
 
 **DEPLOYOLVA 6.32.0 (2026-08-30):** két commit ment ki egy passzban — `2aab359` (a commitolatlanul állt 6.31.0: status-filter countok, tree platform-színek, `--plat-*` tokenek, + a MARKET-session két one-off scriptje) és `36cf83c` (ez a feed-fix). Box `def87db`→`36cf83c`, `npm run build` exit 0, `pm2 restart mm6-erste` → **Ready 1470ms**. Séma-migráció nincs. Health: `/` 307, `/login` 200, `/mcp` 401, `/api/feed-exports` 401; publikus `https://erste.messagingmatrix.ai/login` 200.
 **Hátravan:** a feed 35 (SZA) újraexportálása — a most kint lévő sor mindkét hibát viszi (donor audience key a pmmidben/ReportingLabelben és a clickTAG-ben).
+
+### Riport-bővítés — DCO kereszthivatkozások + dokumentáció
+- **A creative-átfedés kártyák mellé jobbra zárt referencia-blokk** került, két kérdésre válaszolva: (1) *van-e DCO kártya ezen a számon* — tiszta DB-lekérdezés; (2) *a képen olvasható szöveg alapján melyik DCO MC-nek ugyanez a headline-ja*.
+- **OCR:** a generátor lefordít egy pici Swift programot (`OCR_SWIFT` → `swiftc` → temp), ami az Apple **Vision** `VNRecognizeTextRequest`-jét használja (`hu-HU` + `en-US`), és az **eredeti méretű** kreatívokon fut. Nem kellett külső függőség — se tesseract, se Python csomag.
+- **Normalizálás:** NFD + ékezet-eldobás + kisbetű + nem-alfanumerikus → szóköz. A felismerő rendszeresen elhagyja az ékezetet („almaid"), ékezet-érzékeny összevetés semmit nem találna.
+- **Küszöb, ami nélkül használhatatlan:** headline csak akkor vesz részt, ha normalizálva ≥20 karakter **és** ≥4 szó. Enélkül a „Személyi Kölcsön" a fél SZK termékvonalra illeszkedett — **946 találat** jött ki; a küszöbökkel **60**. Kártyánként max 6 tétel látszik, a többi „+N további".
+- **Valódi leletek:** az MC171 statikus (`gamertech`) szövege a DCO **MC271**-re illeszkedik; az MC287 (`BeErste3` + `WIZZAIR`) szövege a ma átszámozott **MC398**-ra („Válts csapatot, legyél erstés!", ACTIVE). A „szám szerinti" oszlop többnyire üres — a 8 átfedő számból 6 nonDCO-only, csak a 301/302 érinti a DCO oldalt.
+- **`docs/mc-collisions.md`** — kísérő dokumentáció a riport mellé: újrafuttatás egy paranccsal, mit tekint ütközésnek (tengely-definíció, a három `NOTES`-kategória, a creative-átfedés heurisztikája a rendition-szűrővel), hogyan működik az OCR-es kereszthivatkozás a küszöbökkel, honnan jönnek a képek, gyorsítótár, és a már megfizetett buktatók (fájlnév-prefix szerinti szűrés, Drive-rename audit, nonDCO témák nem `topics` sorok).
+- **Feljegyezve a jövőre:** a fájlnév `ERSTE_<PRODUCT>_` prefixe erősebb jel a kampány-tokennél — ha két külön termék fájljai ülnek egy számon, az biztos találat. A generátor ma nem használja szűrésre; ez a következő szigorítás helye.
+
+### Product tag a creative-átfedés kártyákon
+Minden kampány-thumbnail alatt, a fájlszámláló sor **bal oldalán** termék-címke (`SZK` `SZA` `HK` `HITEL` `VAL` `MARKET` `LTP`), a fájlnév `ERSTE_<PRODUCT>_` prefixéből — vagyis abból, amihez az adott MC ténylegesen parse-olódik. Termékenként saját szín; ismeretlen termék semleges szürkét kap (nincs `.product-tag--*` osztály → a `.product-tag` alap háttere marad), tehát új termék nem töri el a riportot. 62 címke a 20 kártyán.
+
+Ettől egy pillantásra látszik a kemény eset: **MC287** = `SZA` + `HK`, **MC302** = `SZA` + `SZK`. A `docs/mc-collisions.md` frissítve — a korábbi „ezt a generátor nem mutatja" megjegyzés helyére pontos leírás került: a termék **látszik**, de a jelöltlistát továbbra is a kampány-token heurisztika állítja elő, a termék-alapú szigorítás a következő lépés.
+
+### 2026-08-31 — nonDCO státuszok kiosztása
+**Kérés:** minden nonDCO (statikus) kreatív kapjon státuszt — idei dátumúak `ACTIVE`, régebbiek `INACTIVE`, ne maradjon státusz nélküli.
+
+- **A dátum forrása a lényeg:** `creatives.created_at` (amit a `scripts/fix-creative-dates.ts` a valódi fájldátumból töltött fel), **nem** a `messages.created_at` — az utóbbi az egységes 2026-08-17-i import-időbélyeg, azzal minden sor ACTIVE lett volna. Ellenőrizve: a legkésőbbi kreatív-dátum 2026-08-13, tehát nincs import-szennyeződés.
+- **A join fájlnév szerint** (`messages.name = creatives.file_name`), nem `(mc_number, mc_variant)` alapján — az a pár kampányok és tengelyek közt osztott. Mind a 688 nonDCO sor pontosan illeszkedett, egy sem maradt dátum nélkül (a script kilép, ha bármelyik nem talál dátumot — így nem tud „none" státuszú sor keletkezni).
+- **Eredmény:** 676 sor kapott státuszt → nonDCO összesen **374 ACTIVE / 314 INACTIVE**, 0 üres. Kereszttábla: 2024 → 56 INACTIVE, 2025 → 258 INACTIVE, 2026 → 373 ACTIVE.
+- **Csak az üres státuszúakhoz nyúltam.** A 12 már beállított sort békén hagytam; ezek közül **egy tér el a szabálytól**: MC290a `HITEL_kerdoiv_hitelvalaszto_hiteltinder_1` `ACTIVE`, pedig a kreatívja 2025-10-28-i. Szándékosan nem írtam felül — emberi döntés volt, és a testvérsora (2026-os) is ACTIVE. Ha kell, egy paranccsal átbillenthető.
+- Egyszeri script (`_status-nondco.ts`), futás után törölve. `messages` biztonsági mentés a futás előtt.
+- A riport újragenerálva — a nonDCO oszlopban mostantól valódi státusz-badge-ek látszanak a korábbi „—" helyett.
+
+### 2026-08-31 — „None" státusz kizárása MC-ken (elemzés + fix, bump vár)
+**User-kérdés:** hogyan keletkezik kreatív-feltöltéskor státusz nélküli MC, és hogyan előzzük meg. **User-döntés:** a „nincs státusz" **nem legális állapot**, és mivel rendszerint leadott (élő) kreatívok töltődnek fel, a default **ACTIVE**.
+- **Elemzés — a feltöltés két külön dolog:**
+  - **Fájl → Creative Library:** `useUploadQueue` → `POST /api/files/upload` (`uploaded_files`, MinIO, sha256-dedup) → `POST /api/creatives` → `createCreative`. **Ez az út nem tud „none"-t gyártani:** a `creatives` táblán nincs is status oszlop, és nem keletkezik `messages` sor.
+  - **Kreatív → MC:** `creative_promote` → `promoteCreative` → `createMessage` (INCOMING default), VAGY `scripts/rebuild-creatives.ts` nyers insertje.
+- **Gyökér-ok:** `rebuild-creatives.ts:499` nyers `db.insert(messages)`-e **kihagyta a `status` mezőt**. Szándékosan kerüli meg a `createMessage`-et (hogy a fájlnévből jövő MC-szám megmaradjon) — így viszont annak `status: input.status ?? "INCOMING"` defaultját is megkerülte. **Mind a 676 status nélküli MC innen jött, 2026-08-17-én** (mind nonDCO channel-MC, mind template-null; DCO oldalon 0 db volt).
+- **Miért volt rosszabb, mint amilyennek látszott:** a szűrő `m.status && ss.has(m.status)` szerint dolgozik, és a `statusOptions` csak létező státuszokat kínál → **egy null-státuszú MC eltűnt, amint bármelyik státuszt bepipáltad, és rá szűrni sem lehetett.** Nem szürke volt, hanem láthatatlan a státusz-tengelyen.
+- **A 676 sort a user időközben maga szétosztotta** ACTIVE (+362) / INACTIVE (+314) között — a backfill tehát megtörtént, a munka a megelőzésről szól.
+- **Fix — a réteg + mind a három forrás:**
+  - [x] **Séma:** `messages.status` → `NOT NULL DEFAULT 'ACTIVE'`, migráció **`0008_nifty_the_initiative.sql`**. A generált SQL elé **kézzel betettem egy backfill UPDATE-et**: a `SET NOT NULL` egyetlen megmaradt NULL-on is elhasal, és a gyártó script a fájl megírása és a deploy között még lefuthat.
+  - [x] **`scripts/rebuild-creatives.ts`:** explicit `status: "ACTIVE"` (nem a kolumna-defaultra bízva — olvashatóság).
+  - [x] **`MessageEditor`:** a Status legördülő `— none —` opciója **törölve** (ez volt szó szerint a „none", és minden MC-n elérhető volt; a global edit ráadásul propagálta a testvérekre).
+  - [x] **`import-xlsx.ts`:** üres Status cella → `INCOMING`, **nem** a kolumna ACTIVE defaultja. ⚠️ **Kimondott feltevés:** egy táblázat-sor, ami sosem mondta hogy „élő", ne váljon élővé mulasztásból. Ha ezt máshogy akarod, egy szó átírása.
+  - [x] **`promoteCreative`:** explicit `status: "ACTIVE"` (eddig a `createMessage` INCOMING-ját örökölte, ami egy kész, leadott fájlra hamis). **Kézzel létrehozott MC változatlanul INCOMING.**
+- **Verifikáció:** `tsc` 0, `npm run build` 0, `npx vitest run` **606/606**, eslint 0 error a módosított fájlokon.
+- **⚠️ Deploy:** séma-migráció van → **migrate + kód EGY passzban** a boxon (`db:migrate` + build + `pm2 restart mm6-erste`), soha nem lokál `db:migrate` önmagában.
+- **Bump-javaslat:** `6.32.0` → **`6.33.0`** (minor: séma-migráció + user-látható viselkedés-változás). A CHANGELOG-bejegyzés egyelőre `[Unreleased]` alatt áll, mert menet közben te is bumpoltál (6.31.0 → 6.32.0) — nem akartam verziót ütni rád.
+- **Nyitva hagyva (nem kértél rá):** 8 db **`PLANNED`** státuszú MC van, ami nincs a kanonikus `STATUS_OPTIONS`-ban; a `Message` TS-típus még `status: string | null`-t mond (a DB már nem engedi); a `MessageEditor` saját, karakterre azonos `STATUS_OPTIONS` másolatot tart a `types.ts`-beli mellett.
+
+### 2026-08-31 — Feed-váltás crash nyomozás (BLOKKOLVA — hibaszöveg kell)
+**Bejelentés:** mátrixban változtatás → átlépés Feed view-ra → az app errorral elszáll; reload után a feed rendben feljön.
+**Kizárva (nem ez):**
+- **Lazy chunk / ChunkLoadError:** a `GridView`/`FeedView`/`TreeView` **statikus import** a `MatrixGrid`-ben, nincs `dynamic()`/`lazy()`, nincs `Suspense`.
+- **Hook-sorrend (a 6.24.0-s F1 minta):** a `FeedView`-ban minden hook a return előtt van, korai return nincs; a `FeedExportPanel`-ben pedig **már ott a védelem és a magyarázó komment is** (a `filteredIds` memo szándékosan a `if (!ready) return` FÖLÖTT van). Az eslint `rules-of-hooks: error` óta (6.27.0) a statikus alakot amúgy is elfogná a build.
+- **Query-hiba mint render-crash:** a globális `QueryClient`-en nincs `throwOnError` (`QueryProvider.tsx:9-16`), tehát egy elszálló query nem dobja a boundaryt.
+- **Cache-alak romlás:** a mátrixban **nincs `setQueryData`**, csak invalidálás → a feed ugyanazt az alakot kapja, mint reload után.
+- A `FeedView` adat-útja (`columns`/`rows`/`sizesByTemplate`) végig `??` fallbackös, nem dob.
+**Ami hátravan:** a tényleges hibaszöveg. Kliens-oldali render-hiba, a box logjában nem látszik, lokálisan pedig nem tudom reprodukálni (nincs bejelentkezésem — a dev a KÖZÖS prod Postgresre megy).
+**Következő lépés:** a user másolja ki a piros hibaképernyő / konzol első sorát (React #300/#310 vs. egy konkrét `TypeError`), abból egy lépésben megvan. Megjegyzés: a **6.32.0** épp feed-fixet hozott (DEFAULT-sor audience-rewrite) — ha az után is megvan, az kizár egy lehetséges okot.
+
+### 2026-08-31 — Feeds lista: fájlnév-oszlop + Exported áthelyezés; a „mindig v1" magyarázata
+**User-kérés (3):** (1) a generált XLSX neve legyen az első oszlop, pontosan ahogy a letöltés adja; (2) az `Exported` kerüljön a `Published at` elé; (3) fura, hogy a verzió mindig `v1`, pedig egy VAL feedből rögtön 4-et generált, mire végleges lett.
+- [x] **(1) Fájlnév-oszlop.** Új `src/lib/feed-filename.ts` (`feedExportFilename`, db-függőség nélkül, hogy kliens is használhassa). A letöltő route (`feed-exports/[id]`) és a lista-route MOSTANTÓL UGYANEZT hívja — eddig a formátum-string csak a letöltőben élt, egy második másolat garantáltan szétcsúszott volna. A lista-route visszaad egy `filename` mezőt (kell hozzá a `clients.key`, +1 lekérdezés listánként). A `FeedsView` első oszlopa `File` (300px, mono), és **a detail-link is ide költözött** a dátumról — az első oszlop a sor identitása. ⚠️ Feltevés, egy sor visszacsinálni, ha a linket a dátumon akarod.
+- [x] **(2) `Exported` áthelyezve** közvetlenül a `Published at` elé, sima cellaként (`feeds-table__exported`). A default rendezés marad `exportedAt desc`, a fejléc a `COLUMNS`-ból generálódik, tehát a sorrend automatikusan követi.
+- **(3) A verzió NEM bug — ez a lockolt „uploaded ≠ exported" invariáns.** `decideVersion` (`feed-export.ts:560`) a `liveExport`-ból indul ki, amit a `findLiveExport` **kizárólag a `uploaded_to_adform_at`-tal rendelkező sorokból** választ. Ha nincs publikált előd → `{feedVersion: 1, action: "first"}`. Ha van, akkor is csak három ok bumpol: a user kéri, a sorszám átlépi a `MAX_ROWS_PER_FEED`-et, vagy sor tűnne el (sticky-superset); egyébként `append` ugyanarra a verzióra.
+  - **Adat igazolja:** VAL 4 export (id 37–40), publikálva csak a 40-es, 12:50-kor — vagyis mind a 4 generáláskor még nem volt publikált VAL előd → mind `v1`. Termékenként: SZA 13 export / 2 publikált / max v2; SZK 16 / 1 / v1; VAL 4 / 1 / v1. A minta konzisztens.
+  - **Fogalmi különbség:** a `Version` azt mondja, **melyik verziót kapja/kapta az Adform**, nem azt, hányszor nyomtál Exportot. A „hányadik próbálkozás" egy külön fogalom (export-sorszám), amit ma az `Exported` időbélyeg + a sor id hordoz — és a fájlnév végén lévő id meg is különbözteti a négy VAL fájlt (`…-v1-37.xlsx` … `…-v1-40.xlsx`).
+  - **Ha mégis látni akarod a próbálkozás-számot:** külön oszlop (ordinal a product+version csoporton belül) a helyes megoldás — **a `Version` szemantikáját NEM szabad átírni**, mert az az AdForm advert_id identitáshoz van kötve (a négy lockolt feed-invariáns egyike). Külön kérésre megcsinálom.
+- **Mellékes lelet:** a `src/lib/feed-export.ts` **nyers NUL bájtot tartalmaz** (offset 18511, 502. sor) egy kulcs-összefűzés elválasztójaként: `` `${row[advertIdCol] ?? ""}\x00${row[reportingCol] ?? ""}` ``. Működik, de emiatt a `file` és a `grep` **binárisnak látja az egész fájlt és némán kihagyja** — ezért nem találtam meg elsőre a verzió-logikát benne. Egy karakteres javítás: nyers bájt helyett `\u0000` escape, futásidőben azonos. Nem nyúltam hozzá, mert nem kérted.
+- **Verifikáció:** `tsc` 0, `npm run build` 0, eslint 0 error/0 warning a négy érintett fájlon.

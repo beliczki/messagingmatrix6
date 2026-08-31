@@ -940,12 +940,11 @@ function NamingTab({
             value={draft.status ?? ""}
             onChange={(e) =>
               setDraft((prev) =>
-                prev ? { ...prev, status: e.target.value || null } : prev,
+                prev ? { ...prev, status: e.target.value } : prev,
               )
             }
             className="custom-dropdown w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
           >
-            <option value="">— none —</option>
             {STATUS_OPTIONS.map((s) => (
               <option key={s} value={s}>
                 {s}

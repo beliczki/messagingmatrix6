@@ -277,7 +277,13 @@ export const messages = pgTable(
     topic: text("topic").notNull(),
     versionNo: integer("version_no").notNull().default(1),
     pmmid: text("pmmid"),
-    status: text("status"),
+    // "No status" is not a legal state for an MC: a status-less row is invisible
+    // to the matrix status filter (it matches no option and cannot be filtered
+    // FOR), so it silently drops out of every status-scoped view. NOT NULL keeps
+    // it that way; the default covers inserts that omit the column entirely —
+    // ACTIVE because the rows that reach us without one are delivered creatives.
+    // Hand-created MCs are unaffected: createMessage passes INCOMING explicitly.
+    status: text("status").notNull().default("ACTIVE"),
     startDate: text("start_date"),
     endDate: text("end_date"),
     template: text("template"),

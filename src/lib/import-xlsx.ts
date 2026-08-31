@@ -371,7 +371,12 @@ async function importMessages(
       topic: topKey,
       versionNo: n(r[idx.versionNo]) ?? 1,
       pmmid: s(r[idx.pmmid]),
-      status: s(r[idx.status]),
+      // An empty Status cell used to import as NULL, which is no longer a legal
+      // state for a message. INCOMING rather than the column's ACTIVE default:
+      // a spreadsheet row that never said "live" must not become live by
+      // omission. (Audience/topic status above is a different column and keeps
+      // its nullable semantics.)
+      status: s(r[idx.status]) ?? "INCOMING",
       startDate: s(r[idx.start]),
       endDate: s(r[idx.end]),
       template: s(r[idx.template]),

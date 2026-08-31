@@ -500,6 +500,12 @@ async function main() {
       clientId,
       number,
       variant,
+      // Explicit, not left to the column default: this raw insert deliberately
+      // bypasses createMessage (to keep the MC number parsed from the filename),
+      // so it also bypasses that function's INCOMING default. Omitting the field
+      // is what produced 676 status-less MCs on 2026-08-17. What this script
+      // imports is delivered creative files, hence ACTIVE.
+      status: "ACTIVE",
       audience: audienceKey,
       topic: topicKey,
       versionNo: 1,

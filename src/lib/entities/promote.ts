@@ -156,6 +156,10 @@ export async function promoteCreative(
       topic: topic.key,
       image1: fileName,
       name: fileName,
+      // Same reasoning as scripts/rebuild-creatives.ts: what gets promoted is a
+      // finished, delivered creative file, not a card someone still has to write.
+      // Without this it would inherit createMessage's INCOMING default.
+      status: "ACTIVE",
     });
 
     const upd = await updateCreative(clientId, creativeId, creativeVersion, {

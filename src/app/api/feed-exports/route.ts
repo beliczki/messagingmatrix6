@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import { feedExports, users } from "@/db/schema";
+import { clients, feedExports, users } from "@/db/schema";
 import { withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 import {
@@ -13,6 +13,7 @@ import {
   pmmidRowKey,
   serializePayload,
 } from "@/lib/feed-export";
+import { feedExportFilename } from "@/lib/feed-filename";
 
 type ExportRowOut = {
   id: number;
@@ -29,11 +30,15 @@ type ExportRowOut = {
   rowCount: number;
   notes: string | null;
   source: string;
+  // The exact name the download route will produce, so the list can show the
+  // file you are about to get instead of making you guess it.
+  filename: string;
 };
 
 function shapeRow(
   r: typeof feedExports.$inferSelect,
   emailById: Map<string, string>,
+  clientKey: string,
 ): ExportRowOut {
   return {
     id: r.id,
@@ -45,6 +50,7 @@ function shapeRow(
     uploadedToAdformAt: r.uploadedToAdformAt,
     uploadedBy: r.uploadedBy,
     uploadedByEmail: r.uploadedBy ? emailById.get(r.uploadedBy) ?? null : null,
+    filename: feedExportFilename(clientKey, r.product, r.feedVersion, r.id),
     defaultMessageId: r.defaultMessageId,
     defaultLabel: r.defaultLabel,
     rowCount: r.rowCount,
@@ -87,8 +93,14 @@ export const GET = withSession(async ({ req, claims }) => {
     .orderBy(desc(feedExports.exportedAt));
 
   const emailById = await resolveEmails(rows);
+  const [client] = await db
+    .select({ key: clients.key })
+    .from(clients)
+    .where(eq(clients.id, claims.cid))
+    .limit(1);
+  const clientKey = client?.key ?? `client-${claims.cid}`;
   return NextResponse.json({
-    feedExports: rows.map((r) => shapeRow(r, emailById)),
+    feedExports: rows.map((r) => shapeRow(r, emailById, clientKey)),
   });
 });
 
@@ -258,8 +270,17 @@ export const POST = withSession(async ({ req, claims }) => {
   });
 
   const emailById = await resolveEmails([inserted]);
+  const [postClient] = await db
+    .select({ key: clients.key })
+    .from(clients)
+    .where(eq(clients.id, claims.cid))
+    .limit(1);
   return NextResponse.json({
-    feedExport: shapeRow(inserted, emailById),
+    feedExport: shapeRow(
+      inserted,
+      emailById,
+      postClient?.key ?? `client-${claims.cid}`,
+    ),
     decision,
     diff: diffPayload,
   });

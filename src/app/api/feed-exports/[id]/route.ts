@@ -8,6 +8,7 @@ import {
   buildXlsxBuffer,
   deserializePayload,
 } from "@/lib/feed-export";
+import { feedExportFilename } from "@/lib/feed-filename";
 
 type Params = { id: string };
 
@@ -44,7 +45,12 @@ export const GET = withSession<Params>(async ({ req, claims, params }) => {
       .where(eq(clients.id, claims.cid))
       .limit(1);
     const clientKey = client?.key ?? `client-${claims.cid}`;
-    const filename = `${clientKey}-${row.product}-feed-v${row.feedVersion}-${row.id}.xlsx`;
+    const filename = feedExportFilename(
+      clientKey,
+      row.product,
+      row.feedVersion,
+      row.id,
+    );
     return new NextResponse(new Uint8Array(buffer), {
       status: 200,
       headers: {

@@ -5,6 +5,38 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.33.0] — 2026-08-31
+
+### Changed
+- **The Feeds list leads with the file you are about to download.** The first
+  column is now the export's real filename (`erste-VAL-feed-v1-1234.xlsx`) and
+  carries the link to the export; `Exported` moved down to sit directly before
+  `Published at`, so the two dates read as a pair. The name comes from a shared
+  `lib/feed-filename.ts` used by both the list and the download route — a second
+  copy of that format string would have drifted the first time either changed.
+
+### Fixed
+- **An MC can no longer end up with no status.** `messages.status` is now
+  `NOT NULL DEFAULT 'ACTIVE'` (migration `0008`, which backfills first). A
+  status-less MC was worse than it looked: the matrix status filter matches on
+  `m.status && …` and the filter menu only offers statuses that exist, so those
+  rows vanished the moment any status was ticked and could not be filtered
+  *for* — invisible on the status axis rather than merely uncoloured. Three
+  producers are closed at the source:
+  - `scripts/rebuild-creatives.ts` did a raw insert that omitted the column
+    (it bypasses `createMessage` on purpose, to keep the MC number parsed from
+    the filename) — it now sets `ACTIVE` explicitly. This one produced all 676
+    status-less MCs on 2026-08-17.
+  - The MC editor's Status dropdown offered an explicit `— none —` option that
+    wrote `null`. Removed.
+  - An empty Status cell in an imported XLSX became `null`; it now imports as
+    `INCOMING` — a spreadsheet row that never said "live" must not go live by
+    omission.
+- **Creative promotion lands ACTIVE.** `promoteCreative` (MCP `creative_promote`)
+  used to inherit `createMessage`'s `INCOMING`, which reads as "someone still has
+  to write this card". What gets promoted is a finished, delivered creative file.
+  Hand-created MCs are unchanged and still start at `INCOMING`.
+
 ## [6.32.0] — 2026-08-30
 
 ### Fixed

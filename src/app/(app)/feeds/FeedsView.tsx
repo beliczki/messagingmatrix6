@@ -35,9 +35,13 @@ type FeedExportRow = {
   rowCount: number;
   notes: string | null;
   source: "export" | "adform_snapshot" | string;
+  // Server-built (see lib/feed-filename.ts) — the exact name the download
+  // produces, so the list names the file instead of making you guess it.
+  filename: string;
 };
 
 type SortKey =
+  | "filename"
   | "exportedAt"
   | "product"
   | "feedVersion"
@@ -60,12 +64,13 @@ function formatDate(iso: string): string {
 }
 
 const COLUMNS: Array<{ key: SortKey; label: string; width: number }> = [
-  { key: "exportedAt", label: "Exported", width: 200 },
+  { key: "filename", label: "File", width: 300 },
   { key: "product", label: "Product", width: 120 },
   { key: "feedVersion", label: "Version", width: 80 },
   { key: "defaultLabel", label: "Default", width: 280 },
   { key: "rowCount", label: "Rows", width: 80 },
   { key: "live", label: "Live", width: 80 },
+  { key: "exportedAt", label: "Exported", width: 200 },
   { key: "uploadedToAdformAt", label: "Published at", width: 200 },
   { key: "uploadedByEmail", label: "Published by", width: 220 },
 ];
@@ -385,14 +390,14 @@ export function FeedsView() {
                       </div>
                       <div
                         className="feeds-table__cell flex shrink-0 items-center border-r border-slate-100 px-2 text-xs"
-                        style={{ width: 200 }}
+                        style={{ width: 300 }}
                       >
                         <Link
                           href={`/feeds/${r.id}`}
-                          className="feeds-table__date-link truncate text-blue-600 hover:underline"
-                          title={`Open feed export #${r.id}`}
+                          className="feeds-table__file-link truncate font-mono text-blue-600 hover:underline"
+                          title={r.filename}
                         >
-                          {formatDate(r.exportedAt)}
+                          {r.filename}
                         </Link>
                       </div>
                       <div
@@ -442,6 +447,14 @@ export function FeedsView() {
                           )}
                         >
                           {live ? "true" : "false"}
+                        </span>
+                      </div>
+                      <div
+                        className="feeds-table__cell feeds-table__exported flex shrink-0 items-center border-r border-slate-100 px-2 text-xs text-slate-700"
+                        style={{ width: 200 }}
+                      >
+                        <span className="truncate">
+                          {formatDate(r.exportedAt)}
                         </span>
                       </div>
                       <div

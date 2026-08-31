@@ -27,6 +27,7 @@ import PreviewPane, { type PreviewBg } from "../_components/PreviewPane";
 import { templateMetaFor } from "../_components/MatrixIframeTile";
 import ModalBackdrop from "../_components/ModalBackdrop";
 import EntityHistoryDrawer from "../_components/EntityHistoryDrawer";
+import { useTextFormattingRules } from "./useTextFormattingRules";
 
 type AssetRow = {
   id: number;
@@ -1082,16 +1083,9 @@ function ContentTab({
   function set(k: keyof EditableFields, v: string) {
     setDraft((prev) => (prev ? { ...prev, [k]: v || null } : prev));
   }
-  const rulesQ = useQuery({
-    queryKey: ["text-formatting"],
-    queryFn: async () => {
-      const r = await fetch("/api/text-formatting", { credentials: "include" });
-      if (!r.ok) throw new Error("text-formatting");
-      return (await r.json()) as { text_formatting: FormattingRule[] };
-    },
-  });
+  const rulesQ = useTextFormattingRules();
   const allRules = useMemo(
-    () => (rulesQ.data?.text_formatting ?? []).filter((r) => r.archivedAt === null),
+    () => (rulesQ.data ?? []).filter((r) => r.archivedAt === null),
     [rulesQ.data],
   );
 

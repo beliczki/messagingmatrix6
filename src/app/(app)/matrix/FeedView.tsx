@@ -10,7 +10,7 @@ import {
   resolveFeedPattern,
 } from "@/lib/feed-patterns";
 import { mcLabelFor } from "@/lib/mc-label";
-import type { TextFormatting } from "@/db/schema";
+import { useTextFormattingRules } from "./useTextFormattingRules";
 import { type Audience, type Message, type Topic, STATUS_COLOR } from "./types";
 
 type SortDir = "asc" | "desc";
@@ -85,16 +85,7 @@ export default function FeedView({
     [columns, feedPatterns],
   );
 
-  const formattingRulesQ = useQuery({
-    queryKey: ["text-formatting"],
-    queryFn: async (): Promise<TextFormatting[]> => {
-      const r = await fetch("/api/text-formatting", { credentials: "include" });
-      if (!r.ok) return [];
-      const data = (await r.json()) as { text_formatting: TextFormatting[] };
-      return data.text_formatting ?? [];
-    },
-    enabled: usesFormatted,
-  });
+  const formattingRulesQ = useTextFormattingRules(usesFormatted);
 
   const templatesQ = useQuery({
     queryKey: ["templates", "for-feed-formatted"],

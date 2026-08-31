@@ -148,32 +148,38 @@ export default function MonitoringTable({
 
   // Preview pipeline (same sources as Creative Library): resolve each matched
   // message to its template's first size so we can live-render the MC.
+  // These three keys are shared with the matrix and the Creative Library, and a
+  // query key is a contract about the cached SHAPE, not just the URL. This file
+  // used to unwrap the envelope while every other consumer kept it, so whichever
+  // page loaded first decided what the other one found: arriving here from the
+  // matrix handed `templates.map` an object. Keeping the envelope matches the
+  // other four consumers.
   const messagesQ = useQuery({
     queryKey: ["messages"],
     queryFn: () =>
       fetch("/api/messages")
         .then((r) => r.json())
-        .then((d: { messages: Message[] }) => d.messages),
+        .then((d: { messages: Message[] }) => d),
   });
   const templatesQ = useQuery({
     queryKey: ["templates", "folders"],
     queryFn: () =>
       fetch("/api/templates/folders")
         .then((r) => r.json())
-        .then((d: { templates: TemplateInfo[] }) => d.templates),
+        .then((d: { templates: TemplateInfo[] }) => d),
   });
   const audiencesQ = useQuery({
     queryKey: ["audiences"],
     queryFn: () =>
       fetch("/api/audiences")
         .then((r) => r.json())
-        .then((d: { audiences: Audience[] }) => d.audiences),
+        .then((d: { audiences: Audience[] }) => d),
   });
 
   const previewById = useMemo(() => {
-    const messages = messagesQ.data ?? [];
-    const templates = templatesQ.data ?? [];
-    const audiences = audiencesQ.data ?? [];
+    const messages = messagesQ.data?.messages ?? [];
+    const templates = templatesQ.data?.templates ?? [];
+    const audiences = audiencesQ.data?.audiences ?? [];
     if (messages.length === 0 || templates.length === 0) {
       return new Map<number, MatrixNavItem & { templateMeta?: ReturnType<typeof templateMetaFor> }>();
     }

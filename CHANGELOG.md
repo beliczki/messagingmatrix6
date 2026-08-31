@@ -5,6 +5,28 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.35.1] — 2026-08-31
+
+### Fixed
+- **Switching to Feed view after editing in the matrix no longer breaks the
+  page.** MessageEditor and FeedView both read the text-formatting rules under
+  the react-query key `["text-formatting"]`, but they cached different things
+  under it: the editor stored the API envelope (`{ text_formatting: [...] }`),
+  FeedView the unwrapped array. Whichever mounted first won the cache entry, so
+  opening an MC and then switching to Feed handed FeedView an object where it
+  expected an array — `rules.filter is not a function` thrown during render,
+  which took the whole matrix route to its error boundary. Reloading appeared to
+  fix it only because FeedView then repopulated the key first. Both now go
+  through one `useTextFormattingRules` hook, so the shape can only be stated
+  once.
+- **The same defect, three more times, between Monitoring and the matrix.** A
+  scan for query keys shared across files found `["messages"]`,
+  `["audiences"]` and `["templates","folders"]` in the same state: the
+  monitoring table unwrapped the envelope while all four other consumers kept
+  it. Arriving at Monitoring from the matrix handed `templates.map` an object;
+  going the other way silently emptied the matrix's template list. Monitoring
+  now keeps the envelope like everyone else.
+
 ## [6.35.0] — 2026-08-31
 
 ### Added

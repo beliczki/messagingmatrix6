@@ -1010,3 +1010,5 @@ Az IO callback a legutóbbi kézbesítés óta **sorba állt összes** entry-t k
 - **Tanulság a jövőre:** a query key **a cache-elt ALAK szerződése**, nem csak az URL-é. Két `useQuery` ugyanazzal a kulccsal, eltérő `queryFn`-nel = időzítéstől függő crash, amit reload elrejt.
 - **Verifikáció:** `tsc` 0, `npm run build` 0, eslint 0 error, **616/616 teszt zöld**. ⚠️ Komponens-teszt-infra nincs, ezért erre a hiba-osztályra nem született automata teszt; a szerkezeti javítás (egy hook) a megelőzés.
 - **Bump-javaslat:** `6.35.0` → **`6.35.1`** (patch — két crash-fix, nincs user-látható új viselkedés). Nincs séma-migráció.
+
+- **DEPLOYOLVA 6.35.1 (2026-08-31):** commit `fc82682`, push origin main, box `722db94`→`fc82682`, `npm run build` (Compiled successfully 34.9s) + `pm2 restart mm6-erste` → **Ready 1271ms**, online. Nincs séma-migráció. Health: `/` 307, `/login` 200, `/mcp` 401, `/api/text-formatting` 401, `/matrix` 307, `/monitoring` 307. **Böngészős smoke a userre vár — ez a lényeg:** (1) MC szerkesztése → Feed nézetre váltás (a bejelentett crash), (2) mátrix → Monitoring és vissza (a szkennel talált három azonos hiba).

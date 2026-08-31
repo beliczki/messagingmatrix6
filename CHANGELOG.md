@@ -5,6 +5,48 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.36.0] — 2026-08-31
+
+### Added
+- **Choose what the export is compared against.** A "Compare against" picker in
+  the export dialog lists this product's earlier feeds — references and exports
+  alike — with the newest preselected, which is what the export would have built
+  on anyway. The choice is the diff baseline *and* the carry-forward set, which
+  is why it has to be selectable: exporting one section of a product must build
+  on that section's own previous feed, not on a sibling section's.
+
+### Fixed
+- **A feed update no longer deletes the rows you filtered out.** The matrix
+  filter was applied before the sticky-superset union, so exporting one section
+  of a product dropped every other section's row from the file — the one thing a
+  feed update must never do, and it happened precisely in the
+  filter-to-a-section workflow. A row the baseline carries that is not in
+  today's selection now goes out with `IsActive=FALSE`: still in the feed, no
+  longer serving. Deleting is what a new version is for, and the diff labels say
+  so — "Switched off" normally, "Dropped" when Force new version is ticked.
+
+### Removed
+- **The split-by-platform export.** The matrix filter already decides which
+  slice is being exported, so the dialog only has to name the default row and
+  the signal header for that slice. The zip endpoint went with it. The platform
+  column, the signal picker and the per-(product, platform) live feed stay —
+  those are what make two live feeds for one product work.
+
+### Fixed
+- **Uploading a feed reference no longer destroys the previous one.** The upload
+  was an upsert keyed on (client, product): it deleted the existing snapshot for
+  that product before inserting. So uploading SZK's DV360 reference deleted its
+  AdForm one — a product legitimately runs a live feed per platform, and may yet
+  need several per platform. Uploads now accumulate; the newest reference for a
+  (product, platform) is what a new export diffs against, the same rule the
+  exports already follow, and older ones stay as history.
+- **An export diffed against whichever reference the database returned first.**
+  The snapshot lookup that supplies the diff baseline filtered on product alone
+  and took `limit(1)` with no ordering, so once a product had both an AdForm and
+  a DV360 reference, an AdForm export could be compared against the DV360
+  picture — every row of the other platform reading as a difference. It is now
+  scoped by platform and ordered newest-first.
+
 ## [6.35.1] — 2026-08-31
 
 ### Fixed

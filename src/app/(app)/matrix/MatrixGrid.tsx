@@ -1094,7 +1094,6 @@ export default function MatrixWorkspace() {
                 <FeedExportPanel
                   filters={filters}
                   filteredMessages={feedExportMessages}
-                  audiences={audiences}
                 />
               ) : null}
               {view === "tree" ? <TreeViewNavigator /> : null}

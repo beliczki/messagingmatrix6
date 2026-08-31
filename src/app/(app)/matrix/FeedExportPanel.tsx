@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Download, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { type Audience, type Filters, type Message } from "./types";
+import { type Filters, type Message } from "./types";
 import FeedExportDialog from "./FeedExportDialog";
 
 
@@ -33,11 +33,9 @@ const SERVING_STATUSES = new Set(["ACTIVE", "INACTIVE"]);
 export default function FeedExportPanel({
   filters,
   filteredMessages,
-  audiences,
 }: {
   filters: Filters;
   filteredMessages: Message[];
-  audiences: Audience[];
 }) {
   const products = [...filters.products];
   const statuses = [...filters.statuses];
@@ -185,7 +183,6 @@ export default function FeedExportPanel({
         onClose={() => setDialogOpen(false)}
         product={product!}
         messages={filteredMessages}
-        audiences={audiences}
         messageIds={filteredIds}
       />
     </>

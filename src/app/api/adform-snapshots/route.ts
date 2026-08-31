@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
   audiences as audiencesTable,
@@ -79,6 +79,10 @@ export const GET = withSession(async ({ req, claims }) => {
           eq(feedExports.product, product),
         ),
       )
+      // Several references can exist for one product now; newest wins, and
+      // without the ordering limit(1) would return whichever row came back
+      // first.
+      .orderBy(desc(feedExports.uploadedToAdformAt))
       .limit(1);
     if (!row) return NextResponse.json({ snapshot: null });
     return NextResponse.json({
@@ -200,6 +204,9 @@ export const POST = withSession(async ({ req, claims }) => {
     }
     parsed.rowSet.signalColumn = uploadedSignal;
   }
+  // Read off the file itself: the signal header names the platform, and a file
+  // has exactly one. Needed this early because the upsert below is scoped by it.
+  const platform = platformForSignalColumn(uploadedSignal ?? "");
 
   // Infer the product from PMMID audience keys: every PMMID encodes the
   // audience key (between -a_ and -m_), and each audience belongs to a
@@ -249,23 +256,13 @@ export const POST = withSession(async ({ req, claims }) => {
   }
   const product = [...inferredProducts][0];
 
-  // Upsert: one snapshot per (clientId, product). Re-uploading replaces the
-  // previous one — explicit delete first so the audit log shows the
-  // lifecycle and the autoincrement id reflects the new upload.
-  const [previous] = await db
-    .select()
-    .from(feedExports)
-    .where(
-      and(
-        eq(feedExports.clientId, claims.cid),
-        eq(feedExports.source, SNAPSHOT_SOURCE),
-        eq(feedExports.product, product),
-      ),
-    )
-    .limit(1);
-  if (previous) {
-    await db.delete(feedExports).where(eq(feedExports.id, previous.id));
-  }
+  // References accumulate. There used to be an upsert here that deleted the
+  // previous snapshot for the product, which meant uploading the DV360
+  // reference destroyed the AdForm one — a product legitimately has a live feed
+  // per platform, and it may yet need several per platform. Every upload is now
+  // kept; the NEWEST one for a (product, platform) is what the diff builds on,
+  // the same rule the exports already follow, and the older ones stay as
+  // history instead of being thrown away.
 
   // Default label: read the (number, variant) of the snapshot's DEFAULT row
   // and look the message up in the matrix. If found, label = "MC<num><var> —
@@ -314,7 +311,7 @@ export const POST = withSession(async ({ req, claims }) => {
       // file has exactly one. That is why there is no "is this AdForm or DV360"
       // question at upload time -- asking would only let the answer contradict
       // the file.
-      platform: platformForSignalColumn(uploadedSignal ?? ""),
+      platform,
       defaultMessageId,
       defaultLabel,
       rowCount: parsed.rowSet.rows.length,
@@ -329,15 +326,16 @@ export const POST = withSession(async ({ req, claims }) => {
     userId: claims.sub,
     entityType: "feed_exports",
     entityId: inserted.id,
-    action: previous ? "update" : "create",
+    // Always a create now: an upload adds a reference, it never replaces one.
+    action: "create",
     after: {
       id: inserted.id,
       product,
+      platform,
       filename: file.name,
       rowCount: inserted.rowCount,
       sheetName: parsed.sheetName,
       source: SNAPSHOT_SOURCE,
-      replacedId: previous?.id ?? null,
     },
   });
 

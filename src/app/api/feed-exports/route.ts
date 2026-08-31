@@ -119,6 +119,7 @@ export const POST = withSession(async ({ req, claims }) => {
         defaultMessageId?: unknown;
         forceNewVersion?: unknown;
         signalColumn?: unknown;
+        baselineExportId?: unknown;
         notes?: unknown;
         messageIds?: unknown;
         dryRun?: unknown;
@@ -157,6 +158,11 @@ export const POST = withSession(async ({ req, claims }) => {
   // platform and one platform per file, so deriving it here keeps the two from
   // ever disagreeing on a row.
   const platform = platformForSignalColumn(signalColumn);
+  // Which earlier feed this export builds on. It is both the diff baseline and
+  // the carry-forward set, so exporting one section of a product must point at
+  // THAT section's previous feed.
+  const baselineExportId =
+    typeof body.baselineExportId === "number" ? body.baselineExportId : null;
   const notes = typeof body.notes === "string" ? body.notes : null;
   const messageIds = Array.isArray(body.messageIds)
     ? body.messageIds.filter((v): v is number => typeof v === "number")
@@ -170,6 +176,7 @@ export const POST = withSession(async ({ req, claims }) => {
     clientId: claims.cid,
     product,
     platform,
+    baselineExportId,
     defaultMessageId,
     forceNewVersion,
     messageIds,
@@ -209,7 +216,14 @@ export const POST = withSession(async ({ req, claims }) => {
   // The user-facing preview diff uses an AdForm snapshot if one is uploaded
   // (matched by PMMID — MM6 has no advert_id, AdForm has). Otherwise fall
   // back to the MM6-last-export diff we already computed for versioning.
-  const [snapshotRow] = await db
+  //
+  // Scoped by platform: a product can have one reference per platform, and
+  // without this the limit(1) would pick whichever row came back first — an
+  // AdForm export diffed against the DV360 reference reads every row of the
+  // other platform as a difference.
+  const [snapshotRow] = baselineExportId
+    ? [built.liveExport]
+    : await db
     .select()
     .from(feedExports)
     .where(
@@ -217,17 +231,27 @@ export const POST = withSession(async ({ req, claims }) => {
         eq(feedExports.clientId, claims.cid),
         eq(feedExports.source, "adform_snapshot"),
         eq(feedExports.product, product),
+        eq(feedExports.platform, platform),
       ),
     )
+    // Newest reference wins: several can exist for one product+platform, and
+    // the baseline must be the most recent picture of what the platform holds.
+    .orderBy(desc(feedExports.uploadedToAdformAt))
     .limit(1);
   const snapshotPayload = snapshotRow
     ? deserializePayload(snapshotRow.payloadJson)
     : null;
-  const diffSource: "adform_snapshot" | "mm6_last_export" | "none" = snapshotPayload
-    ? "adform_snapshot"
-    : built.liveExport
-      ? "mm6_last_export"
-      : "none";
+  // Name the baseline honestly: an explicitly chosen one may be either an
+  // uploaded reference or an earlier export, and saying "AdForm snapshot" for
+  // an export would misdescribe what the numbers were measured against.
+  const diffSource: "adform_snapshot" | "mm6_last_export" | "none" =
+    snapshotPayload
+      ? snapshotRow?.source === "adform_snapshot"
+        ? "adform_snapshot"
+        : "mm6_last_export"
+      : built.liveExport
+        ? "mm6_last_export"
+        : "none";
   const prevPayload = snapshotPayload ?? lastExportPayload;
   const diff = snapshotPayload
     ? diffRowSets(snapshotPayload, built.rowSet, pmmidRowKey)

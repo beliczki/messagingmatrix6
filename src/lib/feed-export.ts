@@ -73,6 +73,13 @@ export type BuildOptions = {
   product: string;
   /** Which platform's feed this is - scopes the live export it builds on. */
   platform: string;
+  /**
+   * Diff against this specific earlier feed instead of the newest published one
+   * for the product+platform. The baseline is also the carry-forward set, which
+   * is why it must be selectable: exporting one section of a product has to
+   * build on THAT section's previous feed, not on a sibling section's.
+   */
+  baselineExportId?: number | null;
   defaultMessageId: number | null;
   forceNewVersion?: boolean;
   /**
@@ -282,6 +289,29 @@ function buildDefaultRow(
 // ─────────────────────────────────────────────────────────────────────────────
 // Live snapshot lookup
 
+// An explicitly chosen baseline. Scoped to the client AND the product so a
+// hand-passed id cannot pull in another product's feed; returns null when it
+// does not resolve, which falls the caller back to "no baseline" rather than
+// silently diffing against something unrelated.
+export async function findExportById(
+  clientId: number,
+  product: string,
+  id: number,
+): Promise<FeedExport | null> {
+  const [row] = await db
+    .select()
+    .from(feedExports)
+    .where(
+      and(
+        eq(feedExports.clientId, clientId),
+        eq(feedExports.product, product),
+        eq(feedExports.id, id),
+      ),
+    )
+    .limit(1);
+  return row ?? null;
+}
+
 export async function findLiveExport(
   clientId: number,
   product: string,
@@ -388,7 +418,9 @@ export async function buildFeedRowSet(opts: BuildOptions): Promise<{
   // and (every message id from the latest uploaded export). The carry-forwards
   // get re-evaluated through the current patterns; archived messages keep
   // their content but get IsActive forced FALSE downstream.
-  const liveExport = await findLiveExport(clientId, product, platform);
+  const liveExport = opts.baselineExportId
+    ? await findExportById(clientId, product, opts.baselineExportId)
+    : await findLiveExport(clientId, product, platform);
   const liveIds = readLiveMessageIds(liveExport);
 
   const allMessages = await db
@@ -412,8 +444,15 @@ export async function buildFeedRowSet(opts: BuildOptions): Promise<{
   const liveIdSet = new Set(liveIds);
 
   const inSet: DbMessage[] = [];
+  // Rows the baseline already carries are NEVER dropped. `allowed` (the user's
+  // matrix filter) used to be applied first, so exporting one section silently
+  // deleted every other section's row from the feed - the one thing a feed
+  // update must never do. A carried row that is not in today's selection goes
+  // out with IsActive=FALSE instead: still there, no longer serving. Deleting
+  // is what a new version is for.
+  const deactivated = new Set<number>();
   for (const m of allMessages) {
-    if (allowed && !allowed.has(m.id)) continue;
+    const inSelection = !allowed || allowed.has(m.id);
     const matchesProduct =
       productAudKeys.has(m.audience) && productTopicKeys.has(m.topic);
     // ACTIVE and INACTIVE are both serving statuses that belong in the feed —
@@ -424,11 +463,14 @@ export async function buildFeedRowSet(opts: BuildOptions): Promise<{
       (m.status === "ACTIVE" || m.status === "INACTIVE") &&
       m.archivedAt === null &&
       matchesProduct;
-    if (isServing) {
+    if (inSelection && isServing) {
       inSet.push(m);
       continue;
     }
-    if (liveIdSet.has(m.id)) inSet.push(m);
+    if (liveIdSet.has(m.id)) {
+      inSet.push(m);
+      deactivated.add(m.id);
+    }
   }
 
   // Stable sort: by number, then variant, so feeds are reproducible.
@@ -449,8 +491,10 @@ export async function buildFeedRowSet(opts: BuildOptions): Promise<{
     const fmt = buildFormattingCtx(m);
     if (fmt) Object.assign(ctx, fmt);
     const row = evaluateRow(m, columns, feedPatterns, ctx);
-    if (isActiveCol && m.archivedAt !== null) {
-      // Archive trumps status — message has been retired in the system.
+    if (isActiveCol && (m.archivedAt !== null || deactivated.has(m.id))) {
+      // Archive trumps status — the message has been retired in the system.
+      // A carried row outside today's selection is switched off the same way:
+      // present in the feed, not serving.
       row[isActiveCol] = "FALSE";
     }
     rows.push(row);

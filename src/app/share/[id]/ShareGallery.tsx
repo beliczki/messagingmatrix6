@@ -8,8 +8,10 @@ import {
   useState,
 } from "react";
 import {
+  Check,
   Columns3,
   Download,
+  ImageIcon,
   LayoutGrid,
   List as ListIcon,
   Loader2,
@@ -161,6 +163,10 @@ export default function ShareGallery({
   const [sizeFilter, setSizeFilter] = useState<Set<string>>(new Set());
   const [commentedOnly, setCommentedOnly] = useState(false);
   const [view, setView] = useState<ViewMode>("masonry");
+  // Image-preview mode: tiles show the stored preview PNG instead of rendering
+  // the banner live in an iframe, and Download all bundles those PNGs. Same
+  // toggle as the MC editor's "Image preview".
+  const [imagePreview, setImagePreview] = useState(false);
   // Card thumbs use a fixed checker background. The bg toggle lives in the
   // ShareDetailDialog header where the user is actually evaluating preview
   // backgrounds.
@@ -184,6 +190,54 @@ export default function ShareGallery({
   useEffect(() => {
     fetchComments();
   }, [fetchComments]);
+
+  // Stored preview PNGs for the snapshot's MCs, keyed "<messageId>|<size>".
+  // Fetched on mount (not on toggle) so the Image preview button can carry its
+  // count before anyone switches modes.
+  const [previewByKey, setPreviewByKey] = useState<
+    Map<string, { previewId: number; updatedAt: string }>
+  >(new Map());
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/share/${shareId}/previews`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+      .then((data: { previews: Array<{ messageId: number; size: string; previewId: number; updatedAt: string }> }) => {
+        if (cancelled) return;
+        setPreviewByKey(
+          new Map(
+            data.previews.map((p) => [
+              `${p.messageId}|${p.size}`,
+              { previewId: p.previewId, updatedAt: p.updatedAt },
+            ]),
+          ),
+        );
+      })
+      .catch(() => {
+        // No stored previews reachable — Image preview simply reports 0.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shareId]);
+
+  // The image a tile shows (and Download all bundles) in image-preview mode.
+  // null = this item has no stored image: an MC the preview generator has not
+  // run on yet, or a non-image creative (video, binary).
+  const imageSrcFor = useCallback(
+    (it: Item): string | null => {
+      if (it.kind === "creative") {
+        const f = it.file;
+        if (!f || !(f.mimeType?.startsWith("image/") ?? false)) return null;
+        return `/share/${shareId}/file/${f.id}`;
+      }
+      if (!it.size) return null;
+      const hit = previewByKey.get(`${it.message.id}|${it.size}`);
+      if (!hit) return null;
+      // ?v= is load-bearing: /api/previews/[id] is cached on a regen-stable id.
+      return `/api/previews/${hit.previewId}?v=${encodeURIComponent(hit.updatedAt)}`;
+    },
+    [previewByKey, shareId],
+  );
 
   const commentCountByKey = useMemo(() => {
     const map = new Map<string, number>();
@@ -222,17 +276,34 @@ export default function ShareGallery({
   const [zipping, setZipping] = useState(false);
   const [zipProgress, setZipProgress] = useState(0);
 
+  // In image mode only the items that actually have a stored image are
+  // downloadable; the rest are labelled "no preview" in the gallery and stay
+  // out of the zip rather than silently arriving as HTML.
+  const imageReady = useMemo(
+    () => filtered.filter((it) => imageSrcFor(it) !== null),
+    [filtered, imageSrcFor],
+  );
+  const downloadTargets = imagePreview ? imageReady : filtered;
+
   async function downloadAll() {
-    if (filtered.length === 0 || zipping) return;
+    if (downloadTargets.length === 0 || zipping) return;
     setZipping(true);
     setZipProgress(0);
     try {
       const { default: JSZip } = await import("jszip");
       const zip = new JSZip();
       let done = 0;
-      for (const it of filtered) {
+      for (const it of downloadTargets) {
         try {
-          if (it.kind === "matrix") {
+          if (imagePreview) {
+            const src = imageSrcFor(it);
+            if (src) {
+              const r = await fetch(src);
+              if (r.ok) {
+                zip.file(downloadFilenameFor(it, true), await r.blob());
+              }
+            }
+          } else if (it.kind === "matrix") {
             const r = await fetch("/api/render/public", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -257,7 +328,7 @@ export default function ShareGallery({
           // skip the failing item; continue with the rest
         }
         done += 1;
-        setZipProgress(Math.round((done / filtered.length) * 100));
+        setZipProgress(Math.round((done / downloadTargets.length) * 100));
       }
       const blob = await zip.generateAsync({ type: "blob" });
       const url = URL.createObjectURL(blob);
@@ -296,6 +367,8 @@ export default function ShareGallery({
   return (
     <>
       <header className="share-gallery__header sticky top-0 z-20 border-b border-slate-200 bg-white">
+        {/* Row 1 — what this share IS: identity, plus the two read-only facts
+            about it (how many comments it has collected, when it was captured). */}
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-2">
           <div className="share-gallery__brand flex shrink-0 items-center gap-2">
             <img
@@ -315,32 +388,65 @@ export default function ShareGallery({
               {shareTitle ?? "Untitled share"}
             </span>
           </div>
-          <div className="share-gallery__header-controls ml-auto flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setCommentedOnly((v) => !v)}
-              title={commentedOnly ? "Show all items" : "Show only commented items"}
-              className={clsx(
-                "commented-only-toggle inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition",
-                commentedOnly
-                  ? "border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-              )}
-            >
-              <MessageSquare className="size-3.5" />
-              Commented only
-            </button>
-            <SizePill
-              options={sizeOptions}
-              counts={items}
-              values={sizeFilter}
-              onChange={setSizeFilter}
-            />
+          <div className="share-gallery__meta ml-auto flex shrink-0 items-center gap-2 text-[11px] text-slate-500">
+            {commentsLoaded ? (
+              <span className="inline-flex items-center gap-1">
+                <MessageSquare className="size-3" />
+                {comments.length} comment{comments.length === 1 ? "" : "s"}
+              </span>
+            ) : null}
+            {commentsLoaded && generatedAt ? (
+              <span className="text-slate-300">·</span>
+            ) : null}
+            {generatedAt ? <span>captured {generatedAt}</span> : null}
+          </div>
+        </div>
+        {shareDescription ? (
+          <div className="share-gallery__description mx-auto max-w-6xl truncate px-4 pb-1.5 text-[11px] text-slate-500">
+            {shareDescription}
+          </div>
+        ) : null}
+        {/* Row 2 — everything that changes what you see. What narrows the set
+            sits left under the title; what changes how it is rendered or taken
+            away sits right. */}
+        <div className="share-gallery__controls mx-auto flex max-w-6xl flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-2">
+          <SizePill
+            options={sizeOptions}
+            counts={items}
+            values={sizeFilter}
+            onChange={setSizeFilter}
+          />
+          <button
+            type="button"
+            onClick={() => setCommentedOnly((v) => !v)}
+            title={commentedOnly ? "Show all items" : "Show only commented items"}
+            className={clsx(
+              "commented-only-toggle inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition",
+              commentedOnly
+                ? "border-slate-900 bg-slate-900 text-white"
+                : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+            )}
+          >
+            <MessageSquare className="size-3.5" />
+            Commented only
+          </button>
+          <div className="share-gallery__control-actions ml-auto flex flex-wrap items-center gap-2">
             <ViewSwitcher view={view} setView={setView} />
+            <ImagePreviewToggle
+              on={imagePreview}
+              onChange={setImagePreview}
+              ready={imageReady.length}
+              total={filtered.length}
+            />
             <button
               type="button"
               onClick={downloadAll}
-              disabled={zipping || filtered.length === 0}
+              disabled={zipping || downloadTargets.length === 0}
+              title={
+                imagePreview
+                  ? "Bundle the stored preview PNGs"
+                  : "Bundle the rendered HTML creatives"
+              }
               className="toolbar-btn--primary inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {zipping ? (
@@ -350,29 +456,10 @@ export default function ShareGallery({
               )}
               {zipping
                 ? `Bundling… ${zipProgress}%`
-                : `Download all (${filtered.length})`}
+                : `Download all (${downloadTargets.length})`}
             </button>
           </div>
         </div>
-        {shareDescription || generatedAt || commentsLoaded ? (
-          <div className="mx-auto flex max-w-6xl items-center gap-2 px-4 pb-2 text-[11px] text-slate-500">
-            {shareDescription ? (
-              <span className="truncate">{shareDescription}</span>
-            ) : null}
-            <span className="ml-auto inline-flex shrink-0 items-center gap-2">
-              {commentsLoaded ? (
-                <span className="inline-flex items-center gap-1">
-                  <MessageSquare className="size-3" />
-                  {comments.length} comment{comments.length === 1 ? "" : "s"}
-                </span>
-              ) : null}
-              {commentsLoaded && generatedAt ? (
-                <span className="text-slate-300">·</span>
-              ) : null}
-              {generatedAt ? <span>captured {generatedAt}</span> : null}
-            </span>
-          </div>
-        ) : null}
       </header>
 
       <main className="share-gallery__main mx-auto max-w-6xl px-4 py-4">
@@ -395,6 +482,8 @@ export default function ShareGallery({
                   commentCount={commentCountByKey.get(it.itemKey) ?? 0}
                   onOpen={() => openDetail(it)}
                   commentsLoaded={commentsLoaded}
+                  imageMode={imagePreview}
+                  imageSrc={imageSrcFor(it)}
                 />
               </li>
             ))}
@@ -410,6 +499,8 @@ export default function ShareGallery({
                 commentCount={commentCountByKey.get(it.itemKey) ?? 0}
                 onOpen={() => openDetail(it)}
                 commentsLoaded={commentsLoaded}
+                imageMode={imagePreview}
+                imageSrc={imageSrcFor(it)}
               />
             ))}
           </div>
@@ -421,12 +512,26 @@ export default function ShareGallery({
             <Masonry
               items={filtered}
               itemKey={(it) => it.key}
+              // Every item's shape is known before a single byte loads — an MC
+              // from its banner size, a creative from its stored file
+              // dimensions — so the packer can put each tile in the column that
+              // is currently shortest instead of the next one in turn. Without
+              // it the first columns ran several screens longer than the last.
+              estimateHeight={(it, colWidth) => {
+                const dims = parseDimensions(it.size);
+                // Unknown shape (a creative with no recorded dimensions): a
+                // square is the least-wrong guess, and a wrong guess only
+                // costs balance, never correctness.
+                return dims ? colWidth * (dims.h / dims.w) : colWidth;
+              }}
               render={(it) => (
                 <MasonryTile
                   item={it}
                   shareId={shareId}
                   bg={cardBg}
                   onOpen={() => openDetail(it)}
+                  imageMode={imagePreview}
+                  imageSrc={imageSrcFor(it)}
                 />
               )}
             />
@@ -486,6 +591,65 @@ function ViewSwitcher({
         </button>
       ))}
     </div>
+  );
+}
+
+// Checkbox-style toggle, same shape as the MC editor's "Image preview"
+// (PreviewPane). The count is the point of the badge: it says how many of the
+// items on screen actually have a stored PNG, so a mismatch with the Download
+// all count is visible without switching modes. Amber when they disagree —
+// same language the Creative Library uses for missing previews.
+function ImagePreviewToggle({
+  on,
+  onChange,
+  ready,
+  total,
+}: {
+  on: boolean;
+  onChange: (v: boolean) => void;
+  ready: number;
+  total: number;
+}) {
+  const complete = ready === total;
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!on)}
+      title={
+        complete
+          ? `All ${total} items have a stored preview image`
+          : `${ready} of ${total} items have a stored preview image — the rest have no preview yet and stay out of the download`
+      }
+      className={clsx(
+        "share-gallery__image-toggle inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition",
+        on
+          ? "share-gallery__image-toggle--active border-slate-900 bg-slate-900 text-white"
+          : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+      )}
+    >
+      <span
+        className={clsx(
+          "flex size-3.5 items-center justify-center rounded-sm border",
+          on ? "border-white bg-white text-slate-900" : "border-slate-300",
+        )}
+      >
+        {on ? <Check className="size-2.5" strokeWidth={3} /> : null}
+      </span>
+      <ImageIcon className="size-3.5" />
+      Image preview
+      <span
+        className={clsx(
+          "share-gallery__image-toggle-count rounded-full px-1.5 text-[10px] font-medium",
+          complete
+            ? on
+              ? "bg-white/20 text-white"
+              : "bg-slate-100 text-slate-600"
+            : "bg-amber-100 text-amber-700",
+        )}
+      >
+        {ready}
+      </span>
+    </button>
   );
 }
 
@@ -572,11 +736,71 @@ function SizePill({
   );
 }
 
-function downloadFilenameFor(it: Item): string {
+// "300x250" → {w,h}. Serves both the size filter's ordering and the masonry
+// height estimate; null when the string is not a WxH pair (or absent).
+function parseDimensions(size: string | null): { w: number; h: number } | null {
+  if (!size) return null;
+  const m = size.match(/^(\d+)\s*x\s*(\d+)$/i);
+  if (!m) return null;
+  const w = parseInt(m[1]!, 10);
+  const h = parseInt(m[2]!, 10);
+  if (!w || !h) return null;
+  return { w, h };
+}
+
+// Image-preview mode for an MC tile: the stored PNG, or an honest gap when the
+// preview generator has not run on this MC yet. Never falls back to the live
+// iframe — that would hide which MCs are missing an image, which is exactly
+// what the toggle's count is there to show.
+function StoredPreview({
+  src,
+  label,
+  fill,
+  size,
+}: {
+  src: string | null;
+  label: string;
+  /** true inside a fixed-size parent (card thumb, list row); false in masonry. */
+  fill: boolean;
+  size: string | null;
+}) {
+  if (!src) {
+    const dims = parseDimensions(size);
+    return (
+      <div
+        className="stored-preview stored-preview--missing flex size-full min-h-24 items-center justify-center p-2 text-center text-[10px] text-slate-400"
+        // Hold the banner's shape so a missing image leaves the same gap the
+        // picture would have, and the masonry columns stay as packed.
+        style={!fill && dims ? { aspectRatio: `${dims.w} / ${dims.h}` } : undefined}
+      >
+        no preview image
+      </div>
+    );
+  }
+  const dims = parseDimensions(size);
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt={label}
+      className={clsx("stored-preview block w-full", fill && "size-full object-contain")}
+      // Reserve the banner's shape before the PNG loads. Without it every tile
+      // is zero-height for a moment, the page collapses to nothing and a reader
+      // who was scrolled down lands past the end of the gallery.
+      style={!fill && dims ? { aspectRatio: `${dims.w} / ${dims.h}` } : undefined}
+      loading="lazy"
+    />
+  );
+}
+
+function downloadFilenameFor(it: Item, asImage = false): string {
   if (it.kind === "creative") {
+    // A creative's own file is already the image — its name is unchanged in
+    // both modes.
     return it.creative.fileName ?? it.file?.filename ?? `creative-${it.creative.id}`;
   }
-  return `MC${it.message.number}${it.message.variant}-${it.size ?? "default"}.html`;
+  const ext = asImage ? "png" : "html";
+  return `MC${it.message.number}${it.message.variant}-${it.size ?? "default"}.${ext}`;
 }
 
 function labelFor(it: Item): string {
@@ -685,6 +909,8 @@ function ItemCard({
   commentCount,
   onOpen,
   commentsLoaded,
+  imageMode,
+  imageSrc,
 }: {
   item: Item;
   shareId: string;
@@ -692,6 +918,8 @@ function ItemCard({
   commentCount: number;
   onOpen: () => void;
   commentsLoaded: boolean;
+  imageMode: boolean;
+  imageSrc: string | null;
 }) {
   // Matches Creative Library's Card / MatrixIframeCard: uniform aspect-[4/3]
   // thumb so all grid tiles align; preview is letterboxed inside via the
@@ -713,7 +941,14 @@ function ItemCard({
         className="share-gallery__card-thumb creative-card__thumb relative aspect-[4/3]"
         style={bgStyleFor(bg)}
       >
-        {item.kind === "matrix" && item.message.template && item.size ? (
+        {item.kind === "matrix" && imageMode ? (
+          <StoredPreview
+            src={imageSrc}
+            label={labelFor(item)}
+            fill
+            size={item.size}
+          />
+        ) : item.kind === "matrix" && item.message.template && item.size ? (
           <PublicMatrixPreview
             shareId={shareId}
             messageId={item.message.id}
@@ -752,11 +987,15 @@ function MasonryTile({
   shareId,
   bg,
   onOpen,
+  imageMode,
+  imageSrc,
 }: {
   item: Item;
   shareId: string;
   bg: PreviewBg;
   onOpen: () => void;
+  imageMode: boolean;
+  imageSrc: string | null;
 }) {
   // Matches Creative Library's MatrixIframeTile / ImageTile: bare preview,
   // no meta strip. Container takes full column width; height comes from the
@@ -776,7 +1015,14 @@ function MasonryTile({
       className="share-gallery__masonry-tile media-tile group block w-full cursor-pointer overflow-hidden rounded-md transition hover:ring-2 hover:ring-slate-300"
       style={bgStyleFor(bg)}
     >
-      {item.kind === "matrix" && item.message.template && item.size ? (
+      {item.kind === "matrix" && imageMode ? (
+        <StoredPreview
+          src={imageSrc}
+          label={labelFor(item)}
+          fill={false}
+          size={item.size}
+        />
+      ) : item.kind === "matrix" && item.message.template && item.size ? (
         <PublicMatrixPreview
           shareId={shareId}
           messageId={item.message.id}
@@ -798,6 +1044,8 @@ function ItemRow({
   commentCount,
   onOpen,
   commentsLoaded,
+  imageMode,
+  imageSrc,
 }: {
   item: Item;
   shareId: string;
@@ -805,6 +1053,8 @@ function ItemRow({
   commentCount: number;
   onOpen: () => void;
   commentsLoaded: boolean;
+  imageMode: boolean;
+  imageSrc: string | null;
 }) {
   return (
     <div
@@ -823,7 +1073,14 @@ function ItemRow({
         className="share-gallery__row-thumb size-16 shrink-0 overflow-hidden rounded"
         style={bgStyleFor(bg)}
       >
-        {item.kind === "matrix" && item.message.template && item.size ? (
+        {item.kind === "matrix" && imageMode ? (
+          <StoredPreview
+            src={imageSrc}
+            label={labelFor(item)}
+            fill
+            size={item.size}
+          />
+        ) : item.kind === "matrix" && item.message.template && item.size ? (
           <PublicMatrixPreview
             shareId={shareId}
             messageId={item.message.id}

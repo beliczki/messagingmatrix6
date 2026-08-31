@@ -14,6 +14,12 @@ import {
   serializePayload,
 } from "@/lib/feed-export";
 import { feedExportFilename } from "@/lib/feed-filename";
+import {
+  DEFAULT_SIGNAL_COLUMN,
+  isValidSignalColumn,
+  platformForSignalColumn,
+  SIGNAL_COLUMN_OPTIONS,
+} from "@/lib/feed-signal";
 
 type ExportRowOut = {
   id: number;
@@ -30,6 +36,7 @@ type ExportRowOut = {
   rowCount: number;
   notes: string | null;
   source: string;
+  platform: string;
   // The exact name the download route will produce, so the list can show the
   // file you are about to get instead of making you guess it.
   filename: string;
@@ -50,7 +57,14 @@ function shapeRow(
     uploadedToAdformAt: r.uploadedToAdformAt,
     uploadedBy: r.uploadedBy,
     uploadedByEmail: r.uploadedBy ? emailById.get(r.uploadedBy) ?? null : null,
-    filename: feedExportFilename(clientKey, r.product, r.feedVersion, r.id),
+    platform: r.platform,
+    filename: feedExportFilename(
+      clientKey,
+      r.product,
+      r.platform,
+      r.feedVersion,
+      r.id,
+    ),
     defaultMessageId: r.defaultMessageId,
     defaultLabel: r.defaultLabel,
     rowCount: r.rowCount,
@@ -110,6 +124,7 @@ export const POST = withSession(async ({ req, claims }) => {
         product?: unknown;
         defaultMessageId?: unknown;
         forceNewVersion?: unknown;
+        signalColumn?: unknown;
         notes?: unknown;
         messageIds?: unknown;
         dryRun?: unknown;
@@ -125,6 +140,29 @@ export const POST = withSession(async ({ req, claims }) => {
   const defaultMessageId =
     typeof body.defaultMessageId === "number" ? body.defaultMessageId : null;
   const forceNewVersion = body.forceNewVersion === true;
+  // Which platform's signal header the XLSX should carry. An unknown value is
+  // rejected rather than passed through: this string lands in a header AdForm
+  // and DV360 both parse strictly, so a typo would produce a file that imports
+  // as garbage on the far side.
+  if (
+    body.signalColumn !== undefined &&
+    !isValidSignalColumn(body.signalColumn)
+  ) {
+    return NextResponse.json(
+      {
+        error: "bad_signal_column",
+        reason: `signalColumn must be one of: ${SIGNAL_COLUMN_OPTIONS.map((o) => o.value).join(", ")}`,
+      },
+      { status: 400 },
+    );
+  }
+  const signalColumn = isValidSignalColumn(body.signalColumn)
+    ? body.signalColumn
+    : DEFAULT_SIGNAL_COLUMN;
+  // The signal header IS the platform statement: there is one header per
+  // platform and one platform per file, so deriving it here keeps the two from
+  // ever disagreeing on a row.
+  const platform = platformForSignalColumn(signalColumn);
   const notes = typeof body.notes === "string" ? body.notes : null;
   const messageIds = Array.isArray(body.messageIds)
     ? body.messageIds.filter((v): v is number => typeof v === "number")
@@ -137,10 +175,16 @@ export const POST = withSession(async ({ req, claims }) => {
   const built = await buildFeedRowSet({
     clientId: claims.cid,
     product,
+    platform,
     defaultMessageId,
     forceNewVersion,
     messageIds,
   });
+
+  // Stamped on the row set (not into `columns`) so the stored payload remembers
+  // which platform this export was built for, and the download can rename the
+  // header without any of the diffing above ever seeing a different column set.
+  built.rowSet.signalColumn = signalColumn;
 
   if (built.rowSet.columns.length === 0) {
     return NextResponse.json(
@@ -247,6 +291,7 @@ export const POST = withSession(async ({ req, claims }) => {
       defaultMessageId: built.defaultMessage?.id ?? null,
       defaultLabel,
       rowCount: built.rowSet.rows.length,
+      platform,
       payloadJson: serializePayload(built.rowSet),
       notes,
     })

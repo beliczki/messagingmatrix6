@@ -197,6 +197,20 @@ Négy ötlet érkezett; a user 2026-08-30-án mindháromra megadta az irányt (a
 - [x] **I3.4** `component-inventory` frissítve. **Legend NEM készült, szándékosan:** az appban ma sehol nincs legend-komponens (a mátrix audience-header is legend nélkül színez a platformmal), így a tree-hez építeni új mintát találna ki egy olyan kódoláshoz, ami máshol is magyarázat nélkül él. Külön kérésre, és akkor mindkét helyre egyszerre.
 - ✅ **LEZÁRVA (user, 2026-08-30):** a tree **csak színt** kap; a strategy vastagság-kódolása NEM jön át (a tree-node keretvastagsága ma más célt szolgál).
 
+### I4 — Drive-leadási linkek ↔ Creative Library (IGÉNY RÖGZÍTVE, 2026-08-31 — NINCS terv, nincs döntés)
+**User-igény, szó szerint:** „szeretnék egy feature-t ami összeköti a Google Drive leadási linkeket a Creative Library kreatívok infóval; jó lenne tudni hogy mi hol érhető el Drive-on mátrixból, meg Drive-ból hogy azok hol elérhetőek matrix preview API-n." **User: „megbeszéljük később, most csak az igény van."** → **NE készüljön terv, amíg a lenti három kapu nincs megválaszolva.**
+
+**Felmérés (2026-08-31, tények — ezek a kiindulás, ha egyszer nekiállunk):**
+- ⚠️ **Az `/api/drive/proxy/` NEM Google Drive.** v5-ös örökség: a `template.json` beégetett `path-messagingmatrix` útvonala, ami fájlnév alapján a MinIO-ból szolgál ki bájtokat (`src/app/api/drive/proxy/[filename]/route.ts`). **A projektben ma nulla Drive-integráció van.**
+- Minden eddigi Drive-munka (átnevezések, lapos tükör, mtime-helyreállítás) a **user gépén, a mountolt Drive-on** futó scriptekkel ment. **A Hetzner boxon nincs Drive mount** — ez dönti el, hogy tárolt linkre vagy API-ra van szükség.
+- **A fájlnév már ma is join-kulcs:** a korábbi átnevezési körök után „3227/3227 cél létezik" és „60/60 fájl neve egyezik a DB-vel". Ha a mappaszerkezet determinisztikus, a Drive-hely nagy része **kiszámítható** abból, amit az MM6 már tud — új tárolás nélkül.
+- **Átfedés meglévő roadmap-tételekkel:** **FR-B Documents** (Google Slides link-tárház, `documents` tábla + soft link + MCP toolok) majdnem ugyanez a forma; a **Wave 5 — Share → Google Drive** kapujában pedig az áll, hogy a legolcsóbb 80% = PDF-export + manuális Drive drop → *kill the build*. Külön építve **két majdnem azonos dolgot** kapnánk.
+
+**Megválaszolatlan kapuk (a user későbbre tette):**
+1. **Hozzáférés:** tárolt link/útvonal (script tölti a mountról, nincs OAuth) · számított útvonal (nulla tárolás, de nincs kattintható URL) · valódi Drive API (OAuth + token-tárolás + kvóta, a boxon is).
+2. **Kimenet:** generált kereszt-riport (a `docs/mc-collisions.html` mintájára, nulla séma/UI/deploy) · UI a Creative Library-ben · MCP tool az agentnek.
+3. **FR-B összevonás:** közös „külső hivatkozás" tábla mindkettőre, vagy külön.
+
 ### I1 — Dashboard: hasznos **napi** áttekintő (DÖNTÉS LEZÁRVA)
 **User-döntés:** „ha már van, hasznos áttekintőt szeretnék belőle faragni, **per nap**." → a dashboard **nap-scope-os digest**, nem szabad-szűrős analitika-oldal. Ez egyben megválaszolja a top-toolbar kérdést: a szűrő = **nap-választó** (Ma / Tegnap / utolsó 7 nap), nem generikus filter-sáv.
 **Felmért tények (2026-08-30, prod DB):**
@@ -866,3 +880,104 @@ Ettől egy pillantásra látszik a kemény eset: **MC287** = `SZA` + `HK`, **MC3
 - **Verifikáció:** `tsc` 0, `npm run build` 0, eslint 0 error/0 warning a négy érintett fájlon.
 
 - **DEPLOYOLVA 6.33.0 (2026-08-31):** commit `9d34ec0`, push origin main, box `36cf83c`→`9d34ec0`. **Séma-migráció VAN:** `npm run db:migrate` → `0008` alkalmazva (9 migráció összesen), utána `npm run build` (Compiled successfully 41s) + `pm2 restart mm6-erste` → **Ready 1460ms**, online. Verifikálva a közös Postgresen: `messages.status` `is_nullable=NO`, `column_default='ACTIVE'::text`, **0 null sor**. Health: `/` 307, `/login` 200, `/mcp` 401, `/api/feed-exports` 401, `/feeds` 307. A box-on nincs `psql` (a DB-ellenőrzés lokálról, a tunnelen ment).
+
+### 2026-08-31 — DV360 vs AdForm signal-oszlop: export-dropdown + referencia-visszatöltés (bump vár)
+**Kiváltó:** a user két SZK feedet tett a `docs/`-ba (`…-27-merged-adform-…`, `…-28-merged-DV360-…`). **Megállapítás: pontosan EGY oszlop tér el, a 3.** — `AdformSignal:ADFPLAID` vs `ExternalSignal:ExternalSignal`; a maradék 32 fejléc karakterre azonos. Az **érték** oldal viszont már ma is helyes: mindkettőnél a `{{audiences[…].lineitem_id}}` pattern tölti, és az audience a saját buying platformjához tartozó id-t hordozza (adform 8 jegyű placement id, dv360 11 jegyű line item id). **Tehát nem új oszlop, nem új pattern, nem külön feed-struktúra kell — csak a fejlécnév.**
+- [x] **Közös modul `src/lib/feed-signal.ts`** — `SIGNAL_COLUMN_OPTIONS` (a két érték + platform-címke), `DEFAULT_SIGNAL_COLUMN` (= AdForm, hogy a régi viselkedés változatlan maradjon), `isSignalColumn`, `isValidSignalColumn`. Függőség-mentes, mert a panel (kliens) és a route-ok (szerver) is használják.
+- [x] **`FeedRowSet.signalColumn?`** — a választott fejléc a payloadban tárolódik, de **szándékosan NEM a `columns`-ban**. Ok: a `columns` a sor-értékek lookup-kulcsa, és a `diffRowSets` oszlopnév szerint hasonlít — ha az alias bekerülne a `columns`-ba, egy DV360-as export MINDEN sora „changed"-nek olvasódna egy AdForm-oshoz képest.
+- [x] **`buildXlsxBuffer`** — csak a fejléc-cellát írja át (`isSignalColumn` találatnál), az értékeket továbbra is az eredeti kulcson olvassa.
+- [x] **`POST /api/feed-exports`** — `signalColumn` a body-ban, ismeretlen érték **elutasítva** (400 `bad_signal_column`), nem átengedve: ez a string egy olyan fejlécbe kerül, amit AdForm és DV360 is szigorúan parse-ol, egy elgépelés használhatatlan fájlt adna a túloldalon.
+- [x] **Referencia-visszatöltés (`adform-snapshots`)** — (a) a `findColumnMismatch` a signal-vs-signal esetet egyezésnek veszi; (b) a feltöltött snapshot a **konfigurált névre normalizálva** tárolódik (oszlop + sor-kulcsok), a fájl által használt alias a `signalColumn`-ba kerül — különben a feltöltés átmenne, de utána minden sor „changed"-nek látszana a diffben.
+- [x] **UI:** `Signal column` dropdown közvetlenül a `Default for this export` alatt (`feed-export-panel__signal`), azonos stílus; perzisztencia terméken­ként (`mm6_feed_export_signal_<product>`), a default-sor mintájára. A hookok mind a `if (!ready)` korai return FÖLÖTT maradtak (a panel ismert csapdája).
+- **Verifikáció a VALÓDI fájlokon:** a konfigurált struktúra 33 oszlop; az AdForm fájl régen is, most is átmegy; a **DV360 fájl régen elakadt** (`3. oszlop: "ExternalSignal:ExternalSignal" vs "AdformSignal:ADFPLAID"`), **most átmegy**. `tsc` 0, `npm run build` 0, eslint 0 error/0 warning, új `tests/unit/feed-signal.test.ts` (4 teszt: alias-felismerés, stamp nélkül változatlan fejléc, rename csak a fejlécen az értékek megtartásával, a `columns` érintetlen marad).
+- **Bump-javaslat:** `6.33.0` → **`6.34.0`** (minor: új user-látható vezérlő + új HTTP body-mező). Nincs séma-migráció.
+
+### 2026-08-31 — Feeds `Live` oszlop: egy élő sor / termék + ACTIVE szín (bump vár)
+**User-kérés (2):** (1) a `Live` cella háttere legyen az ACTIVE státusz-szín, hogy jobban látsszon; (2) ne lehessen két Live sor ugyanarra a termékre — ha új SZA feedet tölt fel referenciaként, a másiknak vissza kéne állnia.
+- **Gyökér-ok (2): az oszlop rossz dolgot mutatott.** `live = r.uploadedToAdformAt !== null`, azaz „valaha publikálva lett" — nem „ez az élő". A rendszer saját definíciója viszont a `findLiveExport` (`feed-export.ts`): a publikált sorok közül a **legfrissebb**. Vagyis a DB-ben mindig is pontosan egy élő sor volt terméken­ként, csak a UI mutatott kettőt.
+- [x] **Megjelenítés javítva, adat nem** — `liveIdByProduct` memo a TELJES listából (nem a `filtered`-ből: a termék-szűrés nem promótálhat más sort élővé); `live = liveIdByProduct.get(r.product) === r.id`. A leváltott sor **megtartja a `Published at` dátumát** — egyszer tényleg élő volt, az tény, nem törlendő. Így nem kell adatot rombolni ahhoz, hogy egy élő sor legyen. Tooltip megkülönbözteti: „currently live" vs „was published, but a newer export has since gone live".
+- [x] **Rendezés is az új definíción** (`compareRows` kapja a mapet) — különben a `Live` szerinti rendezés mást csoportosítana, mint amit az oszlop mutat.
+- [x] **(1) Szín:** `feeds-table__cell--live` a teljes cellán, a meglévő `status-badge--active` szín-képletével (`color-mix(… var(--status-active) 18%, white)` + `var(--status-active)` szöveg) — nem új szín-család, és követi a Design tab státusz-színeit.
+- [x] **⚠️ Menet közben talált VALÓDI hiba — vegyes időbélyeg-formátum.** Két író volt: a `mark-uploaded` route a séma `nowUtc`-ját (`YYYY-MM-DD HH:MM:SS`), az `adform-snapshots` viszont `new Date().toISOString()`-et (`…T…Z`). Ezeket az oszlopokat **stringként** hasonlítjuk össze (a `findLiveExport` és mostantól a UI is), és `"T"` (0x54) > `" "` (0x20) → **azonos napon egy ISO-bélyegű reggeli referencia felülírja a délután publikált exportot.** Ez nem elméleti: a user ma reggel töltött fel referenciát SZA-ra és SZK-ra. A snapshot-route átírva `nowUtc`-ra.
+  - ⏳ **NYITVA (user döntése kell, prod UPDATE):** két meglévő sor ISO-formátumú — `id 41 (SZA, 2026-08-31T12:50:18.068Z)` és `id 42 (SZK, 2026-08-31T13:21:22.145Z)`. Amíg nincsenek normalizálva, ugyanez a hiba elsülhet rajtuk. Javasolt: `update feed_exports set uploaded_to_adform_at = to_char((uploaded_to_adform_at::timestamptz at time zone 'utc'), 'YYYY-MM-DD HH24:MI:SS') where uploaded_to_adform_at like '%T%Z';` — MA mindkettő a legfrissebb a termékén, tehát az élő sor nem változna tőle.
+- **Verifikáció:** `tsc` 0, build 0, eslint 0 error. Az adaton: publikált sorok SZA 41+16, SZK 42, VAL 40 → az új szabály szerint élő SZA=41, SZK=42, VAL=40, ami **karakterre egyezik** a `findLiveExport` `distinct on (product)` eredményével.
+- **Bump-javaslat:** a `6.34.0` javaslathoz hozzáadva (ugyanaz a kiadás, nincs séma-migráció).
+
+## 🟢 AKTÍV — Feed platform-dimenzió + split export (TERV, 2026-08-31, user green-light: „platform + split egyben")
+
+**Kiváltó / premissza-javítás (user):** egy termékhez **jogosan tartozik két élő feed** — egy AdForm, egy DV360 —, mert a két platform külön feedet kap (más signal-fejléc, más lineitemek). Ez érvényteleníti a 6.34.0-ba írt „egy élő / termék" szabályt: ma véletlenül helyes (mind a 4 publikált sor `AdformSignal:ADFPLAID`-et hordoz, ellenőrizve a payloadokban), de az első DV360 feednél elrejtené az élő AdForm sort. **A termék-scope-os szabály NEM megy ki** — ugyanebben a kiadásban a platform-scope-os váltja le.
+**A valódi hiányzó darab nem a split, hanem hogy sehol nem tároljuk, melyik platformnak készült egy feed.** A `findLiveExport` is `(clientId, product)` szerint keres → egy DV360 referencia lenne a következő AdForm export verzió-alapja; a két `docs/`-beli fájl 362 vs 467 soros, tehát a keresztbe-diff tömegével „removed" sort adna, ami **verzió-bump trigger** → spontán verzióugrások.
+
+### P1 — platform first-class a `feed_exports`-on (ez oldja meg a korrektséget)
+- [x] **P1.1** `feed_exports.platform` (`NOT NULL DEFAULT 'adform'`), `0009` migráció. Backfill: minden meglévő sor `adform` — igazolva, mindegyik payload `AdformSignal:ADFPLAID`-et tartalmaz.
+- [x] **P1.2** `findLiveExport(clientId, product, platform)` — az élő-keresés, és ezzel a verzió-döntés + diff-alap platformra szűkül.
+- [x] **P1.3** `POST /api/feed-exports` a `signalColumn`-ból vezeti le és tárolja a platformot.
+- [x] **P1.4** Referencia-feltöltés: a platform a **feltöltött fájl signal-fejlécéből** derül ki (`isSignalColumn`) — nincs „split vagy single" kapcsoló, mert egy fájlnak egy fejléce van, tehát fizikailag nem lehet split.
+- [x] **P1.5** Feeds lista: `Platform` oszlop + a Live „egy élő / (termék × platform)". Ez váltja le a termék-scope-os szabályt.
+- [ ] **P1.6** Tesztek (élő-választás platformonként; a cross-platform alap ne szivárogjon be a verzió-döntésbe).
+
+### P2 — split export (kényelem: egy művelet két menet helyett)
+- [x] **P2.1** A default-választó átkerül a side toolbarból az **export dialogba** (user kérése). Perzisztencia terméken­kéntiről termék+platformra bővül.
+- [x] **P2.2** Split kapcsoló a dialogban: bekapcsolva a `filteredMessages` `audience.buyingPlatform` szerint particionálódik, **platformonként külön default-választóval**.
+- [x] **P2.3** Egy művelet **két `feed_exports` sort** hoz létre (platformonként egyet), mindegyik a saját signal-fejlécével és **saját verzió-vonalával**.
+- [x] **P2.4** Letöltés: **egy ZIP** a két XLSX-szel (`jszip` már függőség, nincs új dep).
+- [x] **P2.5** Elutasítási szabály: ha egy sor audience-ének nincs `buyingPlatform`-ja, a split **megtagadja és felsorolja őket** — feedből sort némán elhagyni veszélyes. Ma ez csak a 7 `*_INCOMING` staging audience-t érintené (egyetlen érdeminek 2 üzenete van).
+- [ ] **P2.6** Tesztek + component-inventory + CHANGELOG + bump.
+
+**Kimondott feltevések (egy szó átírni, ha másképp kell):**
+1. **Platformonként külön verzió-vonal** — az első DV360 export `v1` akkor is, ha az AdForm már `v3`-nál tart. Két külön feed két külön rendszerben; közös számozás félrevezetne.
+2. **A fájlnév megkapja a platformot** (`erste-SZA-adform-feed-v1-40.xlsx`), különben a split két fájlja csak a záró id-ben térne el. Érinti a `lib/feed-filename.ts`-t és a Feeds lista első oszlopát.
+3. **A single (nem split) export megmarad** a signal-dropdownnal — a split nem váltja ki, csak automatizálja a két menetet.
+
+- [x] **P2.6 részben** — component-inventory + CHANGELOG kész. **Új integrációs teszt a split útra még NINCS** (a meglévő 610 lefut); a split kliens-oldali particionálás, amire nincs komponens-teszt-infra a projektben. A szerver-oldali rész (platform-scope-olt `findLiveExport`, zip-route) tesztelhető lenne integrációs szinten — ha kell, külön kérésre.
+- **Megvalósítás — eltérés a tervtől, indoklással:** a split NEM egy új „többlábú" POST végpont, hanem a dialog **legenként hívja a meglévő `POST /api/feed-exports`-ot** (szekvenciálisan). Ok: az a route már tartalmazza a teljes verzió-döntést, diffet és auditot; egy második, több-legű változat lemásolta volna mindezt. A két leg amúgy is két független export (külön verzió-vonal), tehát a szekvenciális hívás az őszinte modell. A ZIP-et külön `GET /api/feed-exports/zip?ids=` adja (`jszip`, max 10 id, hiányzó id → 404, hogy a zip ne legyen némán hiányos).
+- **Egységes „leg" modell:** a nem-split export = 1 leg, a split = platformonként 1. Így a preview, a commit és a letöltés nem ágazik el a `split` flagre minden lépésnél; a preview EGY `useQuery`, ami `Promise.all`-lal futtatja a legeket (fix hook-szám, akárhány platform).
+
+## MC export a docs-ba (2026-08-31)
+
+Kérés: ismételhető export az összes **DCO** MC-ről, ami ACTIVE vagy INACTIVE (= ami szolgál ki) — product, MC szám, variáns, PMMID, status, preview kép link. A preview-generátor újrafuttatása után csak újra kell futtatni, és a linkek frissülnek.
+
+Döntések (user, AskUserQuestion):
+- **Granularitás:** egy sor = egy MC szám+variáns (219 sor), a PMMID-k (2038 db) összevonva darabszámmal + listával, a status ACTIVE/INACTIVE bontásban összesítve.
+- **Formátum:** XLSX (`node-xlsx`, már függőség) → `docs/mc-export.xlsx`.
+- **Origin:** `https://erste.messagingmatrix.ai` (a `/api/previews/[id]` route szándékosan publikus), `MC_EXPORT_ORIGIN`-nal felülírható.
+
+- [x] **M1** `scripts/gen-mc-export.ts` — read-only, lapozó (500/oldal) lekérés. DCO-teszt a kanonikus `sameAxisAs` szerint: az `audience` kulcs **nem** oldódik fel channelre. Product = `audiences.product ?? topics.product`.
+- [x] **M2** Preview linkek: `message_previews` minden méretre külön oszlop, csoportonként a legkisebb message id reprezentánsa, `?v=updated_at` cache-busterrel (ugyanaz a forma, mint a `list_mc`-é és a szerkesztőé).
+- [x] **M3** `npm run export:mc` script a `package.json`-be.
+- [x] **M4** Futtatás + a fájl ellenőrzése; CHANGELOG + verzióbump javaslat.
+
+**Kész (2026-08-31).** `npm run export:mc` → `docs/mc-export.xlsx`: **219 MC** (2038 message sorból összevonva), méretek 300x250 / 300x600 / 640x360 / 970x250. Egy élő link ellenőrizve: `200 image/png`. **25 MC-nek nincs egyetlen preview-ja sem** — mind `html` sablonos, tehát csak még nem futott rájuk a shooter; `npm run gen:previews` + újra `export:mc` betölti őket. Product/topic/template kártya-szintű egyezése nem feltételezés: eltérésre a script figyelmeztet (most egy sem volt).
+
+## Share oldal + Creative Library kör (2026-08-31)
+
+### B1 — BUG: a HTML néha nem jelenik meg (gyökérok megvan)
+`PublicMatrixPreview.tsx:50` és `MatrixIframeTile.tsx:189` egyaránt így olvassa az IntersectionObservert:
+`(entries) => setVisible(entries[0]?.isIntersecting === true)`.
+Az IO callback a legutóbbi kézbesítés óta **sorba állt összes** entry-t kapja, és `entries[0]` a **LEGRÉGEBBI**. Gyors görgetésnél (19 iframe, terhelt main thread) a sor `[false, true]` lesz → a kód a `false`-ot olvassa ki, a tile `visible=false` marad. A tile ezután mozdulatlanul áll a képernyőn, **több intersection-változás nincs**, tehát soha nem tér magához → örök `</>` placeholder. Ráadásul a `visible → false` az effect cleanupját is lefuttatja: a már repülő render-fetch `cancelled=true` lesz, és a beérkező válasz a guard miatt **még a modul-szintű `renderCache`-be sem kerül be**, tehát a következő mount sem tudja megúszni.
+- [x] **B1.1** Az utolsó entry olvasása (`entries[entries.length - 1]`) mindkét fájlban.
+- [x] **B1.2** `renderCache.set(...)` a `cancelled` guard **elé** — egy megérkezett render soha ne vesszen el.
+- [x] **B1.3** Ez a belépett Creative Library masonryjában is ott van (`MatrixIframeTile`), tehát a user kérdésére: **de igen, ott is** ugyanez a hiba.
+
+### S1 — Select all filtered (Creative Library)
+- [x] **S1.1** Gomb a `SelectionActions`-be, a Share **fölé**; a teljes `filtered` halmazt jelöli ki, nem csak a végtelen-görgetéssel betöltött 200-at. Collapsed toolbarhoz ikonos variáns.
+
+### S2 — Share oldal fejléc-átrendezés
+- [x] **S2.1** 1. sáv: brand / breadcrumb / cím + jobbra a **comments számláló és a captured dátum** (ma alul van).
+- [x] **S2.2** 2. sáv: **balra** Size filter + Commented only (a cím alatt), **jobbra** View switcher + Image preview + Download all.
+
+### S3 — Image preview kapcsoló a share oldalon
+- [x] **S3.1** Új publikus `GET /share/[id]/previews` — a snapshotban szereplő üzenetek `{messageId, size, previewId, updatedAt}` listája. Ugyanaz a kapuzás, mint a `/share/[id]/file/[fileId]`-nál (a share snapshotja a hozzáférési lista). A PNG-t maga a már publikus `/api/previews/[id]` szolgálja ki.
+- [x] **S3.2** Pipás kapcsoló a View mellé, a Download all elé — ugyanaz a checkbox-forma, mint az MC editor „Image preview"-je. Bekapcsolva a matrix-tile-ok az eltárolt PNG-t mutatják iframe helyett.
+- [x] **S3.3** Download all: image módban a PNG-ket zipeli, egyébként a HTML-eket (a statikus kreatívok mindkét módban a saját fájljukat adják).
+
+### S4 — Kompaktabb masonry a share oldalon
+- [~] **S4.1** ELVETVE (user): nem a szélesség a baj. A `max-w-6xl` marad.
+- [x] **S4.2** A `Masonry` round-robin osztása (item i → i % colCount) vegyes képarányoknál csálé aljat ad. Opcionális, magasság-becslésen alapuló „legrövidebb oszlopba" pakolás — **csak a share galéria kapcsolja be**, a library olvasási sorrendje marad.
+
+**Kész (2026-08-31).** Build zöld, 613 teszt zöld, a share oldal élőben ellenőrizve localhost:6009-en.
+- **B1**: a gyökérok igazolva a kódból, nem tünetkezelés. Ugyanaz a hiba volt a belépett Creative Library masonryjában (`MatrixIframeTile`) is — ott is javítva.
+- **S3**: új publikus `GET /share/[id]/previews`. Hiányzó PNG-nél a tile „no preview image", és **kimarad a zipből** (user döntése) — az Image preview gomb számlálója ezért mutatja külön, hány elemnek van képe: ha eltér a Download all számától, azonnal látszik.
+- **S4.2**: a `Masonry` új, opcionális `estimateHeight` propja — a share galéria a banner-méretből / fájl-dimenzióból előre kiszámolja a tile magasságát, és mindig a **legrövidebb oszlopba** pakol. A library round-robinja (olvasási sorrend) érintetlen. Ellenőrizve: a négy oszlop alja ~300px-en belül ér véget, korábban több képernyőnyi volt a különbség.
+- A `StoredPreview` `aspectRatio`-t foglal betöltés előtt, különben a galéria 0 magasságra esik össze a módváltáskor.
+- **Figyelem:** a 6001-es dev szervered újraindítás nélkül nem látja az új `/share/[id]/previews` route-ot (a Next dev nem szedte fel az új könyvtárat) — a 6009-esen ezért teszteltem.

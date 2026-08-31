@@ -179,6 +179,15 @@ html.dark {
   .status-badge--dead { background-color: color-mix(in srgb, var(--status-dead) 18%, white); color: var(--status-dead); }
   .status-badge--memory { background-color: color-mix(in srgb, var(--status-memory) 18%, white); color: var(--status-memory); }
 
+  /* Feeds list: the live row's whole Live cell takes the ACTIVE status tint, so
+     the one export AdForm is actually serving is findable at a glance in a long
+     history. Same colour formula as .status-badge--active above, applied to the
+     cell instead of a pill because the cell is the thing being flagged. */
+  .feeds-table__cell--live {
+    background-color: color-mix(in srgb, var(--status-active) 18%, white);
+    color: var(--status-active);
+  }
+
   /* Transparency checkerboard behind thumbnails so PNG/SVG transparency is
      visible. Two-tone gray, 16px tile. Flips to dark checker in dark mode so
      transparent ad previews stay legible against a themed surface. */

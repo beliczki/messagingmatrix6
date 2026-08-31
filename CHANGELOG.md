@@ -5,6 +5,98 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.34.0] — 2026-08-31
+
+### Fixed
+- **A megosztott galéria (és a Creative Library) néha üres `</>` placeholdert
+  mutatott banner helyett.** Az IntersectionObserver callbackje a legutóbbi
+  kézbesítés óta sorba állt **összes** entry-t kapja, legrégebbi elöl, és a kód
+  az `entries[0]`-t olvasta. Gyors görgetésnél a sor `[kilép, belép]`, tehát egy
+  elavult `false` érkezett vissza: a tile „nem látható" állapotban ragadt,
+  mozdulatlanul állva pedig több intersection-esemény nem jött, így soha nem tért
+  magához. Ráadásul a látható→nem-látható váltás a repülő render-fetchet is
+  eldobta, mielőtt a cache-be került volna. Mindkettő javítva
+  (`PublicMatrixPreview`, `MatrixIframeTile`).
+
+### Added
+- **Image preview a megosztott galérián.** Pipás kapcsoló a View mellett: a
+  bannerek az eltárolt preview PNG-t mutatják élő iframe helyett, a Download all
+  pedig ezeket a PNG-ket zipeli. A gomb számlálója mondja meg, hány elemnek van
+  egyáltalán képe — ha ez kevesebb a Download all számánál, az a hiányzó
+  preview. Amire nem futott még a generátor, az „no preview image" marad és
+  kimarad a zipből, nem esik vissza némán HTML-re. Új publikus
+  `GET /share/[id]/previews` (ugyanaz a snapshot-alapú kapuzás, mint a
+  fájl-proxynál).
+- **Select all filtered a Creative Library kijelölő módjában.** A teljes szűrt
+  halmazt jelöli ki, nem csak a végtelen görgetéssel betöltött első 200 sort.
+
+### Changed
+- **A megosztott galéria fejléce két sávra bomlik.** Fent az azonosítás és a
+  share tényei (hány komment, mikor készült), alatta a vezérlők: balra ami szűk
+  a halmazt (Size, Commented only), jobbra ami a megjelenítést vagy a letöltést
+  intézi (View, Image preview, Download all).
+- **A megosztott galéria masonryja a legrövidebb oszlopba pakol.** Minden elem
+  magassága előre ismert a banner méretéből, illetve a kreatív tárolt
+  dimenzióiból, tehát nem kell megvárni a betöltést a döntéshez. A körbeosztás
+  vegyes képarányoknál több képernyőnyi különbséget hagyott az első és az utolsó
+  oszlop alja között. A Creative Library olvasási sorrendje változatlan — az új
+  `Masonry` viselkedés opcionális.
+- **MC export a docs-ba (`npm run export:mc`).** Egy sor minden szolgáló DCO
+  kártyáról (MC szám + variáns, ACTIVE vagy INACTIVE státusz), a termékkel, a
+  PMMID-kkel, az ACTIVE/INACTIVE bontással és a négy méret publikus preview-PNG
+  linkjével → `docs/mc-export.xlsx`. A linkek `?v=` cache-bustere a preview sor
+  `updated_at`-je, ezért a `npm run gen:previews` utáni újrafuttatás friss
+  képekre mutat. Csak olvas, bármikor ismételhető.
+- **A feed export knows which platform it is for.** `feed_exports.platform`
+  (migration `0009`; every existing row is AdForm, verified from the stored
+  payloads). This is the piece that was missing: a product legitimately has two
+  live feeds at once — AdForm and DV360 each carry their own lineitems — so
+  `findLiveExport` is now keyed by (product, platform). It used to pick the
+  latest upload for the product regardless of platform, which meant a DV360
+  reference would become the baseline an AdForm export diffs against: the other
+  platform's rows read as removed, and "rows would be removed" is one of the
+  three version-bump triggers. The Feeds list gains a Platform column, and Live
+  marks the current live export per product **and** platform.
+- **Split export.** One action can write both platforms' feeds: the dialog
+  partitions the rows by the audience's buying platform, gives each half its own
+  DEFAULT row selector and its own signal header, creates one export row per
+  platform (each with its own version line), and delivers the pair as a single
+  zip. Rows whose audience has no buying platform block the split and are named
+  — a feed quietly missing rows is worse than an export that refuses.
+- **The default-row and signal selectors moved into the export dialog.** They
+  are export options, and with a split there are two of each; the side panel
+  keeps the gate, the row count and the live-feed line.
+- **Pick the signal column when you export a feed.** A "Signal column" dropdown
+  sits under "Default for this export" with the two values the platforms
+  actually want — `AdformSignal:ADFPLAID` for AdForm, `ExternalSignal:ExternalSignal`
+  for DV360 — so exporting for DV360 no longer means editing the header by hand.
+  The choice is remembered per product. Only the header is renamed: the value is
+  the audience's `lineitem_id` either way, and an audience already carries the id
+  belonging to its own buying platform.
+
+### Fixed
+- **The `Live` column marks the export that is actually live.** It showed
+  `uploadedToAdformAt !== null` — "was published at some point" — so a newer
+  reference left two rows saying `true`. It now marks the most recently
+  published export per product **and platform** (two live feeds for one product
+  is correct: one per platform). The superseded row keeps its `Published at`
+  date — it did go live once. The live cell carries the ACTIVE status colour so
+  it is findable at a glance in a long history.
+- **A published timestamp could sort above a later one.** The reference upload
+  wrote `uploadedToAdformAt` as an ISO string while every other writer uses the
+  schema's `YYYY-MM-DD HH:MM:SS`. These columns are compared as strings to decide
+  which export is live, and `"T"` sorts above `" "` — so on a shared date an
+  ISO-stamped morning reference outranked an export published that afternoon.
+  The snapshot route now writes the same format as everything else.
+- **A DV360 reference no longer bounces off the upload.** Uploading a feed
+  reference compared the header to Settings → Structure → Feed structure
+  position by position, so a DV360 file failed with
+  `Column 3 mismatch: file has "ExternalSignal:ExternalSignal", expected
+  "AdformSignal:ADFPLAID"` — verified against the two SZK files in `docs/`. The
+  two signal aliases now count as a match, and the uploaded snapshot is stored
+  under the configured name so later diffs don't report the signal as changed on
+  every single row.
+
 ## [6.33.0] — 2026-08-31
 
 ### Changed
@@ -12,7 +104,9 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
   column is now the export's real filename (`erste-VAL-feed-v1-1234.xlsx`) and
   carries the link to the export; `Exported` moved down to sit directly before
   `Published at`, so the two dates read as a pair. The name comes from a shared
-  `lib/feed-filename.ts` used by both the list and the download route — a second
+  `lib/feed-filename.ts` used by both the list and the download route, and now
+  carries the platform (`erste-SZA-adform-feed-v1-40.xlsx`) so a split's two
+  files differ by more than their trailing id — a second
   copy of that format string would have drifted the first time either changed.
 
 ### Fixed

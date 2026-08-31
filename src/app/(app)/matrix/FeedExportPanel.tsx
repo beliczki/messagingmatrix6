@@ -4,8 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Download, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { type Filters, type Message } from "./types";
+import { type Audience, type Filters, type Message } from "./types";
 import FeedExportDialog from "./FeedExportDialog";
+
 
 type FeedExportRow = {
   id: number;
@@ -29,32 +30,14 @@ async function fetchFeedExports(product: string): Promise<FeedExportRow[]> {
 
 const SERVING_STATUSES = new Set(["ACTIVE", "INACTIVE"]);
 
-function uniqueMcOptions(messages: Message[]) {
-  const seen = new Map<
-    string,
-    { key: string; label: string; messageId: number; count: number }
-  >();
-  for (const m of messages) {
-    const key = `${m.number}${m.variant}`;
-    const existing = seen.get(key);
-    if (existing) {
-      existing.count += 1;
-      continue;
-    }
-    const label = m.name
-      ? `MC${m.number}${m.variant} — ${m.name}`
-      : `MC${m.number}${m.variant}`;
-    seen.set(key, { key, label, messageId: m.id, count: 1 });
-  }
-  return [...seen.values()].sort((a, b) => a.label.localeCompare(b.label));
-}
-
 export default function FeedExportPanel({
   filters,
   filteredMessages,
+  audiences,
 }: {
   filters: Filters;
   filteredMessages: Message[];
+  audiences: Audience[];
 }) {
   const products = [...filters.products];
   const statuses = [...filters.statuses];
@@ -74,46 +57,7 @@ export default function FeedExportPanel({
     enabled: !!product,
   });
 
-  // Persist the default-row selection per product so users don't have to
-  // re-pick it every time they switch products or come back later.
-  // Save is driven by the user's onChange (chooseDefault), not by an effect —
-  // an effect that wrote on every state change would erase the loaded value
-  // on first render (stale closure) and double-fire under React StrictMode.
-  const storageKey = product ? `mm6_feed_export_default_${product}` : "";
-  const [defaultMessageId, setDefaultMessageId] = useState<number | "">("");
   const [dialogOpen, setDialogOpen] = useState(false);
-
-  useEffect(() => {
-    if (!storageKey) {
-      setDefaultMessageId("");
-      return;
-    }
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (raw !== null) {
-        const parsed = Number(raw);
-        if (Number.isFinite(parsed)) {
-          setDefaultMessageId(parsed);
-          return;
-        }
-      }
-    } catch {}
-    setDefaultMessageId("");
-  }, [storageKey]);
-
-  function chooseDefault(v: number | "") {
-    setDefaultMessageId(v);
-    if (!storageKey) return;
-    try {
-      if (v === "") localStorage.removeItem(storageKey);
-      else localStorage.setItem(storageKey, String(v));
-    } catch {}
-  }
-
-  const mcOptions = useMemo(
-    () => (ready ? uniqueMcOptions(filteredMessages) : []),
-    [ready, filteredMessages],
-  );
 
   const liveExport = useMemo(() => {
     if (!historyQ.data) return null;
@@ -214,27 +158,6 @@ export default function FeedExportPanel({
           </div>
         )}
 
-        <label className="form-field mt-3 block">
-          <span className="form-field__label mb-1 block text-[10px] font-medium uppercase tracking-wider text-slate-500">
-            Default for this export
-          </span>
-          <select
-            value={defaultMessageId}
-            onChange={(e) =>
-              chooseDefault(e.target.value === "" ? "" : Number(e.target.value))
-            }
-            className="input-box w-full rounded border border-slate-300 px-2 py-1 text-xs focus:border-slate-500 focus:outline-none"
-          >
-            <option value="">— no default row —</option>
-            {mcOptions.map((o) => (
-              <option key={o.key} value={o.messageId}>
-                {o.label}
-                {o.count > 1 ? ` (${o.count} variants)` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-
         <button
           type="button"
           onClick={() => setDialogOpen(true)}
@@ -261,9 +184,8 @@ export default function FeedExportPanel({
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         product={product!}
-        defaultMessageId={
-          defaultMessageId === "" ? null : (defaultMessageId as number)
-        }
+        messages={filteredMessages}
+        audiences={audiences}
         messageIds={filteredIds}
       />
     </>

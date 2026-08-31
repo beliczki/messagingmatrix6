@@ -26,6 +26,8 @@ import { shootItems } from "../src/lib/preview-shooter";
 import { readFileBytes } from "../src/lib/storage";
 
 const SIZE = "300x250";
+// Cap the cross-reference lists so a card stays readable.
+const MAX_HITS = 6;
 const TMP = path.join(os.tmpdir(), "mm6-collisions");
 const OUT = path.resolve(process.cwd(), "docs/mc-collisions.html");
 
@@ -306,7 +308,7 @@ async function collectData(): Promise<Item[]> {
 // (mc_number, mc_variant) can carry files from two unrelated campaigns, because
 // the filename convention encodes the campaign but nothing enforces that one MC
 // number means one campaign. Derived from the filenames, not from any join.
-type OverlapCampaign = { name: string; files: number; fileId: string | null };
+type OverlapCampaign = { name: string; files: number; fileId: string | null; products: string[] };
 type Overlap = { mcNumber: number; mcVariant: string; campaigns: OverlapCampaign[]; files: number };
 
 async function creativeOverlaps(clientId: number): Promise<Overlap[]> {
@@ -324,25 +326,26 @@ async function creativeOverlaps(clientId: number): Promise<Overlap[]> {
     {
       mcNumber: number;
       mcVariant: string;
-      camps: Map<string, { files: number; fileId: string | null }>;
+      camps: Map<string, { files: number; fileId: string | null; products: Set<string> }>;
     }
   >();
   for (const r of rows) {
     if (r.mcNumber == null || !r.fileName) continue;
     // ERSTE_<PRODUCT>_MC<n>_<variant>_<campaign>_n<k>_<W>x<H>.<ext>
-    const m = r.fileName.match(/^ERSTE_[A-Z]+_MC\d+_[a-z]_(.+)_n\d+_\d+x\d+\.[a-z]+$/i);
+    const m = r.fileName.match(/^ERSTE_([A-Z]+)_MC\d+_[a-z]_(.+)_n\d+_\d+x\d+\.[a-z]+$/i);
     if (!m) continue;
     const key = `${r.mcNumber}|${r.mcVariant ?? ""}`;
     const e =
       byKey.get(key) ??
       { mcNumber: r.mcNumber, mcVariant: r.mcVariant ?? "", camps: new Map() };
-    const prev = e.camps.get(m[1]);
+    const prev = e.camps.get(m[2]);
     // Prefer a square as the thumbnail — it reads best at card size.
     const better =
       !prev?.fileId || (/1080x1080/.test(r.fileName) && r.fileId);
-    e.camps.set(m[1], {
+    e.camps.set(m[2], {
       files: (prev?.files ?? 0) + 1,
       fileId: better ? (r.fileId ?? prev?.fileId ?? null) : prev.fileId,
+      products: (prev?.products ?? new Set<string>()).add(m[1].toUpperCase()),
     });
     byKey.set(key, e);
   }
@@ -376,7 +379,12 @@ async function creativeOverlaps(clientId: number): Promise<Overlap[]> {
       mcNumber: e.mcNumber,
       mcVariant: e.mcVariant,
       campaigns: [...e.camps.entries()]
-        .map(([name, v]) => ({ name, files: v.files, fileId: v.fileId }))
+        .map(([name, v]) => ({
+          name,
+          files: v.files,
+          fileId: v.fileId,
+          products: [...v.products].sort(),
+        }))
         .sort((a, b) => a.name.localeCompare(b.name)),
       files: [...e.camps.values()].reduce((a, b) => a + b.files, 0),
     }))
@@ -388,9 +396,9 @@ async function creativeOverlaps(clientId: number): Promise<Overlap[]> {
 async function overlapThumbs(
   clientId: number,
   overlaps: Overlap[],
-): Promise<Map<string, string>> {
+): Promise<Map<string, { uri: string; raw: string }>> {
   const ids = [...new Set(overlaps.flatMap((o) => o.campaigns.map((c) => c.fileId)).filter(Boolean))] as string[];
-  const out = new Map<string, string>();
+  const out = new Map<string, { uri: string; raw: string }>();
   if (ids.length === 0) return out;
   const files = await db
     .select({ id: uploadedFiles.id, path: uploadedFiles.storagePath, name: uploadedFiles.filename })
@@ -408,10 +416,111 @@ async function overlapThumbs(
         { stdio: "ignore" },
       );
       const uri = dataUri(small);
-      if (uri) out.set(f.id, uri);
+      if (uri) out.set(f.id, { uri, raw });
     } catch {
       // A missing object just means no thumbnail for that campaign.
     }
+  }
+  return out;
+}
+
+// The static creatives carry their copy as pixels, so the only way to ask "does
+// any DCO card say this?" is to read the image. Vision's text recogniser ships
+// with macOS — same platform assumption `sips` already makes above.
+const OCR_SWIFT = `import Foundation
+import Vision
+import AppKit
+
+for p in CommandLine.arguments.dropFirst() {
+    guard let img = NSImage(contentsOfFile: p),
+          let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+        print("\\(p)\\t"); continue
+    }
+    let req = VNRecognizeTextRequest()
+    req.recognitionLevel = .accurate
+    req.usesLanguageCorrection = true
+    req.recognitionLanguages = ["hu-HU", "en-US"]
+    let handler = VNImageRequestHandler(cgImage: cg, options: [:])
+    try? handler.perform([req])
+    let lines = (req.results ?? []).compactMap { $0.topCandidates(1).first?.string }
+    print("\\(p)\\t\\(lines.joined(separator: " | "))")
+}
+`;
+
+function ocrBinary(): string | null {
+  const bin = path.join(TMP, "ocr");
+  if (fs.existsSync(bin)) return bin;
+  try {
+    const src = path.join(TMP, "ocr.swift");
+    fs.writeFileSync(src, OCR_SWIFT);
+    execFileSync("swiftc", ["-O", src, "-o", bin], { stdio: "ignore" });
+    return bin;
+  } catch {
+    return null;
+  }
+}
+
+/** path → recognised text, one call for the whole batch. */
+function ocrAll(files: string[]): Map<string, string> {
+  const out = new Map<string, string>();
+  const bin = ocrBinary();
+  if (!bin || files.length === 0) return out;
+  // Chunked so the argv stays sane on big runs.
+  for (let i = 0; i < files.length; i += 40) {
+    const chunk = files.slice(i, i + 40);
+    try {
+      const res = execFileSync(bin, chunk, { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 });
+      for (const line of res.split("\n")) {
+        const tab = line.indexOf("\t");
+        if (tab > 0) out.set(line.slice(0, tab), line.slice(tab + 1));
+      }
+    } catch {
+      // OCR is an enrichment; a failed chunk just means no text matches.
+    }
+  }
+  return out;
+}
+
+// Accent-insensitive, punctuation-free — the recogniser drops diacritics often
+// enough ("almaid" for "álmaid") that comparing raw strings would miss.
+function norm(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+}
+
+type DcoCard = { number: number; variant: string; topic: string; status: string | null; headline: string };
+
+async function dcoCards(clientId: number): Promise<DcoCard[]> {
+  const chans = await db.select().from(channels).where(eq(channels.clientId, clientId));
+  const chanKeys = new Set(chans.map((c) => c.key));
+  const rows = await db
+    .select({
+      number: messages.number,
+      variant: messages.variant,
+      topic: messages.topic,
+      status: messages.status,
+      headline: messages.headline,
+      audience: messages.audience,
+    })
+    .from(messages)
+    .where(eq(messages.clientId, clientId));
+  const seen = new Set<string>();
+  const out: DcoCard[] = [];
+  for (const r of rows) {
+    if (chanKeys.has(r.audience)) continue;
+    // A headline only identifies a card if it is long and specific enough.
+    // "Személyi Kölcsön" is printed on half the SZK creatives — matching on it
+    // would return the whole product line instead of a reference.
+    const n = norm(r.headline ?? "");
+    if (n.length < 20 || n.split(" ").length < 4) continue;
+    const k = `${r.number}|${r.variant}|${r.headline}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push({ number: r.number, variant: r.variant, topic: r.topic, status: r.status, headline: r.headline });
   }
   return out;
 }
@@ -428,6 +537,63 @@ async function main() {
 
   const thumbs = await overlapThumbs(clientId, overlaps);
 
+  // Cross-reference each overlapping campaign against the DCO side, two ways:
+  // by MC number, and by the copy actually printed on the static creative.
+  const cards = await dcoCards(clientId);
+  const ocrText = ocrAll([...thumbs.values()].map((t) => t.raw));
+  const dcoByNumber = new Map<number, DcoCard[]>();
+  for (const c of cards) dcoByNumber.set(c.number, [...(dcoByNumber.get(c.number) ?? []), c]);
+
+  const textMatches = (fileId: string | null): DcoCard[] => {
+    if (!fileId) return [];
+    const t = thumbs.get(fileId);
+    const raw = t ? ocrText.get(t.raw) : undefined;
+    if (!raw) return [];
+    const hay = norm(raw);
+    const hit = cards.filter((c) => hay.includes(norm(c.headline)));
+    // One entry per (number, variant) — the same headline repeats per audience.
+    const seen = new Set<string>();
+    return hit.filter((c) => {
+      const k = `${c.number}${c.variant}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  };
+
+  const refBlock = (o: Overlap) => {
+    const byNum = dcoByNumber.get(o.mcNumber) ?? [];
+    const seenNum = new Set<string>();
+    const byNumUniq = byNum.filter((c) => {
+      const k = `${c.number}${c.variant}`;
+      if (seenNum.has(k)) return false;
+      seenNum.add(k);
+      return true;
+    });
+    const byText = o.campaigns.flatMap((c) => textMatches(c.fileId));
+    const seenTxt = new Set<string>();
+    const byTextUniq = byText.filter((c) => {
+      const k = `${c.number}${c.variant}`;
+      if (seenTxt.has(k)) return false;
+      seenTxt.add(k);
+      return true;
+    });
+    const cardLine = (c: DcoCard) =>
+      `<div class="ov-ref__hit"><span class="mc-label">MC${c.number}${esc(c.variant)}</span>${
+        c.status ? `<span class="status-badge status-badge--${c.status.toLowerCase()}">${esc(c.status)}</span>` : ""
+      }<code class="topic">${esc(c.topic)}</code><span class="ov-ref__hl">„${esc(c.headline)}"</span></div>`;
+    return `<aside class="ov-ref">
+      <div class="ov-ref__block">
+        <div class="ov-ref__k">MC${o.mcNumber} a DCO oldalon</div>
+        ${byNumUniq.length ? byNumUniq.slice(0, MAX_HITS).map(cardLine).join("") + (byNumUniq.length > MAX_HITS ? `<div class="ov-ref__none">+${byNumUniq.length - MAX_HITS} további</div>` : "") : `<div class="ov-ref__none">nincs DCO kártya ezen a számon</div>`}
+      </div>
+      <div class="ov-ref__block">
+        <div class="ov-ref__k">a képen olvasott szöveg alapján</div>
+        ${byTextUniq.length ? byTextUniq.slice(0, MAX_HITS).map(cardLine).join("") + (byTextUniq.length > MAX_HITS ? `<div class="ov-ref__none">+${byTextUniq.length - MAX_HITS} további</div>` : "") : `<div class="ov-ref__none">nincs egyező DCO headline</div>`}
+      </div>
+    </aside>`;
+  };
+
   const overlapCards = overlaps
     .map(
       (o) => `<div class="ov-card">
@@ -435,16 +601,27 @@ async function main() {
           <span class="mc-label">MC${o.mcNumber}</span><span class="variant-chip">${esc(o.mcVariant)}</span>
           <span class="ov-n">${o.files} fájl</span>
         </div>
-        <div class="ov-card__camps">
-          ${o.campaigns
-            .map((c) => {
-              const src = c.fileId ? thumbs.get(c.fileId) : null;
-              return `<figure class="ov-camp">
-                ${src ? `<img src="${src}" alt="${esc(c.name)}">` : `<div class="empty-state">nincs kép</div>`}
-                <figcaption><code>${esc(c.name)}</code><span class="ov-n">${c.files} fájl</span></figcaption>
-              </figure>`;
-            })
-            .join("")}
+        <div class="ov-card__body">
+          <div class="ov-card__camps">
+            ${o.campaigns
+              .map((c) => {
+                const src = c.fileId ? thumbs.get(c.fileId)?.uri : null;
+                return `<figure class="ov-camp">
+                  ${src ? `<img src="${src}" alt="${esc(c.name)}">` : `<div class="empty-state">nincs kép</div>`}
+                  <figcaption>
+                    <code>${esc(c.name)}</code>
+                    <span class="ov-camp__meta">
+                      <span class="product-tags">${c.products
+                        .map((pr) => `<span class="product-tag product-tag--${pr.toLowerCase()}">${esc(pr)}</span>`)
+                        .join("")}</span>
+                      <span class="ov-n">${c.files} fájl</span>
+                    </span>
+                  </figcaption>
+                </figure>`;
+              })
+              .join("")}
+          </div>
+          ${refBlock(o)}
         </div>
       </div>`,
     )
@@ -608,6 +785,33 @@ async function main() {
     border-radius: .3rem; background: #f1f5f9; }
   .ov-camp figcaption { margin-top: .4rem; display: flex; flex-direction: column; gap: .15rem;
     word-break: break-all; }
+  .ov-camp__meta { display: flex; align-items: center; justify-content: space-between;
+    gap: .5rem; margin-top: .25rem; }
+  .product-tags { display: flex; gap: .2rem; flex-wrap: wrap; }
+  .product-tag { font-size: .62rem; font-weight: 700; letter-spacing: .04em;
+    padding: .1rem .35rem; border-radius: .25rem; color: #fff; background: #64748b; }
+  .product-tag--szk { background: #0d9488; }
+  .product-tag--sza { background: #2563eb; }
+  .product-tag--hitel { background: #9333ea; }
+  .product-tag--hk { background: #db2777; }
+  .product-tag--val { background: #ea580c; }
+  .product-tag--market { background: #0891b2; }
+  .product-tag--ltp { background: #65a30d; }
+  .ov-card__body { display: grid; grid-template-columns: 1fr minmax(260px, 380px); gap: 1.5rem;
+    align-items: start; }
+  .ov-ref { text-align: right; display: grid; gap: .9rem; }
+  .ov-ref__block { border-left: 2px solid var(--line); padding-left: .8rem; }
+  .ov-ref__k { font-size: .68rem; text-transform: uppercase; letter-spacing: .07em;
+    color: var(--muted); font-weight: 600; margin-bottom: .35rem; }
+  .ov-ref__hit { font-size: .78rem; padding: .3rem 0; border-top: 1px solid var(--line); }
+  .ov-ref__hit:first-of-type { border-top: 0; }
+  .ov-ref__hit .mc-label { margin-right: .35rem; }
+  .ov-ref__hit .status-badge { margin-right: .35rem; }
+  .ov-ref__hit code.topic { display: block; word-break: break-all; margin-top: .1rem; }
+  .ov-ref__hl { display: block; color: #475569; margin-top: .15rem; }
+  .ov-ref__none { font-size: .78rem; color: var(--muted); font-style: italic; }
+  @media (max-width: 1000px) { .ov-card__body { grid-template-columns: 1fr; }
+    .ov-ref { text-align: left; } }
   .panel[hidden] { display: none !important; }
   .ov-table { width: 100%; border-collapse: collapse; border-spacing: 0; margin-top: 1rem; }
   .ov-table th { text-align: left; font-size: .7rem; text-transform: uppercase; letter-spacing: .06em;

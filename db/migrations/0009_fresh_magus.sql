@@ -1,0 +1,1 @@
+ALTER TABLE "feed_exports" ADD COLUMN "platform" text DEFAULT 'adform' NOT NULL;

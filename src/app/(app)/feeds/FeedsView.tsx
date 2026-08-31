@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   useMutation,
@@ -35,6 +35,7 @@ type FeedExportRow = {
   rowCount: number;
   notes: string | null;
   source: "export" | "adform_snapshot" | string;
+  platform: string;
   // Server-built (see lib/feed-filename.ts) — the exact name the download
   // produces, so the list names the file instead of making you guess it.
   filename: string;
@@ -42,6 +43,7 @@ type FeedExportRow = {
 
 type SortKey =
   | "filename"
+  | "platform"
   | "exportedAt"
   | "product"
   | "feedVersion"
@@ -65,7 +67,8 @@ function formatDate(iso: string): string {
 
 const COLUMNS: Array<{ key: SortKey; label: string; width: number }> = [
   { key: "filename", label: "File", width: 300 },
-  { key: "product", label: "Product", width: 120 },
+  { key: "product", label: "Product", width: 100 },
+  { key: "platform", label: "Platform", width: 100 },
   { key: "feedVersion", label: "Version", width: 80 },
   { key: "defaultLabel", label: "Default", width: 280 },
   { key: "rowCount", label: "Rows", width: 80 },
@@ -99,6 +102,39 @@ export function FeedsView() {
     return [...new Set(q.data.map((r) => r.product))].sort();
   }, [q.data]);
 
+  // Exactly one export per product is live, and it is the most recently
+  // published one — that is what findLiveExport (lib/feed-export.ts) picks when
+  // it decides versions and diffs. The column used to read
+  // `uploadedToAdformAt !== null`, i.e. "was published at some point", which
+  // showed two live SZA rows once a newer reference was uploaded. Publishing a
+  // newer export supersedes the older one here rather than clearing its
+  // timestamp, so the record of when it went live survives.
+  // Computed over the FULL list, not `filtered` — narrowing to a product must
+  // not promote a different row to live.
+  const liveIdByKey = useMemo(() => {
+    const best = new Map<string, FeedExportRow>();
+    for (const r of q.data ?? []) {
+      if (!r.uploadedToAdformAt) continue;
+      const key = `${r.product}|${r.platform}`;
+      const cur = best.get(key);
+      if (
+        !cur ||
+        r.uploadedToAdformAt > cur.uploadedToAdformAt! ||
+        // Same publish timestamp: newest row wins, so the pick is stable
+        // instead of depending on arrival order.
+        (r.uploadedToAdformAt === cur.uploadedToAdformAt && r.id > cur.id)
+      ) {
+        best.set(key, r);
+      }
+    }
+    return new Map([...best].map(([k, r]) => [k, r.id]));
+  }, [q.data]);
+
+  const liveIdFor = useCallback(
+    (r: FeedExportRow) => liveIdByKey.get(`${r.product}|${r.platform}`),
+    [liveIdByKey],
+  );
+
   const filtered = useMemo(() => {
     if (!q.data) return [];
     let out = q.data.filter((r) => {
@@ -107,12 +143,12 @@ export function FeedsView() {
     });
     if (sort) {
       out = out.slice().sort((a, b) => {
-        const cmp = compareRows(a, b, sort.key);
+        const cmp = compareRows(a, b, sort.key, liveIdFor);
         return sort.dir === "asc" ? cmp : -cmp;
       });
     }
     return out;
-  }, [q.data, products, sort]);
+  }, [q.data, products, sort, liveIdFor]);
 
   const filteredIds = useMemo(() => filtered.map((r) => r.id), [filtered]);
   const allFilteredSelected =
@@ -364,7 +400,7 @@ export function FeedsView() {
               <div className="feeds-table__body">
                 {filtered.map((r) => {
                   const isSelected = selected.has(r.id);
-                  const live = r.uploadedToAdformAt !== null;
+                  const live = liveIdFor(r) === r.id;
                   return (
                     <div
                       key={r.id}
@@ -402,9 +438,15 @@ export function FeedsView() {
                       </div>
                       <div
                         className="feeds-table__cell flex shrink-0 items-center border-r border-slate-100 px-2 text-xs text-slate-900"
-                        style={{ width: 120 }}
+                        style={{ width: 100 }}
                       >
                         <span className="truncate">{r.product}</span>
+                      </div>
+                      <div
+                        className="feeds-table__cell flex shrink-0 items-center border-r border-slate-100 px-2 text-xs text-slate-700"
+                        style={{ width: 100 }}
+                      >
+                        <span className="truncate">{r.platform}</span>
                       </div>
                       <div
                         className="feeds-table__cell flex shrink-0 items-center border-r border-slate-100 px-2 font-mono text-xs text-slate-900"
@@ -437,13 +479,23 @@ export function FeedsView() {
                         {r.rowCount}
                       </div>
                       <div
-                        className="feeds-table__cell flex shrink-0 items-center border-r border-slate-100 px-2 text-xs"
+                        className={clsx(
+                          "feeds-table__cell flex shrink-0 items-center border-r border-slate-100 px-2 text-xs",
+                          live && "feeds-table__cell--live",
+                        )}
                         style={{ width: 80 }}
+                        title={
+                          live
+                            ? "Currently live: the most recently published export for this product."
+                            : r.uploadedToAdformAt
+                              ? "Was published, but a newer export for this product has since gone live."
+                              : undefined
+                        }
                       >
                         <span
                           className={clsx(
                             "feeds-table__live font-mono",
-                            live ? "text-emerald-700" : "text-slate-400",
+                            !live && "text-slate-400",
                           )}
                         >
                           {live ? "true" : "false"}
@@ -645,10 +697,18 @@ export function FeedsView() {
   );
 }
 
-function compareRows(a: FeedExportRow, b: FeedExportRow, key: SortKey): number {
+function compareRows(
+  a: FeedExportRow,
+  b: FeedExportRow,
+  key: SortKey,
+  liveIdFor: (r: FeedExportRow) => number | undefined,
+): number {
   if (key === "live") {
-    const av = a.uploadedToAdformAt ? 1 : 0;
-    const bv = b.uploadedToAdformAt ? 1 : 0;
+    // Sort on what the column actually shows — the single live export per
+    // product — not on "was ever published", which would group superseded rows
+    // in with the live one.
+    const av = liveIdFor(a) === a.id ? 1 : 0;
+    const bv = liveIdFor(b) === b.id ? 1 : 0;
     return av - bv;
   }
   const av = a[key as keyof FeedExportRow];

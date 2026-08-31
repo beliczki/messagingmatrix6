@@ -186,7 +186,11 @@ function MatrixIframeRender({
     if (!el) return;
     const io = new IntersectionObserver(
       (entries) => {
-        const isIn = entries[0]?.isIntersecting === true;
+        // LAST entry, not entries[0] — see PublicMatrixPreview for the full
+        // reading. entries carries every change queued since the previous
+        // delivery, oldest first, so entries[0] can be a stale `false` that
+        // pins a motionless on-screen tile at "not visible" permanently.
+        const isIn = entries[entries.length - 1]?.isIntersecting === true;
         setVisible(isIn);
       },
       { rootMargin: "300px" },

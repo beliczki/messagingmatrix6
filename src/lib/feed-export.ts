@@ -20,6 +20,7 @@ import {
   type Topic as DbTopic,
 } from "@/db/schema";
 import { evaluatePattern, FORMATTING_CTX_KEYS } from "@/lib/patterns";
+import { isSignalColumn } from "@/lib/feed-signal";
 import {
   parseFeedColumns,
   resolveFeedPattern,
@@ -41,6 +42,13 @@ export type FeedRowSet = {
   // Parallel to rows. The DEFAULT row's slot is -1 (no real message id).
   messageIds: number[];
   defaultRowIndex: number;
+  // Which platform's signal header this export was built for. Kept OUT of
+  // `columns` on purpose: the column keeps its configured name everywhere
+  // (pattern lookup, row keys, diffs against earlier exports), and only the
+  // XLSX header row is renamed on the way out. Putting the alias in `columns`
+  // would make every row of a DV360 export read as "changed" against an AdForm
+  // one. Absent on rows exported before this existed -> AdForm, as before.
+  signalColumn?: string;
 };
 
 export type FeedDiff = {
@@ -63,6 +71,8 @@ export type VersionDecision = {
 export type BuildOptions = {
   clientId: number;
   product: string;
+  /** Which platform's feed this is - scopes the live export it builds on. */
+  platform: string;
   defaultMessageId: number | null;
   forceNewVersion?: boolean;
   /**
@@ -275,13 +285,23 @@ function buildDefaultRow(
 export async function findLiveExport(
   clientId: number,
   product: string,
+  platform: string,
 ): Promise<FeedExport | null> {
-  // Latest *uploaded* export for this (client, product), regardless of version.
+  // Latest *uploaded* export for this (client, product, platform), regardless
+  // of version. Platform is part of the key because a product legitimately has
+  // two live feeds at once: AdForm and DV360 each carry their own lineitems, so
+  // a DV360 reference must never become the baseline an AdForm export diffs
+  // against. It would report the whole other platform's rows as removed, and
+  // "rows would be removed" is one of the three version-bump triggers.
   const rows = await db
     .select()
     .from(feedExports)
     .where(
-      and(eq(feedExports.clientId, clientId), eq(feedExports.product, product)),
+      and(
+        eq(feedExports.clientId, clientId),
+        eq(feedExports.product, product),
+        eq(feedExports.platform, platform),
+      ),
     );
   const uploaded = rows
     .filter((r) => r.uploadedToAdformAt)
@@ -309,7 +329,7 @@ export async function buildFeedRowSet(opts: BuildOptions): Promise<{
   defaultMessage: DbMessage | null;
   liveExport: FeedExport | null;
 }> {
-  const { clientId, product, defaultMessageId } = opts;
+  const { clientId, product, platform, defaultMessageId } = opts;
   const allowed =
     opts.messageIds && opts.messageIds.length > 0
       ? new Set(opts.messageIds)
@@ -368,7 +388,7 @@ export async function buildFeedRowSet(opts: BuildOptions): Promise<{
   // and (every message id from the latest uploaded export). The carry-forwards
   // get re-evaluated through the current patterns; archived messages keep
   // their content but get IsActive forced FALSE downstream.
-  const liveExport = await findLiveExport(clientId, product);
+  const liveExport = await findLiveExport(clientId, product, platform);
   const liveIds = readLiveMessageIds(liveExport);
 
   const allMessages = await db
@@ -599,7 +619,12 @@ export function decideVersion(
 
 export function buildXlsxBuffer(rowSet: FeedRowSet): Buffer {
   const { columns, rows } = rowSet;
-  const data = [columns, ...rows.map((r) => columns.map((c) => r[c] ?? ""))];
+  // Header-only rename: `columns` stays the lookup key for every row value, so
+  // the alias cannot desync the data from the heading above it.
+  const header = rowSet.signalColumn
+    ? columns.map((c) => (isSignalColumn(c) ? rowSet.signalColumn! : c))
+    : columns;
+  const data = [header, ...rows.map((r) => columns.map((c) => r[c] ?? ""))];
   const buffer = xlsx.build([
     { name: "Feed", data, options: {} },
   ]);

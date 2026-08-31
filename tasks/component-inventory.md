@@ -628,6 +628,9 @@ The Edit toggle and the entire selection-actions block moved out of the top `mat
 - `edit-mode-panel__error` — rose box (`border-rose-200 bg-rose-50 text-[10px] text-rose-700`) at the panel bottom showing the last failed bulk copy/move (Apply or DnD), e.g. "MC330a is ACTIVE — measured cards keep their PMMID and can't be moved". Clears on pending-action change or edit-mode toggle.
 - `edit-mode-toggle`, `edit-mode-toggle--active` — collapsed-mode icon-only Edit button, rendered in the right toolbar's narrow column below the density CycleIconButton. Hidden on the nonDCO axis (no edit mode there).
 - `matrix-nondco-info` (2026-08-17) — visual twin of `edit-mode-panel` (`empty-state` tone) shown in the right toolbar's expanded body IN PLACE OF the Edit mode panel when `view === "grid" && axis === "nondco"`. `__title` ("nonDCO"), `__hint` explains nonDCO MCs are created only by uploading correctly-named creatives to the Creative Library. nonDCO axis disables edit mode entirely (`editApi.editMode` forced off in MatrixGrid).
+- `feed-export-panel__signal` (2026-08-31) — „Signal column" `form-field` select **közvetlenül a „Default for this export" alatt**, azonos stílussal (`text-[10px] uppercase tracking-wider` label + `input-box`). Két érték: `AdformSignal:ADFPLAID` (AdForm) és `ExternalSignal:ExternalSignal` (DV360) — a lista egy helyen él: `lib/feed-signal.ts` `SIGNAL_COLUMN_OPTIONS`. Perzisztencia terméken­ként: `mm6_feed_export_signal_<product>` (a default-sor `mm6_feed_export_default_<product>` mintájára).
+- `feed-export-dialog__options` / `__signal` / `__default` / `__split-blocked` / `__leg-heading` (2026-08-31) — az export-dialog opció-blokkja. A **default-választó és a signal-választó a side toolbarból ide költözött** (a splittel platformonként több default kell, tehát ott a helyük, ahol a split kapcsoló is van). `__default` a `Leg`-enkénti default-sor select (fejlécében a platform + sorszám), `__signal` csak nem-split módban látszik, `__split-blocked` az amber doboz, ha van `buyingPlatform` nélküli audience, `__leg-heading` a platform-címke a preview/eredmény blokkok fölött. Perzisztencia: `mm6_feed_export_default_<product>_<platform>`.
+- `feeds-table__cell--live` (2026-08-31) — a Feeds lista `Live` cellája a **teljes cella** hátterén az ACTIVE státusz-színt viseli, ha az a sor az adott termék ÉLŐ exportja. Ugyanaz a szín-képlet, mint a `status-badge--active` (`color-mix(in srgb, var(--status-active) 18%, white)` + `var(--status-active)` szöveg), csak pill helyett a cellán — a cella maga a megjelölt dolog. A `--status-active` var-on keresztül követi a Design tab státusz-színeit.
 - `feeds-table__file-link` / `feeds-table__exported` (2026-08-31) — a `/feeds` lista első oszlopa mostantól a letöltés VALÓDI fájlneve (`feeds-table__file-link`, mono, kék, a detail-re linkel; a link a dátum-cellából költözött ide, mert az első oszlop a sor identitása), az `Exported` dátum pedig sima cellaként (`feeds-table__exported`) a `Published at` ELÉ került. A fájlnevet a szerver adja (`lib/feed-filename.ts` — közös a letöltő route-tal, hogy a kettő ne csússzon szét). A `feeds-table*` család többi tagja továbbra sincs leltárazva.
 - `matrix-export-panel` (2026-07-16) — third visual twin of `edit-mode-panel`/`feed-export-panel`, right toolbar expanded body directly under the Edit mode panel (`view === "grid"`). `__title` ("Matrix export"), `__filters` chip row reusing `filter-chip` (selected products/statuses vagy "All products"/"All statuses"); Download gomb = `toolbar-btn--primary` a FeedExportPanel mintájára. GET `/api/export/matrix-xlsx?products=&statuses=`.
 
@@ -844,3 +847,18 @@ Added an 11th workflow status `ARCHIVED`, sitting next to `INACTIVE` semanticall
 | Batch-sor (oszloponkénti „set for all") | `asset-upload-table__batch` + `__apply` | – |
 | Sor / kész sor | `asset-upload-table__row` / `--done` | – |
 | Thumbnail / fájlnév / discard | `asset-upload-table__thumb` / `__filename` / `__discard` | – |
+
+### Megosztott galéria fejléc + image preview (ShareGallery.tsx, 2026-08-31)
+
+A fejléc két sávra bomlott. Amit meglévő névből vettünk: `commented-only-toggle`, `multi-pill` (Size), `toggle-group`/`toggle-btn` (View), `toolbar-btn--primary` (Download all) — mind változatlan.
+
+| Mi | Class | Megjegyzés |
+| --- | --- | --- |
+| Share tényei a fejléc jobb felső sarkában | `share-gallery__meta` | komment-szám + „captured" dátum; korábban külön alsó sorban élt |
+| Leírás sor (opcionális) | `share-gallery__description` | csak ha a share-nek van description-je |
+| Vezérlő sáv (2. sor) | `share-gallery__controls` | balra a szűrők, jobbra a `__control-actions` |
+| Jobb oldali vezérlő-csoport | `share-gallery__control-actions` | View + Image preview + Download all |
+| Image preview kapcsoló | `share-gallery__image-toggle` (+`--active`) | a `preview-pane__image-toggle` (MC editor) formája, slate palettán |
+| Kapcsoló számlálója | `share-gallery__image-toggle-count` | `multi-pill__badge` tónusa; amber, ha kevesebb elemnek van képe, mint amennyi látszik — a Creative Library hiányzó-preview nyelvét követi |
+| Eltárolt preview PNG egy tile-ban | `stored-preview` | `block w-full` + `aspectRatio` a betöltés előtti helyfoglaláshoz |
+| Ugyanaz, ha nincs generált kép | `stored-preview--missing` | „no preview image", megtartja a banner képarányát |

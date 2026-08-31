@@ -821,6 +821,13 @@ export const feedExports = pgTable(
     uploadedBy: text("uploaded_by"),
     defaultMessageId: integer("default_message_id"),
     defaultLabel: text("default_label"),
+    // Which platform this feed was built for. A product legitimately has two
+    // live feeds at once — AdForm and DV360 each get their own, with their own
+    // signal header and their own lineitems — so "which export is live" and the
+    // version line it belongs to are per (product, platform), never per product.
+    // Existing rows are all AdForm: every stored payload carries
+    // AdformSignal:ADFPLAID.
+    platform: text("platform").notNull().default("adform"),
     rowCount: integer("row_count").notNull(),
     payloadJson: text("payload_json").notNull(),
     notes: text("notes"),

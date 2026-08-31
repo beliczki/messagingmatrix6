@@ -17,6 +17,7 @@ import {
   Image as ImageIcon,
   Loader2,
   Check,
+  CheckCheck,
   Share2,
   AlertTriangle,
 } from "lucide-react";
@@ -210,6 +211,14 @@ export default function CreativeLibrary() {
       else next.add(id);
       return next;
     });
+  }, []);
+
+  // Selects the whole filtered set, not just the ~200 rows the infinite
+  // scroller has materialised — the toolbar count and the share dialog both
+  // work off ids, so there is no reason to make the user scroll first.
+  const selectAllFiltered = useCallback((ids: number[]) => {
+    setSelectorMode(true);
+    setSelectedIds(new Set(ids));
   }, []);
 
   const beginSelection = useCallback((id: number) => {
@@ -746,6 +755,8 @@ export default function CreativeLibrary() {
             <SelectionActions
               collapsed={collapsed}
               count={selectedIds.size}
+              filteredCount={filtered.length}
+              onSelectAll={() => selectAllFiltered(filtered.map((c) => c.id))}
               onShare={() => setShareOpen(true)}
               onCancel={clearSelection}
             />
@@ -1269,14 +1280,21 @@ function Field({
 function SelectionActions({
   collapsed,
   count,
+  filteredCount,
+  onSelectAll,
   onShare,
   onCancel,
 }: {
   collapsed: boolean;
   count: number;
+  filteredCount: number;
+  onSelectAll: () => void;
   onShare: () => void;
   onCancel: () => void;
 }) {
+  // Nothing left to add once the whole filtered set is in — the button stays
+  // put (so the toolbar does not reflow) but says so.
+  const allSelected = count >= filteredCount;
   if (collapsed) {
     return (
       <div className="selection-actions selection-actions--collapsed flex flex-col items-center gap-2 border-b border-slate-200 pb-2">
@@ -1286,6 +1304,16 @@ function SelectionActions({
         >
           {count}
         </span>
+        <button
+          type="button"
+          onClick={onSelectAll}
+          disabled={allSelected}
+          title={`Select all ${filteredCount} filtered`}
+          aria-label={`Select all ${filteredCount} filtered`}
+          className="toolbar-btn flex size-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          <CheckCheck className="size-4" />
+        </button>
         <button
           type="button"
           onClick={onShare}
@@ -1312,6 +1340,16 @@ function SelectionActions({
       <div className="selection-actions__count text-xs font-semibold text-slate-700">
         {count} selected
       </div>
+      <button
+        type="button"
+        onClick={onSelectAll}
+        disabled={allSelected}
+        title={`Select every creative the current filters match (${filteredCount})`}
+        className="toolbar-btn inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <CheckCheck className="size-3.5" />
+        Select all filtered ({filteredCount})
+      </button>
       <button
         type="button"
         onClick={onShare}

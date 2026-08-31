@@ -6,6 +6,7 @@ import {
   config,
   feedExports,
   messages as messagesTable,
+  nowUtc,
   users,
 } from "@/db/schema";
 import { withSession, denyDemo } from "@/lib/scoped";
@@ -17,6 +18,7 @@ import {
 } from "@/lib/adform-snapshot";
 import { serializePayload } from "@/lib/feed-export";
 import { parseFeedColumns } from "@/lib/feed-patterns";
+import { isSignalColumn, platformForSignalColumn } from "@/lib/feed-signal";
 
 // Snapshots live in `feed_exports` with source='adform_snapshot'. The XLSX
 // notes column carries the original filename ("Uploaded from AdForm: <name>").
@@ -185,6 +187,25 @@ export const POST = withSession(async ({ req, claims }) => {
     );
   }
 
+  // Normalise the signal column to the configured name before storing. The
+  // upload above accepts either platform's alias, but every later diff looks up
+  // row values BY COLUMN NAME against a freshly built export — so a snapshot
+  // filed under the DV360 alias would report its signal as changed on every
+  // single row. The alias the file used is kept on the row set, not in the
+  // column list, so a download of this reference still carries it.
+  const expectedSignal = expected.find((c) => isSignalColumn(c));
+  const uploadedSignal = uploaded.find((c) => isSignalColumn(c));
+  if (expectedSignal && uploadedSignal && uploadedSignal !== expectedSignal) {
+    parsed.rowSet.columns = uploaded.map((c) =>
+      c === uploadedSignal ? expectedSignal : c,
+    );
+    for (const row of parsed.rowSet.rows) {
+      row[expectedSignal] = row[uploadedSignal] ?? "";
+      delete row[uploadedSignal];
+    }
+    parsed.rowSet.signalColumn = uploadedSignal;
+  }
+
   // Infer the product from PMMID audience keys: every PMMID encodes the
   // audience key (between -a_ and -m_), and each audience belongs to a
   // product in this client's audiences table. A snapshot is per-product so
@@ -286,8 +307,19 @@ export const POST = withSession(async ({ req, claims }) => {
       // out of the version-decision math while satisfying the NOT NULL.
       feedVersion: 0,
       exportedBy: claims.sub,
-      uploadedToAdformAt: new Date().toISOString(),
+      // nowUtc, not toISOString(): every other timestamp in the schema is
+      // "YYYY-MM-DD HH:MM:SS", and these columns are compared as STRINGS to
+      // decide which export is live (findLiveExport, and the Feeds list's Live
+      // column). Mixing in an ISO stamp breaks that on a shared date, because
+      // "T" sorts above " " — an ISO-stamped reference from the morning would
+      // outrank an export published the same afternoon.
+      uploadedToAdformAt: nowUtc,
       uploadedBy: claims.sub,
+      // Read off the file itself: the signal header names the platform, and a
+      // file has exactly one. That is why there is no "is this AdForm or DV360"
+      // question at upload time -- asking would only let the answer contradict
+      // the file.
+      platform: platformForSignalColumn(uploadedSignal ?? ""),
       defaultMessageId,
       defaultLabel,
       rowCount: parsed.rowSet.rows.length,
@@ -327,9 +359,14 @@ function findColumnMismatch(
     return `Column count mismatch: file has ${uploaded.length}, Settings → Structure → Feed structure has ${expected.length}.`;
   }
   for (let i = 0; i < uploaded.length; i += 1) {
-    if (uploaded[i] !== expected[i]) {
-      return `Column ${i + 1} mismatch: file has "${uploaded[i]}", expected "${expected[i]}".`;
-    }
+    if (uploaded[i] === expected[i]) continue;
+    // The signal column is the one header that legitimately differs by serving
+    // platform (AdForm's placement-id signal vs DV360's external one) while
+    // meaning the same thing and carrying the same lineitem_id value. A
+    // reference exported for DV360 must upload against an AdForm-configured
+    // structure and vice versa, so signal-vs-signal counts as a match.
+    if (isSignalColumn(uploaded[i]) && isSignalColumn(expected[i])) continue;
+    return `Column ${i + 1} mismatch: file has "${uploaded[i]}", expected "${expected[i]}".`;
   }
   return null;
 }

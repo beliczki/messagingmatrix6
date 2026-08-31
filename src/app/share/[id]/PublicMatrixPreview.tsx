@@ -47,7 +47,14 @@ export default function PublicMatrixPreview({
     const el = wrapRef.current;
     if (!el) return;
     const io = new IntersectionObserver(
-      (entries) => setVisible(entries[0]?.isIntersecting === true),
+      // LAST entry, not entries[0]. The callback receives every intersection
+      // change queued since the previous delivery, oldest first, so during a
+      // fast scroll `entries` is e.g. [leaving, entering] and entries[0] is a
+      // stale `false`. Reading it pinned the tile at visible=false while it sat
+      // still on screen — and a motionless tile produces no further intersection
+      // change, so it stayed a `</>` placeholder forever.
+      (entries) =>
+        setVisible(entries[entries.length - 1]?.isIntersecting === true),
       { rootMargin: "300px" },
     );
     io.observe(el);
@@ -76,8 +83,11 @@ export default function PublicMatrixPreview({
     })
       .then((r) => (r.ok ? r.text() : Promise.reject(r)))
       .then((text) => {
-        if (cancelled) return;
+        // Cache before the cancelled check: the render arrived and is valid
+        // whether or not this instance still wants it. Discarding it here meant
+        // a tile that scrolled out mid-flight threw away work and refetched.
         renderCache.set(k, text);
+        if (cancelled) return;
         setHtml(text);
       })
       .catch(() => {

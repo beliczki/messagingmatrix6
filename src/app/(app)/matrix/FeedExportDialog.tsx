@@ -1,11 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, AlertTriangle, CheckCircle2 } from "lucide-react";
 import AppDialog from "../_components/AppDialog";
+import { type Audience, type Message } from "./types";
+import {
+  DEFAULT_SIGNAL_COLUMN,
+  isValidSignalColumn,
+  platformForSignalColumn,
+  signalColumnForPlatform,
+  SIGNAL_COLUMN_OPTIONS,
+  type SignalColumn,
+} from "@/lib/feed-signal";
 
 type Decision = {
   feedVersion: number;
@@ -34,7 +43,13 @@ type DiffPreview = {
 };
 
 type CreateResponse = {
-  feedExport: { id: number; feedVersion: number; rowCount: number };
+  feedExport: {
+    id: number;
+    feedVersion: number;
+    rowCount: number;
+    platform: string;
+    filename: string;
+  };
   decision: Decision;
   diff: DiffPreview;
 };
@@ -50,9 +65,41 @@ type PostBody = {
   product: string;
   defaultMessageId: number | null;
   forceNewVersion: boolean;
+  signalColumn: string;
   notes: string | null;
   messageIds: number[];
 };
+
+// One export = one or more LEGS. A plain export is a single leg; a split is one
+// leg per platform. Modelling the single case as a list of one keeps preview,
+// commit and download from branching on `split` at every step.
+type Leg = {
+  platform: string;
+  signalColumn: SignalColumn;
+  label: string;
+  messageIds: number[];
+  mcOptions: ReturnType<typeof uniqueMcOptions>;
+};
+
+function uniqueMcOptions(messages: Message[]) {
+  const seen = new Map<
+    string,
+    { key: string; label: string; messageId: number; count: number }
+  >();
+  for (const m of messages) {
+    const key = `${m.number}${m.variant}`;
+    const existing = seen.get(key);
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+    const label = m.name
+      ? `MC${m.number}${m.variant} — ${m.name}`
+      : `MC${m.number}${m.variant}`;
+    seen.set(key, { key, label, messageId: m.id, count: 1 });
+  }
+  return [...seen.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
 
 async function postFeedExport<T>(body: PostBody & { dryRun?: boolean }): Promise<T> {
   const r = await fetch("/api/feed-exports", {
@@ -72,60 +119,179 @@ export default function FeedExportDialog({
   open,
   onClose,
   product,
-  defaultMessageId,
+  messages,
+  audiences,
   messageIds,
 }: {
   open: boolean;
   onClose: () => void;
   product: string;
-  defaultMessageId: number | null;
+  messages: Message[];
+  audiences: Audience[];
   messageIds: number[];
 }) {
   const router = useRouter();
   const qc = useQueryClient();
   const [forceNewVersion, setForceNewVersion] = useState(false);
   const [notes, setNotes] = useState("");
-  const [result, setResult] = useState<CreateResponse | null>(null);
+  const [split, setSplit] = useState(false);
+  const [signalColumn, setSignalColumn] =
+    useState<SignalColumn>(DEFAULT_SIGNAL_COLUMN);
+  // Default row per platform: a split writes two feeds, and each needs its own
+  // fallback ad — the DEFAULT row carries the platform's own lineitem signal.
+  const [defaults, setDefaults] = useState<Record<string, number | null>>({});
+  const [result, setResult] = useState<CreateResponse[] | null>(null);
 
-  // Live dry-run: builds the row set + diff + decision on the server without
-  // persisting, so the user sees impact before clicking Build & Download.
-  // Re-fires when forceNewVersion toggles (the decision depends on it).
+  const platformByAudience = useMemo(
+    () => new Map(audiences.map((a) => [a.key, a.buyingPlatform])),
+    [audiences],
+  );
+
+  // Messages whose audience names no buying platform cannot be assigned to
+  // either half of a split. Dropping them silently would ship a feed that is
+  // quietly missing rows, so the split refuses and names them instead.
+  const unassigned = useMemo(
+    () =>
+      messages.filter((m) => {
+        const p = platformByAudience.get(m.audience);
+        return !p || !p.trim();
+      }),
+    [messages, platformByAudience],
+  );
+
+  const legs = useMemo<Leg[]>(() => {
+    if (!split) {
+      const platform = platformForSignalColumn(signalColumn);
+      return [
+        {
+          platform,
+          signalColumn,
+          label: platform,
+          messageIds,
+          mcOptions: uniqueMcOptions(messages),
+        },
+      ];
+    }
+    const byPlatform = new Map<string, Message[]>();
+    for (const m of messages) {
+      const raw = platformByAudience.get(m.audience);
+      const p = raw?.trim().toLowerCase();
+      if (!p) continue;
+      const list = byPlatform.get(p) ?? [];
+      list.push(m);
+      byPlatform.set(p, list);
+    }
+    return [...byPlatform.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([platform, msgs]) => ({
+        platform,
+        signalColumn: signalColumnForPlatform(platform),
+        label: platform,
+        messageIds: msgs.map((m) => m.id),
+        mcOptions: uniqueMcOptions(msgs),
+      }));
+  }, [split, signalColumn, messages, messageIds, platformByAudience]);
+
+  // Restore the saved default per (product, platform) whenever the leg set
+  // changes — switching split on introduces platforms that had no entry yet.
+  useEffect(() => {
+    setDefaults((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const leg of legs) {
+        if (leg.platform in next) continue;
+        let saved: number | null = null;
+        try {
+          const raw = localStorage.getItem(
+            `mm6_feed_export_default_${product}_${leg.platform}`,
+          );
+          const parsed = raw === null ? NaN : Number(raw);
+          if (Number.isFinite(parsed)) saved = parsed;
+        } catch {}
+        next[leg.platform] = saved;
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [legs, product]);
+
+  function chooseDefault(platform: string, v: number | null) {
+    setDefaults((prev) => ({ ...prev, [platform]: v }));
+    try {
+      const key = `mm6_feed_export_default_${product}_${platform}`;
+      if (v === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, String(v));
+    } catch {}
+  }
+
+  const splitBlocked = split && unassigned.length > 0;
+
+  // Live dry-run per leg: builds the row set + diff + decision on the server
+  // without persisting, so the impact is visible before committing. One query
+  // over all legs (not one query per leg) keeps the hook count fixed no matter
+  // how many platforms the split finds.
   const previewQ = useQuery({
     queryKey: [
       "feed-export-preview",
       product,
-      defaultMessageId ?? "none",
       forceNewVersion,
-      messageIds.join(","),
+      legs
+        .map(
+          (l) =>
+            `${l.platform}:${defaults[l.platform] ?? "none"}:${l.messageIds.join(".")}`,
+        )
+        .join("|"),
     ],
     queryFn: () =>
-      postFeedExport<PreviewResponse>({
-        product,
-        defaultMessageId,
-        forceNewVersion,
-        notes: null,
-        messageIds,
-        dryRun: true,
-      }),
-    enabled: open && !result,
+      Promise.all(
+        legs.map((leg) =>
+          postFeedExport<PreviewResponse>({
+            product,
+            defaultMessageId: defaults[leg.platform] ?? null,
+            forceNewVersion,
+            signalColumn: leg.signalColumn,
+            notes: null,
+            messageIds: leg.messageIds,
+            dryRun: true,
+          }).then((r) => ({ leg, preview: r })),
+        ),
+      ),
+    enabled: open && !result && !splitBlocked && legs.length > 0,
     staleTime: 30_000,
   });
 
   const createM = useMutation({
-    mutationFn: () =>
-      postFeedExport<CreateResponse>({
-        product,
-        defaultMessageId,
-        forceNewVersion,
-        notes: notes.trim() || null,
-        messageIds,
-      }),
+    // Sequential, not parallel: each leg's version decision reads the live
+    // export for its own platform, and two in-flight writes for the same
+    // platform could race. Different platforms cannot race each other, but
+    // sequential keeps the audit order readable and costs nothing at n=2.
+    mutationFn: async () => {
+      const out: CreateResponse[] = [];
+      for (const leg of legs) {
+        out.push(
+          await postFeedExport<CreateResponse>({
+            product,
+            defaultMessageId: defaults[leg.platform] ?? null,
+            forceNewVersion,
+            signalColumn: leg.signalColumn,
+            notes: notes.trim() || null,
+            messageIds: leg.messageIds,
+          }),
+        );
+      }
+      return out;
+    },
     onSuccess: (data) => {
       setResult(data);
       qc.invalidateQueries({ queryKey: ["feed-exports", product] });
       qc.invalidateQueries({ queryKey: ["feed-exports", "all"] });
-      // Auto-trigger download.
-      window.location.href = `/api/feed-exports/${data.feedExport.id}?download=1`;
+      // One file downloads directly; several arrive as a single zip so the
+      // browser is not asked to accept a burst of downloads.
+      const ids = data.map((d) => d.feedExport.id);
+      window.location.href =
+        ids.length === 1
+          ? `/api/feed-exports/${ids[0]}?download=1`
+          : `/api/feed-exports/zip?ids=${ids.join(",")}`;
     },
   });
 
@@ -136,6 +302,7 @@ export default function FeedExportDialog({
     createM.reset();
     onClose();
   }
+
 
   return (
     <AppDialog open={open} onClose={close} ariaLabel="Feed export preview">
@@ -148,11 +315,17 @@ export default function FeedExportDialog({
             <button
               type="button"
               onClick={() => createM.mutate()}
-              disabled={createM.isPending || previewQ.isLoading}
+              disabled={
+                createM.isPending || previewQ.isLoading || splitBlocked
+              }
               className="toolbar-btn--primary flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
             >
               <Download className="size-4" />
-              {createM.isPending ? "Building…" : "Build & Download XLSX"}
+              {createM.isPending
+                ? "Building…"
+                : legs.length > 1
+                  ? `Build & Download ${legs.length} feeds (zip)`
+                  : "Build & Download XLSX"}
             </button>
           ) : null}
         </header>
@@ -164,6 +337,15 @@ export default function FeedExportDialog({
               setForceNewVersion={setForceNewVersion}
               notes={notes}
               setNotes={setNotes}
+              split={split}
+              setSplit={setSplit}
+              signalColumn={signalColumn}
+              setSignalColumn={setSignalColumn}
+              legs={legs}
+              defaults={defaults}
+              chooseDefault={chooseDefault}
+              unassigned={unassigned}
+              splitBlocked={splitBlocked}
               error={createM.error as Error | null}
               isPending={createM.isPending}
               preview={previewQ.data ?? null}
@@ -174,9 +356,9 @@ export default function FeedExportDialog({
             <PostEmitView
               result={result}
               onClose={close}
-              onOpenDetail={() => {
+              onOpenDetail={(id) => {
                 close();
-                router.push(`/feeds/${result.feedExport.id}`);
+                router.push(`/feeds/${id}`);
               }}
             />
           )}
@@ -191,6 +373,15 @@ function PreEmitForm({
   setForceNewVersion,
   notes,
   setNotes,
+  split,
+  setSplit,
+  signalColumn,
+  setSignalColumn,
+  legs,
+  defaults,
+  chooseDefault,
+  unassigned,
+  splitBlocked,
   error,
   isPending,
   preview,
@@ -201,9 +392,18 @@ function PreEmitForm({
   setForceNewVersion: (b: boolean) => void;
   notes: string;
   setNotes: (s: string) => void;
+  split: boolean;
+  setSplit: (b: boolean) => void;
+  signalColumn: SignalColumn;
+  setSignalColumn: (v: SignalColumn) => void;
+  legs: Leg[];
+  defaults: Record<string, number | null>;
+  chooseDefault: (platform: string, v: number | null) => void;
+  unassigned: Message[];
+  splitBlocked: boolean;
   error: Error | null;
   isPending: boolean;
-  preview: PreviewResponse | null;
+  preview: Array<{ leg: Leg; preview: PreviewResponse }> | null;
   previewLoading: boolean;
   previewError: Error | null;
 }) {
@@ -218,14 +418,108 @@ function PreEmitForm({
           <strong>Preview failed:</strong> {previewError.message}
         </div>
       ) : preview ? (
+        preview.map(({ leg, preview: p }) => (
         <PreviewBlock
-          decision={preview.decision}
-          diff={preview.diff}
-          rowCount={preview.previewRowCount}
+          key={leg.platform}
+          platform={legs.length > 1 ? leg.platform : null}
+          decision={p.decision}
+          diff={p.diff}
+          rowCount={p.previewRowCount}
         />
+        ))
       ) : null}
 
-      <div className="space-y-3 border-t border-slate-200 pt-4">
+      <div className="feed-export-dialog__options space-y-3 border-t border-slate-200 pt-4">
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={split}
+            onChange={(e) => setSplit(e.target.checked)}
+          />
+          Split by platform (one feed per buying platform, delivered as a zip)
+        </label>
+
+        {splitBlocked ? (
+          <div className="feed-export-dialog__split-blocked rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            <div className="flex items-start gap-2">
+              <AlertTriangle className="mt-0.5 size-3.5 flex-shrink-0" />
+              <div>
+                <div className="font-medium">
+                  {unassigned.length} row
+                  {unassigned.length === 1 ? "" : "s"} have no buying platform
+                </div>
+                <p className="mt-1 leading-snug">
+                  A split cannot place them, and leaving them out would ship a
+                  feed quietly missing rows. Set a buying platform on these
+                  audiences, or export without splitting.
+                </p>
+                <ul className="mt-1 list-disc pl-4">
+                  {[...new Set(unassigned.map((m) => m.audience))]
+                    .slice(0, 8)
+                    .map((a) => (
+                      <li key={a} className="font-mono">
+                        {a}
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {!split ? (
+          <label className="form-field feed-export-dialog__signal block">
+            <span className="form-field__label mb-1 block text-xs font-medium text-slate-700">
+              Signal column
+            </span>
+            <select
+              value={signalColumn}
+              onChange={(e) => setSignalColumn(e.target.value as SignalColumn)}
+              className="input-box w-full rounded border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
+              title="Header name for the lineitem-signal column. AdForm and DV360 expect different names for the same value."
+            >
+              {SIGNAL_COLUMN_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
+
+        {legs.map((leg) => (
+          <label
+            key={leg.platform}
+            className="form-field feed-export-dialog__default block"
+          >
+            <span className="form-field__label mb-1 block text-xs font-medium text-slate-700">
+              Default row{legs.length > 1 ? ` · ${leg.label}` : ""}
+              <span className="ml-1 font-normal text-slate-400">
+                ({leg.messageIds.length} row
+                {leg.messageIds.length === 1 ? "" : "s"})
+              </span>
+            </span>
+            <select
+              value={defaults[leg.platform] ?? ""}
+              onChange={(e) =>
+                chooseDefault(
+                  leg.platform,
+                  e.target.value === "" ? null : Number(e.target.value),
+                )
+              }
+              className="input-box w-full rounded border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
+            >
+              <option value="">— no default row —</option>
+              {leg.mcOptions.map((o) => (
+                <option key={o.key} value={o.messageId}>
+                  {o.label}
+                  {o.count > 1 ? ` (${o.count} variants)` : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input
             type="checkbox"
@@ -266,10 +560,12 @@ function PreviewBlock({
   decision,
   diff,
   rowCount,
+  platform,
 }: {
   decision: Decision;
   diff: DiffPreview;
   rowCount: number;
+  platform?: string | null;
 }) {
   const action =
     decision.action === "first"
@@ -283,6 +579,11 @@ function PreviewBlock({
 
   return (
     <div className="space-y-3">
+      {platform ? (
+        <div className="feed-export-dialog__leg-heading text-[10px] font-medium uppercase tracking-wider text-slate-500">
+          {platform}
+        </div>
+      ) : null}
       <div className="diff-source rounded border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
         {diff.source === "adform_snapshot" && diff.snapshot ? (
           <>
@@ -356,8 +657,48 @@ function PostEmitView({
   result,
   onOpenDetail,
 }: {
-  result: CreateResponse;
+  result: CreateResponse[];
   onClose: () => void;
+  onOpenDetail: (id: number) => void;
+}) {
+  return (
+    <div className="space-y-6">
+      {result.map((r) => (
+        <PostEmitLeg
+          key={r.feedExport.id}
+          result={r}
+          showHeading={result.length > 1}
+          onOpenDetail={() => onOpenDetail(r.feedExport.id)}
+        />
+      ))}
+      <div className="rounded border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+        <p>
+          {result.length > 1
+            ? `${result.length} feeds downloaded as a zip.`
+            : "XLSX downloaded."}{" "}
+          Once you upload {result.length > 1 ? "them" : "it"} to the platform,
+          mark {result.length > 1 ? "each export" : "this export"} as uploaded
+          from the{" "}
+          <Link
+            href="/feeds"
+            className="font-medium text-blue-600 hover:underline"
+          >
+            Feeds list
+          </Link>
+          .
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PostEmitLeg({
+  result,
+  showHeading,
+  onOpenDetail,
+}: {
+  result: CreateResponse;
+  showHeading: boolean;
   onOpenDetail: () => void;
 }) {
   const { decision, diff, feedExport } = result;
@@ -373,6 +714,11 @@ function PostEmitView({
 
   return (
     <div className="space-y-4">
+      {showHeading ? (
+        <div className="feed-export-dialog__leg-heading text-[10px] font-medium uppercase tracking-wider text-slate-500">
+          {feedExport.platform}
+        </div>
+      ) : null}
       <div
         className={
           action.tone === "ok"
@@ -439,24 +785,13 @@ function PostEmitView({
         <ChangedSection rows={diff.changedPreview} />
       </details>
 
-      <div className="rounded border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
-        <p>
-          XLSX downloaded. Once you upload it to AdForm, mark this export as
-          uploaded from{" "}
-          <button
-            type="button"
-            onClick={onOpenDetail}
-            className="font-medium text-blue-600 hover:underline"
-          >
-            its detail page
-          </button>{" "}
-          or the{" "}
-          <Link href="/feeds" className="font-medium text-blue-600 hover:underline">
-            Feeds list
-          </Link>
-          .
-        </p>
-      </div>
+      <button
+        type="button"
+        onClick={onOpenDetail}
+        className="text-xs font-medium text-blue-600 hover:underline"
+      >
+        Open {feedExport.filename} &rarr;
+      </button>
     </div>
   );
 }

@@ -48,6 +48,7 @@ export const GET = withSession<Params>(async ({ req, claims, params }) => {
     const filename = feedExportFilename(
       clientKey,
       row.product,
+      row.platform,
       row.feedVersion,
       row.id,
     );

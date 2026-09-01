@@ -1101,3 +1101,5 @@ Az IO callback a legutóbbi kézbesítés óta **sorba állt összes** entry-t k
   - A pipa a baseline-választó ALÁ került, mert az alatta lévő mezők viselkedését dönti el.
 - **Mellékhatás kezelve:** ha a DEFAULT sort az alapból hozzuk, a `default_message_id` csak tájékoztató → a route `default_not_found` (422) ellenőrzése kihagyódik ilyenkor (`built.defaultCarried`), különben egy időközben átszámozott MC blokkolna egy exportot, aminek a DEFAULT sora amúgy helyes.
 - **Teszt:** +2 (force: a kizárt sor NEM kerül be; a nem-építhető sor sem). Suite **623/623 + 2 = 625** (a force-tesztekkel a fájl 7).
+
+- **DEPLOYOLVA 6.39.0 (2026-09-01):** commit `fbe6747`, build OK, `pm2 restart` → online. Nincs séma-migráció.

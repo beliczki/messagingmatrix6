@@ -1193,3 +1193,5 @@ Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülé
   - **Egy valós versenyhelyzet javítva még kiszállítás előtt:** a scroll-esemény gyorsabban tüzel, mint ahogy a React state-et commitol, tehát két esemény ugyanazt az offsetet tölthette volna be kétszer (dupla tile, dupla key). A kurzor és az „épp tölt" jelző **ref**, nem state.
 - **Teszt:** új `tests/integration/api/dashboard-creatives.test.ts` (5) — a sorrend-teszt fixture-je pont az éles alakzat (a legkésőbb beszúrt sor a legrégebbi `created_at`), tehát a régi kóddal elbukna; + lapozás vége, kliens-izoláció, archivált kihagyása. Suite **637/637 zöld** (632 → +5).
 - **Bump:** `6.41.0` → **`6.42.0`** (minor — új HTTP route + viselkedés-változás).
+
+- **DEPLOYOLVA 6.42.0 (2026-09-01):** commit `7e696a9`, box `d554cb6`→`7e696a9`, build 36.8s, `pm2 restart` → **Ready 1395ms**, box `package.json` **6.42.0**. Séma-migráció nincs. Health: `/` 307, `/login` 200, `/matrix` 307, `/api/dashboard/creatives` **401** (auth mögött, helyes).

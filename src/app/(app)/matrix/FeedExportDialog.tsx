@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, AlertTriangle, CheckCircle2 } from "lucide-react";
 import AppDialog from "../_components/AppDialog";
+import BaselinePicker from "./BaselinePicker";
 import { type Message } from "./types";
 import {
   DEFAULT_SIGNAL_COLUMN,
@@ -175,6 +176,17 @@ export default function FeedExportDialog({
     );
     return rows;
   }, [baselinesQ.data]);
+
+  // Best guess instead of an "automatic" row: the newest LIVE feed, because
+  // that is what a new export continues. Falling back to the newest built one
+  // when nothing is live yet. Only fires while nothing is chosen, so a manual
+  // pick is never overridden.
+  useEffect(() => {
+    if (baselineExportId !== null || baselines.length === 0) return;
+    const live = baselines.find((b) => b.uploadedToAdformAt);
+    setBaselineExportId((live ?? baselines[0]).id);
+  }, [baselines, baselineExportId]);
+
 
   // The DEFAULT row is the feed's fallback ad, and the server resolves it
   // against every message of the client — not the export's selection. The
@@ -396,31 +408,16 @@ function PreEmitForm({
   return (
     <div className="space-y-4">
       <div className="feed-export-dialog__options space-y-3">
-        <label className="form-field feed-export-dialog__baseline block">
+        <div className="form-field feed-export-dialog__baseline">
           <span className="form-field__label mb-1 block text-xs font-medium text-slate-700">
             Compare against
           </span>
-          <select
-            value={baselineExportId ?? ""}
-            onChange={(e) =>
-              setBaselineExportId(
-                e.target.value === "" ? null : Number(e.target.value),
-              )
-            }
-            className="input-box w-full rounded border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
-            title="The feed this export builds on: it supplies the diff and the rows carried forward."
-          >
-            <option value="">
-              Newest live feed for this platform (automatic)
-            </option>
-            {baselines.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.filename}
-                {b.source === "adform_snapshot" ? " · reference" : ""}
-              </option>
-            ))}
-          </select>
-        </label>
+          <BaselinePicker
+            options={baselines}
+            value={baselineExportId}
+            onChange={setBaselineExportId}
+          />
+        </div>
 
         <label className="form-field feed-export-dialog__signal block">
           <span className="form-field__label mb-1 block text-xs font-medium text-slate-700">

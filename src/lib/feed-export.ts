@@ -524,6 +524,40 @@ export async function buildFeedRowSet(opts: BuildOptions): Promise<{
     messageIds.push(m.id);
   }
 
+  // Rows the baseline carries that MM6 can no longer build. Their MC is gone -
+  // renumbered, deleted, rekeyed - so there is no message to evaluate patterns
+  // against, and until now they simply fell out of the feed. They are exactly
+  // the rows that must NOT: they already served impressions, and a feed update
+  // may not delete a row that has run. So they are re-emitted verbatim from the
+  // baseline, switched off. Deleting them is what a new version is for.
+  //
+  // The baseline's own DEFAULT row is excluded: a feed carries exactly one, and
+  // the current one is generated below from the chosen default message.
+  if (liveExport) {
+    const basePayload = deserializePayload(liveExport.payloadJson);
+    if (basePayload) {
+      const basePmmidCol = findColumnByCleanName(basePayload.columns, "pmmid");
+      const newPmmidCol = findColumnByCleanName(columns, "pmmid");
+      if (basePmmidCol && newPmmidCol) {
+        const present = new Set(rows.map((r) => r[newPmmidCol] ?? ""));
+        for (let i = 0; i < basePayload.rows.length; i += 1) {
+          if (i === basePayload.defaultRowIndex) continue;
+          const baseRow = basePayload.rows[i]!;
+          const key = baseRow[basePmmidCol] ?? "";
+          if (!key || present.has(key)) continue;
+          // Keep only the columns this feed structure defines, so a baseline
+          // built under a different structure cannot widen the sheet.
+          const carried: FeedRow = {};
+          for (const col of columns) carried[col] = baseRow[col] ?? "";
+          if (isActiveCol) carried[isActiveCol] = "FALSE";
+          rows.push(carried);
+          messageIds.push(-1);
+          present.add(key);
+        }
+      }
+    }
+  }
+
   // DEFAULT row — append last so its index is always rows.length - 1 once
   // pushed.
   let defaultRowIndex = -1;

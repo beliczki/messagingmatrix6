@@ -77,6 +77,27 @@ afterEach(async () => {
   await h.cleanup();
 });
 
+async function seedBaselineRows(
+  clientId: number,
+  rows: Record<string, string>[],
+) {
+  await db.insert(feedExports).values({
+    clientId,
+    product: "Loans",
+    platform: "adform",
+    feedVersion: 1,
+    exportedBy: null,
+    uploadedToAdformAt: "2026-08-01 10:00:00",
+    rowCount: rows.length,
+    payloadJson: serializePayload({
+      columns: ["Text:pmmid", "ReportingLabel", "IsActive"],
+      rows,
+      messageIds: rows.map(() => -1),
+      defaultRowIndex: -1,
+    }),
+  });
+}
+
 async function seedBaseline(clientId: number, messageIds: number[]) {
   await db.insert(feedExports).values({
     clientId,
@@ -152,5 +173,55 @@ describe("feed carry-forward", () => {
     });
 
     expect(rowSet.rows[0]?.IsActive).toBe("TRUE");
+  });
+});
+
+describe("baseline rows MM6 can no longer build", () => {
+  it("re-emits them from the baseline, switched off", async () => {
+    // These are the rows that matter most: their MC is gone (renumbered,
+    // deleted, rekeyed), so there is no message to rebuild them from — and they
+    // already served impressions, so the feed may not drop them.
+    const live = await seedMc(erste.id, 1, "aud1", "top1");
+    await seedBaselineRows(erste.id, [
+      { "Text:pmmid": "pmmid-1", ReportingLabel: "1a", IsActive: "TRUE" },
+      { "Text:pmmid": "pmmid-gone", ReportingLabel: "90b", IsActive: "TRUE" },
+    ]);
+
+    const { rowSet } = await buildFeedRowSet({
+      clientId: erste.id,
+      product: "Loans",
+      platform: "adform",
+      defaultMessageId: null,
+      messageIds: [live.id],
+    });
+
+    const byPmmid = new Map(
+      rowSet.rows.map((r) => [r["Text:pmmid"], r] as const),
+    );
+    expect(byPmmid.has("pmmid-gone")).toBe(true);
+    expect(byPmmid.get("pmmid-gone")?.IsActive).toBe("FALSE");
+    // Carried verbatim, so its identity columns survive untouched.
+    expect(byPmmid.get("pmmid-gone")?.ReportingLabel).toBe("90b");
+    expect(byPmmid.get("pmmid-1")?.IsActive).toBe("TRUE");
+  });
+
+  it("does not duplicate a row the current export already builds", async () => {
+    const live = await seedMc(erste.id, 1, "aud1", "top1");
+    await seedBaselineRows(erste.id, [
+      { "Text:pmmid": "pmmid-1", ReportingLabel: "stale", IsActive: "TRUE" },
+    ]);
+
+    const { rowSet } = await buildFeedRowSet({
+      clientId: erste.id,
+      product: "Loans",
+      platform: "adform",
+      defaultMessageId: null,
+      messageIds: [live.id],
+    });
+
+    const hits = rowSet.rows.filter((r) => r["Text:pmmid"] === "pmmid-1");
+    expect(hits).toHaveLength(1);
+    // The freshly built row wins — the baseline copy is stale by definition.
+    expect(hits[0]?.ReportingLabel).toBe("1a");
   });
 });

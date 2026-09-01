@@ -213,8 +213,8 @@ Négy ötlet érkezett; a user 2026-08-30-án mindháromra megadta az irányt (a
 - [x] **I6.1 Carry-forward a szűrő felett:** a `liveIdSet`-beli sorok ne essenek ki az `allowed` szűrőn; ha nincsenek a mai válogatásban, a soruk `IsActive=FALSE`-szal megy ki (az `isActiveCol` felülírás mintájára, ami ma az archivált sorokra megy, `:452`). ⚠️ **Feed-kimenetet változtat** — a négy lockolt invariáns egyike (sticky-superset), tesztekkel és külön ellenőrzéssel.
 - [x] **I6.2 Diff-szöveg:** force nélkül ne „removed" legyen, hanem „x sor nincs benne az új feedben → INACTIVE lesz"; force-szal „x sor törlődik". A `diffRowSets` számol tovább, csak a bemutatás és a `decideVersion` indoklása változik.
 - [x] **I6.3 Alap-választó:** a dialogban select a termék (és platform) korábbi feedjeiből, default a legfrissebb; a választott id a POST bodyba, a szerver ahhoz diffel (ma automatikus: legfrissebb referencia → utolsó export).
-- [ ] **I6.4 (A NEHÉZ RÉSZ) kulcsmező-változás:** ha egy MC pmmid/advert_id-je változott, a régi sornak nincs többé mögötte üzenet — tehát azt **az alap payloadjából** kell kihozni, INACTIVE-ra állítva. Ez új fogalom: „szellemsor", aminek nincs message-e. Érinti a `messageIds` párhuzamos tömböt és a DEFAULT-sor indexét. **Ezt külön szeletként, saját teszttel.**
-- [ ] **I6.5** Tesztek mind a négyre + CHANGELOG + bump.
+- [x] **I6.4 (A NEHÉZ RÉSZ) kulcsmező-változás:** ha egy MC pmmid/advert_id-je változott, a régi sornak nincs többé mögötte üzenet — tehát azt **az alap payloadjából** kell kihozni, INACTIVE-ra állítva. Ez új fogalom: „szellemsor", aminek nincs message-e. Érinti a `messageIds` párhuzamos tömböt és a DEFAULT-sor indexét. **Ezt külön szeletként, saját teszttel.**
+- [x] **I6.5** Tesztek mind a négyre + CHANGELOG + bump.
 
 **Miért nem kezdtem bele:** ez a `buildFeedRowSet` kimenetét módosítja, ami a **négy lockolt feed-invariáns** területe (sticky-superset, verzió-bump triggerek, uploaded≠exported, DEFAULT-sor transzformáció). Nem akartam egy hosszú session végén, más kiadással összekeverve hozzányúlni.
 
@@ -1073,3 +1073,11 @@ Az IO callback a legutóbbi kézbesítés óta **sorba állt összes** entry-t k
 - **Verifikáció:** `tsc` 0, build 0, eslint 0 error, 619/619 zöld. ⚠️ A 190→46 változást élesben a te preview-d fogja igazolni.
 
 - **DEPLOYOLVA 6.37.1 (2026-09-01):** commit `0ee3ec8`, box `90821f5`→`0ee3ec8`, build 36.3s, `pm2 restart` → **Ready 1674ms**, online. Nincs séma-migráció. Health: `/` 307, `/matrix` 307, `/api/feed-exports` 401.
+
+### 2026-09-01 — I6.4 kész: szellemsorok + gazdag alap-választó — 6.38.0
+- **User két kérdése a preview-ról, mindkettő valós hibát fedett fel.**
+- **(1) „Miért akar még egy default sort hozzáadni?"** — a referencia-fájl **önmagával inkonzisztens**: a DEFAULT sorában `messaging_card_id=301` / `advert_name=MC301_b_…`, a PMMID és a ReportingLabel viszont `-m_302-`. Az `extractDefaultMc` a card-id oszlopokból olvas → `default_message_id` = MC301b; a diff viszont PMMID szerint párosít → a mi `-m_301-` DEFAULT sorunk nem talál párt, ezért „added", a fájlé meg „switched off". **Nem kód-hiba: a feltöltött (kézzel merge-elt) fájl mond két különbözőt.** Egy feed egyébként is pontosan egy DEFAULT sort visz, tehát a csere helyes viselkedés.
+- **(2) „A switched off nem kéne hogy kikerüljön a feedből"** — IGAZA VAN, és ki is került: 361 alap − 46 + 1 = 316 sor. Ok: mind a 46 sor PMMID-je olyan MC-re mutat, ami **már nem létezik** (MC90, MC91, MC92…), tehát nincs mögötte üzenet, amiből a sort felépíthetném — a tegnapi PMMID-alapú carry-forward csak létező üzenetre tud hordozni. **Javítás (I6.4):** az alap payloadjából **szó szerint újra kiírjuk** ezeket a sorokat `IsActive=FALSE`-szal, a feed-struktúra oszlopaira szűkítve (hogy egy másik struktúrájú alap ne szélesítse a lapot). Az alap saját DEFAULT sora kimarad (egy feed egy DEFAULT-ot visz).
+- **Gazdag alap-választó** (`BaselinePicker`): fájlnév + `reference`/`export vN` + `· live` + dátum. Natív select helyett popover, `MultiPill` mechanikával. **Az „automatic" sor megszűnt:** a legfrissebb ÉLŐ feed van előre kijelölve (ha nincs élő, a legfrissebb épített), kézi választást soha nem ír felül.
+- **Teszt:** +2 (`feed-carry-forward.test.ts`): a nem-építhető sor bent van FALSE-szal és a ReportingLabelje sértetlen; a frissen épített sor nem duplázódik az alapból. Suite **621/621 zöld**.
+- **Bump:** `6.37.1` → **`6.38.0`** (minor — feed-kimenet viselkedés-változás + új vezérlő).

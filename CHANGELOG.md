@@ -5,6 +5,26 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.38.0] — 2026-09-01
+
+### Fixed
+- **Rows the feed can no longer rebuild are carried instead of dropped.** A
+  baseline row whose MC is gone — renumbered, deleted, rekeyed — has no message
+  to evaluate patterns against, so it fell out of the export entirely. Those are
+  exactly the rows that must not: they already served impressions, and a feed
+  update may not delete a row that has run. They are now re-emitted verbatim
+  from the baseline with `IsActive=FALSE`. Against the live SZK reference this
+  was all 46 of the rows the preview called "switched off" — none of them were
+  actually in the file. The baseline's own DEFAULT row is excluded: a feed
+  carries exactly one, and the current one is generated from the chosen default.
+
+### Changed
+- **The baseline picker shows what each feed is and when it went out** —
+  filename, `reference` or `export v1`, whether it is live, and the date —
+  instead of a flat list of filenames.
+- **No more "automatic" baseline row.** The newest live feed is preselected,
+  falling back to the newest built one; a manual pick is never overridden.
+
 ## [6.37.1] — 2026-09-01
 
 ### Fixed

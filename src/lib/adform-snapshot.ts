@@ -112,12 +112,45 @@ export function extractAudienceKeysFromRowSet(rowSet: FeedRowSet): string[] {
 // cells of the row whose IsDefault flag is truthy. Both columns are looked up
 // by clean name so any prefix the user has on them works (Text:, Bool:, …).
 // Returns null if the snapshot has no DEFAULT row or the cells aren't present.
+// Read the DEFAULT row's MC from its PMMID first, and only fall back to the
+// messaging_card_id / _variant columns.
+//
+// The PMMID is the identity everything else matches on — the diff, the
+// carry-forward, AdForm's own reporting — while the card-id columns are
+// descriptive text that can disagree with it. A live reference did exactly
+// that: card-id said 301/b while its PMMID and ReportingLabel said -m_302-.
+// Trusting the columns made the export rebuild the DEFAULT row from a different
+// MC, so it never matched the baseline's and every export showed one row added
+// and one switched off, forever.
+//
+// versionNo comes along because a number+variant can exist at several versions
+// (MC302b lives at both n_1 and n_4 here); without it the lookup could pick the
+// wrong one and regenerate a PMMID that still fails to match.
 export function extractDefaultMc(
   rowSet: FeedRowSet,
-): { number: number; variant: string } | null {
+): { number: number; variant: string; versionNo?: number } | null {
   if (rowSet.defaultRowIndex < 0) return null;
   const row = rowSet.rows[rowSet.defaultRowIndex];
   if (!row) return null;
+
+  const pmmidIdx = findCleanColumnIdx(rowSet.columns, "pmmid");
+  if (pmmidIdx >= 0) {
+    const pmmid = (row[rowSet.columns[pmmidIdx]] ?? "").trim();
+    const m = pmmid.match(/-m_(\d+)-/);
+    const v = pmmid.match(/-v_([^-]+)-/);
+    if (m && v) {
+      const n = pmmid.match(/-n_(\d+)\b/);
+      const number = Number(m[1]);
+      if (Number.isInteger(number)) {
+        return {
+          number,
+          variant: v[1],
+          ...(n ? { versionNo: Number(n[1]) } : {}),
+        };
+      }
+    }
+  }
+
   const numIdx = findCleanColumnIdx(rowSet.columns, "messaging_card_id");
   const varIdx = findCleanColumnIdx(rowSet.columns, "messaging_card_variant");
   if (numIdx < 0 || varIdx < 0) return null;

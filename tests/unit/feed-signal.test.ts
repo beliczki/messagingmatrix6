@@ -13,6 +13,7 @@ import {
   feedExportDisplayName,
   feedExportFilename,
 } from "@/lib/feed-filename";
+import { extractDefaultMc } from "@/lib/adform-snapshot";
 
 const ADFORM = "AdformSignal:ADFPLAID";
 const DV360 = "ExternalSignal:ExternalSignal";
@@ -135,5 +136,51 @@ describe("feed export display name", () => {
         "erste",
       ),
     ).toBe("erste-SZK-adform-feed-v1-42.xlsx");
+  });
+});
+
+describe("extractDefaultMc", () => {
+  const columns = [
+    "Text:pmmid",
+    "Text:messaging_card_id",
+    "Text:messaging_card_variant",
+  ];
+
+  function rs(row: Record<string, string>) {
+    return {
+      columns,
+      rows: [row],
+      messageIds: [-1],
+      defaultRowIndex: 0,
+    };
+  }
+
+  it("reads the MC from the PMMID, not the descriptive columns", () => {
+    // A live reference carried card-id 301/b while its PMMID said -m_302-. The
+    // PMMID is what the diff, the carry-forward and AdForm all match on, so it
+    // wins — otherwise the export rebuilds the DEFAULT row from a different MC
+    // and it never lines up with the baseline's.
+    expect(
+      extractDefaultMc(
+        rs({
+          "Text:pmmid":
+            "p_adform-s_pro-a_DEFAULT-m_302-t_SZK_valami-v_b-n_4",
+          "Text:messaging_card_id": "301",
+          "Text:messaging_card_variant": "b",
+        }),
+      ),
+    ).toEqual({ number: 302, variant: "b", versionNo: 4 });
+  });
+
+  it("falls back to the columns when the PMMID cannot be parsed", () => {
+    expect(
+      extractDefaultMc(
+        rs({
+          "Text:pmmid": "not-a-pmmid",
+          "Text:messaging_card_id": "301",
+          "Text:messaging_card_variant": "b",
+        }),
+      ),
+    ).toEqual({ number: 301, variant: "b" });
   });
 });

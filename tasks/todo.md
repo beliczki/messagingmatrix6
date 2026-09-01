@@ -1083,3 +1083,10 @@ Az IO callback a legutóbbi kézbesítés óta **sorba állt összes** entry-t k
 - **Bump:** `6.37.1` → **`6.38.0`** (minor — feed-kimenet viselkedés-változás + új vezérlő).
 
 - **DEPLOYOLVA 6.38.0 (2026-09-01):** commit `65db982`, box `0ee3ec8`→`65db982`, build 36.8s, `pm2 restart` → **Ready 1393ms**, online. Nincs séma-migráció. Health: `/` 307, `/matrix` 307, `/api/feed-exports` 401.
+
+### 2026-09-01 — DEFAULT sor: a PMMID a forrás, nem a leíró oszlopok — 6.38.1
+- **User: „a defaultot még mindig meg akarja változtatni, miért?"** A 6.38.0 után 361 sor (a carry-forward rendben), de maradt **1 added + 1 switched off — mindkettő a DEFAULT sor**: a miénk `-m_301-`, a fájlé `-m_302-`.
+- **Gyökér-ok a MI oldalunkon:** az `extractDefaultMc` a `messaging_card_id`/`_variant` oszlopokból olvasott, azok viszont **leíró szöveg**, ami elmehet a sor saját PMMID-jétől. A user referenciájában pontosan ez történt: card-id `301/b`, PMMID és ReportingLabel `-m_302-`. Mivel MINDEN párosítás (diff, carry-forward, AdForm riport) PMMID-n megy, a DEFAULT sort más MC-ből építettük újra → sosem talált párt → **minden export örökre 1 added + 1 switched off**.
+- **Javítás:** a DEFAULT MC a **PMMID-ből** derül (`-m_<szám>-`, `-v_<variáns>-`, `-n_<verzió>-`), a leíró oszlopok maradnak fallbacknek. A **verzió is kell**: az MC302b két verzióban létezik (`n_1` és `n_4`), és rossz verzióval olyan PMMID-t generálnánk, ami továbbra sem egyezik. +2 unit teszt.
+- **A meglévő referencia adata is javítva** (a kód csak új feltöltésre hat): `feed_exports.id=46` `default_message_id` `32654` (MC301b) → **`32208`** (MC302b n4, topic egyezik), `default_label` frissítve. Ellenőrizve: ennek a PMMID-je a DEFAULT-átírás után **karakterre** a referencia DEFAULT sora.
+- **Verifikáció:** `tsc` 0, build 0, eslint 0 error, **623/623 zöld**.

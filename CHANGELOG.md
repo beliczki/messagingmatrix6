@@ -5,6 +5,20 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.38.1] — 2026-09-01
+
+### Fixed
+- **The DEFAULT row stopped being rebuilt from the wrong MC.** A reference's
+  default was read from its `messaging_card_id` / `_variant` columns, which are
+  descriptive text and can disagree with the row's own PMMID — a live reference
+  said card-id 301/b while its PMMID and ReportingLabel said `-m_302-`. Since
+  every match (the diff, the carry-forward, AdForm's reporting) runs on PMMID,
+  the export rebuilt the DEFAULT row from a different MC and it never lined up:
+  every export showed one row added and one switched off, permanently. The MC is
+  now read from the PMMID, including its version — a number+variant can exist at
+  several versions, and picking the wrong one regenerates a PMMID that still
+  fails to match. The descriptive columns remain the fallback.
+
 ## [6.38.0] — 2026-09-01
 
 ### Fixed

@@ -281,6 +281,9 @@ export const POST = withSession(async ({ req, claims }) => {
           eq(messagesTable.clientId, claims.cid),
           eq(messagesTable.number, defaultMc.number),
           eq(messagesTable.variant, defaultMc.variant),
+          ...(defaultMc.versionNo !== undefined
+            ? [eq(messagesTable.versionNo, defaultMc.versionNo)]
+            : []),
         ),
       )
       .limit(1);

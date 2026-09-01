@@ -1113,3 +1113,42 @@ Az IO callback a legutóbbi kézbesítés óta **sorba állt összes** entry-t k
 - **Verifikáció:** `tsc` 0, build 0, eslint 0 error, **625/625 zöld**.
 
 - **DEPLOYOLVA 6.40.0 (2026-09-01):** commit `c20d718`, build 37.9s, `pm2 restart` → **Ready 1415ms**, online. Nincs séma-migráció. Tartalom: Append/New feed kapcsoló, diff-szűrő + 1000-es limit, a panel gombja `Export`.
+
+---
+
+## Checkpoint 2026-09-01 — tenant-fork tanulmány (docs-only)
+
+Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülése nélkül, két ág fenntartása nélkül.
+Új doksi: **`docs/TENANT_FORK_STRATEGY.md`** (361 sor). Kódot nem érintett.
+
+**Verdikt:** nincs fork, nincs hosszú életű `telekom` ág. A kód már mély multi-tenant (minden tenant-tábla `client_id`, `ACTIVE_CLIENT_KEY` boot-pin, `src/`-ben 21 „erste"-találat és mind komment/placeholder). Elválasztás futásidőben; `git worktree` csak munkaeszközként (külön könyvtár + port 6002 + `ACTIVE_CLIENT_KEY=telekom`, közös DB, izolált adat).
+
+**Feltárt tények (a doksiban részletesen):**
+- A `*Structure` config-kulcsok nagyrészt dekoráció — csak a `StructureTab` olvassa őket; a valódi oszlopok a `schema.ts`-ben fixek. Kivétel: `feedStructure` + `treeStructure` (ezek élnek).
+- A státusz-készlet hardcode-olt 5 helyen (`matrix/types.ts:160`, `DesignTab.tsx:11`, `MessageEditor.tsx:50`, `TemplateEditor.tsx:82`, `branding.ts:54`) — csak a *színek* per-kliensek.
+- Hosszú párhuzamos ágak konkrét gyilkosa: a drizzle migráció-sorszámok (`0009` a legmagasabb) két ágon ütköznének egy közös éles DB-n.
+
+**Javasolt védőháló (még NINCS megcsinálva, backlog):** G1 Erste-golden tesztréteg a közös kódutakra (`feed-export.ts`, `numbering.ts`, `patterns/pmmid/trafficking`), G2 additív-only migrációs szabály a `CLAUDE.md`-be, G3 tenant-capability flag config-ban (kliens-kulcs szerinti `if` tilos), G4 külön checkout + `mm6-telekom` pm2 app.
+
+**Nyitott döntés a userre (a doksi 10. pontja):** a Telekom store-fan-out modellje — N valódi `messages` sor vs. 1 üzenet × N lokalizáció (`message_locales` additív tábla). Ez az egyetlen visszafordíthatatlan döntés, és az egyetlen pont, ahol a Telekom adatmennyiséggel ronthatna Erste-élményt. **Az első tömeges import ELŐTT kell eldönteni.**
+
+---
+
+## SESSION-OSSZEFOGLALO — 2026-08-28 -> 09-01 (`6.27.3` -> `6.40.0`)
+
+**Kiadasok:** 6.28–6.30 (topic/audience kulcs-fixek, header-dialog delete, asset batch upload, rekey-kaszkad) · 6.31 (statusz-darabszam a szuroben, tree platform-szinek) · 6.32 (feed DEFAULT-sor audience-rewrite, masik szal) · 6.33 (MC-statusz NOT NULL, Feeds fajlnev-oszlop) · 6.34 (feed platform-dimenzio + split + share-galeria) · 6.35 (share image-preview, referencia-fajlnev; .1 a ket query-key crash) · 6.36–6.40 (diff-alap valaszto, carry-forward, szellemsorok, Append/New feed kapcsolo, diff-szuro).
+
+**A harom legfontosabb tanulsag — mindharom memoriaba is felkerult:**
+1. **A query key a cache-elt ALAK szerzodese**, nem csak az URL-e. Ket `useQuery` egy kulcson, eltero alakkal = sorrendfuggo crash, amit a reload elrejt. Negyszer volt meg elesben. -> `project_query_key_shape_contract.md`
+2. **Az idobelyegek stringkent hasonlitodnak.** Mindig `nowUtc`, soha `toISOString()` — azonos napon a `T` felulirja a szokozt, es a sorrend megfordul. Egy sort kezzel kellett normalizalni. -> `project_timestamp_string_ordering.md`
+3. **A feed-invariansok kibovultek** (platform az identitas resze; PMMID a MI azonositonk, az advert_id az AdForme; a feedbol semmi nem tunik el; Append != New feed). -> a `project_adform_export_invariants.md` atirva, 5–8. pont.
+
+**Modszertani tanulsag:** a feed-hibak egyiket sem teszt talalta meg, hanem a user, aki ranezett egy preview-szamra es megkerdezte, miert annyi. A „190 vs 46" elteres, az „1 added default", a 316 vs 361 sor — mind ilyen. **Ha egy feed-szam furcsan nez ki, azt vegig kell kerdezni.**
+
+**Nyitva maradt:**
+- **`advert_name` zaro szama** — a minta `{{version}}`-t hasznal, ami a `messages.version` optimistic-lock szamlalo, tehat minden mentesnel no (ez sok „changed" sor oka). **Konfig, nem kod** (Settings -> Patterns). Kivetelekor **egyszeri nagy churn** lesz: minden sor advert_name-je valtozik. **User dontese.**
+- **`feed-export.ts` nyers NUL bajtja** (502. sor, kulcs-elvalaszto) — emiatt a `grep`/`file` binarisnak latja es nemán kihagyja a fajlt; engem is megvezetett. Egy karakteres javitas: nyers bajt helyett `\u0000` escape.
+- **I4** Drive-linkek <-> Creative Library (igeny rogzitve, nincs terv, 3 kapu nyitva).
+- **I5** 500-as limit szerinti feed-reszletek (user: „kesobb"; a modell-dontes megvan: ket onallo feed).
+- **I6.4 reszben:** kulcsmezo-valtozasnal (pmmid/advert_id) a regi sor ma az alapbol hordozodik szellemsorkent — ez mukodik —, de a *szandekos* rekey-forgatokonyv vegig nincs tesztelve.
+- **M9, W2.6/W2.7, M1, M4.2, M5–M8** es a Channels-epic S4–S6 tovabbra is a roadmapen.

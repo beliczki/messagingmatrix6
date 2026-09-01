@@ -86,6 +86,8 @@ async function resolveEmails(
   return new Map(found.map((u) => [u.id, u.email]));
 }
 
+const DIFF_PREVIEW_LIMIT = 1000;
+
 export const GET = withSession(async ({ req, claims }) => {
   const url = new URL(req.url);
   const product = url.searchParams.get("product");
@@ -290,11 +292,14 @@ export const POST = withSession(async ({ req, claims }) => {
     unchangedCount: diff.unchangedCount,
     // Lightweight per-bucket previews so the modal doesn't need a second
     // round-trip. Cap at 50 each.
-    addedPreview: diff.added.slice(0, 50).map((i) => built.rowSet.rows[i]),
+    // 50 was too short to find anything: a routine export changes hundreds of
+    // rows, so the one you were looking for was usually past the cut. A feed is
+    // capped at MAX_ROWS_PER_FEED rows, which bounds this too.
+    addedPreview: diff.added.slice(0, DIFF_PREVIEW_LIMIT).map((i) => built.rowSet.rows[i]),
     removedPreview: prevPayload
-      ? diff.removed.slice(0, 50).map((i) => prevPayload.rows[i])
+      ? diff.removed.slice(0, DIFF_PREVIEW_LIMIT).map((i) => prevPayload.rows[i])
       : [],
-    changedPreview: diff.changed.slice(0, 50).map((c) => ({
+    changedPreview: diff.changed.slice(0, DIFF_PREVIEW_LIMIT).map((c) => ({
       fields: c.fields,
       prev: prevPayload?.rows[c.prevIndex] ?? null,
       next: built.rowSet.rows[c.nextIndex] ?? null,

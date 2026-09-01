@@ -75,6 +75,8 @@ type PostBody = {
   messageIds: number[];
 };
 
+type ExportMode = "append" | "new";
+
 /** Which slice of the diff the details list shows. */
 type DiffFilter = "all" | "added" | "changed" | "off";
 
@@ -145,7 +147,12 @@ export default function FeedExportDialog({
 }) {
   const router = useRouter();
   const qc = useQueryClient();
-  const [forceNewVersion, setForceNewVersion] = useState(false);
+  // Two genuinely different acts, not a modifier on one: Append continues an
+  // existing feed (so it needs a baseline, and inherits that feed's signal and
+  // DEFAULT row), New Feed starts a fresh one (so it needs those chosen, and
+  // there is nothing to diff against).
+  const [mode, setMode] = useState<ExportMode>("append");
+  const forceNewVersion = mode === "new";
   const [notes, setNotes] = useState("");
   const [result, setResult] = useState<CreateResponse | null>(null);
   const [signalColumn, setSignalColumn] =
@@ -197,7 +204,8 @@ export default function FeedExportDialog({
   // With a baseline and no forced new version, this export continues that feed:
   // its signal header and its DEFAULT row are already decided, and letting them
   // be re-chosen only produces a row that fails to match.
-  const boundToBaseline = baselineExportId !== null && !forceNewVersion;
+  const boundToBaseline = mode === "append" && baselineExportId !== null;
+  const sentBaselineId = mode === "append" ? baselineExportId : null;
 
   const baseline = useMemo(
     () => baselines.find((b) => b.id === baselineExportId) ?? null,
@@ -264,7 +272,7 @@ export default function FeedExportDialog({
       product,
       forceNewVersion,
       signalColumn,
-      baselineExportId ?? "auto",
+      sentBaselineId ?? "none",
       defaultMessageId ?? "none",
       messageIds.join(","),
     ],
@@ -274,7 +282,7 @@ export default function FeedExportDialog({
         defaultMessageId,
         forceNewVersion,
         signalColumn,
-        baselineExportId,
+        baselineExportId: sentBaselineId,
         notes: null,
         messageIds,
         dryRun: true,
@@ -290,7 +298,7 @@ export default function FeedExportDialog({
         defaultMessageId,
         forceNewVersion,
         signalColumn,
-        baselineExportId,
+        baselineExportId: sentBaselineId,
         notes: notes.trim() || null,
         messageIds,
       }),
@@ -304,7 +312,7 @@ export default function FeedExportDialog({
 
   function close() {
     setResult(null);
-    setForceNewVersion(false);
+    setMode("append");
     setNotes("");
     createM.reset();
     onClose();
@@ -327,7 +335,11 @@ export default function FeedExportDialog({
             <button
               type="button"
               onClick={() => createM.mutate()}
-              disabled={createM.isPending || previewQ.isLoading}
+              disabled={
+                createM.isPending ||
+                previewQ.isLoading ||
+                (mode === "append" && baselineExportId === null)
+              }
               className="toolbar-btn--primary flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
             >
               <Download className="size-4" />
@@ -340,9 +352,10 @@ export default function FeedExportDialog({
           {!result ? (
             <PreEmitForm
               forceNewVersion={forceNewVersion}
-              setForceNewVersion={setForceNewVersion}
               notes={notes}
               setNotes={setNotes}
+              mode={mode}
+              setMode={setMode}
               boundToBaseline={boundToBaseline}
               signalColumn={signalColumn}
               setSignalColumn={setSignalColumn}
@@ -376,9 +389,10 @@ export default function FeedExportDialog({
 
 function PreEmitForm({
   forceNewVersion,
-  setForceNewVersion,
   notes,
   setNotes,
+  mode,
+  setMode,
   boundToBaseline,
   signalColumn,
   setSignalColumn,
@@ -395,9 +409,10 @@ function PreEmitForm({
   previewError,
 }: {
   forceNewVersion: boolean;
-  setForceNewVersion: (b: boolean) => void;
   notes: string;
   setNotes: (s: string) => void;
+  mode: ExportMode;
+  setMode: (m: ExportMode) => void;
   boundToBaseline: boolean;
   signalColumn: SignalColumn;
   setSignalColumn: (v: SignalColumn) => void;
@@ -416,26 +431,66 @@ function PreEmitForm({
   return (
     <div className="space-y-4">
       <div className="feed-export-dialog__options space-y-3">
-        <div className="form-field feed-export-dialog__baseline">
-          <span className="form-field__label mb-1 block text-xs font-medium text-slate-700">
-            Compare against
-          </span>
-          <BaselinePicker
-            options={baselines}
-            value={baselineExportId}
-            onChange={setBaselineExportId}
-          />
+        <div className="feed-export-dialog__mode" role="radiogroup" aria-label="Export mode">
+          <div className="mode-switch grid grid-cols-2 gap-2">
+            {(
+              [
+                {
+                  key: "append" as const,
+                  title: "Append",
+                  desc: "Continue an existing feed. Nothing is ever deleted — rows outside this selection go out switched off.",
+                },
+                {
+                  key: "new" as const,
+                  title: "New feed",
+                  desc: "Start a fresh feed. Only this selection goes out, and you choose the signal and DEFAULT row.",
+                },
+              ]
+            ).map((m) => {
+              const on = mode === m.key;
+              return (
+                <button
+                  key={m.key}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  onClick={() => setMode(m.key)}
+                  className={clsx(
+                    "mode-switch__option rounded-md border px-3 py-2 text-left transition",
+                    on
+                      ? "mode-switch__option--active border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-400",
+                  )}
+                >
+                  <span className="mode-switch__title block text-sm font-medium">
+                    {m.title}
+                  </span>
+                  <span
+                    className={clsx(
+                      "mode-switch__desc mt-0.5 block text-[11px] leading-snug",
+                      on ? "text-slate-300" : "text-slate-500",
+                    )}
+                  >
+                    {m.desc}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={forceNewVersion}
-            onChange={(e) => setForceNewVersion(e.target.checked)}
-          />
-          Force new feed version — rows outside this selection are dropped, and
-          the signal and DEFAULT row are yours to choose
-        </label>
+        {mode === "append" ? (
+          <div className="form-field feed-export-dialog__baseline">
+            <span className="form-field__label mb-1 block text-xs font-medium text-slate-700">
+              Compare against
+            </span>
+            <BaselinePicker
+              options={baselines}
+              value={baselineExportId}
+              onChange={setBaselineExportId}
+            />
+          </div>
+        ) : null}
 
         <label className="form-field feed-export-dialog__signal block">
           <span className="form-field__label mb-1 block text-xs font-medium text-slate-700">
@@ -503,7 +558,24 @@ function PreEmitForm({
       </div>
 
       <div className="feed-export-dialog__diff space-y-4 border-t border-slate-200 pt-4">
-      {previewLoading && !preview ? (
+      {mode === "new" ? (
+        // A fresh feed has nothing to be different from, so the diff is not
+        // hidden noise — it does not exist. Only the size of what goes out.
+        <div className="rounded border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+          New feed — nothing to compare against.{" "}
+          {preview ? (
+            <>
+              <strong>{preview.previewRowCount}</strong> rows go out, and only
+              what this filter selects.
+            </>
+          ) : null}
+        </div>
+      ) : !boundToBaseline ? (
+        <div className="rounded border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+          Pick a feed to compare against — appending continues that feed, so it
+          decides what carries forward, the signal header and the DEFAULT row.
+        </div>
+      ) : previewLoading && !preview ? (
         <div className="rounded border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
           Computing the diff against the chosen baseline…
         </div>
@@ -549,6 +621,7 @@ function PreviewBlock({
   // Which slice of the diff the details list shows. Local to each block so the
   // preview and the result view do not share a selection.
   const [filter, setFilter] = useState<DiffFilter>("all");
+  const [query, setQuery] = useState("");
   const action =
     decision.action === "first"
       ? { label: "First export (v1)", tone: "ok" as const }
@@ -646,17 +719,26 @@ function PreviewBlock({
             </span>
           ) : null}
         </summary>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Filter these rows — MC number, PMMID, an image name…"
+          className="input-box diff-details__filter mt-2 w-full rounded border border-slate-300 px-2 py-1 text-xs focus:border-slate-500 focus:outline-none"
+        />
         {filter === "all" || filter === "added" ? (
-          <DiffSection title="Added rows" rows={diff.addedPreview} />
+          <DiffSection
+            title="Added rows"
+            rows={matchRows(diff.addedPreview, query)}
+          />
         ) : null}
         {filter === "all" || filter === "off" ? (
           <DiffSection
             title={forceNewVersion ? "Dropped rows" : "Switched off rows"}
-            rows={diff.removedPreview}
+            rows={matchRows(diff.removedPreview, query)}
           />
         ) : null}
         {filter === "all" || filter === "changed" ? (
-          <ChangedSection rows={diff.changedPreview} />
+          <ChangedSection rows={matchChanged(diff.changedPreview, query)} />
         ) : null}
       </details>
     </div>
@@ -674,6 +756,7 @@ function PostEmitView({
   const { decision, diff, feedExport } = result;
   const forceNewVersion = decision.action === "new_version";
   const [filter, setFilter] = useState<DiffFilter>("all");
+  const [query, setQuery] = useState("");
   const action =
     decision.action === "first"
       ? { label: "First export (v1)", tone: "ok" }
@@ -771,17 +854,26 @@ function PostEmitView({
             </span>
           ) : null}
         </summary>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Filter these rows — MC number, PMMID, an image name…"
+          className="input-box diff-details__filter mt-2 w-full rounded border border-slate-300 px-2 py-1 text-xs focus:border-slate-500 focus:outline-none"
+        />
         {filter === "all" || filter === "added" ? (
-          <DiffSection title="Added rows" rows={diff.addedPreview} />
+          <DiffSection
+            title="Added rows"
+            rows={matchRows(diff.addedPreview, query)}
+          />
         ) : null}
         {filter === "all" || filter === "off" ? (
           <DiffSection
             title={forceNewVersion ? "Dropped rows" : "Switched off rows"}
-            rows={diff.removedPreview}
+            rows={matchRows(diff.removedPreview, query)}
           />
         ) : null}
         {filter === "all" || filter === "changed" ? (
-          <ChangedSection rows={diff.changedPreview} />
+          <ChangedSection rows={matchChanged(diff.changedPreview, query)} />
         ) : null}
       </details>
 
@@ -862,6 +954,39 @@ function Stat({
   );
 }
 
+// Substring match across every cell, so "331" finds the MC and "_n2.jpg" finds
+// the image swap without knowing which column either lives in.
+function matchRows(
+  rows: Record<string, string>[],
+  query: string,
+): Record<string, string>[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return rows;
+  return rows.filter((r) =>
+    Object.values(r).some((v) => (v ?? "").toLowerCase().includes(q)),
+  );
+}
+
+function matchChanged(
+  rows: Array<{
+    fields: string[];
+    prev: Record<string, string> | null;
+    next: Record<string, string> | null;
+  }>,
+  query: string,
+) {
+  const q = query.trim().toLowerCase();
+  if (!q) return rows;
+  return rows.filter((c) => {
+    const hay = [
+      ...c.fields,
+      ...Object.values(c.prev ?? {}),
+      ...Object.values(c.next ?? {}),
+    ];
+    return hay.some((v) => (v ?? "").toLowerCase().includes(q));
+  });
+}
+
 function DiffSection({
   title,
   rows,
@@ -874,8 +999,7 @@ function DiffSection({
   return (
     <div className="mt-3">
       <div className="font-medium text-slate-700">
-        {title} ({rows.length}
-        {rows.length === 50 ? "+" : ""})
+        {title} ({rows.length})
       </div>
       <table className="mt-1 w-full border-collapse text-[10px]">
         <thead>

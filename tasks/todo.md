@@ -1103,3 +1103,11 @@ Az IO callback a legutóbbi kézbesítés óta **sorba állt összes** entry-t k
 - **Teszt:** +2 (force: a kizárt sor NEM kerül be; a nem-építhető sor sem). Suite **623/623 + 2 = 625** (a force-tesztekkel a fájl 7).
 
 - **DEPLOYOLVA 6.39.0 (2026-09-01):** commit `fbe6747`, build OK, `pm2 restart` → online. Nincs séma-migráció.
+
+### 2026-09-01 — Append / New feed kapcsoló + diff-szűrő — 6.40.0
+- **User:** „a force new version is rossz UI, kéne felülre egy jobbra-balra nagy kapcsoló leírással, Append or New Feed… a new-nál nincs értelme a diffnek." Igaza van: a pipa egy MÓDOSÍTÓ volt egy cselekvésen, holott **két külön cselekvésről** van szó.
+  - **Append:** alap **kötelező** (a gomb tiltva nélküle), a signal és a DEFAULT sor onnan öröklődik (disabled mezők), sor soha nem tűnik el.
+  - **New feed:** nincs alap-választó, nincs diff (helyette egy sor: hány sor megy ki), a signal és a default szabadon választható, és csak a mostani válogatás megy ki.
+  - A dróton továbbra is `forceNewVersion` megy (`mode === "new"`), és New feed esetén `baselineExportId: null` — a szerver-oldali szemantika változatlan, csak a UI mondja ki tisztán.
+- **Diff details:** a szerver **50 sorra** vágta mindhárom listát, a changed viszont 206 volt → a keresett sor tipikusan a vágás után volt. Ez okozta a user panaszát („nem látom az MC331 változásait"). **Ellenőriztem az adatot: mindhárom változás BENNE VAN** — MC331a/b `IsActive` FALSE→TRUE (a referenciában FALSE, ma ACTIVE), MC331c `bg1` `…_n1`→`…_n2`. Limit 1000-re emelve (a feed amúgy is max 500 sor), és **szabadszöveges szűrő** került a lista tetejére, ami minden cellaértéken keres.
+- **Verifikáció:** `tsc` 0, build 0, eslint 0 error, **625/625 zöld**.

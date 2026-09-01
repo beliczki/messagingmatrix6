@@ -5,6 +5,28 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.40.0] — 2026-09-01
+
+### Changed
+- **Append or New feed, as a switch rather than a checkbox.** "Force new feed
+  version" was a modifier on one act; these are two different acts and now say
+  so at the top of the dialog, each with a line explaining what it does.
+  Appending continues a feed: it requires a baseline, inherits that feed's
+  signal header and DEFAULT row, and never deletes a row. A new feed starts
+  fresh: you choose the signal and the DEFAULT row, only the current selection
+  goes out, and there is no diff — a fresh feed has nothing to be different
+  from, so the panel says that instead of showing an empty comparison.
+- **Append refuses to build without a baseline**, since the baseline is what it
+  would be continuing.
+
+### Fixed
+- **The diff details showed the first 50 rows of each kind.** A routine export
+  changes hundreds, so the row you were looking for was usually past the cut —
+  an MC's status flip and an image swap were both in the diff and both
+  invisible. The limit is now 1000 (a feed is capped at 500 rows anyway) and
+  there is a text filter above the list that matches on any cell, so "331" finds
+  the MC and "_n2.jpg" finds the image change.
+
 ## [6.39.0] — 2026-09-01
 
 ### Changed

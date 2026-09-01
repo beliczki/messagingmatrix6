@@ -1111,3 +1111,5 @@ Az IO callback a legutóbbi kézbesítés óta **sorba állt összes** entry-t k
   - A dróton továbbra is `forceNewVersion` megy (`mode === "new"`), és New feed esetén `baselineExportId: null` — a szerver-oldali szemantika változatlan, csak a UI mondja ki tisztán.
 - **Diff details:** a szerver **50 sorra** vágta mindhárom listát, a changed viszont 206 volt → a keresett sor tipikusan a vágás után volt. Ez okozta a user panaszát („nem látom az MC331 változásait"). **Ellenőriztem az adatot: mindhárom változás BENNE VAN** — MC331a/b `IsActive` FALSE→TRUE (a referenciában FALSE, ma ACTIVE), MC331c `bg1` `…_n1`→`…_n2`. Limit 1000-re emelve (a feed amúgy is max 500 sor), és **szabadszöveges szűrő** került a lista tetejére, ami minden cellaértéken keres.
 - **Verifikáció:** `tsc` 0, build 0, eslint 0 error, **625/625 zöld**.
+
+- **DEPLOYOLVA 6.40.0 (2026-09-01):** commit `c20d718`, build 37.9s, `pm2 restart` → **Ready 1415ms**, online. Nincs séma-migráció. Tartalom: Append/New feed kapcsoló, diff-szűrő + 1000-es limit, a panel gombja `Export`.

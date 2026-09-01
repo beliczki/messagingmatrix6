@@ -5,6 +5,23 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.37.1] — 2026-09-01
+
+### Fixed
+- **The version decision was made on a diff that could not match anything.** It
+  compared rows by (advert_id, ReportingLabel) — an identity only two MM6
+  exports share. An uploaded reference carries AdForm's advert_ids and a freshly
+  built row set has none, so against a reference the key matched almost nothing
+  and nearly every row read as removed: the warning claimed 190 rows while the
+  PMMID-matched preview beside it said 46. A reference is now compared on PMMID
+  in both places.
+- **The baseline's default row is offered even when it sits outside the current
+  filter.** The server resolves the DEFAULT row against every message of the
+  client, but the dropdown was built from the export's selection, so a baseline
+  whose default was filtered out had no option to select and the field silently
+  read "no default row". The baseline's own default is carried in as an option,
+  labelled as coming from outside the filter.
+
 ## [6.37.0] — 2026-09-01
 
 ### Fixed

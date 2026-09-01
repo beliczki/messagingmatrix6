@@ -203,12 +203,23 @@ export const POST = withSession(async ({ req, claims }) => {
     );
   }
 
-  // Version decision (append vs new_version) is keyed off the MM6 last upload
-  // because that's the only source of stable advert_id / lineitem identity.
+  // Version decision (append vs new_version). Match rows the way the baseline
+  // allows: the default key is (advert_id, ReportingLabel), which only works
+  // between two MM6 exports. An uploaded reference has AdForm's advert_ids and
+  // our freshly built rows have none, so that key matches almost nothing and
+  // the decision was made on a diff that reported nearly every row as removed —
+  // 190 "removed" against a baseline the PMMID-matched preview put at 46. PMMID
+  // is the identity MM6 owns, so it is what a reference is compared on, here as
+  // well as in the preview below.
   const lastExportPayload = built.liveExport
     ? deserializePayload(built.liveExport.payloadJson)
     : null;
-  const versionDiff = diffRowSets(lastExportPayload, built.rowSet);
+  const baselineIsReference = built.liveExport?.source === "adform_snapshot";
+  const versionDiff = diffRowSets(
+    lastExportPayload,
+    built.rowSet,
+    baselineIsReference ? pmmidRowKey : undefined,
+  );
   const decision = decideVersion(
     built.liveExport,
     built.rowSet,

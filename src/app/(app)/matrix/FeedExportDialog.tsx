@@ -84,6 +84,7 @@ type BaselineOption = {
   filename: string;
   platform: string;
   defaultMessageId: number | null;
+  defaultLabel: string | null;
   feedVersion: number;
   source: string;
   exportedAt: string;
@@ -175,7 +176,29 @@ export default function FeedExportDialog({
     return rows;
   }, [baselinesQ.data]);
 
-  const mcOptions = useMemo(() => uniqueMcOptions(messages), [messages]);
+  // The DEFAULT row is the feed's fallback ad, and the server resolves it
+  // against every message of the client — not the export's selection. The
+  // options here come from the current filter, so a baseline whose default sits
+  // outside that filter had no <option> to select and the field silently read
+  // "no default row". Carry the baseline's own default in as an option so the
+  // choice it already made survives.
+  const baseline = useMemo(
+    () => baselines.find((b) => b.id === baselineExportId) ?? null,
+    [baselines, baselineExportId],
+  );
+  const mcOptions = useMemo(() => {
+    const opts = uniqueMcOptions(messages);
+    const fromBaseline = baseline?.defaultMessageId;
+    if (fromBaseline != null && !opts.some((o) => o.messageId === fromBaseline)) {
+      opts.unshift({
+        key: `baseline-${fromBaseline}`,
+        label: `${baseline?.defaultLabel ?? `#${fromBaseline}`} (from baseline, outside this filter)`,
+        messageId: fromBaseline,
+        count: 1,
+      });
+    }
+    return opts;
+  }, [messages, baseline]);
   const platform = platformForSignalColumn(signalColumn);
 
   // The default row is remembered per (product, platform): the same product
@@ -202,11 +225,10 @@ export default function FeedExportDialog({
   // when the baseline itself changes.
   useEffect(() => {
     if (baselineExportId === null) return;
-    const b = baselines.find((x) => x.id === baselineExportId);
-    if (!b) return;
-    setSignalColumn(signalColumnForPlatform(b.platform));
-    setDefaultMessageId(b.defaultMessageId);
-  }, [baselineExportId, baselines]);
+    if (!baseline) return;
+    setSignalColumn(signalColumnForPlatform(baseline.platform));
+    setDefaultMessageId(baseline.defaultMessageId);
+  }, [baselineExportId, baseline]);
 
   function chooseDefault(v: number | null) {
     setDefaultMessageId(v);

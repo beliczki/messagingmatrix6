@@ -1092,3 +1092,12 @@ Az IO callback a legutóbbi kézbesítés óta **sorba állt összes** entry-t k
 - **Verifikáció:** `tsc` 0, build 0, eslint 0 error, **623/623 zöld**.
 
 - **DEPLOYOLVA 6.38.1 (2026-09-01):** commit `a9f7e55`, box `65db982`→`a9f7e55`, build 33.0s, `pm2 restart` → **Ready 1516ms**, online. Nincs séma-migráció. Health: `/` 307, `/matrix` 307.
+
+### 2026-09-01 — Az alap köti a mezőket; a force tényleg töröl — 6.39.0
+- **User-kérdés volt, hogy a `none (new feed, new version)` sor vagy a disabled compare-against a jobb.** Egyik sem: mindkettő azt feltételezi, hogy „force new version" = „nincs alap". **Nem ugyanaz** — a leggyakoribb verzióugrás épp az, amikor új verziót csinálsz, DE látni akarod a diffet a régihez képest. Ha a `none` lenne az egyetlen út a verzióugráshoz, pont akkor veszne el a diff, amikor a legjobban kell. Ezért a pipa maradt, de a jelentése lett éles: **kötve vagy-e az alaphoz**.
+- **Lezárt viselkedés (user döntései):**
+  - **Alap + nincs force → kötve:** a signal-oszlop és a DEFAULT sor az alapé; mindkét legördülő **mutatja az értéket és disabled**, és az alap **saját DEFAULT sora szó szerint** kerül az exportba (nem generáljuk újra). Az újragenerálás volt az oka az örökös „1 added + 1 switched off" párnak.
+  - **Force bepipálva → a mezők felszabadulnak**, ÉS a válogatásból kimaradt sorok **tényleg kiesnek** (se carry-forward, se szellemsor). Eddig a force csak a verziószámot emelte, miközben minden sor bent maradt — vagyis **egyáltalán nem volt mód sort kivezetni**.
+  - A pipa a baseline-választó ALÁ került, mert az alatta lévő mezők viselkedését dönti el.
+- **Mellékhatás kezelve:** ha a DEFAULT sort az alapból hozzuk, a `default_message_id` csak tájékoztató → a route `default_not_found` (422) ellenőrzése kihagyódik ilyenkor (`built.defaultCarried`), különben egy időközben átszámozott MC blokkolna egy exportot, aminek a DEFAULT sora amúgy helyes.
+- **Teszt:** +2 (force: a kizárt sor NEM kerül be; a nem-építhető sor sem). Suite **623/623 + 2 = 625** (a force-tesztekkel a fájl 7).

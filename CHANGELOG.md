@@ -5,6 +5,23 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.39.0] — 2026-09-01
+
+### Changed
+- **Continuing a feed means continuing its choices.** With a baseline selected
+  and no forced new version, the signal column and the DEFAULT row are the
+  baseline's: both fields show what they will be and are disabled, and the
+  baseline's own DEFAULT row goes into the export unchanged rather than being
+  rebuilt from an MC. Rebuilding it produced a row that could not match the
+  baseline's, so every export reported one row added and one switched off,
+  permanently. Ticking Force new feed version hands both fields back.
+- **Force new feed version drops the rows outside the selection.** Until now it
+  only bumped the version number while every row was still carried, which left
+  no way to retire a row at all. Issuing a new version is exactly the moment
+  rows may leave; updating the current one is when they may not. The checkbox
+  moved directly under the baseline picker, where it decides how the fields
+  below it behave, and says what it does.
+
 ## [6.38.1] — 2026-09-01
 
 ### Fixed

@@ -196,7 +196,15 @@ export const POST = withSession(async ({ req, claims }) => {
       { status: 422 },
     );
   }
-  if (defaultMessageId != null && !built.defaultMessage) {
+  // Only meaningful when we had to build the DEFAULT row from an MC. When it
+  // was carried across from the baseline the id is informational, and refusing
+  // over an MC that has since been renumbered would block an export whose
+  // DEFAULT row is already correct.
+  if (
+    !built.defaultCarried &&
+    defaultMessageId != null &&
+    !built.defaultMessage
+  ) {
     return NextResponse.json(
       { error: "default_not_found", reason: "default message not found" },
       { status: 422 },

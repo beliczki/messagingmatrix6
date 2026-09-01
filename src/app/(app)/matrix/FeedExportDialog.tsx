@@ -194,6 +194,11 @@ export default function FeedExportDialog({
   // outside that filter had no <option> to select and the field silently read
   // "no default row". Carry the baseline's own default in as an option so the
   // choice it already made survives.
+  // With a baseline and no forced new version, this export continues that feed:
+  // its signal header and its DEFAULT row are already decided, and letting them
+  // be re-chosen only produces a row that fails to match.
+  const boundToBaseline = baselineExportId !== null && !forceNewVersion;
+
   const baseline = useMemo(
     () => baselines.find((b) => b.id === baselineExportId) ?? null,
     [baselines, baselineExportId],
@@ -338,6 +343,7 @@ export default function FeedExportDialog({
               setForceNewVersion={setForceNewVersion}
               notes={notes}
               setNotes={setNotes}
+              boundToBaseline={boundToBaseline}
               signalColumn={signalColumn}
               setSignalColumn={setSignalColumn}
               baselines={baselines}
@@ -373,6 +379,7 @@ function PreEmitForm({
   setForceNewVersion,
   notes,
   setNotes,
+  boundToBaseline,
   signalColumn,
   setSignalColumn,
   baselines,
@@ -391,6 +398,7 @@ function PreEmitForm({
   setForceNewVersion: (b: boolean) => void;
   notes: string;
   setNotes: (s: string) => void;
+  boundToBaseline: boolean;
   signalColumn: SignalColumn;
   setSignalColumn: (v: SignalColumn) => void;
   baselines: BaselineOption[];
@@ -419,14 +427,30 @@ function PreEmitForm({
           />
         </div>
 
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={forceNewVersion}
+            onChange={(e) => setForceNewVersion(e.target.checked)}
+          />
+          Force new feed version — rows outside this selection are dropped, and
+          the signal and DEFAULT row are yours to choose
+        </label>
+
         <label className="form-field feed-export-dialog__signal block">
           <span className="form-field__label mb-1 block text-xs font-medium text-slate-700">
             Signal column
+            {boundToBaseline ? (
+              <span className="ml-1 font-normal text-slate-400">
+                — from the compared feed
+              </span>
+            ) : null}
           </span>
           <select
             value={signalColumn}
+            disabled={boundToBaseline}
             onChange={(e) => setSignalColumn(e.target.value as SignalColumn)}
-            className="input-box w-full rounded border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
+            className="input-box w-full rounded border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none disabled:bg-slate-50 disabled:text-slate-500"
             title="Header name for the lineitem-signal column. AdForm and DV360 expect different names for the same value."
           >
             {SIGNAL_COLUMN_OPTIONS.map((o) => (
@@ -440,13 +464,19 @@ function PreEmitForm({
         <label className="form-field feed-export-dialog__default block">
           <span className="form-field__label mb-1 block text-xs font-medium text-slate-700">
             Default row
+            {boundToBaseline ? (
+              <span className="ml-1 font-normal text-slate-400">
+                — the compared feed&apos;s own row goes out unchanged
+              </span>
+            ) : null}
           </span>
           <select
             value={defaultMessageId ?? ""}
+            disabled={boundToBaseline}
             onChange={(e) =>
               chooseDefault(e.target.value === "" ? null : Number(e.target.value))
             }
-            className="input-box w-full rounded border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
+            className="input-box w-full rounded border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none disabled:bg-slate-50 disabled:text-slate-500"
           >
             <option value="">— no default row —</option>
             {mcOptions.map((o) => (
@@ -456,15 +486,6 @@ function PreEmitForm({
               </option>
             ))}
           </select>
-        </label>
-
-        <label className="flex items-center gap-2 text-sm text-slate-700">
-          <input
-            type="checkbox"
-            checked={forceNewVersion}
-            onChange={(e) => setForceNewVersion(e.target.checked)}
-          />
-          Force new feed version (bumps version even if append would be allowed)
         </label>
 
         <label className="form-field block">

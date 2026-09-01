@@ -357,6 +357,8 @@ function readLiveMessageIds(live: FeedExport | null): number[] {
 export async function buildFeedRowSet(opts: BuildOptions): Promise<{
   rowSet: FeedRowSet;
   defaultMessage: DbMessage | null;
+  /** True when the DEFAULT row came from the baseline rather than an MC. */
+  defaultCarried: boolean;
   liveExport: FeedExport | null;
 }> {
   const { clientId, product, platform, defaultMessageId } = opts;
@@ -421,7 +423,12 @@ export async function buildFeedRowSet(opts: BuildOptions): Promise<{
   const liveExport = opts.baselineExportId
     ? await findExportById(clientId, product, opts.baselineExportId)
     : await findLiveExport(clientId, product, platform);
-  const liveIds = readLiveMessageIds(liveExport);
+  // A forced new version is the one time rows may leave the feed: that is the
+  // difference between issuing a new version and updating the current one. With
+  // it off nothing is ever dropped (carried forward, or re-emitted from the
+  // baseline below); with it on the file is exactly today's selection.
+  const forcedNewVersion = opts.forceNewVersion === true;
+  const liveIds = forcedNewVersion ? [] : readLiveMessageIds(liveExport);
 
   const allMessages = await db
     .select()
@@ -448,7 +455,7 @@ export async function buildFeedRowSet(opts: BuildOptions): Promise<{
   // Without this the "nothing ever leaves the feed" rule silently did not apply
   // whenever the baseline was a reference - which is the common case.
   const liveIdSet = new Set(liveIds);
-  if (liveIdSet.size === 0 && liveExport) {
+  if (!forcedNewVersion && liveIdSet.size === 0 && liveExport) {
     const payload = deserializePayload(liveExport.payloadJson);
     if (payload) {
       const pmmidCol = findColumnByCleanName(payload.columns, "pmmid");
@@ -533,7 +540,7 @@ export async function buildFeedRowSet(opts: BuildOptions): Promise<{
   //
   // The baseline's own DEFAULT row is excluded: a feed carries exactly one, and
   // the current one is generated below from the chosen default message.
-  if (liveExport) {
+  if (liveExport && !forcedNewVersion) {
     const basePayload = deserializePayload(liveExport.payloadJson);
     if (basePayload) {
       const basePmmidCol = findColumnByCleanName(basePayload.columns, "pmmid");
@@ -562,7 +569,30 @@ export async function buildFeedRowSet(opts: BuildOptions): Promise<{
   // pushed.
   let defaultRowIndex = -1;
   let defaultMessage: DbMessage | null = null;
-  if (defaultMessageId != null) {
+
+  // Continuing a feed: carry the baseline's DEFAULT row across untouched.
+  // Regenerating it from the MC produces a row that differs in whatever the MC
+  // has since become, and the DEFAULT is matched like any other row — so a
+  // regenerated one reads as "added" while the baseline's reads as "switched
+  // off", on every single export. A forced new version rebuilds it instead,
+  // because that is where a fresh choice belongs.
+  const carriedDefault =
+    liveExport && !forcedNewVersion
+      ? (() => {
+          const p = deserializePayload(liveExport.payloadJson);
+          if (!p || p.defaultRowIndex < 0) return null;
+          return p.rows[p.defaultRowIndex] ?? null;
+        })()
+      : null;
+  if (carriedDefault) {
+    const carried: FeedRow = {};
+    for (const col of columns) carried[col] = carriedDefault[col] ?? "";
+    rows.push(carried);
+    messageIds.push(-1);
+    defaultRowIndex = rows.length - 1;
+    defaultMessage =
+      allMessages.find((m) => m.id === defaultMessageId) ?? null;
+  } else if (defaultMessageId != null) {
     const defaultMsg = allMessages.find((m) => m.id === defaultMessageId);
     if (defaultMsg) {
       defaultMessage = defaultMsg;
@@ -595,6 +625,7 @@ export async function buildFeedRowSet(opts: BuildOptions): Promise<{
   return {
     rowSet: { columns, rows, messageIds, defaultRowIndex },
     defaultMessage,
+    defaultCarried: carriedDefault !== null,
     liveExport,
   };
 }

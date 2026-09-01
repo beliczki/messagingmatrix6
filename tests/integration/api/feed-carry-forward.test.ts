@@ -225,3 +225,46 @@ describe("baseline rows MM6 can no longer build", () => {
     expect(hits[0]?.ReportingLabel).toBe("1a");
   });
 });
+
+describe("force new version", () => {
+  it("drops rows outside the selection instead of carrying them", async () => {
+    // The one time a row may leave the feed: issuing a new version, as opposed
+    // to updating the current one.
+    const keep = await seedMc(erste.id, 1, "aud1", "top1");
+    const excluded = await seedMc(erste.id, 2, "aud1", "top1");
+    await seedBaseline(erste.id, [keep.id, excluded.id]);
+
+    const { rowSet } = await buildFeedRowSet({
+      clientId: erste.id,
+      product: "Loans",
+      platform: "adform",
+      defaultMessageId: null,
+      forceNewVersion: true,
+      messageIds: [keep.id],
+    });
+
+    expect(rowSet.messageIds).toEqual([keep.id]);
+    expect(rowSet.messageIds).not.toContain(excluded.id);
+  });
+
+  it("drops rows it could not rebuild either", async () => {
+    const live = await seedMc(erste.id, 1, "aud1", "top1");
+    await seedBaselineRows(erste.id, [
+      { "Text:pmmid": "pmmid-1", ReportingLabel: "1a", IsActive: "TRUE" },
+      { "Text:pmmid": "pmmid-gone", ReportingLabel: "90b", IsActive: "TRUE" },
+    ]);
+
+    const { rowSet } = await buildFeedRowSet({
+      clientId: erste.id,
+      product: "Loans",
+      platform: "adform",
+      defaultMessageId: null,
+      forceNewVersion: true,
+      messageIds: [live.id],
+    });
+
+    expect(rowSet.rows.some((r) => r["Text:pmmid"] === "pmmid-gone")).toBe(
+      false,
+    );
+  });
+});

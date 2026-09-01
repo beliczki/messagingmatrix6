@@ -11,6 +11,7 @@ import {
   users,
 } from "@/db/schema";
 import { withSession } from "@/lib/scoped";
+import { shareItemCount } from "@/lib/share-metadata";
 import { writeAudit } from "@/lib/audit";
 import { readTemplate } from "@/lib/templates";
 
@@ -88,29 +89,13 @@ export const GET = withSession(async ({ req, claims }) => {
       createdByEmail: r.createdBy ? emailById.get(r.createdBy) ?? null : null,
       createdAt: r.createdAt,
       archivedAt: r.archivedAt,
-      messageCount: messageCountFromMetadata(r.metadata),
+      messageCount: shareItemCount(r.metadata),
       commentCount: commentCountById.get(r.id) ?? 0,
       viewCount: r.viewCount,
       downloadCount: r.downloadCount,
     })),
   });
 });
-
-function messageCountFromMetadata(raw: string | null): number {
-  if (!raw) return 0;
-  try {
-    const parsed = JSON.parse(raw) as Partial<SnapshotMetadata>;
-    const m = Array.isArray(parsed.matrixItems)
-      ? parsed.matrixItems.length
-      : Array.isArray(parsed.messages)
-        ? parsed.messages.length
-        : 0;
-    const c = Array.isArray(parsed.creatives) ? parsed.creatives.length : 0;
-    return m + c;
-  } catch {
-    return 0;
-  }
-}
 
 export const POST = withSession(async ({ req, claims }) => {
   const body = (await req.json().catch(() => null)) as

@@ -5,6 +5,27 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.44.0] — 2026-09-01
+
+### Added
+- **A Shares panel on the dashboard**: shares opened in the window with their
+  item, view and download counts, plus every comment that landed in the window
+  — including ones on shares opened long before it, which the share rows alone
+  would never surface. Views and downloads are running totals with no per-day
+  history, so they say so rather than passing themselves off as window figures.
+
+### Changed
+- **The dashboard opens with the same toolbar as every other screen** — sticky
+  bar, title, scope pills, count on the right — instead of a page heading of
+  its own. The client name went with it: the sidebar names the client on every
+  screen, so repeating it cost a heading's worth of height and said nothing new.
+- **The client name in the sidebar is now the way back to the dashboard**, which
+  is why the dashboard needs no nav item of its own.
+
+### Internal
+- `shareItemCount` moved out of the share-galleries route into `lib/share-metadata`,
+  now that the dashboard reads the same snapshot shape.
+
 ## [6.43.0] — 2026-09-01
 
 ### Changed

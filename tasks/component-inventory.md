@@ -874,7 +874,12 @@ A lap gyökere `dashboard`. Meglévő névből vettük: `toolbar-btn` (nap-lépt
 | Mi | Class | Megjegyzés |
 | --- | --- | --- |
 | Lap gyökér | `dashboard` | – |
-| Fejléc (cím + scope) | `dashboard__header` | – |
+| Fejléc | `dashboard__toolbar` + `toolbar` / `toolbar__title` / `toolbar__subtitle` / `toolbar__count` | ugyanaz a sticky sáv, mint az aloldalakon (Feeds, Shares); a cím után a szűrők, jobbra a dátum |
+| Görgethető törzs | `dashboard__body` | a toolbar alatt |
+| Jobb hasáb (feed + shares panel) | `dashboard__column--right` | – |
+| Shares lista | `share-digest` + `__row` / `__title` / `__meta` | a nézet/letöltés szám ALL-TIME, a `title` attribútum kimondja |
+| Shares: komment-sor | `share-digest__row--comment` + `__badge--comment` / `__author` / `__on` | az ablakban érkezett komment, akár régi share-en |
+| Shares: archivált jelölés | `share-digest__badge--archived` | – |
 | Nap-scope sáv | `day-scope` | `<nav>`; a szűrő maga a nap-választó, nem generikus filter-sáv |
 | Előző/következő nap | `day-scope__step` (+`--disabled`) | a „következő" ma inaktív, mert jövő nincs |
 | Today / Yesterday / Last 7 days | `day-scope__pill` (+`--active`) | aktív = slate-900 tömb, mint a `toggle-btn--active` |

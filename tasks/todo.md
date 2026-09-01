@@ -1211,3 +1211,11 @@ Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülé
 - **Bump:** `6.42.0` → **`6.43.0`** (minor).
 
 - **DEPLOYOLVA 6.43.0 (2026-09-01):** commit `01f540a`, build 39.8s, `pm2 restart` → **Ready 1255ms**, box `package.json` **6.43.0**. Séma-migráció nincs. Health: `/` 307, `/matrix` 307, `/api/dashboard/creatives` 401.
+
+### 2026-09-01 — Shares-összegző + a fejléc az aloldalak nyelvén — 6.44.0
+- **User:** „kéne egy shares összegző is időtartomány szerint" · „a dashboard yesterday elég a fejlécbe, nem kell alá még egyszer az Erste" · „a Dashboard és az időszak mehet azzal a megjelenéssel, mint a fejléc az aloldalakon" · „a bal felső sarokban az ERSTE szóra kattintva jöhet a dashboard (nem kell külön menüpont)".
+- **Shares panel:** az ablakban nyitott share-ek (elemszám, nézet, letöltés, archivált badge) + **az ablakban érkezett kommentek minden share-en** — a régi share-re ma írt komment ma hír, és a share-sorok önmagukban sosem mutatnák meg. ⚠️ **A nézet- és letöltésszám kumulatív** (nincs napi bontás a sémában), ezért a felirat és a tooltip kimondja, hogy all-time — nem adom el ablak-adatnak.
+- **Fejléc:** a lap most ugyanazzal a sticky `toolbar`-ral nyit, mint a Feeds/Shares (cím → szűrők → jobbra darabszám). A kliens-név kikerült: a sidebar minden képernyőn kiírja.
+- **Sidebar:** a kliens-név `Link` a `/`-ra. Dashboard menüpont **nem** kell (user döntése).
+- `shareItemCount` kikerült a share-galleries route-ból `lib/share-metadata.ts`-be (két hívó).
+- **Bump:** `6.43.0` → **`6.44.0`** (minor).

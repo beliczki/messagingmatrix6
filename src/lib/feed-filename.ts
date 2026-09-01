@@ -13,9 +13,12 @@ export function feedExportFilename(
   product: string,
   platform: string,
   feedVersion: number,
-  id: number,
+  // null before the row exists: the export dialog names the file it is about to
+  // build, and the id is only assigned on insert. "new" says that plainly
+  // instead of showing a 0 that looks like a real id.
+  id: number | null,
 ): string {
-  return `${clientKey}-${product}-${platform}-feed-v${feedVersion}-${id}.xlsx`;
+  return `${clientKey}-${product}-${platform}-feed-v${feedVersion}-${id ?? "new"}.xlsx`;
 }
 
 // An uploaded AdForm reference has no generated name — it is somebody's file,

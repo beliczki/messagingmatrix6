@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import clsx from "clsx";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -59,6 +60,8 @@ type PreviewResponse = {
   decision: Decision;
   diff: DiffPreview;
   previewRowCount: number;
+  /** Name the export would download as; the id reads "new" until it exists. */
+  filenamePreview: string;
 };
 
 type PostBody = {
@@ -71,12 +74,16 @@ type PostBody = {
   messageIds: number[];
 };
 
+/** Which slice of the diff the details list shows. */
+type DiffFilter = "all" | "added" | "changed" | "off";
+
 /** An earlier feed for this product, offered as the diff baseline. */
 type BaselineOption = {
   id: number;
   product: string;
   filename: string;
   platform: string;
+  defaultMessageId: number | null;
   feedVersion: number;
   source: string;
   exportedAt: string;
@@ -175,6 +182,11 @@ export default function FeedExportDialog({
   // exported for the same platform wants the same fallback ad every time.
   const storageKey = `mm6_feed_export_default_${product}_${platform}`;
   useEffect(() => {
+    // Only when the baseline is automatic. With a baseline picked, ITS default
+    // is the answer — and since choosing one also changes the signal column,
+    // and the signal column is part of this key, an unguarded restore would
+    // fire right after and overwrite the value the baseline just supplied.
+    if (baselineExportId !== null) return;
     let saved: number | null = null;
     try {
       const raw = localStorage.getItem(storageKey);
@@ -182,7 +194,19 @@ export default function FeedExportDialog({
       if (Number.isFinite(parsed)) saved = parsed;
     } catch {}
     setDefaultMessageId(saved);
-  }, [storageKey]);
+  }, [storageKey, baselineExportId]);
+
+  // Choosing a baseline is choosing what this export continues, so it also
+  // answers "which platform" and "which fallback ad" — asking again would only
+  // let the two disagree. A later manual change still wins; this only fires
+  // when the baseline itself changes.
+  useEffect(() => {
+    if (baselineExportId === null) return;
+    const b = baselines.find((x) => x.id === baselineExportId);
+    if (!b) return;
+    setSignalColumn(signalColumnForPlatform(b.platform));
+    setDefaultMessageId(b.defaultMessageId);
+  }, [baselineExportId, baselines]);
 
   function chooseDefault(v: number | null) {
     setDefaultMessageId(v);
@@ -253,7 +277,12 @@ export default function FeedExportDialog({
       <div className="feed-export-dialog flex h-full flex-col overflow-hidden">
         <header className="feed-export-dialog__header flex items-center justify-between gap-3 border-b border-slate-200 px-6 py-4 pr-14">
           <h2 className="text-base font-semibold text-slate-900">
-            Feed export · {product}
+            Feed export ·{" "}
+            <span className="font-mono text-sm">
+              {result?.feedExport.filename ??
+                previewQ.data?.filenamePreview ??
+                product}
+            </span>
           </h2>
           {!result ? (
             <button
@@ -344,24 +373,7 @@ function PreEmitForm({
 }) {
   return (
     <div className="space-y-4">
-      {previewLoading && !preview ? (
-        <div className="rounded border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
-          Computing diff against the live AdForm baseline…
-        </div>
-      ) : previewError ? (
-        <div className="rounded border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
-          <strong>Preview failed:</strong> {previewError.message}
-        </div>
-      ) : preview ? (
-        <PreviewBlock
-          decision={preview.decision}
-          diff={preview.diff}
-          rowCount={preview.previewRowCount}
-          forceNewVersion={forceNewVersion}
-        />
-      ) : null}
-
-      <div className="feed-export-dialog__options space-y-3 border-t border-slate-200 pt-4">
+      <div className="feed-export-dialog__options space-y-3">
         <label className="form-field feed-export-dialog__baseline block">
           <span className="form-field__label mb-1 block text-xs font-medium text-slate-700">
             Compare against
@@ -450,6 +462,26 @@ function PreEmitForm({
         </label>
       </div>
 
+      <div className="feed-export-dialog__diff space-y-4 border-t border-slate-200 pt-4">
+      {previewLoading && !preview ? (
+        <div className="rounded border border-slate-200 bg-slate-50 p-4 text-xs text-slate-500">
+          Computing the diff against the chosen baseline…
+        </div>
+      ) : previewError ? (
+        <div className="rounded border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+          <strong>Preview failed:</strong> {previewError.message}
+        </div>
+      ) : preview ? (
+        <PreviewBlock
+          decision={preview.decision}
+          diff={preview.diff}
+          rowCount={preview.previewRowCount}
+          forceNewVersion={forceNewVersion}
+        />
+      ) : null}
+      </div>
+
+
       {error ? (
         <div className="rounded border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
           <strong>Failed:</strong> {error.message}
@@ -474,6 +506,9 @@ function PreviewBlock({
   rowCount: number;
   forceNewVersion: boolean;
 }) {
+  // Which slice of the diff the details list shows. Local to each block so the
+  // preview and the result view do not share a selection.
+  const [filter, setFilter] = useState<DiffFilter>("all");
   const action =
     decision.action === "first"
       ? { label: "First export (v1)", tone: "ok" as const }
@@ -534,8 +569,19 @@ function PreviewBlock({
 
       <div className="grid grid-cols-4 gap-2 text-center text-xs">
         <Stat label="Rows" value={rowCount} />
-        <Stat label="Added" value={diff.added} tone="ok" />
-        <Stat label="Changed" value={diff.changed} />
+        <Stat
+          label="Added"
+          value={diff.added}
+          tone="ok"
+          active={filter === "added"}
+          onClick={() => setFilter(filter === "added" ? "all" : "added")}
+        />
+        <Stat
+          label="Changed"
+          value={diff.changed}
+          active={filter === "changed"}
+          onClick={() => setFilter(filter === "changed" ? "all" : "changed")}
+        />
         <Stat
           // Not "removed": a row the baseline carries that is not in this
           // selection stays in the file with IsActive=FALSE. It only leaves on
@@ -543,16 +589,35 @@ function PreviewBlock({
           label={forceNewVersion ? "Dropped" : "Switched off"}
           value={diff.removed}
           tone={diff.removed > 0 ? "warn" : "neutral"}
+          active={filter === "off"}
+          onClick={() => setFilter(filter === "off" ? "all" : "off")}
         />
       </div>
 
-      <details className="rounded border border-slate-200 bg-white p-3 text-xs">
+      <details
+        className="rounded border border-slate-200 bg-white p-3 text-xs"
+        open={filter !== "all"}
+      >
         <summary className="cursor-pointer font-medium text-slate-700">
           Diff details
+          {filter !== "all" ? (
+            <span className="ml-2 font-normal text-slate-500">
+              — {filter === "off" ? "switched off" : filter} only
+            </span>
+          ) : null}
         </summary>
-        <DiffSection title="Added rows" rows={diff.addedPreview} />
-        <DiffSection title="Removed rows" rows={diff.removedPreview} />
-        <ChangedSection rows={diff.changedPreview} />
+        {filter === "all" || filter === "added" ? (
+          <DiffSection title="Added rows" rows={diff.addedPreview} />
+        ) : null}
+        {filter === "all" || filter === "off" ? (
+          <DiffSection
+            title={forceNewVersion ? "Dropped rows" : "Switched off rows"}
+            rows={diff.removedPreview}
+          />
+        ) : null}
+        {filter === "all" || filter === "changed" ? (
+          <ChangedSection rows={diff.changedPreview} />
+        ) : null}
       </details>
     </div>
   );
@@ -568,6 +633,7 @@ function PostEmitView({
 }) {
   const { decision, diff, feedExport } = result;
   const forceNewVersion = decision.action === "new_version";
+  const [filter, setFilter] = useState<DiffFilter>("all");
   const action =
     decision.action === "first"
       ? { label: "First export (v1)", tone: "ok" }
@@ -628,8 +694,19 @@ function PostEmitView({
 
       <div className="grid grid-cols-4 gap-2 text-center text-xs">
         <Stat label="Rows" value={feedExport.rowCount} />
-        <Stat label="Added" value={diff.added} tone="ok" />
-        <Stat label="Changed" value={diff.changed} />
+        <Stat
+          label="Added"
+          value={diff.added}
+          tone="ok"
+          active={filter === "added"}
+          onClick={() => setFilter(filter === "added" ? "all" : "added")}
+        />
+        <Stat
+          label="Changed"
+          value={diff.changed}
+          active={filter === "changed"}
+          onClick={() => setFilter(filter === "changed" ? "all" : "changed")}
+        />
         <Stat
           // Not "removed": a row the baseline carries that is not in this
           // selection stays in the file with IsActive=FALSE. It only leaves on
@@ -637,16 +714,35 @@ function PostEmitView({
           label={forceNewVersion ? "Dropped" : "Switched off"}
           value={diff.removed}
           tone={diff.removed > 0 ? "warn" : "neutral"}
+          active={filter === "off"}
+          onClick={() => setFilter(filter === "off" ? "all" : "off")}
         />
       </div>
 
-      <details className="rounded border border-slate-200 bg-white p-3 text-xs">
+      <details
+        className="rounded border border-slate-200 bg-white p-3 text-xs"
+        open={filter !== "all"}
+      >
         <summary className="cursor-pointer font-medium text-slate-700">
           Diff details
+          {filter !== "all" ? (
+            <span className="ml-2 font-normal text-slate-500">
+              — {filter === "off" ? "switched off" : filter} only
+            </span>
+          ) : null}
         </summary>
-        <DiffSection title="Added rows" rows={diff.addedPreview} />
-        <DiffSection title="Removed rows" rows={diff.removedPreview} />
-        <ChangedSection rows={diff.changedPreview} />
+        {filter === "all" || filter === "added" ? (
+          <DiffSection title="Added rows" rows={diff.addedPreview} />
+        ) : null}
+        {filter === "all" || filter === "off" ? (
+          <DiffSection
+            title={forceNewVersion ? "Dropped rows" : "Switched off rows"}
+            rows={diff.removedPreview}
+          />
+        ) : null}
+        {filter === "all" || filter === "changed" ? (
+          <ChangedSection rows={diff.changedPreview} />
+        ) : null}
       </details>
 
       <div className="rounded border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
@@ -678,10 +774,15 @@ function Stat({
   label,
   value,
   tone = "neutral",
+  active,
+  onClick,
 }: {
   label: string;
   value: number;
   tone?: "ok" | "warn" | "neutral";
+  /** Selected as the diff-details filter. Omit onClick for a plain readout. */
+  active?: boolean;
+  onClick?: () => void;
 }) {
   const color =
     tone === "ok"
@@ -689,13 +790,35 @@ function Stat({
       : tone === "warn"
         ? "text-amber-700"
         : "text-slate-700";
-  return (
-    <div className="rounded border border-slate-200 bg-white px-2 py-1.5">
+  const body = (
+    <>
       <div className={`text-base font-semibold ${color}`}>{value}</div>
       <div className="text-[10px] uppercase tracking-wider text-slate-500">
         {label}
       </div>
-    </div>
+    </>
+  );
+  if (!onClick) {
+    return (
+      <div className="feed-diff-stat rounded border border-slate-200 bg-white px-2 py-1.5">
+        {body}
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={clsx(
+        "feed-diff-stat feed-diff-stat--filter rounded border px-2 py-1.5 text-left transition",
+        active
+          ? "feed-diff-stat--active border-slate-900 bg-slate-50"
+          : "border-slate-200 bg-white hover:border-slate-400",
+      )}
+    >
+      {body}
+    </button>
   );
 }
 

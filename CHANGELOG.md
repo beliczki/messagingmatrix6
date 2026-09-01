@@ -5,6 +5,36 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.37.0] — 2026-09-01
+
+### Fixed
+- **The carry-forward rule now applies when the baseline is an uploaded
+  reference — which is the common case.** `adform-snapshot.ts` fills a
+  reference's `messageIds` with `-1`, because an XLSX from AdForm knows nothing
+  about our rows, so the "nothing ever leaves the feed" rule silently did not
+  apply to it: rows still vanished. The reference's rows identify themselves by
+  PMMID, which is how the diff already matches them, so the carry-forward set is
+  resolved the same way.
+- **The version reason no longer promises a deletion that cannot happen.** It
+  read "N live rows would be removed (sticky-superset rule)"; without a forced
+  new version those rows are carried out switched off, so it now says so, and
+  only speaks of dropping when Force new version is ticked.
+
+### Added
+- **Choosing a baseline fills in the signal column and the default row.** The
+  baseline answers both — it is the feed this export continues — and asking
+  again only let the two disagree. A later manual change still wins.
+- **The diff tiles filter the details.** Added / Changed / Switched off are
+  buttons; picking one opens the details list showing only that slice.
+- **The dialog header names the file you are about to build**
+  (`erste-SZK-adform-feed-v1-new.xlsx`), with the id reading "new" until the row
+  exists, and the real name once it does.
+
+### Changed
+- **Inputs first, diff underneath.** The comparison readout, the version warning
+  and the details sat above the controls that decide them; a diff means nothing
+  until you have said what it is against.
+
 ## [6.36.0] — 2026-08-31
 
 ### Added

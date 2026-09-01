@@ -441,7 +441,30 @@ export async function buildFeedRowSet(opts: BuildOptions): Promise<{
     topics.filter((t) => t.product === product).map((t) => t.key),
   );
 
+  // An uploaded reference carries no MM6 ids - adform-snapshot.ts fills
+  // messageIds with -1, because an XLSX from AdForm knows nothing about our
+  // rows. Its rows still identify themselves by PMMID, which is exactly how the
+  // diff already matches them, so resolve the carry-forward set the same way.
+  // Without this the "nothing ever leaves the feed" rule silently did not apply
+  // whenever the baseline was a reference - which is the common case.
   const liveIdSet = new Set(liveIds);
+  if (liveIdSet.size === 0 && liveExport) {
+    const payload = deserializePayload(liveExport.payloadJson);
+    if (payload) {
+      const pmmidCol = findColumnByCleanName(payload.columns, "pmmid");
+      if (pmmidCol) {
+        const byPmmid = new Map(
+          allMessages
+            .filter((m) => m.pmmid)
+            .map((m) => [m.pmmid as string, m.id] as const),
+        );
+        for (const row of payload.rows) {
+          const id = byPmmid.get(row[pmmidCol] ?? "");
+          if (id !== undefined) liveIdSet.add(id);
+        }
+      }
+    }
+  }
 
   const inSet: DbMessage[] = [];
   // Rows the baseline already carries are NEVER dropped. `allowed` (the user's
@@ -639,8 +662,13 @@ export function decideVersion(
     );
   }
   if (diff.removed.length > 0) {
+    // Say what actually happens. Without a forced new version these rows are
+    // carried into the feed with IsActive=FALSE, not deleted - calling that
+    // "removed" describes the one outcome the rule exists to prevent.
     reasons.push(
-      `${diff.removed.length} live row${diff.removed.length === 1 ? "" : "s"} would be removed (sticky-superset rule)`,
+      forceNewVersion
+        ? `${diff.removed.length} row${diff.removed.length === 1 ? "" : "s"} in the baseline are dropped from this version`
+        : `${diff.removed.length} baseline row${diff.removed.length === 1 ? "" : "s"} are not in this selection - they go out switched off, not deleted`,
     );
   }
 

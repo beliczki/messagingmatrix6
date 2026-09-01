@@ -13,7 +13,10 @@ import {
   pmmidRowKey,
   serializePayload,
 } from "@/lib/feed-export";
-import { feedExportDisplayName } from "@/lib/feed-filename";
+import {
+  feedExportDisplayName,
+  feedExportFilename,
+} from "@/lib/feed-filename";
 import {
   DEFAULT_SIGNAL_COLUMN,
   isValidSignalColumn,
@@ -296,6 +299,21 @@ export const POST = withSession(async ({ req, claims }) => {
       // Surface the would-be-built row count so the dialog can show a
       // "Rows: N" stat alongside the diff before the user commits.
       previewRowCount: built.rowSet.rows.length,
+      // The name this export would download as, so the dialog can put the file
+      // in its header instead of just the product.
+      filenamePreview: feedExportFilename(
+        (
+          await db
+            .select({ key: clients.key })
+            .from(clients)
+            .where(eq(clients.id, claims.cid))
+            .limit(1)
+        )[0]?.key ?? `client-${claims.cid}`,
+        product,
+        platform,
+        decision.feedVersion,
+        null,
+      ),
     });
   }
 

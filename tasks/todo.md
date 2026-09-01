@@ -1240,3 +1240,25 @@ Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülé
 - **Bump:** `6.45.0` → **`6.45.1`** (patch).
 
 - **DEPLOYOLVA 6.45.1 (2026-09-01):** commit `6893831`, build 35.4s, `pm2 restart` → Ready 1457ms, box `package.json` **6.45.1**. Health: `/` 307, `/matrix` 307.
+
+### 2026-09-01 — Monitoring import: 3 hiba a július/augusztus riporton — 6.46.0
+**Tünet:** `/monitoring` feltöltés előbb 422 („Could not read Reporting Period From/To"), majd 502 (`Unexpected token '<', "<html> <h"…` = nginx hibaoldal, tehát a node process meghalt a kérés alatt).
+
+**Bizonyított okok:**
+1. **Front Page oszlop-eltolás.** Az igazi AdForm export A oszlopa üres (címke B-ben, érték C-ben); a generált fájlokban a címke az A-ban van. A `readPeriod` fixen `row[1]`/`row[2]`-t olvas (`src/lib/adform-report.ts:277`) → üres periódus → 422.
+2. **Insert bind-paraméter plafon.** A `values`-ban **20 oszlop/sor**, a postgres.js hard limitje **65 534 paraméter** → **max 3 276 sor egy statementben**. Mért aggregált sorszám: június **3 364**, július **3 574**, augusztus **5 785**. Élő próbával (tranzakció + rollback) igazolva: 3 364 és 5 785 → `MAX_PARAMETERS_EXCEEDED`. **A júniusi újratöltés is elhasalna ma** — a meglévő 3 364 soros júniusi adat még a `size` aggregációs kulcsba vétele előtti importból van.
+3. **Parse-memória (valószínű, nem bizonyított a crashre).** A generált fájlokban **nincs `sharedStrings.xml`** — minden ismétlődő kampánynév inline. Kicsomagolva: június 52 MB XML / 94k sor, július 118 MB / 112k, augusztus **136 MB / 130k**. Peak RSS a parse alatt: 549 / 767 / **905 MB**. A boxon 3,8 GB RAM, ~1,5 GB már használatban, 5 app fut. Kernel-OOM logot nem találtam, de a process 18:49-kor némán újraindult a POST alatt.
+
+**Terv:**
+- [x] 1. `readPeriod` pozíciófüggetlen: a `Reporting Period From/To` címkét a sor **bármelyik** cellájában keresse, és a rá következő nem üres cellát vegye értéknek. Mindkét alak megy utána.
+- [x] 2. Az insert **darabolása** (1000 sor/statement) a meglévő tranzakción belül. Ez a globális „row caps" szabály write-oldali párja.
+- [x] 3. Unit teszt mindkettőre: (a) behúzás nélküli Front Page, (b) 4000+ soros insert egy tranzakcióban (integration).
+- [ ] 4. **NYITOTT** — Memória: **először 1+2 után újrapróbáljuk élesben.** Ha a parse megint megöli a processzt, akkor és csak akkor nyúlok hozzá (`dense: true` a SheetJS-nek 835→718 MB-ot mért, tehát önmagában kevés — a valódi megoldás a generátor `sharedStrings`-es írása lenne).
+- [x] 5. Bump + CHANGELOG + deploy.
+
+**Eredmény:**
+- `valueAfterLabel()` (`adform-report.ts`): a címkét a sor bármelyik cellájában megtalálja, értéknek a rá következő nem üres cellát veszi. Mindhárom igazi fájl periódusa kiolvasható: `01/06`, `01/07`, `01/08` → `30/06`, `31/07`, `31/08`.
+- `INSERT_CHUNK = 1000` az import route-ban, a meglévő tranzakción belül (a periódus-csere így továbbra is atomi). Aggregált sorszám a három fájlon: **3 364 / 3 547 / 5 733** → 4 / 4 / 6 statement.
+- ⚠️ **A bind-paraméter plafon eddig is ott volt, csak nem ütköztünk bele:** 20 paraméter/sor × 3 276 sor = a limit. A júniusi 3 364 sor már fölötte van — az adat még a `size` aggregációs kulcsba vétele előtti importból származik, egy mai újratöltés elhasalt volna.
+- **Teszt:** új `api/monitoring-import.test.ts` (2 route-szintű eset: 3 500 aggregált sor importja + újratöltés-csere) — mindkettő `MAX_PARAMETERS_EXCEEDED`-del bukik a javítás előtti kódon, ellenőriztem. `adform-report.test.ts` +1 (behúzás nélküli Front Page). Suite **656/656 zöld**.
+- **Bump:** `6.45.1` → **`6.46.0`**. (Szigorúan véve két bugfix, tehát patch is védhető lett volna; a jóváhagyott terv minorra szólt, azt tartottam.)

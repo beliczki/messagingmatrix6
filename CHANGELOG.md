@@ -5,6 +5,22 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.46.0] — 2026-09-01
+
+### Fixed
+- **A monthly AdForm report no longer fails to import once it grows past ~3,300
+  message rows.** A monitoring row spends 20 bind parameters and Postgres caps a
+  single statement at 65,534, so the whole-slice insert died with
+  `MAX_PARAMETERS_EXCEEDED` above 3,276 rows — August 2026 aggregates to 5,733.
+  The insert is now chunked inside the same transaction, so the period slice is
+  still replaced atomically. June 2026 (3,364 rows) was already over the ceiling
+  and would have failed on re-upload.
+- **The reporting period is read from the Front Page wherever the label sits.**
+  AdForm's own export indents every sheet by one blank column (label in B, value
+  in C); reports rebuilt by other tooling start at column A, and the fixed
+  column index made those fail with "Could not read Reporting Period From/To"
+  even though the dates were plainly there.
+
 ## [6.45.1] — 2026-09-01
 
 ### Fixed

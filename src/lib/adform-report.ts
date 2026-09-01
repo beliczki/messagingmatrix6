@@ -264,6 +264,22 @@ function findHeader(data: unknown[][]): number {
   return -1;
 }
 
+// Read the value that follows a label cell on a Front Page row. AdForm's own
+// export leaves column A empty (label in B, value in C), but reports rebuilt by
+// other tooling write the label in A — so the label is located wherever it sits
+// and the value is the next non-empty cell after it, never a fixed index.
+function valueAfterLabel(row: unknown[], label: RegExp): string | null {
+  for (let i = 0; i < row.length; i += 1) {
+    if (!label.test(cellToString(row[i]).trim())) continue;
+    for (let j = i + 1; j < row.length; j += 1) {
+      const v = cellToString(row[j]).trim();
+      if (v) return v;
+    }
+    return "";
+  }
+  return null;
+}
+
 function readPeriod(sheets: { name: string; data: unknown[][] }[]): {
   from: string;
   to: string;
@@ -273,10 +289,11 @@ function readPeriod(sheets: { name: string; data: unknown[][] }[]): {
   let to = "";
   if (front) {
     for (const row of front.data) {
-      const label = cellToString(row?.[1]).trim();
-      const value = cellToString(row?.[2]).trim();
-      if (/^reporting period from$/i.test(label)) from = value;
-      if (/^reporting period to$/i.test(label)) to = value;
+      if (!row) continue;
+      const f = valueAfterLabel(row, /^reporting period from$/i);
+      if (f !== null) from = f;
+      const t = valueAfterLabel(row, /^reporting period to$/i);
+      if (t !== null) to = t;
     }
   }
   return { from, to };

@@ -14,7 +14,7 @@ import {
 // Build a tiny report mirroring the real AdForm "Creative custom report" shape:
 // a "Front Page" summary sheet + a data sheet whose header row is preceded by a
 // "Table" label row, and whose leading column A is blank.
-function buildReport(): Buffer {
+function buildReport(indent = true): Buffer {
   const front = [
     ["", "Summary"],
     ["", "Reporting Date", "30/05/2026 10:13:47 (UTC+02:00)"],
@@ -48,9 +48,12 @@ function buildReport(): Buffer {
     // DEFAULT row — no -m_ marker, must be skipped
     ["", "01/04/2026", "camp", "display!x", "Unknown", "Camp - Ban - p_adform-s_pro-a_VAL_1-t_topic_one-v_a-n_1_default", "n/a", "n/a", 1, 0, 0, 0, 9, 0],
   ];
+  // `indent: false` drops the blank column A — the shape produced by tooling
+  // that rebuilds the report instead of exporting it from AdForm directly.
+  const strip = (rows: unknown[][]) => rows.map((r) => r.slice(1));
   return xlsx.build([
-    { name: "Front Page", data: front, options: {} },
-    { name: "Sheet", data: sheet, options: {} },
+    { name: "Front Page", data: indent ? front : strip(front), options: {} },
+    { name: "Sheet", data: indent ? sheet : strip(sheet), options: {} },
   ]) as Buffer;
 }
 
@@ -238,5 +241,15 @@ describe("parseAdformReport", () => {
     const ga = r.rows.find((x) => x.platform === "googleads")!;
     expect(ga).toMatchObject({ mcNumber: 0, mcVariant: "0", topicKey: "diakszamla", impressions: 0 });
     expect(ga.ctr).toBeNull(); // 0 impressions → undefined CTR
+  });
+
+  // AdForm's own export indents every sheet by one blank column; reports
+  // rebuilt by other tooling start at column A. The period must be read from
+  // the label's own row, not from a fixed column index.
+  it("reads the period from a Front Page with no leading blank column", () => {
+    const r = parseAdformReport(buildReport(false));
+    expect(r.periodFrom).toBe("01/04/2026 00:00:00");
+    expect(r.periodTo).toBe("30/04/2026 23:59:59");
+    expect(r.rows).toHaveLength(2);
   });
 });

@@ -1238,3 +1238,5 @@ Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülé
 - **⚠️ Menet közben talált hiba:** a nap-léptető és a Today/Yesterday/7 days linkek **nem vitték tovább a `?p=`-t**, tehát egy napváltás némán törölte a termékszűrőt. Most minden scope-link (és az üres állapot „try the last 7 days" linkje is) viszi.
 - **Teszt:** `count-segments.test.ts` (5) + a product-inventory tesztek a vágott alakra írva. Suite **653/653 zöld**.
 - **Bump:** `6.45.0` → **`6.45.1`** (patch).
+
+- **DEPLOYOLVA 6.45.1 (2026-09-01):** commit `6893831`, build 35.4s, `pm2 restart` → Ready 1457ms, box `package.json` **6.45.1**. Health: `/` 307, `/matrix` 307.

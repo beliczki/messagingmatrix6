@@ -1229,3 +1229,5 @@ Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülé
 - **Dashboard-szűrés:** a `?p=SZK,VAL` a csíkot és a feed-panelt szűkíti — az a két panel, aminek a sorain van termék. Az activity, a shares és a Library-összegek érintetlenek (nincs rajtuk termék). ⚠️ **A két forrás máshogy éri el a terméket:** a kreatívnak saját `product` oszlopa van, a cellának az audience-én lóg (subquery az audience-kulcsokra).
 - **Teszt:** új `dashboard-products.test.ts` (4) + a csík product-szűrő tesztje. Suite **648/648 zöld**.
 - **Bump:** `6.44.0` → **`6.45.0`** (minor).
+
+- **DEPLOYOLVA 6.44.0 + 6.45.0 (2026-09-01):** `c201838` (shares panel, toolbar-fejléc, sidebar-link) és `8459c12` (product filter), build 34.7s / 39.0s, `pm2 restart` → Ready 1378ms / 1301ms, box `package.json` **6.45.0**. Séma-migráció egyikhez sem kell. Health mindkettő után: `/` 307, `/matrix` 307, `/shares` 307, `/creative-library` 307.

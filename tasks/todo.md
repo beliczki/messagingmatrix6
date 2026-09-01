@@ -1253,7 +1253,7 @@ Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülé
 - [x] 1. `readPeriod` pozíciófüggetlen: a `Reporting Period From/To` címkét a sor **bármelyik** cellájában keresse, és a rá következő nem üres cellát vegye értéknek. Mindkét alak megy utána.
 - [x] 2. Az insert **darabolása** (1000 sor/statement) a meglévő tranzakción belül. Ez a globális „row caps" szabály write-oldali párja.
 - [x] 3. Unit teszt mindkettőre: (a) behúzás nélküli Front Page, (b) 4000+ soros insert egy tranzakcióban (integration).
-- [ ] 4. **NYITOTT** — Memória: **először 1+2 után újrapróbáljuk élesben.** Ha a parse megint megöli a processzt, akkor és csak akkor nyúlok hozzá (`dense: true` a SheetJS-nek 835→718 MB-ot mért, tehát önmagában kevés — a valódi megoldás a generátor `sharedStrings`-es írása lenne).
+- [x] 4. Memória: **elfér, nem kell hozzányúlni.** Élesben mérve az augusztusi (legnagyobb) fájl importja alatt: app RSS **1 085 MB peak**, a boxon a szabad memória **1 486 MB**-ig ment le, a process nem indult újra (restart-számláló 98-on maradt), a kérés után visszaesett 519 MB-ra. ⚠️ **A tartalék vékony:** ha a riport tovább nő, vagy a boxon több app fut, ez elfogyhat. Ha egyszer 502-t adna, a sorrend: (a) generátor írjon `sharedStrings`-et (feleannyi XML), (b) SheetJS `dense: true` (835→718 MB mérve).
 - [x] 5. Bump + CHANGELOG + deploy.
 
 **Eredmény:**
@@ -1262,3 +1262,12 @@ Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülé
 - ⚠️ **A bind-paraméter plafon eddig is ott volt, csak nem ütköztünk bele:** 20 paraméter/sor × 3 276 sor = a limit. A júniusi 3 364 sor már fölötte van — az adat még a `size` aggregációs kulcsba vétele előtti importból származik, egy mai újratöltés elhasalt volna.
 - **Teszt:** új `api/monitoring-import.test.ts` (2 route-szintű eset: 3 500 aggregált sor importja + újratöltés-csere) — mindkettő `MAX_PARAMETERS_EXCEEDED`-del bukik a javítás előtti kódon, ellenőriztem. `adform-report.test.ts` +1 (behúzás nélküli Front Page). Suite **656/656 zöld**.
 - **Bump:** `6.45.1` → **`6.46.0`**. (Szigorúan véve két bugfix, tehát patch is védhető lett volna; a jóváhagyott terv minorra szólt, azt tartottam.)
+
+**Élesben ellenőrizve (2026-09-01 19:21 / 19:23):** július és augusztus is bement.
+
+| időszak | sor | matched | impr | cost | fájl Dashboard impr | eltérés |
+|---|---|---|---|---|---|---|
+| 01/07 | 3 547 | 2 920 | 15 508 359 | 20 697 514 | 15 510 180 | 1 821 |
+| 01/08 | 5 733 | 5 024 | 20 051 365 | 35 883 108 | 20 053 243 | 1 878 |
+
+Az eltérés a **kihagyott DEFAULT/brand sorok** (454 / 439) — nincs a PMMID-jükben `-m_`/`-v_`, tehát egyetlen cellához sem tartoznak. Szándékos, nem veszteség.

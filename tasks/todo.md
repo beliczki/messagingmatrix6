@@ -1209,3 +1209,5 @@ Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülé
 - **Kattintás:** a Library saját dialógusai — uploaded → `CreativeDetailDialog`, DCO → `MatrixDetailDialog`. A DCO tile élő `MatrixIframePreview` (`fit-rect`, 250px magas dobozban), tehát egy perce mentett szöveg is látszik; IntersectionObserver miatt csak a látható tile kér `/api/render`-t.
 - **Teszt:** `dashboard-creatives.test.ts` **11** eset (sorrend, két méret, verzió-család, topic, DCO beszúrás a közös sorrendbe, MC-dedupe, nem-ACTIVE és sablon nélküli cella kizárása, lapozás, kliens-izoláció, archivált). Suite **643/643 zöld**.
 - **Bump:** `6.42.0` → **`6.43.0`** (minor).
+
+- **DEPLOYOLVA 6.43.0 (2026-09-01):** commit `01f540a`, build 39.8s, `pm2 restart` → **Ready 1255ms**, box `package.json` **6.43.0**. Séma-migráció nincs. Health: `/` 307, `/matrix` 307, `/api/dashboard/creatives` 401.

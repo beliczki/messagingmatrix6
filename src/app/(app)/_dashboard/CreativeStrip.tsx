@@ -1,17 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Image as ImageIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, Image as ImageIcon, Loader2 } from "lucide-react";
 import clsx from "clsx";
-
-export type StripItem = {
-  id: number;
-  fileId: string | null;
-  fileName: string | null;
-  mimeType: string | null;
-  dimensions: string | null;
-  mcLabel: string | null;
-};
+import type { StripItem, StripPage } from "@/lib/dashboard-creatives";
 
 // Height-normalized album: every tile is 250px tall (h-[250px] on the media
 // itself, so its width follows the aspect ratio) — a 300x250 banner sits next
@@ -19,17 +11,71 @@ export type StripItem = {
 // different widths. The height must NOT live on the anchor as a percentage the
 // image resolves against: the anchor's own width is derived from the image.
 
-export default function CreativeStrip({ items }: { items: StripItem[] }) {
+// Start fetching this far from the right edge, so the next tiles are usually
+// already there by the time the scroll reaches them.
+const LOAD_AHEAD_PX = 800;
+
+type Props = {
+  /** First page, rendered on the server so the strip is never empty on load. */
+  page: StripPage;
+  /** Day scope, echoed back to the API so paging stays inside the window. */
+  scope: { d: string; r: string };
+};
+
+export default function CreativeStrip({ page, scope }: Props) {
   const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const [items, setItems] = useState<StripItem[]>(page.items);
+  const [nextOffset, setNextOffset] = useState<number | null>(page.nextOffset);
   const [atStart, setAtStart] = useState(true);
   const [atEnd, setAtEnd] = useState(true);
+  // Scroll fires faster than React commits state, so two events can both see
+  // an un-updated `nextOffset`/"not loading" and fetch the same page twice —
+  // duplicate tiles, duplicate keys. Refs settle synchronously; the state
+  // beside them only drives rendering.
+  const cursor = useRef<number | null>(page.nextOffset);
+  const inFlight = useRef(false);
+
+  // A scope switch re-renders this component with a new first page; without
+  // this the old window's tiles would stay on screen under the new heading.
+  useEffect(() => {
+    setItems(page.items);
+    setNextOffset(page.nextOffset);
+    cursor.current = page.nextOffset;
+    scrollerRef.current?.scrollTo({ left: 0 });
+  }, [page]);
+
+  const loadMore = useCallback(async () => {
+    if (inFlight.current || cursor.current === null) return;
+    inFlight.current = true;
+    try {
+      const r = await fetch(
+        `/api/dashboard/creatives?d=${scope.d}&r=${scope.r}&offset=${cursor.current}`,
+        { credentials: "include" },
+      );
+      if (!r.ok) {
+        // Stop paging rather than retrying into the same failure on every
+        // scroll event; what is already loaded stays usable.
+        cursor.current = null;
+        setNextOffset(null);
+        return;
+      }
+      const next = (await r.json()) as StripPage;
+      cursor.current = next.nextOffset;
+      setItems((cur) => [...cur, ...next.items]);
+      setNextOffset(next.nextOffset);
+    } finally {
+      inFlight.current = false;
+    }
+  }, [scope.d, scope.r]);
 
   const sync = useCallback(() => {
     const el = scrollerRef.current;
     if (!el) return;
     setAtStart(el.scrollLeft <= 1);
-    setAtEnd(el.scrollLeft + el.clientWidth >= el.scrollWidth - 1);
-  }, []);
+    const remaining = el.scrollWidth - el.scrollLeft - el.clientWidth;
+    setAtEnd(remaining <= 1);
+    if (remaining < LOAD_AHEAD_PX) void loadMore();
+  }, [loadMore]);
 
   useEffect(() => {
     sync();
@@ -51,14 +97,23 @@ export default function CreativeStrip({ items }: { items: StripItem[] }) {
       <div
         ref={scrollerRef}
         onScroll={sync}
-        className="creative-strip__scroller flex gap-2 overflow-x-auto scroll-smooth pb-2"
+        className="creative-strip__scroller flex gap-2 overflow-x-auto overscroll-x-contain scroll-smooth pb-2"
       >
         {items.map((it) => (
           <StripTile key={it.id} item={it} />
         ))}
+        {nextOffset !== null ? (
+          <div className="creative-strip__loading flex h-[250px] w-[120px] shrink-0 items-center justify-center text-slate-300">
+            <Loader2 className="size-5 animate-spin" />
+          </div>
+        ) : null}
       </div>
       <StepButton side="left" disabled={atStart} onClick={() => step(-1)} />
-      <StepButton side="right" disabled={atEnd} onClick={() => step(1)} />
+      <StepButton
+        side="right"
+        disabled={atEnd && nextOffset === null}
+        onClick={() => step(1)}
+      />
     </div>
   );
 }
@@ -66,7 +121,7 @@ export default function CreativeStrip({ items }: { items: StripItem[] }) {
 function StripTile({ item }: { item: StripItem }) {
   const isImage = item.mimeType?.startsWith("image/") ?? false;
   const isVideo = item.mimeType?.startsWith("video/") ?? false;
-  const title = [item.mcLabel, item.fileName, item.dimensions]
+  const title = [item.mcLabel, item.fileName, item.dimensions, item.createdAt.slice(0, 10)]
     .filter(Boolean)
     .join(" · ");
   return (

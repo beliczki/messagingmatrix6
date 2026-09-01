@@ -5,6 +5,24 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.42.0] — 2026-09-01
+
+### Fixed
+- **The creative strip showed the oldest batch, not the newest.** It ordered by
+  row id, and this library's highest ids are an import whose `created_at` is
+  2025-12-22 — so a strip labelled "new creatives" led with the oldest
+  delivery, and the "latest arrived" note repeated that wrong date. It now
+  orders by `created_at`, which is also what the Creative Library sorts by, so
+  "newest" means the same thing on both pages.
+
+### Added
+- **The strip loads as you scroll right** instead of stopping at 24 tiles:
+  `GET /api/dashboard/creatives` serves pages of 24 within the current day
+  scope, the page renders the first one itself, and the next arrives before the
+  scroll reaches it. Paging is guarded by refs rather than state, because
+  scroll events fire faster than React commits and two of them would otherwise
+  fetch the same page twice.
+
 ## [6.41.0] — 2026-09-01
 
 ### Changed

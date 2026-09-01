@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { and, count, desc, eq, gte, isNull, lte } from "drizzle-orm";
+import { and, count, desc, eq, gte, lte } from "drizzle-orm";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { db } from "@/db";
 import {
@@ -13,7 +13,6 @@ import {
   monitoring,
   textFormatting,
   topics,
-  uploadedFiles,
   users,
 } from "@/db/schema";
 import { getActiveClient } from "@/lib/active-client";
@@ -25,7 +24,8 @@ import {
   todayUtc,
   type DayScope,
 } from "@/lib/day-scope";
-import CreativeStrip, { type StripItem } from "./_dashboard/CreativeStrip";
+import { listStripCreatives } from "@/lib/dashboard-creatives";
+import CreativeStrip from "./_dashboard/CreativeStrip";
 
 export const dynamic = "force-dynamic";
 
@@ -133,51 +133,6 @@ async function reportFreshness(clientId: number) {
   return { ...last, rows: total?.n ?? 0 };
 }
 
-// Delivery is bursty — whole weeks pass with no new creative — so a strictly
-// day-scoped strip would sit empty most of the time and stop being looked at.
-// The scope still leads; when it is empty the strip falls back to the latest
-// arrivals and says so, rather than showing nothing.
-async function creativesInScope(clientId: number, scope: DayScope) {
-  const live = and(eq(creatives.clientId, clientId), isNull(creatives.archivedAt));
-  const inScope = and(
-    live,
-    gte(creatives.createdAt, scope.from),
-    lte(creatives.createdAt, scope.to),
-  );
-  const [total] = await db.select({ n: count() }).from(creatives).where(inScope);
-  const n = total?.n ?? 0;
-  const rows = await db
-    .select({
-      id: creatives.id,
-      fileId: creatives.fileId,
-      fileName: creatives.fileName,
-      dimensions: creatives.fileDimensions,
-      mcNumber: creatives.mcNumber,
-      mcVariant: creatives.mcVariant,
-      createdAt: creatives.createdAt,
-      mimeType: uploadedFiles.mimeType,
-    })
-    .from(creatives)
-    .leftJoin(uploadedFiles, eq(creatives.fileId, uploadedFiles.id))
-    .where(n > 0 ? inScope : live)
-    .orderBy(desc(creatives.id))
-    .limit(n > 0 ? 60 : 24);
-  const items: StripItem[] = rows.map((r) => ({
-    id: r.id,
-    fileId: r.fileId,
-    fileName: r.fileName,
-    mimeType: r.mimeType,
-    dimensions: r.dimensions,
-    mcLabel: r.mcNumber !== null ? `MC${r.mcNumber}${r.mcVariant ?? ""}` : null,
-  }));
-  return {
-    items,
-    total: n,
-    fallback: n === 0,
-    latestAt: rows[0]?.createdAt ?? null,
-  };
-}
-
 export default async function Dashboard({
   searchParams,
 }: {
@@ -198,7 +153,7 @@ export default async function Dashboard({
       activityDigest(client.id, scope),
       feedsInScope(client.id, scope),
       reportFreshness(client.id),
-      creativesInScope(client.id, scope),
+      listStripCreatives(client.id, scope),
       db
         .select({ id: users.id, email: users.email })
         .from(users)
@@ -334,19 +289,20 @@ export default async function Dashboard({
           title={creativeStrip.fallback ? "Creatives" : "New creatives"}
           hint={
             creativeStrip.fallback
-              ? creativeStrip.latestAt
-                ? `none in this window — latest arrived ${creativeStrip.latestAt.slice(0, 10)}`
+              ? creativeStrip.items[0]
+                ? `none in this window — latest arrived ${creativeStrip.items[0].createdAt.slice(0, 10)}`
                 : undefined
-              : creativeStrip.total > creativeStrip.items.length
-                ? `${creativeStrip.items.length} of ${creativeStrip.total}`
-                : `${creativeStrip.total} in this window`
+              : `${creativeStrip.total} in this window`
           }
           href="/creative-library"
         >
           {creativeStrip.items.length === 0 ? (
             <EmptyLine>The creative library is empty.</EmptyLine>
           ) : (
-            <CreativeStrip items={creativeStrip.items} />
+            <CreativeStrip
+              page={creativeStrip}
+              scope={{ d: scope.date, r: scope.range }}
+            />
           )}
         </Panel>
       </section>

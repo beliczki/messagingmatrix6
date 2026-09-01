@@ -1064,3 +1064,5 @@ Az IO callback a legutóbbi kézbesítés óta **sorba állt összes** entry-t k
 - **Sorrend:** inputok felül, alattuk (elválasztóval) a diff-forrás, a verzió-figyelmeztetés és a details — a diff addig értelmetlen, amíg nincs megadva, mihez képest.
 - **Verifikáció:** `tsc` 0, build 0, eslint 0 error, **619/619 zöld**.
 - **NYITVA — advert_name záró szám (user kérdezte):** a minta `MC{{number}}_{{variant}}_{{topic}}_{{version}}`, és a `{{version}}` a **`messages.version`**, azaz az optimistic-lock szerkesztés-számláló (`buildContext` `...m`-mel teszi be), nem az MC verziója. Ezért nő minden mentésnél (41→43, 5→97), és ezért látszik sok „changed" sor. **Ez konfig, nem kód** (Settings → Patterns → feed → `advert_name`). Ha kiszedjük, EGYSZERI churn: minden sor advert_name-je megváltozik, tehát a következő diff mindent „changed"-nek mutat. Nem nyúltam hozzá — user döntése.
+
+- **DEPLOYOLVA 6.37.0 (2026-09-01):** commit `90821f5`, box `237f3bc`→`90821f5`, build 33.0s, `pm2 restart` → **Ready 1316ms**, online. Nincs séma-migráció. Health: `/` 307, `/login` 200, `/matrix` 307, `/api/feed-exports` 401.

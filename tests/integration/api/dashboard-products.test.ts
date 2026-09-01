@@ -60,6 +60,7 @@ describe("dashboard product inventory", () => {
 
     const inv = await productInventory(erste.id);
     expect(inv.options).toEqual(["SZK", "VAL"]);
+    expect(inv.labels).toEqual(["DCO", "nonDCO", "creatives"]);
     expect(inv.counts.SZK).toEqual([2, 0, 1]);
     expect(inv.counts.VAL).toEqual([0, 1, 2]);
   });
@@ -86,13 +87,19 @@ describe("dashboard product inventory", () => {
         archivedAt: "2026-09-01 07:00:00",
       },
     ]);
-    expect((await productInventory(erste.id)).counts.SZK).toEqual([1, 0, 1]);
+    // No channel audience here, so the nonDCO segment drops out entirely —
+    // a column of zeros down the whole menu only invites questions.
+    const inv = await productInventory(erste.id);
+    expect(inv.labels).toEqual(["DCO", "creatives"]);
+    expect(inv.counts.SZK).toEqual([1, 1]);
   });
 
   it("never reaches across clients", async () => {
     await audience(telekom.id, "t_aud", "TEL", null);
     await message(telekom.id, "t_aud", "TEL_topic", 1);
-    expect(await productInventory(erste.id)).toEqual({ counts: {}, options: [] });
+    const inv = await productInventory(erste.id);
+    expect(inv.counts).toEqual({});
+    expect(inv.options).toEqual([]);
   });
 
   // A product with no cells but with delivered files still has to be pickable.
@@ -102,6 +109,7 @@ describe("dashboard product inventory", () => {
       .values({ clientId: erste.id, product: "HITEL", fileName: "x.png" });
     const inv = await productInventory(erste.id);
     expect(inv.options).toEqual(["HITEL"]);
-    expect(inv.counts.HITEL).toEqual([0, 0, 1]);
+    expect(inv.labels).toEqual(["creatives"]);
+    expect(inv.counts.HITEL).toEqual([1]);
   });
 });

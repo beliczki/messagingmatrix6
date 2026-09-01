@@ -21,7 +21,8 @@ import {
   Share2,
   AlertTriangle,
 } from "lucide-react";
-import clsx from "clsx";
+import clsx from "clsx";import { trimEmptyCountSegments } from "@/lib/count-segments";
+
 import { Masonry } from "../_components/Masonry";
 import UploadDialog, { type UploadResult } from "../_components/UploadDialog";
 import UploadQueue, {
@@ -444,7 +445,7 @@ export default function CreativeLibrary() {
       cur[c.kind === "matrix" ? 0 : 1] += 1;
       out[c.product] = cur;
     }
-    return out;
+    return trimEmptyCountSegments(out, ["DCO", "uploaded"]);
   }, [items]);
   const typeOptions = useMemo(() => {
     const s = new Set<string>();
@@ -563,7 +564,8 @@ export default function CreativeLibrary() {
           search={search}
           setSearch={setSearch}
           productOptions={productOptions}
-          productCounts={productCounts}
+          productCounts={productCounts.counts}
+          productCountLabels={productCounts.labels}
           products={products}
           setProducts={setProducts}
           typeOptions={typeOptions}
@@ -815,6 +817,7 @@ function Toolbar({
   setSearch,
   productOptions,
   productCounts,
+  productCountLabels,
   products,
   setProducts,
   typeOptions,
@@ -830,8 +833,9 @@ function Toolbar({
   search: string;
   setSearch: (s: string) => void;
   productOptions: string[];
-  /** [DCO, uploaded] per product. */
+  /** Per product, one number per surviving segment. */
   productCounts: Record<string, number[]>;
+  productCountLabels: string[];
   products: Set<string>;
   setProducts: (s: Set<string>) => void;
   typeOptions: string[];
@@ -868,7 +872,7 @@ function Toolbar({
         values={products}
         options={productOptions}
         optionCounts={productCounts}
-        countLabels={["DCO", "uploaded"]}
+        countLabels={productCountLabels}
         quickSelect={ALL_NONE_QUICK_SELECT}
         onChange={setProducts}
       />

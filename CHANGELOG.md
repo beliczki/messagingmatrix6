@@ -5,6 +5,21 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.45.1] — 2026-09-01
+
+### Fixed
+- **A count segment that is zero for every option is no longer shown.** Erste
+  has no channel audiences, so the product menu's nonDCO column read 0 down the
+  whole list and only invited the question "what is that middle zero?". It
+  reappears on its own once such cells exist. Same rule in the matrix and the
+  creative library.
+- **Stepping the day no longer clears the product filter** — every scope link,
+  including the empty state's "try the last 7 days", carries the selection.
+
+### Changed
+- Dashboard toolbar order: the product filter sits after the title, and the day
+  scope stays on the right next to the date it resolves to.
+
 ## [6.45.0] — 2026-09-01
 
 ### Added

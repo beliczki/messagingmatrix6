@@ -1,10 +1,13 @@
 import { and, count, eq, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { audiences, creatives, messages } from "@/db/schema";
+import { trimEmptyCountSegments } from "@/lib/count-segments";
 
 export type ProductInventory = {
-  /** [DCO cells, nonDCO cells, creatives] per product. */
+  /** Per product, one number per surviving segment of PRODUCT_COUNT_LABELS. */
   counts: Record<string, number[]>;
+  /** Names of the segments actually present in `counts`. */
+  labels: string[];
   options: string[];
 };
 
@@ -63,5 +66,10 @@ export async function productInventory(
   }
   for (const c of creativeRows) bump(c.product, 2, c.n);
 
-  return { counts, options: Object.keys(counts).sort() };
+  const trimmed = trimEmptyCountSegments(counts, PRODUCT_COUNT_LABELS);
+  return {
+    counts: trimmed.counts,
+    labels: trimmed.labels,
+    options: Object.keys(counts).sort(),
+  };
 }

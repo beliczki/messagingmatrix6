@@ -27,10 +27,7 @@ import {
   type DayScope,
 } from "@/lib/day-scope";
 import { listStripCreatives, STRIP_PAGE } from "@/lib/dashboard-creatives";
-import {
-  PRODUCT_COUNT_LABELS,
-  productInventory,
-} from "@/lib/dashboard-products";
+import { productInventory } from "@/lib/dashboard-products";
 import { shareItemCount } from "@/lib/share-metadata";
 import CreativeStrip from "./_dashboard/CreativeStrip";
 import ProductFilter from "./_dashboard/ProductFilter";
@@ -243,20 +240,19 @@ export default async function Dashboard({
     shares,
     inventory,
     userRows,
-  ] =
-    await Promise.all([
-      entityCounts(client.id),
-      activityDigest(client.id, scope),
-      feedsInScope(client.id, scope, products),
-      reportFreshness(client.id),
-      listStripCreatives(client.id, scope, 0, STRIP_PAGE, products),
-      sharesInScope(client.id, scope),
-      productInventory(client.id),
-      db
-        .select({ id: users.id, email: users.email })
-        .from(users)
-        .where(eq(users.clientId, client.id)),
-    ]);
+  ] = await Promise.all([
+    entityCounts(client.id),
+    activityDigest(client.id, scope),
+    feedsInScope(client.id, scope, products),
+    reportFreshness(client.id),
+    listStripCreatives(client.id, scope, 0, STRIP_PAGE, products),
+    sharesInScope(client.id, scope),
+    productInventory(client.id),
+    db
+      .select({ id: users.id, email: users.email })
+      .from(users)
+      .where(eq(users.clientId, client.id)),
+  ]);
 
   const emailById = new Map(userRows.map((u) => [u.id, u.email]));
   const grouped = groupDigest(digest, emailById);
@@ -278,16 +274,19 @@ export default async function Dashboard({
             {scope.label}
           </span>
         </div>
-        <DayScopePicker scope={scope} />
         <ProductFilter
           options={inventory.options}
           counts={inventory.counts}
-          labels={PRODUCT_COUNT_LABELS}
+          labels={inventory.labels}
           selected={products}
           query={{ d: scope.date, r: scope.range }}
         />
-        <div className="toolbar__count ml-auto text-[11px] tabular-nums text-slate-500">
-          {scope.date} UTC
+        {/* The scope belongs with the date it resolves to, on the right. */}
+        <div className="dashboard__scope ml-auto flex items-center gap-3">
+          <DayScopePicker scope={scope} products={products} />
+          <div className="toolbar__count text-[11px] tabular-nums text-slate-500">
+            {scope.date} UTC
+          </div>
         </div>
       </header>
 
@@ -327,7 +326,7 @@ export default async function Dashboard({
             hint={`${events} write${events === 1 ? "" : "s"} · ${scope.label.toLowerCase()}`}
           >
             {grouped.length === 0 ? (
-              <EmptyLine scope={scope}>
+              <EmptyLine scope={scope} products={products}>
                 Nothing was written in this window.
               </EmptyLine>
             ) : (
@@ -367,7 +366,7 @@ export default async function Dashboard({
               href="/feeds"
             >
               {feeds.length === 0 ? (
-                <EmptyLine scope={scope}>
+                <EmptyLine scope={scope} products={products}>
                   No feed was exported in this window.
                 </EmptyLine>
               ) : (
@@ -417,7 +416,7 @@ export default async function Dashboard({
               href="/shares"
             >
               {shares.opened.length === 0 && shares.comments.length === 0 ? (
-                <EmptyLine scope={scope}>
+                <EmptyLine scope={scope} products={products}>
                   No share was opened and no one commented in this window.
                 </EmptyLine>
               ) : (
@@ -578,15 +577,25 @@ function groupDigest(
     .sort((a, b) => b.n - a.n || a.entityType.localeCompare(b.entityType));
 }
 
-function DayScopePicker({ scope }: { scope: DayScope }) {
+function DayScopePicker({
+  scope,
+  products,
+}: {
+  scope: DayScope;
+  products: string[];
+}) {
   const today = todayUtc();
+  const withProducts = (params: string) =>
+    products.length > 0
+      ? `/?${params}&p=${encodeURIComponent(products.join(","))}`
+      : `/?${params}`;
   const prev = shiftDay(scope.date, -1);
   const next = shiftDay(scope.date, 1);
   const atToday = scope.date === today;
   return (
     <nav className="day-scope flex items-center gap-1" aria-label="Day scope">
       <Link
-        href={`/?d=${prev}&r=${scope.range}`}
+        href={withProducts(`d=${prev}&r=${scope.range}`)}
         aria-label="Previous day"
         className="day-scope__step toolbar-btn flex size-7 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50"
       >
@@ -598,7 +607,7 @@ function DayScopePicker({ scope }: { scope: DayScope }) {
         </span>
       ) : (
         <Link
-          href={`/?d=${next}&r=${scope.range}`}
+          href={withProducts(`d=${next}&r=${scope.range}`)}
           aria-label="Next day"
           className="day-scope__step toolbar-btn flex size-7 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50"
         >
@@ -606,17 +615,17 @@ function DayScopePicker({ scope }: { scope: DayScope }) {
         </Link>
       )}
       <ScopePill
-        href="/"
+        href={withProducts(`d=${today}&r=day`)}
         label="Today"
         active={atToday && scope.range === "day"}
       />
       <ScopePill
-        href={`/?d=${shiftDay(today, -1)}`}
+        href={withProducts(`d=${shiftDay(today, -1)}&r=day`)}
         label="Yesterday"
         active={scope.date === shiftDay(today, -1) && scope.range === "day"}
       />
       <ScopePill
-        href={`/?d=${today}&r=7d`}
+        href={withProducts(`d=${today}&r=7d`)}
         label="Last 7 days"
         active={scope.range === "7d"}
       />
@@ -756,9 +765,12 @@ function Panel({
 function EmptyLine({
   children,
   scope,
+  products = [],
 }: {
   children: React.ReactNode;
   scope?: DayScope;
+  /** Kept on the "wider window" link, so it does not clear the filter. */
+  products?: string[];
 }) {
   return (
     <p className="empty-state__hint text-sm text-slate-500">
@@ -767,7 +779,11 @@ function EmptyLine({
         <>
           {" "}
           <Link
-            href={`/?d=${todayUtc()}&r=7d`}
+            href={
+              products.length > 0
+                ? `/?d=${todayUtc()}&r=7d&p=${encodeURIComponent(products.join(","))}`
+                : `/?d=${todayUtc()}&r=7d`
+            }
             className="empty-state__link text-slate-600 underline hover:text-slate-900"
           >
             Try the last 7 days

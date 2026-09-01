@@ -16,8 +16,10 @@ type Props = {
   statusOptions: string[];
   // MC count per status in the current result set (status filter excluded).
   statusCounts: Record<string, number>;
-  // [DCO, nonDCO] MC inventory per product — whole set, not the result.
+  // MC inventory per product — whole set, not the result. Segments that are
+  // zero for every product are dropped, so the labels come with them.
   productCounts: Record<string, number[]>;
+  productCountLabels: string[];
   counts: {
     audiences: number;
     topics: number;
@@ -79,7 +81,7 @@ export default function MatrixToolbar(p: Props) {
         values={p.filters.products}
         options={p.productOptions}
         optionCounts={p.productCounts}
-        countLabels={["DCO", "nonDCO"]}
+        countLabels={p.productCountLabels}
         quickSelect={ALL_NONE_QUICK_SELECT}
         onChange={(s) => p.setFilters({ ...p.filters, products: s })}
       />

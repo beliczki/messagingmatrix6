@@ -1231,3 +1231,10 @@ Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülé
 - **Bump:** `6.44.0` → **`6.45.0`** (minor).
 
 - **DEPLOYOLVA 6.44.0 + 6.45.0 (2026-09-01):** `c201838` (shares panel, toolbar-fejléc, sidebar-link) és `8459c12` (product filter), build 34.7s / 39.0s, `pm2 restart` → Ready 1378ms / 1301ms, box `package.json` **6.45.0**. Séma-migráció egyikhez sem kell. Health mindkettő után: `/` 307, `/matrix` 307, `/shares` 307, `/creative-library` 307.
+
+### 2026-09-01 — „mi az a 0-ás oszlop középen?" + toolbar-sorrend — 6.45.1
+- **User kérdése volt a bizonyíték arra, amit előző körben tudtam, de nem javítottam:** a nonDCO oszlop minden terméknél 0 (nincs channel-audience Erstében), és egy csupa-nulla oszlop csak kérdést szül. **`trimEmptyCountSegments`** (`lib/count-segments.ts`): ha egy szegmens MINDEN opciónál nulla, kiesik — a `countLabels` vele együtt. Magától visszajön, amint lesz ilyen adat. Ugyanez a mátrixban (DCO · nonDCO) és a Creative Library-ben (DCO · uploaded). Az utolsó szegmens sosem esik ki.
+- **Toolbar-sorrend (user):** product a cím után, a nap-scope jobbra a dátum mellé.
+- **⚠️ Menet közben talált hiba:** a nap-léptető és a Today/Yesterday/7 days linkek **nem vitték tovább a `?p=`-t**, tehát egy napváltás némán törölte a termékszűrőt. Most minden scope-link (és az üres állapot „try the last 7 days" linkje is) viszi.
+- **Teszt:** `count-segments.test.ts` (5) + a product-inventory tesztek a vágott alakra írva. Suite **653/653 zöld**.
+- **Bump:** `6.45.0` → **`6.45.1`** (patch).

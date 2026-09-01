@@ -3,7 +3,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { LayoutList, List, Grip, Table2, ListFilter, Pencil, GitFork } from "lucide-react";
-import clsx from "clsx";
+import clsx from "clsx";import { trimEmptyCountSegments } from "@/lib/count-segments";
+
 import { ReactFlowProvider } from "@xyflow/react";
 import GridView from "./GridView";
 import FeedView from "./FeedView";
@@ -788,7 +789,7 @@ export default function MatrixWorkspace() {
         bump(i > 0 ? m.topic.slice(0, i) : null, 1);
       }
     }
-    return out;
+    return trimEmptyCountSegments(out, ["DCO", "nonDCO"]);
   }, [messages, audienceById]);
 
   const topicById = useMemo(
@@ -968,7 +969,8 @@ export default function MatrixWorkspace() {
           productOptions={productOptions}
           statusOptions={statusOptions}
           statusCounts={filtered.statusCounts}
-          productCounts={productCounts}
+          productCounts={productCounts.counts}
+          productCountLabels={productCounts.labels}
           counts={{
             audiences: filtered.axisAudienceCount,
             topics: topics.length,

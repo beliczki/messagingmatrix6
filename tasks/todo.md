@@ -1132,6 +1132,8 @@ Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülé
 
 **Nyitott döntés a userre (a doksi 10. pontja):** a Telekom store-fan-out modellje — N valódi `messages` sor vs. 1 üzenet × N lokalizáció (`message_locales` additív tábla). Ez az egyetlen visszafordíthatatlan döntés, és az egyetlen pont, ahol a Telekom adatmennyiséggel ronthatna Erste-élményt. **Az első tömeges import ELŐTT kell eldönteni.**
 
+**Kiegészítés (ugyanaz a session):** a doksi új **11. fejezettel** bővült — „Séma-változás tenant-igényre". Lényeg: a közös DB + eltolt deploy miatt a destruktív migráció NEM „kockázatos", hanem azonnal leviszi a futó Erste-t (a drizzle felsorolja az oszlopokat, nem `SELECT *`), tehát az additív-only + expand→backfill→switch→contract üzemeltetési kényszer. Eszköz-sorrend: config (státusz-készlet, `*Structure` valódivá tétele) → sidecar tábla domain-névvel (precedens: `message_previews`/`text_formatting`) → additív nullable oszlop → külön adatbázis. **`search_path` schema-per-tenant: ne** (a drizzle-journal + globális táblák + pool miatt a data-access réteg átírása lenne, olyan izolációért, ami már megvan). `jsonb`: ma **nulla** json/jsonb oszlop van a sémában, tehát új minta lenne — egyelőre ne. Négy javasolt `CLAUDE.md`-szabály a 11.9-ben.
+
 ---
 
 ## SESSION-OSSZEFOGLALO — 2026-08-28 -> 09-01 (`6.27.3` -> `6.40.0`)
@@ -1152,3 +1154,25 @@ Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülé
 - **I5** 500-as limit szerinti feed-reszletek (user: „kesobb"; a modell-dontes megvan: ket onallo feed).
 - **I6.4 reszben:** kulcsmezo-valtozasnal (pmmid/advert_id) a regi sor ma az alapbol hordozodik szellemsorkent — ez mukodik —, de a *szandekos* rekey-forgatokonyv vegig nincs tesztelve.
 - **M9, W2.6/W2.7, M1, M4.2, M5–M8** es a Channels-epic S4–S6 tovabbra is a roadmapen.
+
+---
+
+## 2026-09-01 — I1 Dashboard átépítés (auto mód, user: „dönts magad")
+
+**Scope-döntés (magam hoztam, user felhatalmazásával):** I1.1 + I1.2 (D.2 users-join nélkül migráció) + I1.3 (egyszerűsítve) + I1.4 + I1.5 megy egy körben. **I1.6 (`actor_kind` migráció) és I1.7 (chartok) NEM** — előbbi séma-migrációt kér (külön passz a boxon), utóbbi 3 hónapos adatot rajzolna.
+- [x] **I1.1** `?d=YYYY-MM-DD&r=day|7d` nap-scope + Today / Yesterday / Last 7 days pill-sor. Server component marad, a scope az URL-ben. UTC-nap (a tárolt bélyeg UTC), a fejléc kimondja.
+- [x] **I1.2** Activity-digest: `entityType × action × aktor` aggregálva, darabszámmal, users-join (email a nyers `user_id` helyett). A 15-soros nyers lista helyett.
+- [x] **I1.3** Friss kreatívok vízszintes csík, 250px egységes MAGASSÁG, léptető gombokkal. **Infinite scroll / swipe-fizika kimarad** (a nap-scope halmaza kicsi, nincs mit tölteni).
+- [x] **I1.4** Aznapi feed-exportok + „exportálva, nincs feltöltve" badge.
+- [x] **I1.5** Riport-frissesség tile (`monitoring` max(imported_at) + lefedett periódus + „N napja").
+- [x] Entity-count csempék megmaradnak, de a lap aljára („Library"), mert nem nap-scope-osak.
+
+**KÉSZ (6.41.0, nincs deployolva — a boxon még 6.40.0 fut).**
+- **Új fájlok:** `src/lib/day-scope.ts` (scope-feloldás, 7 unit teszt), `(app)/_dashboard/CreativeStrip.tsx`. Átírva: `(app)/page.tsx`.
+- **Amit a lap most mond (élő adaton ellenőrizve):** ma 3 írás / 3 export (2 nem publikált), 7 napra 5569 írás 25 fajtából, `messages` update 5242 (ebből `system` 1145 — **null `user_id`**, tehát az `actor_kind` (I1.6) kérdése tényleg él), riport-adat **47 napja** áll.
+- **Két döntés, amit a terv nyitva hagyott, és most eldőlt:**
+  1. **A kreatív-csík nem lehet szigorúan nap-scope-os** — az utolsó `creatives.created_at` **2025-12-22**, tehát a widget örökre üres lenne. Megoldás: a scope vezet, de ha üres, a **legutóbbi 24** kreatívot mutatja, és **kiírja, hogy azt csinálja** (`none in this window — latest arrived …`). Infinite scroll/swipe-fizika ezért kimaradt: nincs mit tölteni.
+  2. **A magasság a médián van, nem az anchoron.** Az anchor szélessége a képből jön, a kép magassága pedig százalékban az anchorhoz kötődött volna — körkörös; a tile-ok 10px-es csíkokká estek össze. `h-[250px]` az `img`/`video`/placeholder elemre.
+- **Nem került bele:** I1.6 (`actor_kind` — séma-migráció, külön passz a boxon) és I1.7 (chartok — a 47 napos adat miatt).
+- **Verifikáció:** `tsc` 0, `npm run build` 0, eslint **0 error**, **632/632 teszt zöld** (625 + 7 új). Vizuálisan mindkét scope ellenőrizve élő adattal.
+- **Bump:** `6.40.0` → **`6.41.0`** (minor — új oldal-viselkedés).

@@ -5,6 +5,38 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.41.0] — 2026-09-01
+
+### Changed
+- **The dashboard is a day digest instead of a counter page.** It opens on
+  today and can be moved a day at a time or widened to the last seven, with the
+  scope carried in the URL (`/?d=2026-09-01&r=7d`) so a view can be linked or
+  reloaded. The window is a UTC day, which is how every timestamp in the
+  database is stored; the header says so.
+- **Activity is aggregated, not tailed.** The old page listed the last 15 audit
+  rows — on a day that wrote 5085 of them, that list said nothing. It now
+  groups by entity and action with a count and the people behind it (email,
+  resolved from the audit row's user id, rather than the raw id), longest first,
+  capped at 15 kinds with a "+N more" line.
+- **The entity counters moved to the bottom** as "Library · all time" and now
+  link to the pages they count (Audiences and Topics went to /matrix before).
+
+### Added
+- **Three signal tiles**: writes in the window, feeds exported in the window
+  with how many are still not published to AdForm, and how old the reporting
+  data is. The last one is the point: the monitoring import has been silent
+  since 2026-07-16 while the matrix kept moving, and the tile says that out
+  loud instead of letting a chart imply freshness.
+- **Feed exports of the window**, each linking to its detail page, marked
+  published or not published — the uploaded-is-not-exported distinction the
+  feed invariants rest on, visible on the front page.
+- **A creatives strip** normalized to a single 250px height, so a 300x250
+  banner and a 1080x1080 square sit side by side without cropping or
+  letterboxing, with step buttons for the overflow. Delivery is bursty and most
+  windows have no new creative, so an empty window falls back to the latest
+  arrivals and labels itself as doing that, rather than showing a permanently
+  empty widget.
+
 ## [6.40.0] — 2026-09-01
 
 ### Changed

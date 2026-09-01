@@ -866,3 +866,27 @@ A fejléc két sávra bomlott. Amit meglévő névből vettünk: `commented-only
 | Kapcsoló számlálója | `share-gallery__image-toggle-count` | `multi-pill__badge` tónusa; amber, ha kevesebb elemnek van képe, mint amennyi látszik — a Creative Library hiányzó-preview nyelvét követi |
 | Eltárolt preview PNG egy tile-ban | `stored-preview` | `block w-full` + `aspectRatio` a betöltés előtti helyfoglaláshoz |
 | Ugyanaz, ha nincs generált kép | `stored-preview--missing` | „no preview image", megtartja a banner képarányát |
+
+### Dashboard — napi digest (`(app)/page.tsx` + `_dashboard/CreativeStrip.tsx`, 2026-09-01)
+
+A lap gyökere `dashboard`. Meglévő névből vettük: `toolbar-btn` (nap-léptető + scope pill inaktív állapota), `status-badge` (published / not published, action-badge), `empty-state__hint`, `media-tile` / `media-tile__image` / `media-tile__placeholder` / `thumb-checker` (a Creative Library tile nyelve).
+
+| Mi | Class | Megjegyzés |
+| --- | --- | --- |
+| Lap gyökér | `dashboard` | – |
+| Fejléc (cím + scope) | `dashboard__header` | – |
+| Nap-scope sáv | `day-scope` | `<nav>`; a szűrő maga a nap-választó, nem generikus filter-sáv |
+| Előző/következő nap | `day-scope__step` (+`--disabled`) | a „következő" ma inaktív, mert jövő nincs |
+| Today / Yesterday / Last 7 days | `day-scope__pill` (+`--active`) | aktív = slate-900 tömb, mint a `toggle-btn--active` |
+| Az aktuális nap kiírva | `day-scope__date` | mono, `YYYY-MM-DD UTC` |
+| Felső jelző-csempe sor | `dashboard__signals` | 3 csempe |
+| Egy jelző-csempe | `signal-tile` + `__label` / `__value` / `__hint` | `href`-fel linkké válik; tónus: ok / warn (amber) / muted |
+| Két-hasábos törzs | `dashboard__columns` | `items-start` — a rövidebb panel nem nyúlik |
+| Panel keret (cím + hint + „Open →") | `panel` + `__header` / `__title` / `__hint` / `__link` | a dashboard általános doboza |
+| Activity aggregátum lista | `activity-digest` + `__row` / `__action` / `__entity` / `__actors` / `__count` | entity × action, darabszámmal |
+| „+N more kinds of change" | `activity-digest__more` | 15 sor után |
+| Feed-export lista | `feed-digest` + `__row` / `__product` / `__meta` | – |
+| Publikálva / nem publikálva | `feed-digest__badge--live` / `--pending` | `status-badge` tónusai |
+| Kreatív-csík | `creative-strip` + `__scroller` / `__tile` / `__step` | egységes 250px MAGASSÁG, változó szélesség (a méret a médián van, nem az anchoron) |
+| Üres állapot + kiút | `empty-state__hint` + `empty-state__link` | „Try the last 7 days" |
+| Alsó összeszámláló csempék | `count-tile` + `__label` / `__value` | „Library · all time" |

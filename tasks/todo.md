@@ -1081,3 +1081,5 @@ Az IO callback a legutóbbi kézbesítés óta **sorba állt összes** entry-t k
 - **Gazdag alap-választó** (`BaselinePicker`): fájlnév + `reference`/`export vN` + `· live` + dátum. Natív select helyett popover, `MultiPill` mechanikával. **Az „automatic" sor megszűnt:** a legfrissebb ÉLŐ feed van előre kijelölve (ha nincs élő, a legfrissebb épített), kézi választást soha nem ír felül.
 - **Teszt:** +2 (`feed-carry-forward.test.ts`): a nem-építhető sor bent van FALSE-szal és a ReportingLabelje sértetlen; a frissen épített sor nem duplázódik az alapból. Suite **621/621 zöld**.
 - **Bump:** `6.37.1` → **`6.38.0`** (minor — feed-kimenet viselkedés-változás + új vezérlő).
+
+- **DEPLOYOLVA 6.38.0 (2026-09-01):** commit `65db982`, box `0ee3ec8`→`65db982`, build 36.8s, `pm2 restart` → **Ready 1393ms**, online. Nincs séma-migráció. Health: `/` 307, `/matrix` 307, `/api/feed-exports` 401.

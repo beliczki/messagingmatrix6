@@ -10,7 +10,7 @@ import {
 } from "../../_components/MatrixIframeTile";
 import { type MatrixNavItem } from "../../creative-library/MatrixDetailDialog";
 import MonitoringDetailDialog from "./MonitoringDetailDialog";
-import MultiPill from "../../_components/MultiPill";
+import MultiPill, { ALL_NONE_QUICK_SELECT } from "../../_components/MultiPill";
 import type { Message, Audience } from "../../matrix/types";
 
 type TemplateInfo = {
@@ -218,6 +218,14 @@ export default function MonitoringTable({
       ),
     ].sort();
   }, [data]);
+  // Counted over the whole set: the product filter is this pill's own.
+  const productCounts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const r of data?.rows ?? []) {
+      if (r.product) out[r.product] = (out[r.product] ?? 0) + 1;
+    }
+    return out;
+  }, [data]);
 
   // Collapse the size-grained rows back to one display row per
   // (platform, product, MC, audience, topic, message), summing metrics. The
@@ -353,6 +361,8 @@ export default function MonitoringTable({
           label="Product"
           values={products}
           options={productOptions}
+          optionCounts={productCounts}
+          quickSelect={ALL_NONE_QUICK_SELECT}
           onChange={setProducts}
         />
         <MultiPill

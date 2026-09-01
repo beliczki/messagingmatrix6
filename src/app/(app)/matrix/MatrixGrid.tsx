@@ -762,6 +762,35 @@ export default function MatrixWorkspace() {
     () => new Map(audiences.map((a) => [a.key, a])),
     [audiences],
   );
+
+  // MC inventory per product for the Product filter menu: how many DCO cells
+  // and how many nonDCO ones the product has. Measured over the whole message
+  // set, not the current result — a product picker is read to decide where to
+  // look, so the numbers must not move as the other filters narrow. DCO/nonDCO
+  // is the audience partition (channel == null vs not), the same one the axis
+  // switch uses; nonDCO product comes from the topic key prefix, since those
+  // channel audiences are product-agnostic.
+  const productCounts = useMemo(() => {
+    const out: Record<string, number[]> = {};
+    const bump = (product: string | null, slot: 0 | 1) => {
+      if (!product) return;
+      const cur = out[product] ?? [0, 0];
+      cur[slot] += 1;
+      out[product] = cur;
+    };
+    for (const m of messages) {
+      const a = audienceById.get(m.audience);
+      if (!a) continue;
+      if (a.channel == null) {
+        bump(a.product ?? null, 0);
+      } else {
+        const i = m.topic.indexOf("_");
+        bump(i > 0 ? m.topic.slice(0, i) : null, 1);
+      }
+    }
+    return out;
+  }, [messages, audienceById]);
+
   const topicById = useMemo(
     () => new Map([...topics, ...nonDcoTopics].map((t) => [t.key, t])),
     [topics, nonDcoTopics],
@@ -939,6 +968,7 @@ export default function MatrixWorkspace() {
           productOptions={productOptions}
           statusOptions={statusOptions}
           statusCounts={filtered.statusCounts}
+          productCounts={productCounts}
           counts={{
             audiences: filtered.axisAudienceCount,
             topics: topics.length,

@@ -23,7 +23,7 @@ import { type Column } from "./columns";
 import { useRowAutosave, type Versioned, type RowSaveState } from "./useRowAutosave";
 import DimensionEditPanel from "./DimensionEditPanel";
 import ArchiveToggle from "../ArchiveToggle";
-import MultiPill, { STATUS_QUICK_SELECT } from "../MultiPill";
+import MultiPill, { ALL_NONE_QUICK_SELECT } from "../MultiPill";
 import RightToolbar from "../RightToolbar";
 import EntityHistoryDrawer, {
   type HistoryEntity,
@@ -313,7 +313,7 @@ export default function DimensionGrid<T extends Versioned>({
           label="Status"
           values={statuses}
           options={statusOptions}
-          quickSelect={STATUS_QUICK_SELECT}
+          quickSelect={ALL_NONE_QUICK_SELECT}
           onChange={setStatuses}
         />
         <MultiPill

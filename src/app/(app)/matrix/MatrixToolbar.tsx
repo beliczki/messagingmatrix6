@@ -2,7 +2,7 @@
 
 import { X, Filter as FilterIcon, Users, ListTree } from "lucide-react";
 import { type Filters, type MatrixAxis, STATUS_COLOR } from "./types";
-import MultiPill, { STATUS_QUICK_SELECT } from "../_components/MultiPill";
+import MultiPill, { ALL_NONE_QUICK_SELECT } from "../_components/MultiPill";
 
 const AXES: Array<{ key: MatrixAxis; label: string }> = [
   { key: "dco", label: "DCO" },
@@ -16,6 +16,8 @@ type Props = {
   statusOptions: string[];
   // MC count per status in the current result set (status filter excluded).
   statusCounts: Record<string, number>;
+  // [DCO, nonDCO] MC inventory per product — whole set, not the result.
+  productCounts: Record<string, number[]>;
   counts: {
     audiences: number;
     topics: number;
@@ -76,6 +78,9 @@ export default function MatrixToolbar(p: Props) {
         label="Product"
         values={p.filters.products}
         options={p.productOptions}
+        optionCounts={p.productCounts}
+        countLabels={["DCO", "nonDCO"]}
+        quickSelect={ALL_NONE_QUICK_SELECT}
         onChange={(s) => p.setFilters({ ...p.filters, products: s })}
       />
       <MultiPill
@@ -84,7 +89,7 @@ export default function MatrixToolbar(p: Props) {
         options={p.statusOptions}
         optionColors={STATUS_COLOR}
         optionCounts={p.statusCounts}
-        quickSelect={STATUS_QUICK_SELECT}
+        quickSelect={ALL_NONE_QUICK_SELECT}
         onChange={(s) => p.setFilters({ ...p.filters, statuses: s })}
       />
 

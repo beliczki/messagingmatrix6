@@ -127,14 +127,31 @@ export async function listStripCreatives(
   scope: DayScope,
   offset = 0,
   limit = STRIP_PAGE,
+  products: string[] = [],
 ): Promise<StripPage> {
   const templates = stripTemplates();
   const templateNames = [...templates.keys()];
+
+  // A product narrows both sources, but it reaches them differently: a
+  // creative carries its own product column, while a cell's product hangs off
+  // its audience.
+  const productKeys = products.length
+    ? db
+        .select({ key: audiences.key })
+        .from(audiences)
+        .where(
+          and(
+            eq(audiences.clientId, clientId),
+            inArray(audiences.product, products),
+          ),
+        )
+    : null;
 
   const liveCreative = and(
     eq(creatives.clientId, clientId),
     isNull(creatives.archivedAt),
     inArray(creatives.fileDimensions, STRIP_SIZES),
+    products.length ? inArray(creatives.product, products) : undefined,
   );
   // Same rule the Creative Library applies to its matrix tiles: live cells
   // only, and only templates that actually render at one of these sizes.
@@ -145,6 +162,7 @@ export async function listStripCreatives(
     templateNames.length > 0
       ? inArray(messages.template, templateNames)
       : sql`false`,
+    productKeys ? inArray(messages.audience, productKeys) : undefined,
   );
 
   const windowed = (base: ReturnType<typeof and>, col: PgColumn) =>

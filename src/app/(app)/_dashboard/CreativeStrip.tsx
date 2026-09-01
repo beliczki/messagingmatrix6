@@ -22,8 +22,8 @@ const LOAD_AHEAD_PX = 800;
 type Props = {
   /** First page, rendered on the server so the strip is never empty on load. */
   page: StripPage;
-  /** Day scope, echoed back to the API so paging stays inside the window. */
-  scope: { d: string; r: string };
+  /** Scope + product filter, echoed back so paging matches what is on screen. */
+  scope: { d: string; r: string; p: string };
 };
 
 export default function CreativeStrip({ page, scope }: Props) {
@@ -54,7 +54,7 @@ export default function CreativeStrip({ page, scope }: Props) {
     inFlight.current = true;
     try {
       const r = await fetch(
-        `/api/dashboard/creatives?d=${scope.d}&r=${scope.r}&offset=${cursor.current}`,
+        `/api/dashboard/creatives?d=${scope.d}&r=${scope.r}&p=${encodeURIComponent(scope.p)}&offset=${cursor.current}`,
         { credentials: "include" },
       );
       if (!r.ok) {
@@ -71,7 +71,7 @@ export default function CreativeStrip({ page, scope }: Props) {
     } finally {
       inFlight.current = false;
     }
-  }, [scope.d, scope.r]);
+  }, [scope.d, scope.r, scope.p]);
 
   const sync = useCallback(() => {
     const el = scrollerRef.current;

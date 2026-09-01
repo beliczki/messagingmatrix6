@@ -11,8 +11,9 @@ export type QuickPreset = {
   values: string[] | "all" | "none" | "all-none";
 };
 
-// Shared by both Status pills (matrix toolbar + DimensionGrid).
-export const STATUS_QUICK_SELECT = {
+// "Select all / none" — the whole-list shorthand every multi-select filter
+// wants. Named for what it does, not for the Status pill it first shipped on.
+export const ALL_NONE_QUICK_SELECT = {
   prefix: "Select",
   presets: [
     { label: "all", values: "all" },
@@ -32,7 +33,13 @@ type Props = {
   // responsible for computing these against the result set *before* this pill's
   // own filter is applied — otherwise every selected option would just count
   // itself and every unselected one would read 0.
-  optionCounts?: Record<string, number>;
+  //
+  // An array renders as several numbers separated by dots — one option, more
+  // than one thing worth counting (e.g. DCO / nonDCO / creatives per product).
+  // Name the parts in `countLabels` so the tooltip can say which is which.
+  optionCounts?: Record<string, number | number[]>;
+  /** Names for the segments of an array-valued count, in the same order. */
+  countLabels?: string[];
   // Optional quick-select row at the top of the menu. Omit for a plain list.
   quickSelect?: { prefix?: string; presets: QuickPreset[] };
 };
@@ -44,6 +51,7 @@ export default function MultiPill({
   onChange,
   optionColors,
   optionCounts,
+  countLabels,
   quickSelect,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -152,9 +160,10 @@ export default function MultiPill({
                 ) : null}
                 <span className="truncate">{opt}</span>
                 {optionCounts ? (
-                  <span className="multi-pill__count ml-auto pl-2 text-xs tabular-nums text-slate-400">
-                    {optionCounts[opt] ?? 0}
-                  </span>
+                  <OptionCount
+                    value={optionCounts[opt] ?? 0}
+                    labels={countLabels}
+                  />
                 ) : null}
               </label>
             );
@@ -162,5 +171,27 @@ export default function MultiPill({
         </div>
       ) : null}
     </div>
+  );
+}
+
+function OptionCount({
+  value,
+  labels,
+}: {
+  value: number | number[];
+  labels?: string[];
+}) {
+  const parts = Array.isArray(value) ? value : [value];
+  return (
+    <span
+      className="multi-pill__count ml-auto shrink-0 pl-2 text-xs tabular-nums text-slate-400"
+      title={
+        labels
+          ? parts.map((n, i) => `${n} ${labels[i] ?? ""}`.trim()).join(" · ")
+          : undefined
+      }
+    >
+      {parts.join(" · ")}
+    </span>
   );
 }

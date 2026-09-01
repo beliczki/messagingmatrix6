@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { db } from "@/db";
-import { clients, creatives, messages } from "@/db/schema";
+import { audiences, clients, creatives, messages } from "@/db/schema";
 import {
   listStripCreatives,
   STRIP_PAGE,
@@ -233,5 +233,61 @@ describe("dashboard creative strip", () => {
       archivedAt: "2026-09-01 07:40:00",
     });
     expect(names(await listStripCreatives(erste.id, today))).toEqual(["live.png"]);
+  });
+});
+
+describe("dashboard creative strip — product filter", () => {
+  it("narrows both sources, each through its own product link", async () => {
+    await db.insert(audiences).values([
+      { clientId: erste.id, key: "szk_aud", name: "szk", product: "SZK", orderIndex: 0 },
+      { clientId: erste.id, key: "val_aud", name: "val", product: "VAL", orderIndex: 0 },
+    ]);
+    await db.insert(messages).values([
+      {
+        clientId: erste.id,
+        number: 1,
+        variant: "a",
+        audience: "szk_aud",
+        topic: "SZK_t",
+        template: "html",
+        status: "ACTIVE",
+        updatedAt: "2026-08-30 09:00:00",
+      },
+      {
+        clientId: erste.id,
+        number: 2,
+        variant: "a",
+        audience: "val_aud",
+        topic: "VAL_t",
+        template: "html",
+        status: "ACTIVE",
+        updatedAt: "2026-08-30 09:00:01",
+      },
+    ]);
+    await db.insert(creatives).values([
+      {
+        clientId: erste.id,
+        product: "SZK",
+        fileName: "szk.png",
+        fileDimensions: "300x250",
+        updatedAt: "2026-08-30 09:00:02",
+      },
+      {
+        clientId: erste.id,
+        product: "VAL",
+        fileName: "val.png",
+        fileDimensions: "300x250",
+        updatedAt: "2026-08-30 09:00:03",
+      },
+    ]);
+
+    const all = await listStripCreatives(erste.id, today);
+    expect(names(all)).toEqual(["val.png", "szk.png", "MC2a", "MC1a"]);
+
+    // A creative carries its own product column; a cell's product hangs off
+    // its audience — one filter, two different paths to it.
+    const szk = await listStripCreatives(erste.id, today, 0, STRIP_PAGE, ["SZK"]);
+    expect(names(szk)).toEqual(["szk.png", "MC1a"]);
+    expect(szk.total).toBe(2);
   });
 });

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { and, count, desc, eq, gte, isNull, lte } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { db } from "@/db";
 import {
@@ -26,9 +26,14 @@ import {
   todayUtc,
   type DayScope,
 } from "@/lib/day-scope";
-import { listStripCreatives } from "@/lib/dashboard-creatives";
+import { listStripCreatives, STRIP_PAGE } from "@/lib/dashboard-creatives";
+import {
+  PRODUCT_COUNT_LABELS,
+  productInventory,
+} from "@/lib/dashboard-products";
 import { shareItemCount } from "@/lib/share-metadata";
 import CreativeStrip from "./_dashboard/CreativeStrip";
+import ProductFilter from "./_dashboard/ProductFilter";
 
 export const dynamic = "force-dynamic";
 
@@ -99,7 +104,7 @@ function activityDigest(clientId: number, scope: DayScope) {
     .groupBy(auditLog.entityType, auditLog.action, auditLog.userId);
 }
 
-function feedsInScope(clientId: number, scope: DayScope) {
+function feedsInScope(clientId: number, scope: DayScope, products: string[]) {
   return db
     .select({
       id: feedExports.id,
@@ -118,6 +123,7 @@ function feedsInScope(clientId: number, scope: DayScope) {
         eq(feedExports.clientId, clientId),
         gte(feedExports.exportedAt, scope.from),
         lte(feedExports.exportedAt, scope.to),
+        products.length ? inArray(feedExports.product, products) : undefined,
       ),
     )
     .orderBy(desc(feedExports.exportedAt))
@@ -213,7 +219,7 @@ async function reportFreshness(clientId: number) {
 export default async function Dashboard({
   searchParams,
 }: {
-  searchParams: Promise<{ d?: string; r?: string }>;
+  searchParams: Promise<{ d?: string; r?: string; p?: string }>;
 }) {
   // Defense-in-depth: layout already enforces auth, but a direct hit here
   // without the layout (rare) would bypass it.
@@ -222,16 +228,30 @@ export default async function Dashboard({
 
   const sp = await searchParams;
   const scope = resolveDayScope(sp.d, sp.r);
+  const products = (sp.p ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
   const client = await getActiveClient();
 
-  const [counts, digest, feeds, freshness, creativeStrip, shares, userRows] =
+  const [
+    counts,
+    digest,
+    feeds,
+    freshness,
+    creativeStrip,
+    shares,
+    inventory,
+    userRows,
+  ] =
     await Promise.all([
       entityCounts(client.id),
       activityDigest(client.id, scope),
-      feedsInScope(client.id, scope),
+      feedsInScope(client.id, scope, products),
       reportFreshness(client.id),
-      listStripCreatives(client.id, scope),
+      listStripCreatives(client.id, scope, 0, STRIP_PAGE, products),
       sharesInScope(client.id, scope),
+      productInventory(client.id),
       db
         .select({ id: users.id, email: users.email })
         .from(users)
@@ -259,6 +279,13 @@ export default async function Dashboard({
           </span>
         </div>
         <DayScopePicker scope={scope} />
+        <ProductFilter
+          options={inventory.options}
+          counts={inventory.counts}
+          labels={PRODUCT_COUNT_LABELS}
+          selected={products}
+          query={{ d: scope.date, r: scope.range }}
+        />
         <div className="toolbar__count ml-auto text-[11px] tabular-nums text-slate-500">
           {scope.date} UTC
         </div>
@@ -469,7 +496,7 @@ export default async function Dashboard({
             ) : (
               <CreativeStrip
                 page={creativeStrip}
-                scope={{ d: scope.date, r: scope.range }}
+                scope={{ d: scope.date, r: scope.range, p: products.join(",") }}
               />
             )}
           </Panel>

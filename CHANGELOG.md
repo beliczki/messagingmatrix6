@@ -5,6 +5,28 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.45.0] — 2026-09-01
+
+### Added
+- **A Product filter on the dashboard**, in the toolbar beside the day scope.
+  It narrows the creatives strip and the feed exports — the two panels whose
+  rows carry a product; activity, shares and the library totals have none and
+  are left alone. The selection lives in the URL (`?p=SZK,VAL`) like the scope,
+  so a filtered view is linkable and survives a reload.
+- **Every product filter now has "Select all / none"** — matrix, feeds,
+  creative library, assets, monitoring — the row the status filter has had all
+  along.
+- **Per-product counts in those menus**, in small grey. The dashboard shows
+  three numbers per product — DCO cells, nonDCO cells, delivered creatives —
+  the matrix shows DCO and nonDCO, the creative library DCO and uploaded, and
+  the rest a single row count. A tooltip names the segments. Counted over the
+  whole library, not the current result: a product picker is read to decide
+  where to look, so the numbers must not collapse to zero on a quiet day.
+
+### Changed
+- `STATUS_QUICK_SELECT` is now `ALL_NONE_QUICK_SELECT` — it was never about
+  status, and it is now on six filters.
+
 ## [6.44.0] — 2026-09-01
 
 ### Added

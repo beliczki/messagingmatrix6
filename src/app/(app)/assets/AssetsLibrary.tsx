@@ -14,7 +14,7 @@ import clsx from "clsx";
 import { Masonry } from "../_components/Masonry";
 import AssetUploadDialog from "./AssetUploadDialog";
 import { useDropTarget, type QueueItem } from "../_components/UploadQueue";
-import MultiPill from "../_components/MultiPill";
+import MultiPill, { ALL_NONE_QUICK_SELECT } from "../_components/MultiPill";
 import ArchiveToggle from "../_components/ArchiveToggle";
 import RightToolbar from "../_components/RightToolbar";
 import AssetDetailDialog from "./AssetDetailDialog";
@@ -162,6 +162,12 @@ export default function AssetsLibrary() {
     for (const a of assets) if (a.product) s.add(a.product);
     return [...s].sort();
   }, [assets]);
+  // Counted over the whole set: the product filter is this pill's own.
+  const productCounts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const a of assets) if (a.product) out[a.product] = (out[a.product] ?? 0) + 1;
+    return out;
+  }, [assets]);
   const typeOptions = useMemo(() => {
     const s = new Set<string>();
     for (const a of assets) if (a.type) s.add(a.type);
@@ -210,7 +216,14 @@ export default function AssetsLibrary() {
           />
         </div>
 
-        <MultiPill label="Product" values={products} options={productOptions} onChange={setProducts} />
+        <MultiPill
+          label="Product"
+          values={products}
+          options={productOptions}
+          optionCounts={productCounts}
+          quickSelect={ALL_NONE_QUICK_SELECT}
+          onChange={setProducts}
+        />
         <MultiPill label="Type" values={types} options={typeOptions} onChange={setTypes} />
 
         {(products.size > 0 || types.size > 0 || search) ? (

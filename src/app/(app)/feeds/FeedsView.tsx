@@ -16,7 +16,7 @@ import {
   Upload as UploadIcon,
 } from "lucide-react";
 import clsx from "clsx";
-import MultiPill from "../_components/MultiPill";
+import MultiPill, { ALL_NONE_QUICK_SELECT } from "../_components/MultiPill";
 import RightToolbar from "../_components/RightToolbar";
 import { useAlertDialog } from "../_components/AlertDialog";
 
@@ -100,6 +100,15 @@ export function FeedsView() {
   const productOptions = useMemo(() => {
     if (!q.data) return [];
     return [...new Set(q.data.map((r) => r.product))].sort();
+  }, [q.data]);
+
+  // Feeds per product, counted over the whole list — the product filter is
+  // this pill's own, so counting after it would leave every unselected option
+  // reading 0.
+  const productCounts = useMemo(() => {
+    const out: Record<string, number> = {};
+    for (const r of q.data ?? []) out[r.product] = (out[r.product] ?? 0) + 1;
+    return out;
   }, [q.data]);
 
   // Exactly one export per product is live, and it is the most recently
@@ -335,6 +344,8 @@ export function FeedsView() {
             label="Product"
             values={products}
             options={productOptions}
+            optionCounts={productCounts}
+            quickSelect={ALL_NONE_QUICK_SELECT}
             onChange={setProducts}
           />
           <div className="toolbar__count ml-auto text-[11px] tabular-nums text-slate-500">

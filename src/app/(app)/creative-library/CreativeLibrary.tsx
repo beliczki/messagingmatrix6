@@ -28,7 +28,10 @@ import UploadQueue, {
   useDropTarget,
   type QueueItem,
 } from "../_components/UploadQueue";
-import MultiPill, { type QuickPreset } from "../_components/MultiPill";
+import MultiPill, {
+  ALL_NONE_QUICK_SELECT,
+  type QuickPreset,
+} from "../_components/MultiPill";
 
 // Size-pill shortcuts. Each named preset toggles its own sizes (so social+iab
 // can stack); "none" flips the whole list between all-selected and cleared.
@@ -430,6 +433,19 @@ export default function CreativeLibrary() {
     for (const c of items) if (c.product) s.add(c.product);
     return [...s].sort();
   }, [items]);
+  // [DCO, uploaded] per product: matrix cells rendered from a template versus
+  // delivered files. Counted over the whole set — the product filter is this
+  // pill's own, and counting after it would leave every unselected option at 0.
+  const productCounts = useMemo(() => {
+    const out: Record<string, number[]> = {};
+    for (const c of items) {
+      if (!c.product) continue;
+      const cur = out[c.product] ?? [0, 0];
+      cur[c.kind === "matrix" ? 0 : 1] += 1;
+      out[c.product] = cur;
+    }
+    return out;
+  }, [items]);
   const typeOptions = useMemo(() => {
     const s = new Set<string>();
     for (const c of items) if (c.type) s.add(c.type);
@@ -547,6 +563,7 @@ export default function CreativeLibrary() {
           search={search}
           setSearch={setSearch}
           productOptions={productOptions}
+          productCounts={productCounts}
           products={products}
           setProducts={setProducts}
           typeOptions={typeOptions}
@@ -797,6 +814,7 @@ function Toolbar({
   search,
   setSearch,
   productOptions,
+  productCounts,
   products,
   setProducts,
   typeOptions,
@@ -812,6 +830,8 @@ function Toolbar({
   search: string;
   setSearch: (s: string) => void;
   productOptions: string[];
+  /** [DCO, uploaded] per product. */
+  productCounts: Record<string, number[]>;
   products: Set<string>;
   setProducts: (s: Set<string>) => void;
   typeOptions: string[];
@@ -843,7 +863,15 @@ function Toolbar({
         />
       </div>
 
-      <MultiPill label="Product" values={products} options={productOptions} onChange={setProducts} />
+      <MultiPill
+        label="Product"
+        values={products}
+        options={productOptions}
+        optionCounts={productCounts}
+        countLabels={["DCO", "uploaded"]}
+        quickSelect={ALL_NONE_QUICK_SELECT}
+        onChange={setProducts}
+      />
       <MultiPill label="Type" values={types} options={typeOptions} onChange={setTypes} />
       <MultiPill label="Size" values={sizes} options={sizeOptions} quickSelect={SIZE_QUICK_SELECT} onChange={setSizes} />
 

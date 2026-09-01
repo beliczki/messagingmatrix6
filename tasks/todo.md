@@ -1219,3 +1219,13 @@ Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülé
 - **Sidebar:** a kliens-név `Link` a `/`-ra. Dashboard menüpont **nem** kell (user döntése).
 - `shareItemCount` kikerült a share-galleries route-ból `lib/share-metadata.ts`-be (két hívó).
 - **Bump:** `6.43.0` → **`6.44.0`** (minor).
+
+### 2026-09-01 — Product filter mindenhol: all/none + darabszámok — 6.45.0
+- **User:** „filter gombok közé kéne egy product filter mint a matrixnál, amibe kéne egy olyan mint a statuszban hogy all none, és termékenként megjelölni kicsi szürke számmal a dco nondco mc és creative számokat, in fact a matrix és több product filterbe is jó lenne egy ilyen".
+- **A `MultiPill` kapta a bővítést, nem minden hívó külön:** az `optionCounts` értéke lehet **szám vagy szám-tömb** (több dolog egy opció mellett, ponttal elválasztva), és `countLabels` nevezi meg a szegmenseket a tooltipben. A `STATUS_QUICK_SELECT` átnevezve **`ALL_NONE_QUICK_SELECT`**-re — sosem a státuszról szólt, és most hat szűrőn van rajta.
+- **Hol lett all/none + darabszám:** dashboard (új), matrix (DCO · nonDCO), creative library (DCO · uploaded), feeds, assets, monitoring (sima sor-darabszám).
+- **DCO vs nonDCO definíciója (a mátrix tengelyétől örökölve):** `audiences.channel == null` → DCO; `!= null` → nonDCO, és ott a **termék a topic-kulcs prefixéből** jön, mert a channel-audience-ek termék-agnosztikusak. ⚠️ **Erstében ma 0 channel-audience van (mind a 180 `channel = null`)**, ezért a nonDCO oszlop mindenhol 0 — ez helyes adat, nem hiba; a teszt viszont lefedi a nonDCO ágat, hogy amikor jön ilyen adat, működjön.
+- **A darabszám az EGÉSZ könyvtárra megy, nem az ablakra** (a státusz-darabszámmal ellentétben): egy termék-választót azért néz meg az ember, hogy eldöntse, hova nézzen — csendes napon a nullák haszontalanok lennének. A `MultiPill` doksija eddig is kimondta, hogy a saját szűrője ELŐTT kell számolni.
+- **Dashboard-szűrés:** a `?p=SZK,VAL` a csíkot és a feed-panelt szűkíti — az a két panel, aminek a sorain van termék. Az activity, a shares és a Library-összegek érintetlenek (nincs rajtuk termék). ⚠️ **A két forrás máshogy éri el a terméket:** a kreatívnak saját `product` oszlopa van, a cellának az audience-én lóg (subquery az audience-kulcsokra).
+- **Teszt:** új `dashboard-products.test.ts` (4) + a csík product-szűrő tesztje. Suite **648/648 zöld**.
+- **Bump:** `6.44.0` → **`6.45.0`** (minor).

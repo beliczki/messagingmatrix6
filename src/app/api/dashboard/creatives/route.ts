@@ -12,6 +12,16 @@ export const GET = withSession(async ({ req, claims }) => {
     url.searchParams.get("r") ?? undefined,
   );
   const offset = Math.max(Number(url.searchParams.get("offset") ?? "0"), 0);
-  const page = await listStripCreatives(claims.cid, scope, offset, STRIP_PAGE);
+  const products = (url.searchParams.get("p") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const page = await listStripCreatives(
+    claims.cid,
+    scope,
+    offset,
+    STRIP_PAGE,
+    products,
+  );
   return NextResponse.json(page);
 });

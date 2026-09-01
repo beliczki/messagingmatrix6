@@ -880,6 +880,7 @@ A lap gyökere `dashboard`. Meglévő névből vettük: `toolbar-btn` (nap-lépt
 | Shares lista | `share-digest` + `__row` / `__title` / `__meta` | a nézet/letöltés szám ALL-TIME, a `title` attribútum kimondja |
 | Shares: komment-sor | `share-digest__row--comment` + `__badge--comment` / `__author` / `__on` | az ablakban érkezett komment, akár régi share-en |
 | Shares: archivált jelölés | `share-digest__badge--archived` | – |
+| Product szűrő a toolbarban | `multi-pill` (globalis) | `ALL_NONE_QUICK_SELECT` + `optionCounts` tömbbel (DCO · nonDCO · creatives), a kijelölés az URL-ben (`?p=`) |
 | Nap-scope sáv | `day-scope` | `<nav>`; a szűrő maga a nap-választó, nem generikus filter-sáv |
 | Előző/következő nap | `day-scope__step` (+`--disabled`) | a „következő" ma inaktív, mert jövő nincs |
 | Today / Yesterday / Last 7 days | `day-scope__pill` (+`--active`) | aktív = slate-900 tömb, mint a `toggle-btn--active` |

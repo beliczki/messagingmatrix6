@@ -19,6 +19,8 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 - **Append refuses to build without a baseline**, since the baseline is what it
   would be continuing.
 
+- The feed panel's button reads **Export** rather than "Preview & Export".
+
 ### Fixed
 - **The diff details showed the first 50 rows of each kind.** A routine export
   changes hundreds, so the row you were looking for was usually past the cut —

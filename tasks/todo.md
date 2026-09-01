@@ -1090,3 +1090,5 @@ Az IO callback a legutóbbi kézbesítés óta **sorba állt összes** entry-t k
 - **Javítás:** a DEFAULT MC a **PMMID-ből** derül (`-m_<szám>-`, `-v_<variáns>-`, `-n_<verzió>-`), a leíró oszlopok maradnak fallbacknek. A **verzió is kell**: az MC302b két verzióban létezik (`n_1` és `n_4`), és rossz verzióval olyan PMMID-t generálnánk, ami továbbra sem egyezik. +2 unit teszt.
 - **A meglévő referencia adata is javítva** (a kód csak új feltöltésre hat): `feed_exports.id=46` `default_message_id` `32654` (MC301b) → **`32208`** (MC302b n4, topic egyezik), `default_label` frissítve. Ellenőrizve: ennek a PMMID-je a DEFAULT-átírás után **karakterre** a referencia DEFAULT sora.
 - **Verifikáció:** `tsc` 0, build 0, eslint 0 error, **623/623 zöld**.
+
+- **DEPLOYOLVA 6.38.1 (2026-09-01):** commit `a9f7e55`, box `65db982`→`a9f7e55`, build 33.0s, `pm2 restart` → **Ready 1516ms**, online. Nincs séma-migráció. Health: `/` 307, `/matrix` 307.

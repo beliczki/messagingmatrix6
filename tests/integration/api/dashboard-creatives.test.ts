@@ -1,7 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { db } from "@/db";
-import { clients, creatives } from "@/db/schema";
-import { listStripCreatives, STRIP_PAGE } from "@/lib/dashboard-creatives";
+import { clients, creatives, messages } from "@/db/schema";
+import {
+  listStripCreatives,
+  STRIP_PAGE,
+  type StripPage,
+} from "@/lib/dashboard-creatives";
 import { resolveDayScope } from "@/lib/day-scope";
 import { createTestDb, type TestDb } from "../../helpers/test-db";
 
@@ -11,18 +15,32 @@ let telekom: { id: number };
 
 const NOW = new Date("2026-09-01T08:00:00Z");
 const today = resolveDayScope("2026-09-01", "day", NOW);
-const week = resolveDayScope("2026-09-01", "7d", NOW);
 
-async function seed(
-  clientId: number,
-  rows: Array<{ name: string; createdAt: string }>,
-) {
+type Row = {
+  name: string;
+  size?: string;
+  createdAt?: string;
+  updatedAt: string;
+  mcNumber?: number;
+  mcVariant?: string;
+};
+
+async function seed(clientId: number, rows: Row[]) {
   for (const r of rows) {
-    await db
-      .insert(creatives)
-      .values({ clientId, fileName: r.name, createdAt: r.createdAt });
+    await db.insert(creatives).values({
+      clientId,
+      fileName: r.name,
+      fileDimensions: r.size ?? "300x250",
+      createdAt: r.createdAt ?? r.updatedAt,
+      updatedAt: r.updatedAt,
+      mcNumber: r.mcNumber ?? null,
+      mcVariant: r.mcVariant ?? null,
+    });
   }
 }
+
+const names = (p: StripPage) =>
+  p.items.map((i) => (i.kind === "uploaded" ? i.creative.fileName : i.mcLabel));
 
 beforeEach(async () => {
   h = await createTestDb();
@@ -38,32 +56,68 @@ afterEach(async () => {
 });
 
 describe("dashboard creative strip", () => {
-  // The live library's highest ids carry a 2025-12-22 createdAt, so id order
-  // put the oldest batch at the front of a strip labelled "new creatives".
-  it("orders by createdAt, not by insertion id", async () => {
+  // The live library's highest ids carry a years-old createdAt, so neither id
+  // nor createdAt orders the strip the way "latest change" reads.
+  it("orders by updatedAt, not by insertion id or createdAt", async () => {
     await seed(erste.id, [
-      { name: "new.png", createdAt: "2026-08-13 09:00:00" },
-      { name: "old-but-inserted-last.png", createdAt: "2025-12-22 10:00:00" },
+      { name: "old-change.png", createdAt: "2026-08-30 09:00:00", updatedAt: "2026-08-30 09:00:00" },
+      {
+        name: "new-change-but-oldest-file.png",
+        createdAt: "2025-12-22 10:00:00",
+        updatedAt: "2026-08-31 09:00:00",
+      },
     ]);
-    const page = await listStripCreatives(erste.id, today);
-    expect(page.fallback).toBe(true);
-    expect(page.items.map((i) => i.fileName)).toEqual([
-      "new.png",
-      "old-but-inserted-last.png",
+    expect(names(await listStripCreatives(erste.id, today))).toEqual([
+      "new-change-but-oldest-file.png",
+      "old-change.png",
     ]);
   });
 
-  it("uses the window when it holds something, and says so", async () => {
+  it("shows only 300x250 and 1080x1080", async () => {
     await seed(erste.id, [
-      { name: "in-window.png", createdAt: "2026-09-01 07:00:00" },
-      { name: "older.png", createdAt: "2026-08-13 09:00:00" },
+      { name: "banner.png", size: "300x250", updatedAt: "2026-08-30 09:00:03" },
+      { name: "square.png", size: "1080x1080", updatedAt: "2026-08-30 09:00:02" },
+      { name: "skyscraper.png", size: "300x600", updatedAt: "2026-08-30 09:00:01" },
+      { name: "leaderboard.png", size: "970x250", updatedAt: "2026-08-30 09:00:00" },
+    ]);
+    const page = await listStripCreatives(erste.id, today);
+    expect(names(page)).toEqual(["banner.png", "square.png"]);
+    expect(page.total).toBe(2);
+  });
+
+  it("collapses a version family to its newest member", async () => {
+    await seed(erste.id, [
+      { name: "ERSTE_SZK_MC1_a_thing_n1_300x250.png", updatedAt: "2026-08-30 09:00:01" },
+      { name: "ERSTE_SZK_MC1_a_thing_n2_300x250.png", updatedAt: "2026-08-30 09:00:00" },
+    ]);
+    expect(names(await listStripCreatives(erste.id, today))).toEqual([
+      "ERSTE_SZK_MC1_a_thing_n2_300x250.png",
+    ]);
+  });
+
+  it("labels a tile with the topic of its MC", async () => {
+    await seed(erste.id, [
+      { name: "mc7.png", updatedAt: "2026-08-30 09:00:00", mcNumber: 7, mcVariant: "a" },
+    ]);
+    await db.insert(messages).values({
+      clientId: erste.id,
+      number: 7,
+      variant: "a",
+      audience: "aud",
+      topic: "SZK_topic",
+    });
+    const page = await listStripCreatives(erste.id, today);
+    expect(page.items[0]!.topic).toBe("SZK_topic");
+  });
+
+  it("uses the window when it holds a change, and says so", async () => {
+    await seed(erste.id, [
+      { name: "changed-today.png", updatedAt: "2026-09-01 07:00:00" },
+      { name: "changed-earlier.png", updatedAt: "2026-08-13 09:00:00" },
     ]);
     const page = await listStripCreatives(erste.id, today);
     expect(page.fallback).toBe(false);
-    expect(page.total).toBe(1);
-    expect(page.items.map((i) => i.fileName)).toEqual(["in-window.png"]);
-    // Widening the window pulls the older one in too.
-    expect((await listStripCreatives(erste.id, week)).total).toBe(1);
+    expect(names(page)).toEqual(["changed-today.png"]);
   });
 
   it("pages to the end and then stops", async () => {
@@ -71,36 +125,113 @@ describe("dashboard creative strip", () => {
       erste.id,
       Array.from({ length: STRIP_PAGE + 5 }, (_, i) => ({
         name: `c${i}.png`,
-        createdAt: `2026-08-${String(10 + (i % 3)).padStart(2, "0")} 09:00:00`,
+        updatedAt: `2026-08-30 09:${String(i).padStart(2, "0")}:00`,
       })),
     );
     const first = await listStripCreatives(erste.id, today);
+    expect(first.fallback).toBe(true);
     expect(first.items).toHaveLength(STRIP_PAGE);
     expect(first.nextOffset).toBe(STRIP_PAGE);
     const second = await listStripCreatives(erste.id, today, first.nextOffset!);
     expect(second.items).toHaveLength(5);
     expect(second.nextOffset).toBeNull();
-    // No row is served twice across the two pages.
     const ids = [...first.items, ...second.items].map((i) => i.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  // The user's "DCO creatives" — matrix cells rendered live through their
+  // template — belong in the same list as delivered files, on one recency line.
+  it("mixes DCO matrix banners into the same recency order", async () => {
+    await seed(erste.id, [
+      { name: "older-file.png", updatedAt: "2026-08-30 08:00:00" },
+      { name: "newer-file.png", updatedAt: "2026-08-30 10:00:00" },
+    ]);
+    await db.insert(messages).values({
+      clientId: erste.id,
+      number: 331,
+      variant: "a",
+      audience: "aud",
+      topic: "SZK_topic",
+      template: "html",
+      status: "ACTIVE",
+      updatedAt: "2026-08-30 09:00:00",
+    });
+    const page = await listStripCreatives(erste.id, today);
+    expect(names(page)).toEqual(["newer-file.png", "MC331a", "older-file.png"]);
+    const mc = page.items.find((i) => i.kind === "mc");
+    expect(mc).toBeDefined();
+    if (mc?.kind === "mc") {
+      expect(mc.size).toBe("300x250");
+      expect(mc.topic).toBe("SZK_topic");
+      // Negative, so one id space holds both kinds — the Creative Library's
+      // own scheme.
+      expect(mc.id).toBeLessThan(0);
+    }
+  });
+
+  it("leaves out cells the Creative Library would not show either", async () => {
+    await db.insert(messages).values([
+      {
+        clientId: erste.id,
+        number: 1,
+        variant: "a",
+        audience: "aud",
+        topic: "t",
+        template: "html",
+        status: "INCOMING",
+        updatedAt: "2026-08-30 09:00:00",
+      },
+      {
+        clientId: erste.id,
+        number: 2,
+        variant: "a",
+        audience: "aud",
+        topic: "t",
+        template: null,
+        status: "ACTIVE",
+        updatedAt: "2026-08-30 09:00:00",
+      },
+    ]);
+    expect((await listStripCreatives(erste.id, today)).items).toEqual([]);
+  });
+
+  // One MC lives in as many cells as it has audiences; without the collapse a
+  // single edited MC would fill the strip with copies of itself.
+  it("shows an MC once, however many cells carry it", async () => {
+    for (const audience of ["aud_a", "aud_b", "aud_c"]) {
+      await db.insert(messages).values({
+        clientId: erste.id,
+        number: 331,
+        variant: "a",
+        audience,
+        topic: "SZK_topic",
+        template: "html",
+        status: "ACTIVE",
+        updatedAt: "2026-08-30 09:00:00",
+      });
+    }
+    const page = await listStripCreatives(erste.id, today);
+    expect(names(page)).toEqual(["MC331a"]);
+    expect(page.total).toBe(1);
+  });
+
   it("never reaches across clients", async () => {
-    await seed(telekom.id, [{ name: "telekom.png", createdAt: "2026-08-13 09:00:00" }]);
+    await seed(telekom.id, [{ name: "telekom.png", updatedAt: "2026-08-13 09:00:00" }]);
     const page = await listStripCreatives(erste.id, today);
     expect(page.items).toEqual([]);
     expect(page.total).toBe(0);
   });
 
   it("leaves archived creatives out", async () => {
-    await seed(erste.id, [{ name: "live.png", createdAt: "2026-09-01 07:00:00" }]);
+    await seed(erste.id, [{ name: "live.png", updatedAt: "2026-09-01 07:00:00" }]);
     await db.insert(creatives).values({
       clientId: erste.id,
       fileName: "archived.png",
+      fileDimensions: "300x250",
       createdAt: "2026-09-01 07:30:00",
+      updatedAt: "2026-09-01 07:30:00",
       archivedAt: "2026-09-01 07:40:00",
     });
-    const page = await listStripCreatives(erste.id, today);
-    expect(page.items.map((i) => i.fileName)).toEqual(["live.png"]);
+    expect(names(await listStripCreatives(erste.id, today))).toEqual(["live.png"]);
   });
 });

@@ -286,11 +286,11 @@ export default async function Dashboard({
 
       <section className="dashboard__creatives mb-6">
         <Panel
-          title={creativeStrip.fallback ? "Creatives" : "New creatives"}
+          title="Creatives"
           hint={
             creativeStrip.fallback
               ? creativeStrip.items[0]
-                ? `none in this window — latest arrived ${creativeStrip.items[0].createdAt.slice(0, 10)}`
+                ? `none in this window — latest change ${creativeStrip.items[0].changedAt.slice(0, 10)}`
                 : undefined
               : `${creativeStrip.total} in this window`
           }

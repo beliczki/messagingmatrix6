@@ -5,6 +5,32 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.43.0] — 2026-09-01
+
+### Changed
+- **The creative strip is one recency line over both kinds of creative.** DCO
+  banners — matrix cells rendered live through their template — sit next to
+  delivered files, ordered by last change, so an MC edited an hour ago leads
+  the strip instead of a file batch from weeks back. An MC appears once however
+  many cells carry it, and only live cells on templates that render a strip
+  size show up, which is what the Creative Library shows too.
+- **Ordered by `updatedAt`, not `createdAt`.** A re-upload, a re-tagging or a
+  copy edit is exactly the change worth surfacing, and the window ("in this
+  window") now means "changed in this window".
+- **Two sizes only — 300x250 and 1080x1080.** A delivery arrives in a dozen
+  sizes; on a dashboard the point is to recognize the creative, not to audit
+  the set. Version families collapse to their newest member within a page.
+
+### Added
+- **Hover names the tile**: MC number and variant, and the topic under it.
+  Creatives carry no topic of their own, so it is resolved from the message
+  their MC number and variant point at — every one of them when a pair fans
+  out to several cells, since picking one silently would name the wrong cell.
+- **Clicking a tile opens the Creative Library's own dialog** — the uploaded
+  detail form for a delivered file, the matrix preview dialog for a DCO banner
+  — so a creative opened from the dashboard edits through the same form and
+  the same PATCH.
+
 ## [6.42.0] — 2026-09-01
 
 ### Fixed

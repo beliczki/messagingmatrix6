@@ -888,5 +888,8 @@ A lap gyökere `dashboard`. Meglévő névből vettük: `toolbar-btn` (nap-lépt
 | Feed-export lista | `feed-digest` + `__row` / `__product` / `__meta` | – |
 | Publikálva / nem publikálva | `feed-digest__badge--live` / `--pending` | `status-badge` tónusai |
 | Kreatív-csík | `creative-strip` + `__scroller` / `__tile` / `__step` | egységes 250px MAGASSÁG, változó szélesség (a méret a médián van, nem az anchoron) |
+| Csík: hover-felirat | `creative-strip__caption` + `__caption-mc` / `__caption-topic` | MC szám+variáns és topic, `group-hover`-re |
+| Csík: DCO (mátrix) tile doboza | `creative-strip__mc` | a `MatrixIframePreview` `fit-rect` befoglalója; szélessége a size-tokenből SZÁMÍTOTT, ezért inline |
+| Csík: lapozás-jelző | `creative-strip__loading` | a jobb szélen, amíg van következő lap |
 | Üres állapot + kiút | `empty-state__hint` + `empty-state__link` | „Try the last 7 days" |
 | Alsó összeszámláló csempék | `count-tile` + `__label` / `__value` | „Library · all time" |

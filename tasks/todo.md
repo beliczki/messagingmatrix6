@@ -1195,3 +1195,17 @@ Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülé
 - **Bump:** `6.41.0` → **`6.42.0`** (minor — új HTTP route + viselkedés-változás).
 
 - **DEPLOYOLVA 6.42.0 (2026-09-01):** commit `7e696a9`, box `d554cb6`→`7e696a9`, build 36.8s, `pm2 restart` → **Ready 1395ms**, box `package.json` **6.42.0**. Séma-migráció nincs. Health: `/` 307, `/login` 200, `/matrix` 307, `/api/dashboard/creatives` **401** (auth mögött, helyes).
+
+### 2026-09-01 — A csík négy user-kérése: két méret, DCO is, hover, dialog — 6.43.0
+- **User:** „minden méretet nem rakunk ki ide csak a 300x250 és a 1080x1080" · „ezek a képek nem a legfrissebb módosítások még mindig" · „mouse overre írjuk ki az MC számot, variánst és topicot" · „kattintásra megnyílhat ugyanaz a dialog mint a creative libraryban" · **majd menet közben:** „nem csak a creative library hanem a **dco kreatívok** is a listába kéne kerüljenek legutóbbi változás dátuma szerint".
+- **A „legfrissebb" kérdés végigkövetése (három rossz jel után a negyedik a jó):**
+  1. `creatives.id` — **nem recencia** (a legmagasabb id-k `created_at`-je 2025-12-22). Ez volt a 6.41.0 hibája.
+  2. `uploaded_files.created_at` — **sem**: mind a 3140 kreatív fájlja `2026-08-17`, a storage-migráció napja.
+  3. `creatives.created_at` — a szállítás napja, de a *módosítás* nem látszik rajta (6.42.0 ezt használta; a user szerint még mindig nem a friss).
+  4. **`updated_at` mindkét forráson** — ez a valódi „utolsó változás". A csík éle most MC331a/b/c (2026-08-31 21:02), pontosan az, amin a user tegnap dolgozott.
+- **Két forrás, egy idővonal:** a kurzor egy SQL `union all` (uploaded creative + DCO üzenet), `changed_at desc` szerint, és külön hidratálódik a két fajta. A DCO ág **`distinct on (number, variant)`** — egy MC annyi cellában él, ahány audience-e van, és nélküle egyetlen szerkesztett MC kitöltené a csíkot (élesben 24-ből 24 tile volt MC331a). A Creative Library ugyanígy dedupál (`seen` a `number|variant|size`-on).
+- **Ugyanaz a szűrés, mint a Library-ben:** csak ACTIVE cella, csak olyan sablon, ami rendel a két méret valamelyikére (`listAllTemplates()` a forrás; élesben az `html` 300x250-et ad, 1080x1080-at egyik sablon sem — az a méret az **uploaded** oldalról jön).
+- **Hover:** MC szám+variáns és alatta a topic. A kreatívon nincs topic, az üzenetről oldódik fel `mcNumber+mcVariant` alapján; a 630 párból 40 több topicra fut ki — ilyenkor **mind** kiíródik, mert az egyik önkényes választása rossz cellát nevezne meg.
+- **Kattintás:** a Library saját dialógusai — uploaded → `CreativeDetailDialog`, DCO → `MatrixDetailDialog`. A DCO tile élő `MatrixIframePreview` (`fit-rect`, 250px magas dobozban), tehát egy perce mentett szöveg is látszik; IntersectionObserver miatt csak a látható tile kér `/api/render`-t.
+- **Teszt:** `dashboard-creatives.test.ts` **11** eset (sorrend, két méret, verzió-család, topic, DCO beszúrás a közös sorrendbe, MC-dedupe, nem-ACTIVE és sablon nélküli cella kizárása, lapozás, kliens-izoláció, archivált). Suite **643/643 zöld**.
+- **Bump:** `6.42.0` → **`6.43.0`** (minor).

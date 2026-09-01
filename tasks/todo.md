@@ -1167,7 +1167,7 @@ Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülé
 - [x] **I1.5** Riport-frissesség tile (`monitoring` max(imported_at) + lefedett periódus + „N napja").
 - [x] Entity-count csempék megmaradnak, de a lap aljára („Library"), mert nem nap-scope-osak.
 
-**KÉSZ (6.41.0, nincs deployolva — a boxon még 6.40.0 fut).**
+**KÉSZ ÉS DEPLOYOLVA — 6.41.0.**
 - **Új fájlok:** `src/lib/day-scope.ts` (scope-feloldás, 7 unit teszt), `(app)/_dashboard/CreativeStrip.tsx`. Átírva: `(app)/page.tsx`.
 - **Amit a lap most mond (élő adaton ellenőrizve):** ma 3 írás / 3 export (2 nem publikált), 7 napra 5569 írás 25 fajtából, `messages` update 5242 (ebből `system` 1145 — **null `user_id`**, tehát az `actor_kind` (I1.6) kérdése tényleg él), riport-adat **47 napja** áll.
 - **Két döntés, amit a terv nyitva hagyott, és most eldőlt:**
@@ -1176,3 +1176,6 @@ Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülé
 - **Nem került bele:** I1.6 (`actor_kind` — séma-migráció, külön passz a boxon) és I1.7 (chartok — a 47 napos adat miatt).
 - **Verifikáció:** `tsc` 0, `npm run build` 0, eslint **0 error**, **632/632 teszt zöld** (625 + 7 új). Vizuálisan mindkét scope ellenőrizve élő adattal.
 - **Bump:** `6.40.0` → **`6.41.0`** (minor — új oldal-viselkedés).
+
+- **DEPLOYOLVA 6.41.0 (2026-09-01):** commit `d554cb6`, box `c20d718`→`d554cb6` (a két docs-commit is felment), `npm run build` ok, `pm2 restart mm6-erste` → **Ready 1235ms**, online, box `package.json` **6.41.0**. Séma-migráció nincs. Health: `/` 307, `/login` 200, `/matrix` 307, `/feeds` 307, `/api/feed-exports` 401, `/mcp` 401. Az `error.log`-ban a restart óta nincs új bejegyzés (a benne álló utolsó sorok az AWS SDK node>=22 figyelmeztetése, korábbról).
+- ⚠️ **Auto módban az `ssh` a boxra blokkolva van** (klasszifikátor) — a deploy csak auto módon kívül ment át. Ha ez rendszeresen kell, `.claude/settings.json` permission-szabály oldja meg.

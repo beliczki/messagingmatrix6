@@ -1,6 +1,16 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { and, count, desc, eq, gte, inArray, isNull, lte } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  gte,
+  inArray,
+  isNull,
+  lte,
+  sql,
+} from "drizzle-orm";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { db } from "@/db";
 import {
@@ -26,10 +36,17 @@ import {
   todayUtc,
   type DayScope,
 } from "@/lib/day-scope";
+import {
+  activityDigest,
+  type DigestRow,
+} from "@/lib/dashboard-activity";
 import { listStripCreatives, STRIP_PAGE } from "@/lib/dashboard-creatives";
 import { productInventory } from "@/lib/dashboard-products";
 import { shareItemCount } from "@/lib/share-metadata";
+import { monthlyDelivery } from "@/lib/dashboard-monitoring";
+import CoverageTile from "./_dashboard/CoverageTile";
 import CreativeStrip from "./_dashboard/CreativeStrip";
+import DeliveryTrend from "./_dashboard/DeliveryTrend";
 import ProductFilter from "./_dashboard/ProductFilter";
 
 export const dynamic = "force-dynamic";
@@ -71,35 +88,6 @@ async function entityCounts(clientId: number) {
 // Long tail of one-off entity+action pairs adds height, not information.
 const DIGEST_ROWS = 15;
 
-type DigestRow = {
-  entityType: string;
-  action: string;
-  userId: string | null;
-  n: number;
-};
-
-// Aggregated, not listed: a busy day writes thousands of audit rows (5085 on
-// 2026-08-17), and a 15-row raw tail of that says nothing. Group cardinality is
-// bounded by entity types x actions x users, so it cannot approach the 1000-row
-// truncation limit the way the raw log would.
-function activityDigest(clientId: number, scope: DayScope) {
-  return db
-    .select({
-      entityType: auditLog.entityType,
-      action: auditLog.action,
-      userId: auditLog.userId,
-      n: count(),
-    })
-    .from(auditLog)
-    .where(
-      and(
-        eq(auditLog.clientId, clientId),
-        gte(auditLog.createdAt, scope.from),
-        lte(auditLog.createdAt, scope.to),
-      ),
-    )
-    .groupBy(auditLog.entityType, auditLog.action, auditLog.userId);
-}
 
 function feedsInScope(clientId: number, scope: DayScope, products: string[]) {
   return db
@@ -233,6 +221,7 @@ export default async function Dashboard({
 
   const [
     counts,
+    delivery,
     digest,
     feeds,
     freshness,
@@ -242,7 +231,8 @@ export default async function Dashboard({
     userRows,
   ] = await Promise.all([
     entityCounts(client.id),
-    activityDigest(client.id, scope),
+    monthlyDelivery(client.id),
+    activityDigest(client.id, scope, products),
     feedsInScope(client.id, scope, products),
     reportFreshness(client.id),
     listStripCreatives(client.id, scope, 0, STRIP_PAGE, products),
@@ -292,31 +282,12 @@ export default async function Dashboard({
 
       <div className="dashboard__body flex-1 overflow-auto p-6">
         <section className="dashboard__signals mb-6 grid gap-3 md:grid-cols-3">
-          <SignalTile
-            label="Activity"
-            value={String(events)}
-            hint={
-              events === 0
-                ? "no writes in this window"
-                : `${grouped.length} kind${grouped.length === 1 ? "" : "s"} of change`
-            }
-            tone={events === 0 ? "muted" : "ok"}
-          />
-          <SignalTile
-            label="Feeds exported"
-            value={String(feeds.length)}
-            hint={
-              feeds.length === 0
-                ? "no export in this window"
-                : unpublished > 0
-                  ? `${unpublished} not published to AdForm yet`
-                  : "all published"
-            }
-            tone={
-              feeds.length === 0 ? "muted" : unpublished > 0 ? "warn" : "ok"
-            }
-            href="/feeds"
-          />
+          {/* Monthly, unlike everything below: `monitoring` stores whole
+              report periods, so these two say their own period and ignore the
+              day scope. They replaced an Activity and a Feeds-exported tile
+              that only repeated the panel headers underneath them. */}
+          <DeliveryTrend months={delivery} />
+          <CoverageTile months={delivery} />
           <FreshnessTile freshness={freshness} />
         </section>
 
@@ -361,7 +332,9 @@ export default async function Dashboard({
             <Panel
               title="Feed exports"
               hint={
-                feeds.length > 0 ? `${feeds.length} in this window` : undefined
+                feeds.length > 0
+                  ? `${feeds.length} in this window${unpublished > 0 ? ` · ${unpublished} not published to AdForm` : ""}`
+                  : undefined
               }
               href="/feeds"
             >

@@ -7,6 +7,7 @@ import {
   templateMetaFor,
 } from "../../_components/MatrixIframeTile";
 import type { MatrixNavItem } from "../../creative-library/MatrixDetailDialog";
+import { periodDateKey } from "@/lib/period";
 
 // Minimal row shape the dialog needs from the monitoring list.
 export type DetailRow = {
@@ -15,6 +16,15 @@ export type DetailRow = {
   audienceKey: string;
   mcNumber: number;
   mcVariant: string;
+  impressions: number;
+  clicks: number;
+};
+
+/** One report period's totals for this MC, from the range the table selected. */
+export type TrendRow = {
+  mcNumber: number;
+  mcVariant: string;
+  periodFrom: string;
   impressions: number;
   clicks: number;
 };
@@ -33,6 +43,7 @@ export default function MonitoringDetailDialog({
   messageStatus,
   preview,
   rows,
+  trend,
   onClose,
 }: {
   mc: { number: number; variant: string };
@@ -40,6 +51,7 @@ export default function MonitoringDetailDialog({
   messageStatus: string | null;
   preview?: Preview;
   rows: DetailRow[];
+  trend: TrendRow[];
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -63,17 +75,34 @@ export default function MonitoringDetailDialog({
       const k = `${r.audienceKey}|${r.size}`;
       const e =
         byKey.get(k) ??
-        byKey.set(k, {
-          audience: r.audienceKey,
-          size: r.size,
-          impressions: 0,
-          clicks: 0,
-        }).get(k)!;
+        byKey
+          .set(k, {
+            audience: r.audienceKey,
+            size: r.size,
+            impressions: 0,
+            clicks: 0,
+          })
+          .get(k)!;
       e.impressions += r.impressions;
       e.clicks += r.clicks;
     }
     return [...byKey.values()].sort((a, b) => b.impressions - a.impressions);
   }, [rows, mc.number, mc.variant]);
+
+  // This MC month by month, oldest first. Only worth showing when the table's
+  // range covers more than one period — with a single period it would just
+  // restate the total below it.
+  const byPeriod = useMemo(
+    () =>
+      trend
+        .filter((r) => r.mcNumber === mc.number && r.mcVariant === mc.variant)
+        .sort((a, b) =>
+          (periodDateKey(a.periodFrom) ?? "").localeCompare(
+            periodDateKey(b.periodFrom) ?? "",
+          ),
+        ),
+    [trend, mc.number, mc.variant],
+  );
 
   const totals = breakdown.reduce(
     (a, r) => ({
@@ -144,62 +173,113 @@ export default function MonitoringDetailDialog({
             )}
           </div>
 
-          {/* per size × audience breakdown */}
-          <div className="monitoring-detail__breakdown min-w-0 flex-1">
-            <h3 className="mb-2 text-[10px] font-medium uppercase tracking-wider text-slate-500">
-              By audience &amp; size
-            </h3>
-            <table className="w-full table-auto border-collapse text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
-                  <th className="px-2 py-1.5 font-medium">Audience</th>
-                  <th className="px-2 py-1.5 font-medium">Size</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Impr.</th>
-                  <th className="px-2 py-1.5 text-right font-medium">Clicks</th>
-                  <th className="px-2 py-1.5 text-right font-medium">CTR</th>
-                </tr>
-              </thead>
-              <tbody>
-                {breakdown.map((r) => (
-                  <tr
-                    key={`${r.audience}|${r.size}`}
-                    className="border-b border-slate-100"
-                  >
-                    <td className="px-2 py-1 text-xs text-slate-600">
-                      {r.audience}
+          <div className="monitoring-detail__tables flex min-w-0 flex-1 flex-col gap-4">
+            {byPeriod.length > 1 ? (
+              <div className="monitoring-detail__periods">
+                <h3 className="mb-2 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                  By report period
+                </h3>
+                <table className="w-full table-auto border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
+                      <th className="px-2 py-1.5 font-medium">Period</th>
+                      <th className="px-2 py-1.5 text-right font-medium">
+                        Impr.
+                      </th>
+                      <th className="px-2 py-1.5 text-right font-medium">
+                        Clicks
+                      </th>
+                      <th className="px-2 py-1.5 text-right font-medium">
+                        CTR
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {byPeriod.map((r) => (
+                      <tr
+                        key={r.periodFrom}
+                        className="border-b border-slate-100"
+                      >
+                        <td className="px-2 py-1 font-mono text-xs text-slate-600">
+                          {r.periodFrom.slice(0, 10)}
+                        </td>
+                        <td className="px-2 py-1 text-right tabular-nums text-slate-800">
+                          {fmt(r.impressions)}
+                        </td>
+                        <td className="px-2 py-1 text-right tabular-nums text-slate-800">
+                          {fmt(r.clicks)}
+                        </td>
+                        <td className="px-2 py-1 text-right tabular-nums text-slate-600">
+                          {pct(r.impressions, r.clicks)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : null}
+
+            {/* per size × audience breakdown */}
+            <div className="monitoring-detail__breakdown min-w-0 flex-1">
+              <h3 className="mb-2 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                By audience &amp; size
+              </h3>
+              <table className="w-full table-auto border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] uppercase tracking-wide text-slate-500">
+                    <th className="px-2 py-1.5 font-medium">Audience</th>
+                    <th className="px-2 py-1.5 font-medium">Size</th>
+                    <th className="px-2 py-1.5 text-right font-medium">
+                      Impr.
+                    </th>
+                    <th className="px-2 py-1.5 text-right font-medium">
+                      Clicks
+                    </th>
+                    <th className="px-2 py-1.5 text-right font-medium">CTR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {breakdown.map((r) => (
+                    <tr
+                      key={`${r.audience}|${r.size}`}
+                      className="border-b border-slate-100"
+                    >
+                      <td className="px-2 py-1 text-xs text-slate-600">
+                        {r.audience}
+                      </td>
+                      <td className="px-2 py-1 font-mono text-xs text-slate-600">
+                        {r.size || "—"}
+                      </td>
+                      <td className="px-2 py-1 text-right tabular-nums text-slate-800">
+                        {fmt(r.impressions)}
+                      </td>
+                      <td className="px-2 py-1 text-right tabular-nums text-slate-800">
+                        {fmt(r.clicks)}
+                      </td>
+                      <td className="px-2 py-1 text-right tabular-nums text-slate-600">
+                        {pct(r.impressions, r.clicks)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-slate-300 font-semibold text-slate-900">
+                    <td className="px-2 py-1.5 text-xs" colSpan={2}>
+                      Total
                     </td>
-                    <td className="px-2 py-1 font-mono text-xs text-slate-600">
-                      {r.size || "—"}
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {fmt(totals.impressions)}
                     </td>
-                    <td className="px-2 py-1 text-right tabular-nums text-slate-800">
-                      {fmt(r.impressions)}
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {fmt(totals.clicks)}
                     </td>
-                    <td className="px-2 py-1 text-right tabular-nums text-slate-800">
-                      {fmt(r.clicks)}
-                    </td>
-                    <td className="px-2 py-1 text-right tabular-nums text-slate-600">
-                      {pct(r.impressions, r.clicks)}
+                    <td className="px-2 py-1.5 text-right tabular-nums">
+                      {pct(totals.impressions, totals.clicks)}
                     </td>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t border-slate-300 font-semibold text-slate-900">
-                  <td className="px-2 py-1.5 text-xs" colSpan={2}>
-                    Total
-                  </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">
-                    {fmt(totals.impressions)}
-                  </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">
-                    {fmt(totals.clicks)}
-                  </td>
-                  <td className="px-2 py-1.5 text-right tabular-nums">
-                    {pct(totals.impressions, totals.clicks)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
+                </tfoot>
+              </table>
+            </div>
           </div>
         </div>
       </div>

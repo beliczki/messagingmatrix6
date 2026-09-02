@@ -654,6 +654,14 @@ export const monitoring = pgTable(
     // report period (from the XLSX Front Page)
     periodFrom: text("period_from").notNull(),
     periodTo: text("period_to").notNull(),
+    // the single day this row covers, ISO `YYYY-MM-DD`. The source report has
+    // carried a per-day `Date` column all along; the importer used to fold it
+    // away. ISO rather than the report's own DD/MM/YYYY because the whole point
+    // of the column is to be ordered and ranged on, and DD/MM/YYYY sorts
+    // December 2025 after May 2026. "" means "no day breakdown" — a period the
+    // importer folded whole, exactly as `size` uses "" for "no size token" —
+    // which also keeps the unique index below free of NULLs.
+    day: text("day").notNull().default(""),
     importedAt: text("imported_at")
       .notNull()
       .default(nowUtc),
@@ -663,12 +671,15 @@ export const monitoring = pgTable(
     index("monitoring_client_message_idx").on(t.clientId, t.messageId),
     index("monitoring_client_platform_idx").on(t.clientId, t.platform),
     index("monitoring_client_mc_idx").on(t.clientId, t.mcNumber, t.mcVariant),
-    // one row per (platform, message-key, size) per period — re-upload replaces
+    index("monitoring_client_day_idx").on(t.clientId, t.day),
+    // one row per (platform, message-key, size, day) per period — re-upload
+    // replaces the whole period, so a period is never half day-grained.
     uniqueIndex("monitoring_client_period_key_idx").on(
       t.clientId,
       t.platform,
       t.periodFrom,
       t.periodTo,
+      t.day,
       t.mcNumber,
       t.mcVariant,
       t.audienceKey,

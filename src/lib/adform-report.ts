@@ -6,20 +6,25 @@
 //
 // Two things this module owns:
 //   1. Robust PMMID extraction from "Banner/Adgroups" (two on-the-wire formats).
-//   2. Aggregation to one row per (platform, message-key) for the whole period
-//      — the matrix only needs message-level numbers, never per-keyword.
+//   2. Aggregation to one row per (platform, message-key, size, DAY) — the
+//      matrix only needs message-level numbers, never per-keyword. The report
+//      has always carried a per-day `Date` column; it used to be folded away
+//      into a single whole-period row per key.
 //
 // Columns are resolved BY HEADER NAME, so adding/removing/reordering metrics in
 // the AdForm report builder (e.g. adding "Rendered Impressions") does not break
 // the parser.
 
 import xlsx from "node-xlsx";
+import { periodDateKey } from "@/lib/period";
 
 export type MonitoringRow = {
   platform: string;
   scope: string | null;
   pmmid: string;
   size: string;
+  /** ISO `YYYY-MM-DD`; "" when the report carried no readable `Date` column. */
+  day: string;
   audienceKey: string;
   topicKey: string;
   mcNumber: number;
@@ -330,6 +335,10 @@ export function parseAdformReport(buffer: Buffer): AdformReportParseResult {
   const header = dataSheet.data[headerIdx].map((c) => cellToString(c).trim());
   const col = (name: string): number => header.indexOf(name);
   const bagIdx = col("Banner/Adgroups");
+  // Optional: a report built without the Date dimension still imports, its rows
+  // just fold into one whole-period row per key the way every report did before
+  // this column existed.
+  const dateIdx = col("Date");
   const imprIdx = col("Rendered Impressions");
   const clicksIdx = col("Clicks");
   const costIdx = col("Cost");
@@ -357,6 +366,11 @@ export function parseAdformReport(buffer: Buffer): AdformReportParseResult {
 
     const platform = normalizePlatform(parsed.scope);
     const size = extractSize(bag);
+    // Normalized to ISO: the cell is either a Date (already ISO via
+    // cellToString) or the report's own "DD/MM/YYYY", and the column exists to
+    // be ordered and ranged on. An unreadable date folds into the period.
+    const day =
+      dateIdx >= 0 ? (periodDateKey(cellToString(raw[dateIdx])) ?? "") : "";
     const key = [
       platform,
       parsed.audienceKey,
@@ -364,6 +378,7 @@ export function parseAdformReport(buffer: Buffer): AdformReportParseResult {
       parsed.topicKey,
       parsed.mcVariant,
       size,
+      day,
     ].join("|");
 
     const impressions = imprIdx >= 0 ? cellToNumber(raw[imprIdx]) : 0;
@@ -383,6 +398,7 @@ export function parseAdformReport(buffer: Buffer): AdformReportParseResult {
         scope: parsed.scope,
         pmmid: token!,
         size,
+        day,
         audienceKey: parsed.audienceKey,
         topicKey: parsed.topicKey,
         mcNumber: parsed.mcNumber,

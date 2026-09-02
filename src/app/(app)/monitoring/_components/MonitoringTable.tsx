@@ -24,6 +24,14 @@ type TemplateInfo = {
 
 type Period = { periodFrom: string; periodTo: string; rows: number };
 
+type McTrendRow = {
+  mcNumber: number;
+  mcVariant: string;
+  periodFrom: string;
+  impressions: number;
+  clicks: number;
+};
+
 type Row = {
   id: number;
   platform: string;
@@ -47,8 +55,16 @@ type Row = {
 
 type Payload = {
   periods: Period[];
-  selected: { periodFrom: string; periodTo: string } | null;
+  /** The selected slice: `from`/`to` are the two markers, newest-first. */
+  selected: {
+    from: string;
+    to: string;
+    periodFrom: string;
+    periodTo: string;
+    periods: number;
+  } | null;
   rows: Row[];
+  mcTrend: McTrendRow[];
 };
 
 type MatchFilter = "all" | "matched" | "unmatched";
@@ -121,7 +137,9 @@ export default function MonitoringTable({
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [fromFilter, setFromFilter] = useState<string | null>(null);
+  // Two markers into the period list, not a date range: the data has no day
+  // dimension, so a period is the narrowest slice that exists.
+  const [range, setRange] = useState<{ from: string; to: string } | null>(null);
   const [platforms, setPlatforms] = useState<Set<string>>(new Set());
   const [products, setProducts] = useState<Set<string>>(new Set());
   const [match, setMatch] = useState<MatchFilter>("matched");
@@ -131,7 +149,9 @@ export default function MonitoringTable({
   useEffect(() => {
     let live = true;
     setLoading(true);
-    const qs = fromFilter ? `?from=${encodeURIComponent(fromFilter)}` : "";
+    const qs = range
+      ? `?from=${encodeURIComponent(range.from)}&to=${encodeURIComponent(range.to)}`
+      : "";
     fetch(`/api/monitoring${qs}`)
       .then((r) => r.json())
       .then((body: Payload) => {
@@ -144,7 +164,7 @@ export default function MonitoringTable({
     return () => {
       live = false;
     };
-  }, [reloadToken, fromFilter]);
+  }, [reloadToken, range]);
 
   // Preview pipeline (same sources as Creative Library): resolve each matched
   // message to its template's first size so we can live-render the MC.
@@ -181,7 +201,10 @@ export default function MonitoringTable({
     const templates = templatesQ.data?.templates ?? [];
     const audiences = audiencesQ.data?.audiences ?? [];
     if (messages.length === 0 || templates.length === 0) {
-      return new Map<number, MatrixNavItem & { templateMeta?: ReturnType<typeof templateMetaFor> }>();
+      return new Map<
+        number,
+        MatrixNavItem & { templateMeta?: ReturnType<typeof templateMetaFor> }
+      >();
     }
     const tmap = new Map(templates.map((t) => [t.name, t]));
     const prod = new Map(audiences.map((a) => [a.key, a.product]));
@@ -283,12 +306,11 @@ export default function MonitoringTable({
   );
 
   const detailRow = useMemo(
-    () => (data ? data.rows.find((r) => r.id === detailRowId) ?? null : null),
+    () => (data ? (data.rows.find((r) => r.id === detailRowId) ?? null) : null),
     [data, detailRowId],
   );
 
-  const hasFilter =
-    platforms.size > 0 || products.size > 0 || match !== "all";
+  const hasFilter = platforms.size > 0 || products.size > 0 || match !== "all";
   const totalRows = displayRows.length;
 
   function header(key: SortKey, label: string, align?: "right") {
@@ -341,12 +363,20 @@ export default function MonitoringTable({
         </div>
 
         {data && data.periods.length > 0 ? (
-          <label className="flex items-center gap-1.5 text-xs text-slate-500">
+          // Two markers into the period list rather than a date picker: a
+          // calendar would promise day precision the reports do not carry. The
+          // API spans whichever pair it gets, so neither side can be "wrong".
+          <div className="monitoring-table__period-range flex items-center gap-1.5 text-xs text-slate-500">
             Report period
             <select
               className="input-box rounded border border-slate-300 px-2 py-1 text-xs text-slate-800 focus:border-slate-500 focus:outline-none"
-              value={data.selected?.periodFrom ?? ""}
-              onChange={(e) => setFromFilter(e.target.value)}
+              value={data.selected?.to ?? ""}
+              onChange={(e) =>
+                setRange({
+                  from: e.target.value,
+                  to: data.selected?.from ?? e.target.value,
+                })
+              }
             >
               {data.periods.map((p) => (
                 <option key={p.periodFrom} value={p.periodFrom}>
@@ -354,7 +384,29 @@ export default function MonitoringTable({
                 </option>
               ))}
             </select>
-          </label>
+            <span className="monitoring-table__period-dash">–</span>
+            <select
+              className="input-box rounded border border-slate-300 px-2 py-1 text-xs text-slate-800 focus:border-slate-500 focus:outline-none"
+              value={data.selected?.from ?? ""}
+              onChange={(e) =>
+                setRange({
+                  from: data.selected?.to ?? e.target.value,
+                  to: e.target.value,
+                })
+              }
+            >
+              {data.periods.map((p) => (
+                <option key={p.periodFrom} value={p.periodFrom}>
+                  {day(p.periodFrom)} – {day(p.periodTo)}
+                </option>
+              ))}
+            </select>
+            {data.selected && data.selected.periods > 1 ? (
+              <span className="monitoring-table__period-count text-slate-400">
+                {data.selected.periods} periods summed
+              </span>
+            ) : null}
+          </div>
         ) : null}
 
         <MultiPill
@@ -470,7 +522,9 @@ export default function MonitoringTable({
             <tbody>
               {filtered.map((r) => {
                 const preview =
-                  r.messageId !== null ? previewById.get(r.messageId) : undefined;
+                  r.messageId !== null
+                    ? previewById.get(r.messageId)
+                    : undefined;
                 return (
                   <tr
                     key={r.id}
@@ -500,9 +554,7 @@ export default function MonitoringTable({
                       </span>
                     </td>
                     <td className="px-3 py-1.5 text-xs text-slate-600">
-                      {r.product ?? (
-                        <span className="text-slate-300">—</span>
-                      )}
+                      {r.product ?? <span className="text-slate-300">—</span>}
                     </td>
                     <td className="px-3 py-1.5 font-mono text-xs text-slate-700">
                       MC{r.mcNumber}
@@ -581,6 +633,7 @@ export default function MonitoringTable({
               : undefined
           }
           rows={data?.rows ?? []}
+          trend={data?.mcTrend ?? []}
           onClose={() => setDetailRowId(null)}
         />
       ) : null}

@@ -168,6 +168,40 @@ Cél: a creative↔cella match a nyers mezőkön túl guided + tömeges legyen.
 ### Wave 3 maradék — cell-badge + unmatched-link + legacy-retire
 - [ ] **W3.g** Matrix cella stat-badge: linkelt monitoring-sorral rendelkező MC-cellán kis impr/CTR badge (`GridView.tsx`); adat-wiring a lényeg, styling follow-up.
 - [ ] **W3.h** Unmatched sor → message manuális link `MonitoringTable`-ben (ma csak match-filter `:369`, nincs kézi hozzárendelés).
+- [x] **W3.i Monitoring: több periódus együtt (tartomány-választó) — GREEN-LIGHT (2026-09-01).** User: „van 4-5 hónap adatunk, tök jó lenne tetszőleges ezen belüli periódusból elemezni". Ma a `/api/monitoring` **pontosan egy** periódust ad (`route.ts:35` `eq(periodFrom, selected)`), a UI egy `<select>`-tel vált (`MonitoringTable.tsx:344`).
+  - **Felmért tények (prod DB, 2026-09-01):** 4 periódus, **15 646** nyers sor, de csak **6 227** különböző message-kulcs → a négy hónap EGYÜTT 6 227 sorra aggregálódik, azaz **nagyjából akkora nézet, mint ma az augusztus egyedül (5 733)**. Nincs se skálázási, se compute-probléma. **2 623 kulcs (42 %) mind a 4 periódusban futott** — ez az a populáció, amiért az egész funkció van. Különböző MC: **267** → a per-MC/per-periódus trend-payload legfeljebb ~1 068 sor.
+  - **A grain MA hónap — a választó ezért hónap-lista, NEM naptár.** A `monitoring`-ban nincs nap-oszlop, tehát „jún 15 – júl 20" ma nem kiszolgálható, és egy dátumválasztó olyan pontosságot ígérne, ami mögött nincs adat. ⚠️ **Korrekció:** ez a `monitoring` tábla és a parser korlátja, **nem a forrásfájlé** — a nyers riportban ott a nap, lásd **W3.j**. Ha a W3.j leszállít, ez a választó bővíthető nap-felbontásra ugyanezzel a szerver-oldali aggregációval.
+  - **Aggregációs kulcs:** `(platform, audience_key, topic_key, mc_number, mc_variant, size)`. A `product` / `message_id` / `match_level` bemehet a GROUP BY-ba: **ma 0 olyan kulcs van, ahol ezek periódusok között eltérnének** (mérve). Ha egyszer eltérnének, az két sorként *látszik* — jobb, mint egy `max()`-szal némán feloldani.
+  - **CTR mindig összegzett klikk/impresszióból újraszámolva**, soha nem periódus-CTR-ek átlaga.
+  - [x] **W3.i-1** `/api/monitoring`: `?from=&to=` **összefüggő szelet** a periódus-listából (mindkettő inkluzív, a lista-sorrend szerint). Alap változatlanul a legfrissebb egy periódus — a mai viselkedés nem változik magától. A periódus-lista rendezése `periodDateKey`-re (`route.ts:24` ma a nyers `DD/MM/YYYY` szövegen `desc`-el → évfordulón megfordul).
+  - [x] **W3.i-2** Új `mcTrend` a payloadban: `(mc_number, mc_variant, period_from)` → impressions/clicks, a kiválasztott szeletre. ~1 068 sor a teljes tartományra.
+  - [x] **W3.i-3** `MonitoringTable`: a `<select>` helyére **két** select (`from` – `to`), alapból mindkettő a legfrissebb periódus. A `to < from` eset a UI-ban kizárva. A tábla többi része (méret-összecsukás, MultiPill-ek, match-szűrő, rendezés) változatlan — a szerver ugyanabban a méret-grainben adja a sorokat, mint ma.
+  - [x] **W3.i-4** `MonitoringDetailDialog`: a mai (audience × méret) bontás mellé **periódus-bontás** (impr / klikk / CTR periódusonként) — egy MC havi lefutása. Ez a funkció tényleges haszna.
+  - [x] **W3.i-5** Teszt: több periódus összegzése egy kulcsra, CTR újraszámolás (nem átlag), tartomány-határok inkluzivitása, évfordulós periódus-sorrend, `mcTrend` alak, kliens-izoláció.
+  - **Verzió a slice végén:** `6.47.0` → `6.48.0` (minor — új API-paraméter + UI).
+  - **Az átfedés-guard nyitva marad:** az import-replace a pontos `(from, to)` párra megy (`import/route.ts:108`), tehát egy havi és egy heti fájl ugyanarra az időszakra ma **egymás mellett élne és mindkettő számolna**. Rövidebb periódusok bevezetése előtt kell egy guard, ami átfedő tartományt visszautasít.
+- [~] **W3.j Nap-grain ingest — ⚠️ KORREKCIÓ egy korábbi állításhoz (2026-09-01).** Azt írtam a usernek, hogy a forrás XLSX-ben nincs nap-dimenzió és ezért az AdForm report buildert kellene átállítani. **Ez téves volt.** A `docs/Creative rep_05_2026.xlsx` fejléce: `Date | Campaign | Line Item | Banner Ad Message | Banner/Adgroups | … | Rendered Impressions` — **a nap ott van minden sorban** (`01/05/2026`), és mindig is ott volt. A `parseAdformReport` egyszerűen **eldobja**: a `Date` oszlopot nem is olvassa ki, mindent a periódus egészére aggregál (`adform-report.ts:333` — a `col()` hívások között nincs `Date`).
+  - **Mérve, a valódi parser-helperekkel (`extractPmmidToken` / `parsePmmid` / `extractSize` / `normalizePlatform`), tehát nem becslés:**
+
+    | fájl | nyers sor | periódus-grain | **nap-grain** | szorzó |
+    |---|---|---|---|---|
+    | `Creative rep_04_2026.xlsx` | 85 222 | 3 244 | **73 488** | ×22,7 |
+    | `Creative rep_05_2026.xlsx` | 83 905 | **3 002** | **67 749** | ×22,6 |
+
+    A május periódus-grain 3 002 **pontosan egyezik** a DB-ben tárolt májusi sorszámmal → a mérési módszer hiteles.
+  - **Következmény:** napi felbontás **nem igényel semmilyen változtatást abban, ahogy a riportot lehúzod**. Nem kell új AdForm-riport, nem lesz nagyobb a fájl (ma is 5,5 MB / 84 e sor, és ma is elparse-oljuk). Ami kell: `day` oszlop a `monitoring`-ra + az unique index bővítése + a parser olvassa a `Date`-et + újraimport azokra a periódusokra, amiknek **megvan még a forrásfájlja** (a `docs/`-ban április + május; a `source_filename` tárolt, a bájtok nem).
+  - **Költség:** ~68–73 e sor/hónap a mai ~3 e helyett → ~0,8–0,9 M sor/év. Postgresnek indexszel semmi; az insert oldalt a 6.46.0 chunkolása már bírja (68 e sor × 20 bind-param ≫ 65 534, de a chunkolás pont ezt kezeli).
+  - **Miért NEM volt szabad ezt a W3.i előtt megcsinálni:** a `/api/monitoring` a kiválasztott tartomány sorait küldi a böngészőnek. Nap-grainnél egyetlen hónap ~68 e sor JSON lenne. A **W3.i szerver-oldali aggregációja pontosan ez az előfeltétel** — nap-grain táblából is 3 e sort ad vissza egy hónapra. A sorrend tehát helyes volt, csak az indoklásom volt rossz.
+  - **A user megerősítette (2026-09-01): a június / július / augusztus riportfájl is megvan** → a nap-grain **visszamenőleg teljes**, nem lesz kevert grainű tábla. Ez volt az egyetlen nyitott kockázat.
+  - **Slice-határ:** ez a szelet CSAK azt csinálja, hogy a nap bekerül a táblába úgy, hogy **egyetlen mai fogyasztó se változzon**. A tényleges nap-felbontású tartomány-lekérdezés (`?from=2026-06-15&to=2026-07-20`, „last 30 days") külön szelet — **W3.k** —, mert az UI-t és a dashboard-csempéket is érinti.
+  - **Miért nem törik el semmi közben:** minden mai fogyasztó **periódusra** csoportosít (`monthlyDelivery` a `period_from`-ra, a `/api/monitoring` a szeletre), és egy periódus napjait összegezve pontosan a mai számot kapja vissza. A payload-méret sem nő: a route továbbra is a message-kulcsra aggregál, nem napokra.
+  - [x] **W3.j-1** Séma: `monitoring.day` — `text("day").notNull().default("")`, **ISO `YYYY-MM-DD`**. Nem a nyers `DD/MM/YYYY`: a nap épp azért kerül be, hogy rendezni és tartományozni lehessen rajta, és a `periodDateKey` már ma is DD/MM/YYYY↔ISO-t normalizál. Az üres string = „nincs napi bontás", pontosan a `size` meglévő konvenciója szerint (`schema.ts:642`) — így az unique index NULL-mentes marad. Migráció `0010`.
+  - [x] **W3.j-2** `monitoring_client_period_key_idx` bővítése `day`-jel + új `monitoring_client_day_idx` a `(client_id, day)`-re.
+  - [x] **W3.j-3** `parseAdformReport`: a `Date` oszlop kiolvasása (ma nincs is `col("Date")`), ISO-ra normalizálva, és bevétele az aggregációs kulcsba. **Ha nincs `Date` oszlop → `day = ""`**, tehát egy régi alakú riport ugyanúgy importál, mint ma.
+  - [x] **W3.j-4** Import-route: `day` átvezetése. A replace továbbra is a `(client, period_from, period_to)` hármasra megy, tehát egy periódus újratöltése **egészben** vált periódus-grainről nap-grainre — félig átállt periódus nem létezhet. A sorszám ~3 e-ről ~68 e-re nő importonként (21 chunk a mai 3 276-os chunk-mérettel) — **az import futásidejét meg kell mérni**, nem feltételezni.
+  - [x] **W3.j-5** Teszt: valódi alakú riport (Date oszloppal) naponként aggregál; `Date` nélküli riport `day=""`-vel importál (regresszió); ugyanaz a periódus újratöltése nem hagy vegyes grainű maradékot; a `monthlyDelivery` és a `/api/monitoring` **változatlan számokat** ad nap-grain tábla fölött (ez a szelet lényege).
+  - [ ] **W3.j-6** Újraimport a 4 (5) meglévő riportfájlból a Monitoring oldal feltöltőjén át — nem script. **Migráció + kód egy passzban a boxon** (`migrate` + `pm2 restart`), ahogy a `mcp_tokens` szeletnél is.
+  - **Verzió a slice végén:** `6.48.0` → `6.49.0` (minor — új oszlop + index + migráció).
 - [ ] **Legacy `reporting` retire (LAST):** a 2 lingering olvasó (`mcp.ts:350` monitoring_status→adformStatus, `:977` matrix_status→syncedAt) átkötése `monitoring`-ra → tábla drop-migráció → import/export-xlsx + snapshot refek takarítása.
 - Deferred: **Meta parser/resolver** — blokkolva valós Meta export sample-ig.
 
@@ -249,7 +283,30 @@ Négy ötlet érkezett; a user 2026-08-30-án mindháromra megadta az irányt (a
 - [ ] **I1.4 Feed-exportok:** aznapi `feed_exports` (product, verzió, `exported_at`) + **„exportálva, nincs feltöltve" figyelmeztetés**, ha `uploaded_to_adform_at IS NULL`.
 - [ ] **I1.5 Riport-frissesség tile:** `monitoring` `max(imported_at)` + a lefedett `period_from..period_to` + „N napja nincs friss import" jelzés. **Ez az egyetlen widget, ami MA is hasznos adatot mutat** — előre veendő.
 - [ ] **I1.6 (külön slice, migrációval) `actor_kind`:** `FR-D D.1` — `ui|mcp` oszlop az `audit_log`-ra + beállítás a két writer-site-on + ember/agent badge a digestben. **Migráció + kód egy passzban a boxon.** Ugyanez az oszlop-fogalom kell az I2-höz → **egyszer szülessen meg.**
-- [ ] **I1.7 (halasztva) Chartok:** amíg a monitoring-import nem indul újra, 3 hónapos adatot rajzolnának. Chart-lib választás + widget csak ezután. ⚠️ **Külön green-light.**
+- [x] **I1.7 Chartok — GREEN-LIGHT (2026-09-01).** A halasztás oka megszűnt: a július + augusztus import tegnap leszállt, így **4 havi periódus** van (máj 8,3 M → jún 12,1 M → júl 15,5 M → aug 20,1 M impression), és havonta nő. **User-döntés:** a felső sor két redundáns csempéje (Activity, Feeds exported — mindkettő ugyanazt mondja, mint az alatta lévő panel) helyére **delivery-trend** + **matrix-lefedettség** megy; a Reporting data csempe marad harmadiknak.
+  - **Lezárt döntések:**
+    - **Havi grain, nem napi.** A két chart **nem** reagál a `?d`/`?r` nap-scope-ra (a `monitoring` havi periódusokat tárol — Today-en üres lenne). Saját címkét viselnek („2026. aug", „utolsó 6 hónap"); a nap-scope továbbra is csak a lenti paneleket vezérli. Ezt ki kell írni a csempére, nem elhallgatni.
+    - **Nincs chart-lib.** 6 oszlop + egy ratio-bar inline SVG-ben megvan; a `page.tsx` marad server component (recharts = új dep + `"use client"` az egész felső sorra).
+    - **`impressions > 0` szűrő kötelező:** a `size='1x1'` click-tracker sorok augusztusban 0 impression mellett **445 e klikket és 17,9 M Ft költséget** hoznak — beszámítva a CTR értelmetlen, a cost duplázódik.
+    - **Rendezés parse-olt dátumkulcs szerint, NEM a `period_from` sztringen.** A tárolt alak `DD/MM/YYYY`, tehát `"01/12/2025" > "01/05/2026"` lexikailag → évfordulón megfordulna a trend. (A `/api/monitoring/route.ts:24` `orderBy(desc(periodFrom))`-ja ma csak azért jó, mert minden adat 2026-os.)
+    - **Mit mutat a lefedettség:** a riportolt impressionsből mennyi köthető mátrix-MC-hez — aug **35 %**, júl 46 %, jún 78 %. A romlást a nem-matchelt publisher-sorok (telex, hvg, centralmedia…) növekvő volumene okozza; a csempe a Settings → Structure → Monitoring keyword→product szabályaira mutat.
+  - [x] **I1.7a** `src/lib/dashboard-monitoring.ts` — `monthlyDelivery(clientId, n = 6)`: periódusonként impressions / clicks / cost / `matchedImpressions` (`message_id IS NOT NULL`), egy `GROUP BY`, ≤ 6 sor. A `dashboard-creatives.ts` + `dashboard-products.ts` mintáját követi.
+  - [x] **I1.7b** `periodDateKey` (ma `mcp.ts:258`, privát) kiemelése `src/lib/period.ts`-be, az mcp.ts call-site-ok átkötve. Külön, izolált lépés — a rendezés ezen áll.
+  - [x] **I1.7c** `_dashboard/DeliveryTrend.tsx` — `delivery-trend` csempe: havi oszlopdiagram impressionsből, nagy szám = utolsó hónap + MoM-delta (`20,1 M · +29 %`). A `signal-tile` layout-nyelvét (label / value / hint) követi, nem új csempe-família.
+  - [x] **I1.7d** `_dashboard/CoverageTile.tsx` — `coverage-tile`: matched/total ratio-bar + havi mini-trend, link a `/monitoring`-ra.
+  - [x] **I1.7e** A két régi `SignalTile` (Activity, Feeds exported) törlése a `dashboard__signals` sorból (`page.tsx:295-317`); a `FreshnessTile` marad.
+  - [x] **I1.7f** Teszt a `monthlyDelivery`-re: 1x1-kizárás, **évfordulós rendezés** (2025-12 + 2026-01 fixture — a sztring-rendezéssel elbukna), kliens-izoláció.
+  - [x] **I1.7g** `tasks/component-inventory.md` Dashboard szekció: `delivery-trend`, `coverage-tile` felvétele.
+  - **Verzió a slice végén:** `6.46.0` → `6.47.0` (minor — új dashboard-widgetek + új lib-modul).
+- [x] **I1.8 Activity panel product-szűrés (user, 2026-09-01):** „az activity pane is legyen időszakasz és product filtered (it seems to be only time filtered)". **Igaz:** az `activityDigest` (`page.tsx:84`) csak `clientId` + `createdAt` BETWEEN — a `products` tömböt meg sem kapja, míg a `feedsInScope` (`:123`) és a `listStripCreatives` (`dashboard-creatives.ts:145,154`) már szűr rá.
+  - **Az audit_log-ban nincs product oszlop** (`schema.ts:106` — `entity_type` + `entity_id` + `action`), tehát a productot entitásonként fel kell oldani. 7 napra mérve (5679 sor): feloldható `messages` 5370 (94,6 %), `topics` 126, `feed_exports` 55, `assets` 30, `creatives` 5, `audiences` 4 → **97,3 %**. Nem oldható fel: `text_formatting` 33, `keywords` 25, `uploaded_files` 23, `share_galleries` 5, `monitoring` 2, `config` 1 — ezeknek nincs product-dimenziójuk, aktív szűrő mellett kiesnek. Ez helyes viselkedés (egy globális `config`-írás nem „SZK-aktivitás"), de ki kell mondani.
+  - **A nonDCO cellák product-feloldása:** a `messages` sorok 13 %-a (688 cella: `ch_disp` 357 + `ch_soc` 331) **nonDCO**, azaz a `messages.audience`-ben egy csatorna-kulcs áll. A csatornák a **`channels` táblában** élnek (a 2026-08-17-i szétválasztás óta, `schema.ts:207`), nem az `audiences`-ben, és **nincs product oszlopuk** — ezeknél egyedül a topic-kulcs prefixe nevezi meg a productot (SZA 200, SZK 179, HITEL 139, HK 62, VAL 59, MARKET 55, LTP 18). Az I1.8 ezért `coalesce(audiences.product, split_part(topic,'_',1))` szerint old fel.
+  - **⚠️ Külön ügy, NEM ebben a slice-ban:** a `dashboard-products.ts:58` nonDCO-ága a *régi* alakra van írva (`audiences.channel != null`), amit a channels-szétválasztás óta semmi nem elégít ki → a fölötte lévő `if (!a) continue;` elejti a 688 nonDCO cellát, tehát a ProductFilter nonDCO-számlálói 0-k. (Ezt a 6.45.1 „mind-nulla szegmens elrejtése" fixe *helyesen* takarja el a UI-ban; a számláló viszont attól még nem számol.) Átállítása a `channels` táblára külön döntés.
+  - **Nem JS-ben szűrünk:** a nyers sorok lekérése 5679 (rossz napon 5085 egyetlen napra) → a row-cap szabályba ütközne, és a `:79` komment épp ezt tiltja. Marad az egy darab `GROUP BY` query, a product-feltétel egy `EXISTS` + `UNION ALL` feloldó-táblával a hat feloldható entitástípusra.
+  - **Ismert korlát:** törölt entitás sora (7 nap: `feed_exports` delete 28, `topics` 3, `messages` 3) nem oldható fel join-nal — a sor már nincs meg, csak a `before` JSON-ban. Aktív szűrő mellett kiesnek; a `before` parse-olása szándékosan kimarad.
+  - **A Shares panel is csak idő-szűrt** — ott viszont nincs mire szűrni: a `share_galleries`-nek nincs product oszlopa, egy galéria vegyes tartalmú. Változatlanul hagyva, nem az I1.8 tárgya.
+  - [x] **I1.8a** `activityDigest(clientId, scope, products)` — `EXISTS` + `UNION ALL` product-feloldás (messages/topics/feed_exports/creatives/assets/audiences), üres `products`-nál változatlan a mai query.
+  - [x] **I1.8b** Teszt: ch_* (audience nélküli) sor a topic-prefixére szűrve előjön; product nélküli entitástípus aktív szűrőnél kiesik; üres szűrő = mai viselkedés; kliens-izoláció.
 - ⚠️ **Elvetve az első körből:** side toolbar view-kapcsolókkal — a nap-scope adja a nézetváltást, és 5-6 widgetnél a második toolbar üres chrome.
 
 ### I2 — Komment-thread mint **entitás-provenance** (DÖNTÉS LEZÁRVA)
@@ -1271,3 +1328,81 @@ Kérdés: Telekom-fejlesztés fork/clone/worktree-vel, Erste-funkciók sérülé
 | 01/08 | 5 733 | 5 024 | 20 051 365 | 35 883 108 | 20 053 243 | 1 878 |
 
 Az eltérés a **kihagyott DEFAULT/brand sorok** (454 / 439) — nincs a PMMID-jükben `-m_`/`-v_`, tehát egyetlen cellához sem tartoznak. Szándékos, nem veszteség.
+
+---
+
+## 2026-09-01 — I1.7 dashboard-chartok + I1.8 activity product-szűrés — 6.47.0
+
+**User:** „a top left two tiles are redundant, az adat a nagyobb panelekben van, de szeretnék jó kinézetű monitoring chartokat a dashboard felső sorába" · „az activity pane is legyen időszakasz és product filtered (it seems to be only time filtered)".
+
+- [x] **I1.7 teljes** — a felső sor: `DeliveryTrend` + `CoverageTile` + a megmaradt `FreshnessTile`. Új: `src/lib/dashboard-monitoring.ts` (`monthlyDelivery`, `monthLabel`, `compactNumber`), `src/lib/period.ts` (`periodDateKey` az `mcp.ts`-ből kiemelve), `_dashboard/DeliveryTrend.tsx`, `_dashboard/CoverageTile.tsx`.
+- [x] **I1.8 teljes** — `activityDigest` átköltözve `src/lib/dashboard-activity.ts`-be (a `dashboard-creatives.ts` / `dashboard-products.ts` mintájára; a `page.tsx`-ben privát volt, így tesztelhetetlen), + `productScoped()` row-constructor IN feloldó.
+
+**Amit az adat mondott (prod DB, ellenőrizve):**
+- 4 havi periódus: máj 8,34 M → jún 12,14 M → júl 15,51 M → aug 20,05 M impression (+29 % MoM). CTR (valós sorok): 0,235 / 0,227 / 0,338 / 0,294 %.
+- **Lefedettség romlik:** 45 % → 78 % → 46 % → **35 %**. Nem a mátrix romlott, a nem-matchelt publisher-volumen nő (aug 20 M-ból 10,9 M nem-matchelt).
+- **`size='1x1'` csapda igazolva:** augusztusban 0 impression mellett 445 366 klikk és 17,9 M Ft költség. A `monthlyDelivery` `impressions > 0`-val szűr.
+- **SZK-szűrés az activityn:** 1452 `messages:update` az 5344-ből — ebből **179 sor csak a `coalesce(audience.product, topic-prefix)` miatt jön be** (a `ch_disp`/`ch_soc` cellák).
+
+**⚠️ KORREKCIÓ (ugyanaznap, a `channels` tábla felfedezése után):** először azt írtam, hogy a 688 `ch_disp`/`ch_soc` cella „hiányzó audience-sorokra hivatkozik", és hogy a 6.45.1 fixe a tünetet takarta. **Mindkettő téves.** A csatornák szándékosan külön táblában (`channels`, `schema.ts:207`) élnek a 2026-08-17-i szétválasztás óta, és tényleg nincs channel-*audience* — a 6.45.1 megfogalmazása helyes volt. Ami valóban nyitott: a `dashboard-products.ts:58` nonDCO-ága még a régi `audiences.channel != null` alakra van írva, ezért a ProductFilter nonDCO-számlálói 0-k. Külön döntés, lásd I1.8.
+
+**Teszt:** `tests/integration/dashboard-monitoring.test.ts` (7 — 1x1-kizárás, évfordulós rendezés `01/12/2025` vs `01/01/2026`, newest-n, matched-impressions, kliens-izoláció, üres sorozat) + `tests/integration/dashboard-activity.test.ts` (7 — product-szűrés, `ch_*` topic-prefix feloldás, product nélküli entitástípusok kiesése, nem-numerikus `entity_id`, törölt entitás, `topics.product` fallback, scope+kliens). Suite **670/670 zöld** (656 → +14). `npm run build` sikeres.
+
+**Vizuális ellenőrzés:** a két csempe `renderToStaticMarkup` + playwright screenshottal ellenőrizve él adaton. Első körben a coverage %-sor a ratio-bar tengelyének látszott → átírva a delivery-vel azonos oszlop-nyelvre (fix 0–100 %-os skálán), így a felső sor egy vizuális nyelvet beszél.
+
+**Verzió:** `6.46.0` → **`6.47.0`** (minor). Séma-migráció nincs. **Deploy még nem történt.**
+
+---
+
+## 2026-09-01 (folytatás) — W3.i monitoring periódus-tartomány — 6.48.0
+
+**User:** „kell a periódus-selector később? van 4-5 hónap adatunk, tök jó lenne tetszőleges ezen belüli periódusból elemezni."
+
+**Az én tévedésem, kétszer, ugyanabban a szálban:**
+1. Azt írtam, „amíg egy periódus egy hónap, az összevonás semmit nem ad a mostani választóhoz képest". **Téves** — a mai route pontosan EGY periódust ad, több hónap együtt-nézése más képesség, és az adat támogatja.
+2. Azt írtam, a forrás XLSX-ben nincs nap-dimenzió, ezért az AdForm report buildert kellene átállítani. **Téves** — a nap ott van minden sorban, a parser dobja el. Részletek + mérés: **W3.j**.
+
+**Szállítva:**
+- `/api/monitoring?from=&to=` — összefüggő szelet a periódus-listából, mindkét marker inkluzív, tetszőleges sorrendben adható (a route `min`/`max`-szal normalizál). Alap változatlanul a legfrissebb egy periódus. Sorok szerver-oldalon aggregálva a `(platform, product, size, message_id, match_level, audience_key, topic_key, mc_number, mc_variant)` kulcsra; a `messages.name`/`status` **explicit benne a GROUP BY-ban** (a `monitoring.message_id`-hez kötődnek, nem a `messages.id`-hez, tehát Postgres nem tudja levezetni — a régi PG-dialect csapda).
+- Új `mcTrend` a payloadban: `(mc, periódus)` → impr/klikk, ~1 068 sor a teljes történetre.
+- `MonitoringTable`: két select (`__period-range`), „N periods summed" jelzés 1-nél több periódusnál.
+- `MonitoringDetailDialog`: új `__periods` tábla (periódusonkénti impr/klikk/CTR), csak több-periódusos tartománynál.
+- Periódus-lista rendezése `periodDateKey`-re (évforduló-bug).
+
+**Miért nem nő a payload:** 4 periódus = 15 646 tárolt sor, de **6 227** különböző kulcs → a teljes történet ~akkora nézet, mint ma az augusztus (5 733). Mérve.
+
+**Teszt:** `tests/integration/api/monitoring-range.test.ts` (10 — alapértelmezett egy periódus, összegzés kulcsra, CTR újraszámolás nem átlag, fordított markerek, kulcs-szétválasztás, évfordulós sorrend, ismeretlen marker fallback, `mcTrend` alak, kliens-izoláció, üres payload). Suite **680/680 zöld** (670 → +10). Build sikeres.
+
+**Verzió:** `6.47.0` → **`6.48.0`** (minor). Séma-migráció nincs. **Deploy még nem történt** (6.47.0 sem).
+
+---
+
+## 2026-09-01 (folytatás 2) — W3.j nap-grain ingest — 6.49.0
+
+**User:** „megvan" (a jún/júl/aug riportfájl) → „mehet".
+
+**Szállítva:** `monitoring.day` (`text notNull default ''`, ISO `YYYY-MM-DD`), migráció **`0010`** — unique index bővítve `day`-jel + új `monitoring_client_day_idx`. A `parseAdformReport` kiolvassa a `Date` oszlopot (`periodDateKey`-vel ISO-ra normalizálva) és beveszi az aggregációs kulcsba; az import-route átvezeti. `Date` oszlop nélküli riport `day=""`-vel importál, változatlanul.
+
+**Mérve valódi fájlokon (nem becslés):**
+
+| | ápr | máj |
+|---|---|---|
+| nyers sor | 85 222 | 83 905 |
+| periódus-grain (régi) | 3 244 | **3 002** |
+| **nap-grain (új)** | **73 488** | **67 749** |
+| parse | 2,26 s | 2,11 s |
+| impressions összeg | 10 029 134 | **8 335 352** |
+
+A májusi 3 002 sor és a 8 335 352 impresszió **pontosan** a ma tárolt érték → a parse nem veszít és nem duplikál. Insert (teszt-PG, 68 chunk × 1000): **5,0 s**. Aggregátum egy teljes nap-grain periódus fölött: **15 ms**. Egy hónap importja tehát ~7 s — kézi feltöltéshez bőven jó.
+
+**Amiért nem tört el semmi:** minden mai olvasó periódusra csoportosít. Erre külön teszt van, ami ugyanazt a riportot **összecsukva ÉS naponta** importálja, és a `monthlyDelivery` + `/api/monitoring` kimenetét összehasonlítja — azonos.
+
+**A két bukó unit teszt nem regresszió volt:** a `tests/unit/adform-report.test.ts` fixture-jében ugyanaz az MC1a két különböző napon szerepel, tehát most helyesen két sor. A tesztet úgy írtam át, hogy a **változást mutassa**: napi sorok külön assertálva, plusz egy assert, hogy a két nap összege továbbra is a régi 150/5/15/1.
+
+**Teszt:** új `tests/integration/api/monitoring-day-grain.test.ts` (4) + `adform-report.test.ts` frissítve. Suite **684/684 zöld** (680 → +4). Build sikeres.
+
+**Verzió:** `6.48.0` → **`6.49.0`** (minor, séma-migrációval).
+
+**⚠️ Nyitva — `W3.j-6`, a useré:** a 4–5 riportfájl újratöltése a Monitoring feltöltőjén. Amíg egy periódus nincs újratöltve, az `day=""`-vel, összecsukva marad — ez nem hiba, csak azon a periódison nem lesz napi bontás. **Deploy: a migráció + kód egy passzban kell a boxra** (`npm run db:migrate` + build + `pm2 restart`), és három verzió megy ki egyszerre: 6.47.0 + 6.48.0 + 6.49.0.
+
+**Menet közbeni korrekció:** kiderült, hogy létezik a `channels` tábla (`schema.ts:207`, 2026-08-17-i szétválasztás, 6 sor: ch_disp/soc/prg/gsn/gnw/yt). Az I1.8-nál tett állításom, hogy a 688 `ch_disp`/`ch_soc` cella „hiányzó audience-sorokra hivatkozik" és hogy a 6.45.1 fixe „a tünetet takarta", **téves volt** — a nonDCO csatornák szándékosan külön táblában élnek. A kód viselkedése helyes maradt (a nonDCO product a topic-prefixből jön, mert a csatornának nincs productja), csak az indoklás volt rossz; a kommentek, a teszt neve, a CHANGELOG és az I1.8 jegyzet javítva.

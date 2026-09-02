@@ -53,6 +53,7 @@ import {
   updateMessage,
 } from "@/lib/entities/messages";
 import { isNull } from "drizzle-orm";
+import { periodDateKey } from "@/lib/period";
 import { listVisibleTemplates, readTemplate } from "@/lib/templates";
 import { collectStalePreviews } from "@/lib/previews";
 import { shootPreviews } from "@/lib/preview-shooter";
@@ -249,19 +250,6 @@ function jsonResult(value: unknown) {
   return {
     content: [{ type: "text" as const, text: JSON.stringify(value, null, 2) }],
   };
-}
-
-// Report periods are stored as text in the imported XLSX Front-Page format
-// ("DD/MM/YYYY HH:MM:SS"), but agents naturally pass ISO ("2026-06-01").
-// Collapse either form to a YYYY-MM-DD key so `from` matching accepts both and
-// never silently misses on a format mismatch. Returns null when unparseable.
-function periodDateKey(value: string): string | null {
-  const s = value.trim();
-  const dmy = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/); // DD/MM/YYYY [HH:MM:SS]
-  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
-  const iso = s.match(/^(\d{4})-(\d{2})-(\d{2})/); // YYYY-MM-DD[...]
-  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  return null;
 }
 
 // Resolve an agent-supplied `from` (ISO or native) to the exact stored

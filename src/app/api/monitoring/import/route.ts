@@ -17,10 +17,11 @@ import { loadProductContext } from "@/lib/monitoring-products";
 // replaces the slice for this report period (one file = one period snapshot).
 
 // Rows per INSERT statement. Postgres' bind message caps a statement at 65534
-// parameters and a monitoring row spends 20 of them, so a single-statement
-// insert dies with MAX_PARAMETERS_EXCEEDED above 3276 rows — which a full month
-// of AdForm data now clears (Aug 2026 aggregated to 5785 rows). Chunked inside
-// the same transaction, so the period slice is still replaced atomically.
+// parameters and a monitoring row spends 21 of them, so a single-statement
+// insert dies with MAX_PARAMETERS_EXCEEDED above 3120 rows — which a full month
+// of AdForm data clears several times over now that rows are day-grained
+// (May 2026: 3,002 rows folded whole, 67,749 per day). Chunked inside the same
+// transaction, so the period slice is still replaced atomically.
 const INSERT_CHUNK = 1000;
 
 export const POST = withSession(async ({ req, claims }) => {
@@ -86,6 +87,7 @@ export const POST = withSession(async ({ req, claims }) => {
         productRules,
       ),
       size: r.size,
+      day: r.day,
       audienceKey: r.audienceKey,
       topicKey: r.topicKey,
       mcNumber: r.mcNumber,

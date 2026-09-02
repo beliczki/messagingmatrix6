@@ -217,26 +217,46 @@ describe("resolveProduct", () => {
 });
 
 describe("parseAdformReport", () => {
-  it("aggregates to message level and resolves period + metrics", () => {
+  // The two MC1a keyword rows sit on different days, so they aggregate to one
+  // row EACH, not to one row between them: the day is part of the key now. The
+  // keyword grain is still folded away — that is what "message level" means.
+  it("aggregates to message level per day and resolves period + metrics", () => {
     const r = parseAdformReport(buildReport());
     expect(r.periodFrom).toBe("01/04/2026 00:00:00");
     expect(r.periodTo).toBe("30/04/2026 23:59:59");
     expect(r.totalDataRows).toBe(4);
     expect(r.skipped).toBe(1); // the DEFAULT row
-    expect(r.rows).toHaveLength(2);
+    expect(r.rows).toHaveLength(3);
 
-    const mc1 = r.rows.find((x) => x.platform === "adform")!;
-    expect(mc1).toMatchObject({
+    const mc1 = r.rows
+      .filter((x) => x.platform === "adform")
+      .sort((a, b) => a.day.localeCompare(b.day));
+    expect(mc1).toHaveLength(2);
+    expect(mc1[0]).toMatchObject({
+      day: "2026-04-01",
       audienceKey: "VAL_x-findsk",
       topicKey: "topic_one",
       mcNumber: 1,
       mcVariant: "a",
-      impressions: 150,
-      clicks: 5,
-      cost: 15,
+      impressions: 100,
+      clicks: 2,
+      cost: 10,
+      conversions: 0,
+    });
+    expect(mc1[1]).toMatchObject({
+      day: "2026-04-02",
+      impressions: 50,
+      clicks: 3,
+      cost: 5,
       conversions: 1,
     });
-    expect(mc1.ctr).toBeCloseTo(5 / 150);
+    expect(mc1[0].ctr).toBeCloseTo(2 / 100);
+
+    // The period totals the folded import used to report are unchanged.
+    const sum = (k: "impressions" | "clicks" | "cost" | "conversions") =>
+      mc1.reduce((n, x) => n + x[k], 0);
+    expect([sum("impressions"), sum("clicks"), sum("cost"), sum("conversions")])
+      .toEqual([150, 5, 15, 1]);
 
     const ga = r.rows.find((x) => x.platform === "googleads")!;
     expect(ga).toMatchObject({ mcNumber: 0, mcVariant: "0", topicKey: "diakszamla", impressions: 0 });
@@ -250,6 +270,6 @@ describe("parseAdformReport", () => {
     const r = parseAdformReport(buildReport(false));
     expect(r.periodFrom).toBe("01/04/2026 00:00:00");
     expect(r.periodTo).toBe("30/04/2026 23:59:59");
-    expect(r.rows).toHaveLength(2);
+    expect(r.rows).toHaveLength(3);
   });
 });

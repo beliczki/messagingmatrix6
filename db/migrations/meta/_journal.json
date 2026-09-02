@@ -71,6 +71,13 @@
       "when": 1788183697534,
       "tag": "0009_fresh_magus",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1788294691609,
+      "tag": "0010_productive_terrax",
+      "breakpoints": true
     }
   ]
 }

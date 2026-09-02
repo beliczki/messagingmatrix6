@@ -5,6 +5,87 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.49.0] — 2026-09-01
+
+### Added
+- **Monitoring rows now carry the day they cover.** The AdForm report has always
+  had a per-day `Date` column; the importer folded it away into one whole-period
+  row per message key. It is now part of the aggregation key, stored as ISO
+  `YYYY-MM-DD` in a new `monitoring.day` column (migration `0010`, which also
+  extends the period unique index and adds a `(client_id, day)` index).
+  A report built without a `Date` column still imports exactly as before, with
+  `day = ""` meaning "no day breakdown" — the same convention `size` uses.
+
+### Changed
+- A month of AdForm data now stores ~68k rows instead of ~3k (May 2026: 3,002 →
+  67,749). Measured on the real reports: parsing takes ~2.1s and the chunked
+  insert ~5.0s per month, and an aggregate over a whole day-grained period
+  answers in 15ms. Every existing reader groups by report period, so the numbers
+  they show are unchanged — pinned by a test that imports the same report folded
+  and per-day and compares the two.
+
+### Notes
+- Day-level range queries (`?from=2026-06-15`, "last 30 days") are NOT part of
+  this release: the column exists, nothing reads it yet. See `W3.k` in
+  `tasks/todo.md`. Re-importing the existing report files is what turns the
+  stored history day-grained; until a period is re-uploaded it stays folded.
+
+## [6.48.0] — 2026-09-01
+
+### Added
+- **Monitoring can now analyse several report periods at once.** The single
+  period `<select>` became a from–to pair over the period list, and the API sums
+  each message key across the selected slice — the four periods live today are
+  15,646 stored rows but only 6,227 distinct keys, so the whole history is about
+  the size of the single busiest month on its own. CTR is recomputed from the
+  summed clicks and impressions; averaging the per-period rates would weight a
+  quiet month like a busy one.
+- **The detail dialog breaks an MC down per report period**, next to the
+  existing audience × size table, whenever the selected range covers more than
+  one period.
+
+### Fixed
+- The report-period list is ordered on the parsed date instead of the stored
+  `DD/MM/YYYY` text, which would have put December 2025 above January 2026 in
+  the selector.
+
+### Notes
+- The selector is a period list, not a date picker: `monitoring` has no day
+  column, so no slice narrower than a report period is answerable today. The
+  source reports *do* carry a per-day `Date` column that the parser currently
+  discards — see `W3.j` in `tasks/todo.md` for what a day-grain ingest would
+  cost (measured: ~68–73k rows per month instead of ~3k).
+
+## [6.47.0] — 2026-09-01
+
+### Added
+- **The dashboard's top row now carries reporting charts instead of two tiles
+  that repeated the panels underneath them.** *Delivery* shows impressions per
+  report period with the month-over-month change (Aug 2026: 20.1M, +29%), and
+  *Matrix coverage* shows what share of that delivery is linked to an MC
+  (35% in August, down from 78% in June — unmatched publisher lines growing
+  faster than the matched ones). Both are **monthly and ignore the day scope**:
+  `monitoring` stores whole report periods, so a Today window would render them
+  empty on all but one day of the month. They label their own period instead.
+  The "not published to AdForm" count moved into the Feed exports panel header,
+  which is where the per-row badges already are.
+
+### Changed
+- **The Activity panel now honours the product filter**, like the Feed exports
+  and Creatives panels already did. `audit_log` has no product of its own, so it
+  is resolved per entity type — messages, topics, feed exports, creatives,
+  assets and audiences, which is 97% of the volume. Entity types with no product
+  dimension (text formatting, keywords, uploaded files, config) drop out while a
+  filter is on, as do rows whose entity has since been deleted.
+- Message rows are resolved with `coalesce(audience product, topic prefix)`,
+  because a nonDCO cell sits on a channel (`ch_disp`, `ch_soc`) rather than an
+  audience, and a channel carries no product — only the topic key prefix names
+  one. 688 Erste cells are nonDCO, so filtering on SZK finds 1,452 message
+  writes in the last seven days rather than 1,273.
+- `periodDateKey` moved out of `mcp.ts` into `src/lib/period.ts`. Report periods
+  are stored as `DD/MM/YYYY`, so ordering on the stored text puts December 2025
+  after May 2026 — the trend chart sorts on the parsed date instead.
+
 ## [6.46.0] — 2026-09-01
 
 ### Fixed

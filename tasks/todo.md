@@ -1484,3 +1484,21 @@ A májusi 3 002 sor és a 8 335 352 impresszió **pontosan** a ma tárolt érté
 - Health (localhost:6001): `/` 307 · `/login` 200 · `/matrix` 307 · `/monitoring` 307 · `/assets` 307 · `/creative-library` 307 · `/feeds` 307 · `/mcp` 401 · `/api/monitoring` 401 · `/api/dashboard/creatives` 401. Publikus hoston: `/` 307 · `/login` 200 · `/monitoring` 307 · `/assets` 307.
 - **Böngészős smoke a userre vár:** (1) dashboard product-szűrő → felső sor + Library csempék együtt mozognak; (2) `Last 30 days`; (3) kreatív-csík `Time`/`CTR` váltó; (4) Monitoring jobb toolbar nyitva/csukva (Rows felül, upload alul); (5) Assets és Creative Library drop zone nyitott railnél, gomb csukva; (6) Library `MCS 635 · in 2,753 cells`.
 - **Nyitva marad:** `W3.j-6` (a 4–5 riportfájl újratöltése a napi bontásért) és az archivált sorok kérdése a Library-számlálókban.
+
+---
+
+## 2026-09-02 (folytatás) — nonDCO videó-preview + méret-görgetés — 6.52.0
+
+**User:** „a nonDCO creak között a videó megjelenítése nem megy" · „jó lenne az azonos nevű de más méreteket egy pöttyként megjeleníteni" · „ha preview box felett scrollozok vagy swipolok akkor pörgesse a méret választó opciót körbe-körbe".
+
+- [x] **Videó-preview — GYÖKÉROK, nem tünet:** a `PreviewPane` a `staticImage`-et **feltétel nélkül `<img>`-ként** rendereli (`:212`), de a nonDCO kreatív lehet `.mp4` → az `<img>` az alt-szöveget mutatja a sakktábla-háttéren. Pontosan ez látszott a képernyőképen (`ERSTE_SZK_MC104_a_fuggoagy_halfBg_n1_480x480.mp4`). Kiterjesztés szerint választ `<video>`-t, az asset-previewk bevett kezelésével (`controls` / `preload=metadata` / `muted` / `playsInline` / `#t=0.1`).
+  - **Nem írtam negyedik kiterjesztés-listát:** a `parse-filename.ts` `EXT_TYPE` mapja (amivel az importer osztályoz) kapott egy `mediaKindFromFilename` exportot. 3 unit teszt (kis/nagybetű, pontot tartalmazó könyvtárnév ≠ kiterjesztés, ismeretlen kiterjesztés → null).
+- [x] **Méret-körbeléptetés a preview fölött:** wheel + touch-swipe, mindkét végén körbefordul. A wheel listener **kézzel, `passive: false`-szal** van felkötve — React `onWheel`-je passzív, `preventDefault` nélkül a mögötte lévő lap is görögne. A viewport maga sosem görgethető (`overflow-hidden`), tehát nem veszünk el valódi gesztust. Trackpad-burst ellen 60px küszöb + 220ms cooldown.
+- [ ] **„Azonos nevű, más méret = egy pötty" — MÉG NEM CSINÁLTAM MEG, kérdés a userhez.** A felmérés mást mutat, mint amire a kérés szó szerint utal:
+  - **Egy nonDCO cellán belül NINCS azonos nevű, méretben eltérő duplikátum** (0 csoport, mérve). A méretek már ma össze vannak vonva: egy MC-hez több `creatives` sor tartozik méretenként (MC311a: 32 méret), és a preview méret-választója ezeket listázza.
+  - **Ami valójában sokszorozódik: a VARIÁNSOK.** Az MC97 `a…o` variánsai egyenként **egy-egy méretet** jelentenek ugyanabból a kreatívból: a/b/l 970x250, c 1080x1080 + 640x640, e 160x600, f 300x250, g 300x600, h 468x120, j 640x360, m 970x90, n/o 1080x1080 + 960x1200. Mind a 12 ugyanabban a cellában ül, azonos alapnévvel → 12 pötty.
+  - ⇒ A kérés teljesítése **a variánsok összevonását** jelentené egy pöttybe, ami átírja, mit jelent egy pötty a mátrixban (kattintás melyik variánst nyitja? kijelölés? DCO-ra is vonatkozzon?). Ezt nem döntöm el magamtól — a `project_mc_numbering_rules` szerint a variáns tengely jelentéshordozó.
+
+**Teszt:** `parse-filename.test.ts` +3. Suite **706/706 zöld**. Build sikeres.
+
+**Verzió:** `6.51.0` → **`6.52.0`** (minor: hibajavítás + új interakció). Séma-migráció nincs.

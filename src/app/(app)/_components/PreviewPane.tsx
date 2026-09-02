@@ -9,6 +9,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import clsx from "clsx";
+import { mediaKindFromFilename } from "@/lib/parse-filename";
 import { TemplatePreviewImage } from "./TemplatePreviewImage";
 import type { TemplatePreviewMeta } from "./MatrixIframeTile";
 
@@ -73,6 +74,7 @@ export default function PreviewPane({
   staticImage,
 }: Props) {
   const showStatic = !!staticImage;
+  const staticKind = staticImage ? mediaKindFromFilename(staticImage) : null;
   const showImage =
     !showStatic &&
     templateMeta &&
@@ -81,6 +83,57 @@ export default function PreviewPane({
   const boxRef = useRef<HTMLDivElement>(null);
   const [box, setBox] = useState({ w: 0, h: 0 });
   const [reloadKey, setReloadKey] = useState(0);
+
+  /**
+   * Scrolling or swiping over the viewport cycles the size, wrapping at both
+   * ends — the sizes of one creative are a ring, not a list with a stop.
+   *
+   * The listener is attached by hand rather than with onWheel because React's
+   * wheel handler is passive: without preventDefault the page behind scrolls
+   * while the size changes. The viewport itself never scrolls (overflow-hidden),
+   * so nothing legitimate is being stolen.
+   */
+  const cycleRef = useRef({ acc: 0, at: 0, x: 0 });
+  useEffect(() => {
+    const el = boxRef.current;
+    if (!el || sizes.length < 2) return;
+    const step = (dir: number) => {
+      // No size chosen yet counts as "before the first", so one notch either
+      // way lands on a real size rather than doing nothing.
+      const i = size === null ? -1 : sizes.indexOf(size);
+      const from = i === -1 ? 0 : i;
+      onSizeChange(sizes[(from + dir + sizes.length) % sizes.length]!);
+    };
+    // A trackpad emits a burst of small deltas per gesture; accumulate to a
+    // threshold and then hold off, or one flick would run through every size.
+    const WHEEL_STEP = 60;
+    const COOLDOWN_MS = 220;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const now = Date.now();
+      if (now - cycleRef.current.at < COOLDOWN_MS) return;
+      cycleRef.current.acc += e.deltaY + e.deltaX;
+      if (Math.abs(cycleRef.current.acc) < WHEEL_STEP) return;
+      step(cycleRef.current.acc > 0 ? 1 : -1);
+      cycleRef.current.acc = 0;
+      cycleRef.current.at = now;
+    };
+    const onTouchStart = (e: TouchEvent) => {
+      cycleRef.current.x = e.touches[0]?.clientX ?? 0;
+    };
+    const onTouchEnd = (e: TouchEvent) => {
+      const dx = (e.changedTouches[0]?.clientX ?? 0) - cycleRef.current.x;
+      if (Math.abs(dx) > 40) step(dx < 0 ? 1 : -1);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    el.addEventListener("touchstart", onTouchStart, { passive: true });
+    el.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      el.removeEventListener("wheel", onWheel);
+      el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchend", onTouchEnd);
+    };
+  }, [sizes, size, onSizeChange]);
 
   useEffect(() => {
     if (!boxRef.current) return;
@@ -208,12 +261,26 @@ export default function PreviewPane({
       >
         {showStatic ? (
           <div className="preview-pane__static-wrap relative flex size-full items-center justify-center overflow-hidden">
-            <img
-              src={`/api/drive/proxy/${encodeURIComponent(staticImage!)}`}
-              alt={staticImage!}
-              className="preview-pane__static-img max-h-full max-w-full object-contain"
-              loading="lazy"
-            />
+            {/* A nonDCO creative is whatever file was delivered, and plenty of
+                them are .mp4 — an <img> would render the alt text on the
+                checkerboard. Same treatment the asset previews use. */}
+            {staticKind === "video" ? (
+              <video
+                src={`/api/drive/proxy/${encodeURIComponent(staticImage!)}#t=0.1`}
+                className="preview-pane__static-video max-h-full max-w-full object-contain"
+                controls
+                preload="metadata"
+                muted
+                playsInline
+              />
+            ) : (
+              <img
+                src={`/api/drive/proxy/${encodeURIComponent(staticImage!)}`}
+                alt={staticImage!}
+                className="preview-pane__static-img max-h-full max-w-full object-contain"
+                loading="lazy"
+              />
+            )}
           </div>
         ) : showImage ? (
           <div className="preview-pane__image-wrap relative size-full max-h-full max-w-full">

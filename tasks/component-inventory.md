@@ -82,6 +82,7 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `form-field__hint` | Optional helper text alul | MessageEditor Field | – |
 | `form-grid` | 2-oszlopos form rács | MessageEditor minden tab, CreativeMetadataForm | – |
 | `toolbar-btn` | Gomb ami toolbarban él (nem primary CTA) | minden toolbar | – |
+| `preview-pane__static-video` | A statikus (nonDCO) preview videó-ága; `__static-img` a kép-ág. A viewport fölötti scroll/swipe körbelépteti a méretet. | `PreviewPane` | – |
 | `toolbar-upload` + `__header` / `__help` / `__dropzone` (`--over`) / `__btn` | A jobb-toolbar alján ülő feltöltés. Összecsukva a régi primary ikon-gomb (a lap saját dialógusát nyitja), kinyitva maga a drop zone. Nincs benne upload-logika — `onActivate` + `onFiles`. | Monitoring, Assets, Creative Library | a pozicionálás (`mt-auto`) a hívóé, mint az `ArchiveToggle`-nél |
 | `toolbar-btn--primary` / `--danger` / `--icon-only` | Variánsok | – | – |
 | `toggle-btn` | Pressed / unpressed gomb | MatrixGrid `ToggleBtn` 255–277, CL `ToggleBtn` 430–451 | inline duplikátum |

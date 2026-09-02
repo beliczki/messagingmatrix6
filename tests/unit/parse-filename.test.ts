@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { parseFilename, type ParseRules } from "@/lib/parse-filename";
+import {
+  mediaKindFromFilename,
+  parseFilename,
+  type ParseRules,
+} from "@/lib/parse-filename";
 
 const ERSTE_RULES: ParseRules = {
   brand: { type: "segment", index: 0, separator: "_" },
@@ -95,5 +99,24 @@ describe("parseFilename — rule types", () => {
     });
     expect(fields.mc).toBeUndefined();
     expect(warnings).toEqual(["mc: rule did not match"]);
+  });
+});
+
+describe("mediaKindFromFilename", () => {
+  it("classifies by extension, case-insensitively", () => {
+    expect(mediaKindFromFilename("ERSTE_SZK_MC104_a_n1_480x480.mp4")).toBe("video");
+    expect(mediaKindFromFilename("banner.PNG")).toBe("image");
+    expect(mediaKindFromFilename("bundle.zip")).toBe("html");
+  });
+
+  it("reads the extension off the basename, not the path", () => {
+    // A directory with a dot in it must not be mistaken for the extension.
+    expect(mediaKindFromFilename("v1.2/spot.mp4")).toBe("video");
+    expect(mediaKindFromFilename("v1.2/README")).toBeNull();
+  });
+
+  it("returns null for an extension the importer does not know", () => {
+    expect(mediaKindFromFilename("notes.txt")).toBeNull();
+    expect(mediaKindFromFilename("noextension")).toBeNull();
   });
 });

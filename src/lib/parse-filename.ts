@@ -100,6 +100,21 @@ function applyRule(filename: string, rule: ParseRule): string | null {
   }
 }
 
+/**
+ * What a filename's extension says it is, using the same map the importer
+ * classifies uploads with. Returns null for an extension the map does not know.
+ *
+ * Callers that only hold a filename need this — a stored creative is just a
+ * name until it is fetched, and rendering an .mp4 into an `<img>` shows the alt
+ * text on a checkerboard instead of the video.
+ */
+export function mediaKindFromFilename(filename: string): string | null {
+  const name = basename(filename);
+  const dot = name.lastIndexOf(".");
+  if (dot < 0) return null;
+  return EXT_TYPE[name.slice(dot).toLowerCase()] ?? null;
+}
+
 export function parseFilename(
   filename: string,
   rules: ParseRules,

@@ -5,6 +5,23 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.52.0] — 2026-09-02
+
+### Fixed
+- **A nonDCO creative that is a video now plays in the message preview.** The
+  static preview rendered every creative through an `<img>`, so an `.mp4` showed
+  its alt text on the checkerboard. It picks `<video>` by extension now, using
+  the same map the importer classifies uploads with (`mediaKindFromFilename`)
+  rather than a fourth private copy of the extension list, and the same
+  `controls / preload=metadata / muted / playsInline` treatment as the asset
+  previews.
+
+### Added
+- **Scrolling or swiping over the preview cycles the size**, wrapping at both
+  ends — the sizes of one creative are a ring, not a list with a stop. The wheel
+  listener is attached non-passively so the page behind does not scroll along;
+  the viewport itself never scrolled, so nothing is being stolen.
+
 ## [6.51.0] — 2026-09-02
 
 ### Changed

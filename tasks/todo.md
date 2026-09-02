@@ -1477,3 +1477,10 @@ A májusi 3 002 sor és a 8 335 352 impresszió **pontosan** a ma tárolt érté
 **Teszt:** `dashboard-library-counts.test.ts` +1 eset (egy MC két audience-en + egy második variáns → 6 cella, 5 MC; a régi számlálással elbukna), a többi `mcs`/`messageCells`-re átírva. Suite **703/703 zöld**. Build sikeres. Vizuálisan ellenőrizve lokális prod buildben mind a négy felület (monitoring nyitva+csukva, assets rail, library csempék).
 
 **Verzió:** `6.50.0` → **`6.51.0`** (minor). Séma-migráció nincs. **Deploy: sem a 6.50.0, sem a 6.51.0 nincs kint.**
+
+**DEPLOYOLVA 6.50.0 + 6.51.0 (2026-09-02):** commit `5fbbdf2`, push origin main, box `9dab838`→`5fbbdf2`, box `package.json` **6.51.0**.
+- **Séma-migráció NINCS** egyik verzióban sem (`git diff --name-only 6ca011a..5fbbdf2 -- db/migrations` üres) — a `0010` a 6.49.0-val már kiment. Ellenőrizve deploy után: `monitoring` **15 646 sor / 56 035 192 impresszió**, változatlan.
+- `npm run build` **Compiled successfully 37.7s**, `pm2 restart mm6-erste` → **Ready 1325ms**, online.
+- Health (localhost:6001): `/` 307 · `/login` 200 · `/matrix` 307 · `/monitoring` 307 · `/assets` 307 · `/creative-library` 307 · `/feeds` 307 · `/mcp` 401 · `/api/monitoring` 401 · `/api/dashboard/creatives` 401. Publikus hoston: `/` 307 · `/login` 200 · `/monitoring` 307 · `/assets` 307.
+- **Böngészős smoke a userre vár:** (1) dashboard product-szűrő → felső sor + Library csempék együtt mozognak; (2) `Last 30 days`; (3) kreatív-csík `Time`/`CTR` váltó; (4) Monitoring jobb toolbar nyitva/csukva (Rows felül, upload alul); (5) Assets és Creative Library drop zone nyitott railnél, gomb csukva; (6) Library `MCS 635 · in 2,753 cells`.
+- **Nyitva marad:** `W3.j-6` (a 4–5 riportfájl újratöltése a napi bontásért) és az archivált sorok kérdése a Library-számlálókban.

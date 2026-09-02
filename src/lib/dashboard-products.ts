@@ -101,7 +101,10 @@ export const messageProduct = sql`coalesce(${audiences.product}, split_part(${me
 export type LibraryCounts = {
   audiences: number;
   topics: number;
-  messages: number;
+  /** Distinct MC number+variant, NOT `messages` rows — see `libraryCounts`. */
+  mcs: number;
+  /** The rows those MCs occupy, kept as context under the MC count. */
+  messageCells: number;
   assets: number;
   creatives: number;
   text_formatting: number;
@@ -117,6 +120,12 @@ export type LibraryCounts = {
  * filtered — the tile says "all products" instead, which is truer than either
  * dropping it to zero (the rows do exist) or letting it look filtered when it
  * is not.
+ *
+ * The matrix figure counts DISTINCT MC number+variant, not `messages` rows. A
+ * row is a cell, and one MC lives in as many cells as it has audiences — MC316a
+ * occupies 43 of them — so the row count answers "how many times is the same
+ * message duplicated across audiences", which is not a library size. Erste:
+ * 2,753 rows, 635 MCs. The row count rides along as context.
  */
 export async function libraryCounts(
   clientId: number,
@@ -150,7 +159,10 @@ export async function libraryCounts(
         ),
       ),
     db
-      .select({ n: count() })
+      .select({
+        n: sql<number>`count(distinct (${messages.number}, ${messages.variant}))::int`,
+        cells: sql<number>`count(*)::int`,
+      })
       .from(messages)
       .leftJoin(
         audiences,
@@ -191,7 +203,8 @@ export async function libraryCounts(
   return {
     audiences: c[0][0]?.n ?? 0,
     topics: c[1][0]?.n ?? 0,
-    messages: c[2][0]?.n ?? 0,
+    mcs: c[2][0]?.n ?? 0,
+    messageCells: c[2][0]?.cells ?? 0,
     assets: c[3][0]?.n ?? 0,
     creatives: c[4][0]?.n ?? 0,
     text_formatting: c[5][0]?.n ?? 0,

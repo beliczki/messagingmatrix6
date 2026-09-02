@@ -1459,3 +1459,21 @@ A májusi 3 002 sor és a 8 335 352 impresszió **pontosan** a ma tárolt érté
 **Egy saját teszt-hiba, nem kód-hiba:** a CTR-tesztek először üres listát adtak, mert a fixture csak `match_level`-t állított. A „matched" a `message_id IS NOT NULL` — ugyanaz, amit a Monitoring tábla Matched szűrője ért alatta. A fixture javítva (valódi `messages` sorral), a kód nem változott.
 
 **Verzió:** `6.49.0` → **`6.50.0`** (minor). Séma-migráció nincs. **Deploy még nem történt.**
+
+---
+
+## 2026-09-02 (folytatás) — Monitoring toolbar-átrendezés, közös feltöltő-shell, MC-számláló — 6.51.0
+
+**User:** „itt nem kell a report period label" · „az all/matched/unmatched view kapcsoló kimehet a jobb oldali side toolbarba felülre, az upload meg mehet alulra" · „ez az upload metódus tök jó, lehetne ilyen az assets és a creative upload is, de úgy hogy ha toolbar össze van csukva akkor gomb megnyitja nagyban az upload drag-and-dropot, ha nyitva akkor egyből ott a drop zone" · „a librarynál azt kéne kiírni a messages helyett hogy hány különböző, variánsokkal együtt MC-nk van".
+
+**Szállítva:**
+- `Report period` label törölve — a két dátum-select önmagát magyarázza.
+- A match-szűrő kikerült a `MonitoringMatchFilter`-be, a jobb toolbar tetejére (`Rows` szekció). Az állapot a `MonitoringView`-ba emelve, mert a kontroll a railben van, a sorok meg a táblában. Összecsukva három ikon (`List` / `Link2` / `Unlink2`), a `LibraryViewSwitcher`/`ArchiveToggle` collapsed-nyelvén.
+- Az upload a rail aljára került (a tartalom flex-oszlopba csomagolva, mint az Assetsnél — enélkül az `mt-auto` nem ér le).
+- Új közös `_components/ToolbarUpload.tsx`: összecsukva a régi primary ikon-gomb (a lap saját dialógusát nyitja), kinyitva drop zone. **Nincs benne upload-logika** (`onActivate` + `onFiles`), mert mindhárom hívó mást csinál a fájlokkal: Monitoring közvetlen import, Assets a metaadat-dialógus (`setDroppedFiles` + `setUploadOpen`, a plumbing már megvolt), Creative Library az upload-queue (`queue.addFiles`).
+  - **`mt-auto` a hívóé, nem a komponensé** (az `ArchiveToggle` mintájára): az Assets/CL railben az `ArchiveToggle` már kéri, és két `mt-auto` szétosztja a szabad helyet ahelyett, hogy fölöttük gyűlne össze — emiatt csúszott először középre a „Show archived".
+- **Library `Messages` → `MCs`.** A `messages` sor **cella**, nem MC: egy MC annyi cellában él, ahány audience-e van (MC316a **43** cellában). Mérve: **2 753 sor → 635** különböző (szám, variáns), SZK-ra szűrve 1 381 → 209. A csempe a 635-öt írja, alatta jegyzetben `in 2,753 cells` — a régi szám kontextusként megmarad, nem tűnik el.
+
+**Teszt:** `dashboard-library-counts.test.ts` +1 eset (egy MC két audience-en + egy második variáns → 6 cella, 5 MC; a régi számlálással elbukna), a többi `mcs`/`messageCells`-re átírva. Suite **703/703 zöld**. Build sikeres. Vizuálisan ellenőrizve lokális prod buildben mind a négy felület (monitoring nyitva+csukva, assets rail, library csempék).
+
+**Verzió:** `6.50.0` → **`6.51.0`** (minor). Séma-migráció nincs. **Deploy: sem a 6.50.0, sem a 6.51.0 nincs kint.**

@@ -5,6 +5,27 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.51.0] — 2026-09-02
+
+### Changed
+- **The library's Messages tile counts MCs, not rows.** A `messages` row is a
+  cell, and one MC lives in as many cells as it has audiences — MC316a occupies
+  43 — so the old figure answered "how many times is the same message
+  duplicated across audiences". Erste reads 635 MCs (number+variant) in 2,753
+  cells, where the tile used to say 2,753. The row count stays underneath as
+  context.
+- **Monitoring: the report-period label is gone** (two date selects say what
+  they are), and **All / Matched / Unmatched moved into the right toolbar**,
+  above the upload — it is a view mode, like the view switcher and archive
+  toggle that live there on the other screens. Collapsed it becomes three
+  icons; the upload is pinned to the bottom of the rail in both states.
+- **Assets and the Creative Library get the monitoring upload's drop zone.**
+  With the rail open the drop target is right there and files can be dropped
+  without opening anything; collapsed it stays the primary icon button that
+  opens each page's existing batch dialog. Dropped files go where that page
+  already sent them — the asset metadata dialog, or the creative upload queue.
+  The shared shell is `_components/ToolbarUpload.tsx` and owns no upload logic.
+
 ## [6.50.0] — 2026-09-02
 
 ### Added

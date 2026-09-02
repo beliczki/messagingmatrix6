@@ -67,7 +67,7 @@ type Payload = {
   mcTrend: McTrendRow[];
 };
 
-type MatchFilter = "all" | "matched" | "unmatched";
+export type MatchFilter = "all" | "matched" | "unmatched";
 type SortKey =
   | "platform"
   | "product"
@@ -131,8 +131,13 @@ function compare(a: Row, b: Row, key: SortKey): number {
 
 export default function MonitoringTable({
   reloadToken,
+  match,
+  setMatch,
 }: {
   reloadToken: number;
+  /** Owned by MonitoringView: the control for it lives in the right toolbar. */
+  match: MatchFilter;
+  setMatch: (m: MatchFilter) => void;
 }) {
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -142,7 +147,6 @@ export default function MonitoringTable({
   const [range, setRange] = useState<{ from: string; to: string } | null>(null);
   const [platforms, setPlatforms] = useState<Set<string>>(new Set());
   const [products, setProducts] = useState<Set<string>>(new Set());
-  const [match, setMatch] = useState<MatchFilter>("matched");
   const [sort, setSort] = useState<Sort>({ key: "impressions", dir: "desc" });
   const [detailRowId, setDetailRowId] = useState<number | null>(null);
 
@@ -367,7 +371,6 @@ export default function MonitoringTable({
           // calendar would promise day precision the reports do not carry. The
           // API spans whichever pair it gets, so neither side can be "wrong".
           <div className="monitoring-table__period-range flex items-center gap-1.5 text-xs text-slate-500">
-            Report period
             <select
               className="input-box rounded border border-slate-300 px-2 py-1 text-xs text-slate-800 focus:border-slate-500 focus:outline-none"
               value={data.selected?.to ?? ""}
@@ -423,29 +426,6 @@ export default function MonitoringTable({
           options={platformOptions}
           onChange={setPlatforms}
         />
-
-        <div className="monitoring-table__match-filter inline-flex overflow-hidden rounded border border-slate-300 text-xs">
-          {(
-            [
-              ["all", "All"],
-              ["matched", "Matched"],
-              ["unmatched", "Unmatched"],
-            ] as [MatchFilter, string][]
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setMatch(key)}
-              className={clsx(
-                "px-2.5 py-1 font-medium transition",
-                match === key
-                  ? "bg-slate-900 text-white"
-                  : "bg-white text-slate-600 hover:bg-slate-50",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
 
         {hasFilter ? (
           <button

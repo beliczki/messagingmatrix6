@@ -62,7 +62,9 @@ describe("libraryCounts", () => {
     expect(await libraryCounts(erste.id)).toEqual({
       audiences: 2,
       topics: 2,
-      messages: 3,
+      // three cells, but MC1a / MC2a / MC3a — three distinct MCs
+      mcs: 3,
+      messageCells: 3,
       assets: 2,
       creatives: 1,
       text_formatting: 2,
@@ -74,7 +76,8 @@ describe("libraryCounts", () => {
       audiences: 1,
       topics: 1,
       // the DCO cell and the nonDCO channel cell, both on an SZK topic
-      messages: 2,
+      mcs: 2,
+      messageCells: 2,
       assets: 1,
       creatives: 1,
       // no product dimension — deliberately unfiltered
@@ -82,20 +85,35 @@ describe("libraryCounts", () => {
     });
   });
 
+  it("counts an MC once however many cells it occupies", async () => {
+    // The live shape this fixes: MC316a lives in 43 cells, and the row count
+    // read as a library size of 2,753 against 635 actual MCs.
+    await db.insert(messages).values([
+      { clientId: erste.id, number: 9, variant: "a", audience: "SZK_x", topic: "SZK_one" },
+      { clientId: erste.id, number: 9, variant: "a", audience: "HK_x", topic: "SZK_one" },
+      // a second variant of the same number is its own MC
+      { clientId: erste.id, number: 9, variant: "b", audience: "SZK_x", topic: "SZK_one" },
+    ]);
+
+    const all = await libraryCounts(erste.id);
+    expect(all.messageCells).toBe(6); // 3 from the base fixture + 3 here
+    expect(all.mcs).toBe(5); // MC1a, MC2a, MC3a, MC9a, MC9b
+  });
+
   it("takes a topic's product from its key when the column is empty", async () => {
     const hk = await libraryCounts(erste.id, ["HK"]);
     expect(hk.topics).toBe(1);
-    expect(hk.messages).toBe(1);
+    expect(hk.mcs).toBe(1);
   });
 
   it("adds up across a multi-product selection", async () => {
     const both = await libraryCounts(erste.id, ["SZK", "HK"]);
-    expect(both).toMatchObject({ audiences: 2, topics: 2, messages: 3, assets: 2 });
+    expect(both).toMatchObject({ audiences: 2, topics: 2, mcs: 3, assets: 2 });
   });
 
   it("returns zeros for a product with nothing in the library", async () => {
     const val = await libraryCounts(erste.id, ["VAL"]);
-    expect(val).toMatchObject({ audiences: 0, topics: 0, messages: 0, creatives: 0 });
+    expect(val).toMatchObject({ audiences: 0, topics: 0, mcs: 0, creatives: 0 });
   });
 
   it("never counts another client's rows", async () => {

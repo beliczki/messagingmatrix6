@@ -82,6 +82,7 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `form-field__hint` | Optional helper text alul | MessageEditor Field | – |
 | `form-grid` | 2-oszlopos form rács | MessageEditor minden tab, CreativeMetadataForm | – |
 | `toolbar-btn` | Gomb ami toolbarban él (nem primary CTA) | minden toolbar | – |
+| `toolbar-upload` + `__header` / `__help` / `__dropzone` (`--over`) / `__btn` | A jobb-toolbar alján ülő feltöltés. Összecsukva a régi primary ikon-gomb (a lap saját dialógusát nyitja), kinyitva maga a drop zone. Nincs benne upload-logika — `onActivate` + `onFiles`. | Monitoring, Assets, Creative Library | a pozicionálás (`mt-auto`) a hívóé, mint az `ArchiveToggle`-nél |
 | `toolbar-btn--primary` / `--danger` / `--icon-only` | Variánsok | – | – |
 | `toggle-btn` | Pressed / unpressed gomb | MatrixGrid `ToggleBtn` 255–277, CL `ToggleBtn` 430–451 | inline duplikátum |
 | `toggle-btn--active` | Aktív állapot | – | – |
@@ -900,6 +901,6 @@ A lap gyökere `dashboard`. Meglévő névből vettük: `toolbar-btn` (nap-lépt
 | Csík: DCO (mátrix) tile doboza | `creative-strip__mc` | a `MatrixIframePreview` `fit-rect` befoglalója; szélessége a size-tokenből SZÁMÍTOTT, ezért inline |
 | Csík: lapozás-jelző | `creative-strip__loading` | a jobb szélen, amíg van következő lap |
 | Üres állapot + kiút | `empty-state__hint` + `empty-state__link` | „Try the last 7 days" |
-| Alsó összeszámláló csempék | `count-tile` + `__label` / `__value` / `__note` | „Library · all time"; a `__note` („all products") csak azon a csempén és csak aktív product-szűrőnél, aminek nincs product-dimenziója (Text formatting) |
+| Alsó összeszámláló csempék | `count-tile` + `__label` / `__value` / `__note` (két használat: „all products", illetve az MC-csempén „in N cells") | „Library · all time"; a `__note` („all products") csak azon a csempén és csak aktív product-szűrőnél, aminek nincs product-dimenziója (Text formatting) |
 | Panel akció-slot | `panel__action` | a `panel__link` („Open →") helyén; egy panelnek vagy linkje van, vagy akciója |
-| Kreatív-csík rendezés-váltó | `creative-sort` + `__option` (`--active`) | Time / CTR; a `monitoring-table__match-filter` inline rounded group nyelvén |
+| Kreatív-csík rendezés-váltó | `creative-sort` + `__option` (`--active`) | Time / CTR; a jobb-toolbaros inline rounded group nyelvén |

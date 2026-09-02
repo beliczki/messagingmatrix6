@@ -17,6 +17,7 @@ import { useDropTarget, type QueueItem } from "../_components/UploadQueue";
 import MultiPill, { ALL_NONE_QUICK_SELECT } from "../_components/MultiPill";
 import ArchiveToggle from "../_components/ArchiveToggle";
 import RightToolbar from "../_components/RightToolbar";
+import ToolbarUpload from "../_components/ToolbarUpload";
 import AssetDetailDialog from "./AssetDetailDialog";
 import {
   LibraryViewSwitcher,
@@ -378,22 +379,18 @@ export default function AssetsLibrary() {
                 collapsed={collapsed}
                 className="mt-auto"
               />
-              <button
-                type="button"
-                onClick={() => {
+              <ToolbarUpload
+                collapsed={collapsed}
+                help="Drop files to name and tag them in the batch dialog — the same one the Upload button opens."
+                onActivate={() => {
                   setDroppedFiles([]);
                   setUploadOpen(true);
                 }}
-                title="Upload"
-                aria-label="Upload"
-                className={clsx(
-                  "toolbar-btn--primary inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-900 font-medium text-white hover:bg-slate-800",
-                  collapsed ? "size-9" : "px-3 py-1.5 text-xs",
-                )}
-              >
-                <UploadIcon className="size-3.5" />
-                {!collapsed ? "Upload" : null}
-              </button>
+                onFiles={(files) => {
+                  setDroppedFiles(files);
+                  setUploadOpen(true);
+                }}
+              />
             </>
           );
           return collapsed ? content : <div className="flex h-full flex-col gap-3">{content}</div>;

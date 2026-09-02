@@ -471,15 +471,23 @@ export default async function Dashboard({
               [
                 ["Audiences", counts.audiences, "/audiences", true],
                 ["Topics", counts.topics, "/topics", true],
-                ["Messages", counts.messages, "/matrix", true],
+                // MCs, not message rows: a row is a cell, and one MC lives in
+                // as many cells as it has audiences.
+                [
+                  "MCs",
+                  counts.mcs,
+                  "/matrix",
+                  true,
+                  `in ${counts.messageCells.toLocaleString()} cells`,
+                ],
                 ["Assets", counts.assets, "/assets", true],
                 ["Creatives", counts.creatives, "/creative-library", true],
                 // Text formatting has no product dimension, so its count is
                 // the whole library whatever the filter says. Saying so beats
                 // letting the tile look filtered when it is not.
                 ["Text formatting", counts.text_formatting, "/texts", false],
-              ] as Array<[string, number, string, boolean]>
-            ).map(([label, n, href, scoped]) => (
+              ] as Array<[string, number, string, boolean, string?]>
+            ).map(([label, n, href, scoped, note]) => (
               <Link
                 key={label}
                 href={href}
@@ -491,7 +499,11 @@ export default async function Dashboard({
                 <p className="count-tile__value mt-1 text-2xl font-semibold text-slate-900">
                   {n}
                 </p>
-                {!scoped && products.length > 0 ? (
+                {note ? (
+                  <p className="count-tile__note text-[10px] text-slate-400">
+                    {note}
+                  </p>
+                ) : !scoped && products.length > 0 ? (
                   <p className="count-tile__note text-[10px] text-slate-400">
                     all products
                   </p>

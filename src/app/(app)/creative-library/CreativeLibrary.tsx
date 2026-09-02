@@ -24,6 +24,7 @@ import {
 import clsx from "clsx";import { trimEmptyCountSegments } from "@/lib/count-segments";
 
 import { Masonry } from "../_components/Masonry";
+import ToolbarUpload from "../_components/ToolbarUpload";
 import UploadDialog, { type UploadResult } from "../_components/UploadDialog";
 import UploadQueue, {
   useDropTarget,
@@ -790,19 +791,12 @@ export default function CreativeLibrary() {
                 collapsed={collapsed}
                 className="mt-auto"
               />
-              <button
-                type="button"
-                onClick={() => setUploadOpen(true)}
-                title="Upload"
-                aria-label="Upload"
-                className={clsx(
-                  "toolbar-btn--primary inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-900 font-medium text-white hover:bg-slate-800",
-                  collapsed ? "size-9" : "px-3 py-1.5 text-xs",
-                )}
-              >
-                <UploadIcon className="size-3.5" />
-                {!collapsed ? "Upload" : null}
-              </button>
+              <ToolbarUpload
+                collapsed={collapsed}
+                help="Drop creatives to queue them straight away, or click to open the batch dialog."
+                onActivate={() => setUploadOpen(true)}
+                onFiles={queue.addFiles}
+              />
             </>
           );
           return collapsed ? content : <div className="flex h-full flex-col gap-3">{content}</div>;

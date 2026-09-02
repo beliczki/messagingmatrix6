@@ -10,6 +10,7 @@ import {
   topics,
 } from "@/db/schema";
 import type { DayScope } from "@/lib/day-scope";
+import { messageProduct } from "@/lib/dashboard-products";
 
 export type DigestRow = {
   entityType: string;
@@ -60,11 +61,9 @@ export function activityDigest(
  * Resolved as a row-constructor IN, not an EXISTS: the subquery is
  * uncorrelated, so Postgres hashes it once rather than per audit row.
  *
- * `coalesce(audience product, topic prefix)` because a cell's product comes
- * from one of two places. DCO cells take it from their audience; nonDCO cells
- * sit on a channel (`ch_disp`, `ch_soc`, …), which lives in `channels` — a
- * separate table since the 2026-08-17 split — and carries no product of its
- * own, so only the topic key prefix names it. 688 Erste cells are nonDCO.
+ * The messages branch resolves its product with the shared `messageProduct`
+ * expression — the DCO/nonDCO rule is correctness-critical and must not drift
+ * between here and the library counts.
  */
 function productScoped(clientId: number, products: string[]) {
   const wanted = sql.join(
@@ -74,7 +73,7 @@ function productScoped(clientId: number, products: string[]) {
   return sql`(${auditLog.entityType}, ${auditLog.entityId}) in (
     select kind, id from (
       select 'messages' as kind, ${messages.id}::text as id,
-             coalesce(${audiences.product}, split_part(${messages.topic}, '_', 1)) as product
+             ${messageProduct} as product
         from ${messages}
         left join ${audiences}
           on ${audiences.key} = ${messages.audience}

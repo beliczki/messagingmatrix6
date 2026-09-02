@@ -900,4 +900,6 @@ A lap gyökere `dashboard`. Meglévő névből vettük: `toolbar-btn` (nap-lépt
 | Csík: DCO (mátrix) tile doboza | `creative-strip__mc` | a `MatrixIframePreview` `fit-rect` befoglalója; szélessége a size-tokenből SZÁMÍTOTT, ezért inline |
 | Csík: lapozás-jelző | `creative-strip__loading` | a jobb szélen, amíg van következő lap |
 | Üres állapot + kiút | `empty-state__hint` + `empty-state__link` | „Try the last 7 days" |
-| Alsó összeszámláló csempék | `count-tile` + `__label` / `__value` | „Library · all time" |
+| Alsó összeszámláló csempék | `count-tile` + `__label` / `__value` / `__note` | „Library · all time"; a `__note` („all products") csak azon a csempén és csak aktív product-szűrőnél, aminek nincs product-dimenziója (Text formatting) |
+| Panel akció-slot | `panel__action` | a `panel__link` („Open →") helyén; egy panelnek vagy linkje van, vagy akciója |
+| Kreatív-csík rendezés-váltó | `creative-sort` + `__option` (`--active`) | Time / CTR; a `monitoring-table__match-filter` inline rounded group nyelvén |

@@ -1,4 +1,4 @@
-import { and, eq, gt, sql } from "drizzle-orm";
+import { and, eq, gt, inArray, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { monitoring } from "@/db/schema";
 import { periodDateKey } from "@/lib/period";
@@ -34,6 +34,7 @@ export type DeliveryMonth = {
 export async function monthlyDelivery(
   clientId: number,
   n = 6,
+  products: string[] = [],
 ): Promise<DeliveryMonth[]> {
   const rows = await db
     .select({
@@ -47,7 +48,16 @@ export async function monthlyDelivery(
     })
     .from(monitoring)
     .where(
-      and(eq(monitoring.clientId, clientId), gt(monitoring.impressions, 0)),
+      and(
+        eq(monitoring.clientId, clientId),
+        gt(monitoring.impressions, 0),
+        // A product filter narrows the denominator too: the rows carrying no
+        // product at all are the unmatched publisher lines, and they belong to
+        // no product by definition. Coverage therefore reads much higher under
+        // a filter (Aug 2026: 35% overall, 85% on SZK alone) — a different and
+        // equally real question, not an improvement.
+        products.length ? inArray(monitoring.product, products) : undefined,
+      ),
     )
     .groupBy(monitoring.periodFrom, monitoring.periodTo);
 

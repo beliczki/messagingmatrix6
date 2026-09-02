@@ -5,6 +5,34 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.50.0] — 2026-09-02
+
+### Added
+- **A "Last 30 days" scope**, next to Today / Yesterday / Last 7 days. The
+  empty-state link now steps one rung wider too — a day leads to the week and
+  an empty week to the month, instead of dead-ending at 7 days.
+- **The creative strip can be ordered by measured CTR** instead of by recency,
+  from a Time/CTR toggle where the panel's "Open →" was (`?cs=ctr`). The rate
+  is summed over every report period from matched monitoring rows only, and an
+  MC must have delivered 100k impressions to be ranked at all — otherwise a
+  creative shown twice and clicked once tops the list at 50%. Ranking by CTR
+  also drops the day window: of the 74 MCs past the floor, a 7-day window holds
+  9 and no uploaded creative at all, so "best performing" is an all-time
+  question and the panel says so.
+
+### Changed
+- **The product filter now reaches the top report row and the library counts**,
+  which were the last two things on the dashboard ignoring it. Note that
+  Matrix coverage means something different once filtered: the rows carrying no
+  product are the unmatched publisher lines, so they leave the denominator too
+  and coverage reads 58–100% per product against 35% overall (Aug 2026). Both
+  are true; they count different populations.
+- Text formatting has no product dimension, so its library tile is deliberately
+  left unfiltered and labelled "all products" rather than dropping to zero.
+- `entityCounts` moved to `dashboard-products.ts` as `libraryCounts` and the
+  DCO/nonDCO product rule is now one shared `messageProduct` expression instead
+  of a copy in each query that needs it.
+
 ## [6.49.0] — 2026-09-01
 
 ### Added

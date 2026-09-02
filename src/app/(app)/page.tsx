@@ -36,14 +36,16 @@ import {
   todayUtc,
   type DayScope,
 } from "@/lib/day-scope";
+import { activityDigest, type DigestRow } from "@/lib/dashboard-activity";
 import {
-  activityDigest,
-  type DigestRow,
-} from "@/lib/dashboard-activity";
-import { listStripCreatives, STRIP_PAGE } from "@/lib/dashboard-creatives";
-import { productInventory } from "@/lib/dashboard-products";
+  CTR_MIN_IMPRESSIONS,
+  listStripCreatives,
+  STRIP_PAGE,
+  type StripSort,
+} from "@/lib/dashboard-creatives";
+import { libraryCounts, productInventory } from "@/lib/dashboard-products";
 import { shareItemCount } from "@/lib/share-metadata";
-import { monthlyDelivery } from "@/lib/dashboard-monitoring";
+import { compactNumber, monthlyDelivery } from "@/lib/dashboard-monitoring";
 import CoverageTile from "./_dashboard/CoverageTile";
 import CreativeStrip from "./_dashboard/CreativeStrip";
 import DeliveryTrend from "./_dashboard/DeliveryTrend";
@@ -54,40 +56,8 @@ export const dynamic = "force-dynamic";
 // Every timestamp column is a UTC `YYYY-MM-DD HH:MM:SS` string, so a day scope
 // is a plain string BETWEEN — the same ordering the format was chosen for.
 
-async function entityCounts(clientId: number) {
-  const c = await Promise.all([
-    db
-      .select({ n: count() })
-      .from(audiences)
-      .where(eq(audiences.clientId, clientId)),
-    db.select({ n: count() }).from(topics).where(eq(topics.clientId, clientId)),
-    db
-      .select({ n: count() })
-      .from(messages)
-      .where(eq(messages.clientId, clientId)),
-    db.select({ n: count() }).from(assets).where(eq(assets.clientId, clientId)),
-    db
-      .select({ n: count() })
-      .from(creatives)
-      .where(eq(creatives.clientId, clientId)),
-    db
-      .select({ n: count() })
-      .from(textFormatting)
-      .where(eq(textFormatting.clientId, clientId)),
-  ]);
-  return {
-    audiences: c[0][0]?.n ?? 0,
-    topics: c[1][0]?.n ?? 0,
-    messages: c[2][0]?.n ?? 0,
-    assets: c[3][0]?.n ?? 0,
-    creatives: c[4][0]?.n ?? 0,
-    text_formatting: c[5][0]?.n ?? 0,
-  };
-}
-
 // Long tail of one-off entity+action pairs adds height, not information.
 const DIGEST_ROWS = 15;
-
 
 function feedsInScope(clientId: number, scope: DayScope, products: string[]) {
   return db
@@ -204,7 +174,7 @@ async function reportFreshness(clientId: number) {
 export default async function Dashboard({
   searchParams,
 }: {
-  searchParams: Promise<{ d?: string; r?: string; p?: string }>;
+  searchParams: Promise<{ d?: string; r?: string; p?: string; cs?: string }>;
 }) {
   // Defense-in-depth: layout already enforces auth, but a direct hit here
   // without the layout (rare) would bypass it.
@@ -213,6 +183,7 @@ export default async function Dashboard({
 
   const sp = await searchParams;
   const scope = resolveDayScope(sp.d, sp.r);
+  const creativeSort: StripSort = sp.cs === "ctr" ? "ctr" : "time";
   const products = (sp.p ?? "")
     .split(",")
     .map((s) => s.trim())
@@ -230,12 +201,12 @@ export default async function Dashboard({
     inventory,
     userRows,
   ] = await Promise.all([
-    entityCounts(client.id),
-    monthlyDelivery(client.id),
+    libraryCounts(client.id, products),
+    monthlyDelivery(client.id, 6, products),
     activityDigest(client.id, scope, products),
     feedsInScope(client.id, scope, products),
     reportFreshness(client.id),
-    listStripCreatives(client.id, scope, 0, STRIP_PAGE, products),
+    listStripCreatives(client.id, scope, 0, STRIP_PAGE, products, creativeSort),
     sharesInScope(client.id, scope),
     productInventory(client.id),
     db
@@ -273,7 +244,11 @@ export default async function Dashboard({
         />
         {/* The scope belongs with the date it resolves to, on the right. */}
         <div className="dashboard__scope ml-auto flex items-center gap-3">
-          <DayScopePicker scope={scope} products={products} />
+          <DayScopePicker
+            scope={scope}
+            products={products}
+            sort={creativeSort}
+          />
           <div className="toolbar__count text-[11px] tabular-nums text-slate-500">
             {scope.date} UTC
           </div>
@@ -455,20 +430,33 @@ export default async function Dashboard({
           <Panel
             title="Creatives"
             hint={
-              creativeStrip.fallback
-                ? creativeStrip.items[0]
-                  ? `none in this window — latest change ${creativeStrip.items[0].changedAt.slice(0, 10)}`
-                  : undefined
-                : `${creativeStrip.total} in this window`
+              creativeSort === "ctr"
+                ? `${creativeStrip.total} with ${compactNumber(CTR_MIN_IMPRESSIONS)}+ impressions · all time`
+                : creativeStrip.fallback
+                  ? creativeStrip.items[0]
+                    ? `none in this window — latest change ${creativeStrip.items[0].changedAt.slice(0, 10)}`
+                    : undefined
+                  : `${creativeStrip.total} in this window`
             }
-            href="/creative-library"
+            action={
+              <CreativeSortToggle
+                sort={creativeSort}
+                scope={scope}
+                products={products}
+              />
+            }
           >
             {creativeStrip.items.length === 0 ? (
               <EmptyLine>The creative library is empty.</EmptyLine>
             ) : (
               <CreativeStrip
                 page={creativeStrip}
-                scope={{ d: scope.date, r: scope.range, p: products.join(",") }}
+                scope={{
+                  d: scope.date,
+                  r: scope.range,
+                  p: products.join(","),
+                  cs: creativeSort,
+                }}
               />
             )}
           </Panel>
@@ -481,14 +469,17 @@ export default async function Dashboard({
           <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
             {(
               [
-                ["Audiences", counts.audiences, "/audiences"],
-                ["Topics", counts.topics, "/topics"],
-                ["Messages", counts.messages, "/matrix"],
-                ["Assets", counts.assets, "/assets"],
-                ["Creatives", counts.creatives, "/creative-library"],
-                ["Text formatting", counts.text_formatting, "/texts"],
-              ] as Array<[string, number, string]>
-            ).map(([label, n, href]) => (
+                ["Audiences", counts.audiences, "/audiences", true],
+                ["Topics", counts.topics, "/topics", true],
+                ["Messages", counts.messages, "/matrix", true],
+                ["Assets", counts.assets, "/assets", true],
+                ["Creatives", counts.creatives, "/creative-library", true],
+                // Text formatting has no product dimension, so its count is
+                // the whole library whatever the filter says. Saying so beats
+                // letting the tile look filtered when it is not.
+                ["Text formatting", counts.text_formatting, "/texts", false],
+              ] as Array<[string, number, string, boolean]>
+            ).map(([label, n, href, scoped]) => (
               <Link
                 key={label}
                 href={href}
@@ -500,6 +491,11 @@ export default async function Dashboard({
                 <p className="count-tile__value mt-1 text-2xl font-semibold text-slate-900">
                   {n}
                 </p>
+                {!scoped && products.length > 0 ? (
+                  <p className="count-tile__note text-[10px] text-slate-400">
+                    all products
+                  </p>
+                ) : null}
               </Link>
             ))}
           </div>
@@ -553,15 +549,22 @@ function groupDigest(
 function DayScopePicker({
   scope,
   products,
+  sort,
 }: {
   scope: DayScope;
   products: string[];
+  sort: StripSort;
 }) {
   const today = todayUtc();
-  const withProducts = (params: string) =>
-    products.length > 0
-      ? `/?${params}&p=${encodeURIComponent(products.join(","))}`
-      : `/?${params}`;
+  // The filter and the strip ordering survive a scope switch — changing the
+  // window is not a request to reset everything else on the page.
+  const withProducts = (params: string) => {
+    const extra =
+      (products.length > 0
+        ? `&p=${encodeURIComponent(products.join(","))}`
+        : "") + (sort !== "time" ? `&cs=${sort}` : "");
+    return `/?${params}${extra}`;
+  };
   const prev = shiftDay(scope.date, -1);
   const next = shiftDay(scope.date, 1);
   const atToday = scope.date === today;
@@ -602,7 +605,57 @@ function DayScopePicker({
         label="Last 7 days"
         active={scope.range === "7d"}
       />
+      <ScopePill
+        href={withProducts(`d=${today}&r=30d`)}
+        label="Last 30 days"
+        active={scope.range === "30d"}
+      />
     </nav>
+  );
+}
+
+/**
+ * Time vs measured CTR for the creative strip. Sits where the panel's
+ * "Open →" was: on a strip you are looking at to judge creative, the ordering
+ * is the useful control and the library is one click away in the sidebar.
+ */
+function CreativeSortToggle({
+  sort,
+  scope,
+  products,
+}: {
+  sort: StripSort;
+  scope: DayScope;
+  products: string[];
+}) {
+  const href = (cs: StripSort) => {
+    const params = new URLSearchParams({ d: scope.date, r: scope.range });
+    if (products.length > 0) params.set("p", products.join(","));
+    if (cs !== "time") params.set("cs", cs);
+    return `/?${params.toString()}`;
+  };
+  return (
+    <div className="creative-sort inline-flex overflow-hidden rounded border border-slate-300 text-xs">
+      {(
+        [
+          ["time", "Time"],
+          ["ctr", "CTR"],
+        ] as Array<[StripSort, string]>
+      ).map(([key, label]) => (
+        <Link
+          key={key}
+          href={href(key)}
+          aria-current={sort === key ? "page" : undefined}
+          className={
+            sort === key
+              ? "creative-sort__option creative-sort__option--active bg-slate-900 px-2.5 py-1 font-medium text-white"
+              : "creative-sort__option toolbar-btn bg-white px-2.5 py-1 font-medium text-slate-600 transition hover:bg-slate-50"
+          }
+        >
+          {label}
+        </Link>
+      ))}
+    </div>
   );
 }
 
@@ -703,11 +756,14 @@ function Panel({
   title,
   hint,
   href,
+  action,
   children,
 }: {
   title: string;
   hint?: string;
   href?: string;
+  /** Sits where the "Open →" link would; a panel has one or the other. */
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -719,7 +775,9 @@ function Panel({
         {hint ? (
           <span className="panel__hint text-xs text-slate-400">{hint}</span>
         ) : null}
-        {href ? (
+        {action ? (
+          <div className="panel__action ml-auto">{action}</div>
+        ) : href ? (
           <Link
             href={href}
             className="panel__link ml-auto text-xs text-slate-500 hover:text-slate-900 hover:underline"
@@ -745,21 +803,29 @@ function EmptyLine({
   /** Kept on the "wider window" link, so it does not clear the filter. */
   products?: string[];
 }) {
+  // One rung wider than whatever is on screen, so an empty day leads to the
+  // week and an empty week to the month instead of dead-ending.
+  const wider =
+    scope?.range === "day"
+      ? { r: "7d", label: "the last 7 days" }
+      : scope?.range === "7d"
+        ? { r: "30d", label: "the last 30 days" }
+        : null;
   return (
     <p className="empty-state__hint text-sm text-slate-500">
       {children}
-      {scope && scope.range === "day" ? (
+      {wider ? (
         <>
           {" "}
           <Link
             href={
               products.length > 0
-                ? `/?d=${todayUtc()}&r=7d&p=${encodeURIComponent(products.join(","))}`
-                : `/?d=${todayUtc()}&r=7d`
+                ? `/?d=${todayUtc()}&r=${wider.r}&p=${encodeURIComponent(products.join(","))}`
+                : `/?d=${todayUtc()}&r=${wider.r}`
             }
             className="empty-state__link text-slate-600 underline hover:text-slate-900"
           >
-            Try the last 7 days
+            Try {wider.label}
           </Link>
           .
         </>

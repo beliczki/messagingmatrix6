@@ -1,6 +1,13 @@
-import { and, count, eq, isNull } from "drizzle-orm";
+import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { audiences, creatives, messages } from "@/db/schema";
+import {
+  assets,
+  audiences,
+  creatives,
+  messages,
+  textFormatting,
+  topics,
+} from "@/db/schema";
 import { trimEmptyCountSegments } from "@/lib/count-segments";
 
 export type ProductInventory = {
@@ -42,7 +49,9 @@ export async function productInventory(
     db
       .select({ product: creatives.product, n: count() })
       .from(creatives)
-      .where(and(eq(creatives.clientId, clientId), isNull(creatives.archivedAt)))
+      .where(
+        and(eq(creatives.clientId, clientId), isNull(creatives.archivedAt)),
+      )
       .groupBy(creatives.product),
   ]);
 
@@ -71,5 +80,120 @@ export async function productInventory(
     counts: trimmed.counts,
     labels: trimmed.labels,
     options: Object.keys(counts).sort(),
+  };
+}
+
+/**
+ * A matrix cell's product, as SQL.
+ *
+ * Two sources, because a cell's column is one of two things. A DCO cell sits on
+ * an audience and takes the audience's product. A nonDCO cell sits on a channel
+ * (`ch_disp`, `ch_soc`, …) — its own table since the 2026-08-17 split — and a
+ * channel carries no product, so only the topic key prefix names one. 688 Erste
+ * cells are nonDCO, and a rule that branched on the audience alone would lose
+ * every one of them.
+ *
+ * The caller must have `messages` in scope LEFT JOINed to `audiences` on
+ * (key, client_id); this is an expression, not a self-contained query.
+ */
+export const messageProduct = sql`coalesce(${audiences.product}, split_part(${messages.topic}, '_', 1))`;
+
+export type LibraryCounts = {
+  audiences: number;
+  topics: number;
+  messages: number;
+  assets: number;
+  creatives: number;
+  text_formatting: number;
+};
+
+/**
+ * The "Library · all time" tile numbers, narrowed to `products` when a filter
+ * is on.
+ *
+ * Five of the six can be scoped: audiences, topics, assets and creatives carry
+ * a product column, and a message resolves through `messageProduct`. Text
+ * formatting has no product dimension at all, so it is deliberately NOT
+ * filtered — the tile says "all products" instead, which is truer than either
+ * dropping it to zero (the rows do exist) or letting it look filtered when it
+ * is not.
+ */
+export async function libraryCounts(
+  clientId: number,
+  products: string[] = [],
+): Promise<LibraryCounts> {
+  const p = products.length > 0;
+  const c = await Promise.all([
+    db
+      .select({ n: count() })
+      .from(audiences)
+      .where(
+        and(
+          eq(audiences.clientId, clientId),
+          p ? inArray(audiences.product, products) : undefined,
+        ),
+      ),
+    db
+      .select({ n: count() })
+      .from(topics)
+      .where(
+        and(
+          eq(topics.clientId, clientId),
+          // Same fallback the activity digest uses: two Erste topics have no
+          // product column value, and their key prefix names it.
+          p
+            ? inArray(
+                sql`coalesce(${topics.product}, split_part(${topics.key}, '_', 1))`,
+                products,
+              )
+            : undefined,
+        ),
+      ),
+    db
+      .select({ n: count() })
+      .from(messages)
+      .leftJoin(
+        audiences,
+        and(
+          eq(audiences.key, messages.audience),
+          eq(audiences.clientId, messages.clientId),
+        ),
+      )
+      .where(
+        and(
+          eq(messages.clientId, clientId),
+          p ? inArray(messageProduct, products) : undefined,
+        ),
+      ),
+    db
+      .select({ n: count() })
+      .from(assets)
+      .where(
+        and(
+          eq(assets.clientId, clientId),
+          p ? inArray(assets.product, products) : undefined,
+        ),
+      ),
+    db
+      .select({ n: count() })
+      .from(creatives)
+      .where(
+        and(
+          eq(creatives.clientId, clientId),
+          p ? inArray(creatives.product, products) : undefined,
+        ),
+      ),
+    db
+      .select({ n: count() })
+      .from(textFormatting)
+      .where(eq(textFormatting.clientId, clientId)),
+  ]);
+  return {
+    audiences: c[0][0]?.n ?? 0,
+    topics: c[1][0]?.n ?? 0,
+    messages: c[2][0]?.n ?? 0,
+    assets: c[3][0]?.n ?? 0,
+    creatives: c[4][0]?.n ?? 0,
+    text_formatting: c[5][0]?.n ?? 0,
   };
 }

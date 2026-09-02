@@ -309,6 +309,33 @@ Négy ötlet érkezett; a user 2026-08-30-án mindháromra megadta az irányt (a
   - [x] **I1.8b** Teszt: ch_* (audience nélküli) sor a topic-prefixére szűrve előjön; product nélküli entitástípus aktív szűrőnél kiesik; üres szűrő = mai viselkedés; kliens-izoláció.
 - ⚠️ **Elvetve az első körből:** side toolbar view-kapcsolókkal — a nap-scope adja a nézetváltást, és 5-6 widgetnél a második toolbar üres chrome.
 
+### I1.9–I1.11 — Dashboard: product-szűrés mindenütt, 30 napos scope, CTR-rendezés a kreatív-csíkon (user, 2026-09-02) ✅
+**User:** „a library is legyen product filter érzékeny és a felső report sor is". Ma a `feedsInScope`, a `listStripCreatives` és (6.47.0 óta) az `activityDigest` szűr productra; a **`monthlyDelivery`** (Delivery + Matrix coverage csempe) és az **`entityCounts`** (Library · all time) nem kapja meg a `products` tömböt.
+- **⚠️ A Matrix coverage jelentése megváltozik szűrt állapotban — mérve (2026. aug):**
+
+  | product | impr | matched | % |
+  |---|---|---|---|
+  | *(nincs product)* | 10 942 699 | 0 | **0 %** |
+  | SZK | 3 410 204 | 2 898 434 | 85 % |
+  | HK | 2 190 585 | 2 190 585 | 100 % |
+  | SZA | 1 595 581 | 1 181 107 | 74 % |
+  | VAL | 1 320 319 | 763 252 | 58 % |
+  | HITEL | 591 977 | 0 | 0 % |
+
+  A szűretlen **35 %**-ot a product nélküli publisher-blokk húzza le, ami definíció szerint egyetlen product-szűrőnek sem felel meg → bármelyik productra szűrve a lefedettség 58–100 %-ra ugrik. **Ez helyes**: a product-szűrő a nevezőt is szűkíti, és a „mennyit magyaráz meg a mátrix az SZK forgalmából" önmagában érvényes kérdés. De a két szám **két különböző populációt** mér, és ezt tudni kell — a fejléc `Product N` pillje jelzi, hogy szűrt nézet van.
+- **A hat Library-csempéből öt szűrhető:** `audiences` / `topics` / `assets` / `creatives` saját `product` oszlopból, a `messages` a `coalesce(audience.product, topic-prefix)` szabállyal (ugyanaz, mint az `activityDigest`-ben — a nonDCO cellák csatornán ülnek, a csatornának nincs productja). A **`text_formatting`-nak nincs product-dimenziója** (nincs ilyen oszlop) → a csempe **marad, de „all products" jelöléssel**; sem a 0 kiírása (a sorok léteznek), sem a szűrő néma figyelmen kívül hagyása nem volna őszinte.
+- [x] **I1.9a** `monthlyDelivery(clientId, n, products)` — `inArray(monitoring.product, products)` üres tömbnél kihagyva.
+- [x] **I1.9b** `entityCounts(clientId, products)` — táblánkénti product-predikátum; a `messages` a közös `messageProduct` kifejezéssel.
+- [x] **I1.9c** A `coalesce(audience.product, topic-prefix)` kifejezés kiemelése egy helyre (`dashboard-products.ts`), és **mindkét** használat (`productScoped` + `entityCounts`) arra kötve — ez a szabály korrektségi szempontból kritikus, ne éljen két külön másolatban.
+- [x] **I1.9d** `count-tile__note` a `text_formatting` csempére, csak aktív szűrőnél.
+- [x] **I1.9e** Teszt: delivery product-szűrve; library-számlálók productonként; nonDCO cella a topic-prefixe szerint számolódik; `text_formatting` nem esik 0-ra; üres szűrő = mai számok.
+- [x] **I1.10 „Last 30 days" a nap-scope gombok közé (user, 2026-09-02).** A `ScopeRange` `"day" | "7d" | "30d"`, a span egy `RANGE_SPAN` táblából jön (nem elszórt ternary-kből). Az üres állapot „szélesítő" linkje is egy fokkal feljebb lép: nap → 7 nap → 30 nap, tehát egy üres hét sem zsákutca többé.
+- [x] **I1.11 Creative strip: „Open →" helyett rendezés-váltó (user, 2026-09-02).** `Time` / `CTR`, URL-ben `?cs=ctr`, a nap-scope és a product-szűrő megőrzi.
+  - **A CTR mércéje:** MC-nként összegzett **matched** monitoring sorok (`message_id IS NOT NULL` — ugyanaz, amit a Monitoring tábla Matched szűrője ért alatta), **minden periódusra**, és csak a **100 000 impresszió** feletti MC-k (`CTR_MIN_IMPRESSIONS`). Enélkül a lista élére egy kétszer megjelenített, egyszer kattintott kreatív kerülne 50 %-kal.
+  - **A CTR-rendezés ELDOBJA a nap-ablakot — mérve, ezért:** a 100 e felett minősülő **74 MC**-ből egy 7 napos ablak **9**-et tartalmaz, feltöltött kreatívot pedig **nullát**. Ablakkal a nézet üres lenne. A „legjobban teljesítő kreatív" amúgy is all-time kérdés, ahogy maga a ráta is periódusokra mért. A panel hintje ezt kiírja (`… · all time`), a `fallback` pedig CTR-rendezésnél soha nem igaz (nincs ablak, amiről visszaeshetne).
+  - **A rendezés szűkít is:** matched riport nélküli vagy a küszöb alatti MC nem null-lal a lista végére kerül, hanem kiesik.
+- **Verzió a slice végén:** `6.49.0` → `6.50.0` (minor).
+
 ### I2 — Komment-thread mint **entitás-provenance** (DÖNTÉS LEZÁRVA)
 **User-döntés:** „thread lenne a legjobb, fáj hogy nem látszik ki mikor mit" + **a cél explicit: az agenteknek kontextust adni** arról, hogy mi változott, milyen kérésre, miért, és **egyáltalán miért hívnak úgy egy topicot / audience-t / MC-t, mi van rajtuk, miért jöttek létre.**
 ⇒ **Ez átkeretezi a feladatot:** nem „chat-buborék UI" a fő termék, hanem **entitásonkénti provenance-napló, aminek az agent az elsődleges olvasója és társ-írója**. Az MCP olvasó/író oldal tehát nem opcionális ráadás, hanem a lényeg.
@@ -1414,3 +1441,21 @@ A májusi 3 002 sor és a 8 335 352 impresszió **pontosan** a ma tárolt érté
 - A logban látszó „Failed to find Server Action" sorok **04:50-esek, a deploy (08:13) ELŐTTIEK** — elavult action-id-t hívó régi böngészőfül, nem ebből a kiadásból.
 - **Böngészős smoke a userre vár:** (1) dashboard felső sor — Delivery + Matrix coverage csempe valós számokkal; (2) product-szűrő az Activity panelen; (3) Monitoring periódus-tartomány két selecttel + „N periods summed"; (4) egy MC detail dialógusa több-periódusos tartománynál (periódus-bontó tábla).
 - **Nyitva marad `W3.j-6`:** a 4–5 riportfájl újratöltése a Monitoring feltöltőjén — enélkül a napi bontás nem jelenik meg (a `day` oszlopot amúgy sem olvassa még semmi).
+
+---
+
+## 2026-09-02 — I1.9–I1.11 dashboard: product-szűrés mindenütt, 30 napos scope, CTR-rendezés — 6.50.0
+
+**User (három kérés egy menetben):** „a library is legyen product filter érzékeny és a felső report sor is" · „legyen last 30 nap is az idő filter gombok között" · „a creative sliderben meg kéne az open helyett egy order by: time / ctr (ctr values under 100k impression filtered out, only matched)".
+
+**Mérések, amik döntöttek (prod DB):**
+- **Coverage productonként (2026. aug):** `(nincs product)` 10 942 699 impr / **0 %** matched · SZK 85 % · HK 100 % · SZA 74 % · VAL 58 % · HITEL 0 %. A szűretlen 35 %-ot a product nélküli publisher-blokk húzza le → bármelyik productra szűrve 58–100 %. Helyes, de **más populáció** — a CHANGELOG kiírja.
+- **CTR-küszöb hatása:** 100 e impresszió felett **74 MC** minősül; ebből egy **7 napos ablakban 9** MC és **0 feltöltött kreatív**. Ezért dobja el a CTR-rendezés a nap-ablakot (all-time), különben a nézet gyakorlatilag üres lenne.
+
+**Szállítva:** `monthlyDelivery(clientId, n, products)`; `entityCounts` → `libraryCounts(clientId, products)` a `dashboard-products.ts`-ben; közös `messageProduct` SQL-kifejezés (a `productScoped` is erre kötve — a DCO/nonDCO szabály ne éljen két másolatban); `count-tile__note` a Text formattingon; `ScopeRange` + `RANGE_SPAN` a 30 napra; `panel__action` slot; `creative-sort` váltó; `mcPerformance()` + `CTR_MIN_IMPRESSIONS` a `dashboard-creatives.ts`-ben; `?cs=` az oldalon és a strip API-n.
+
+**Teszt:** új `dashboard-library-counts.test.ts` (6) + `dashboard-creatives-ctr.test.ts` (8) + 2 új `monthlyDelivery` eset + 2 új `day-scope` unit eset. Suite **702/702 zöld** (694 → +8, illetve 684 → +18 a nap eleje óta). Build sikeres.
+
+**Egy saját teszt-hiba, nem kód-hiba:** a CTR-tesztek először üres listát adtak, mert a fixture csak `match_level`-t állított. A „matched" a `message_id IS NOT NULL` — ugyanaz, amit a Monitoring tábla Matched szűrője ért alatta. A fixture javítva (valódi `messages` sorral), a kód nem változott.
+
+**Verzió:** `6.49.0` → **`6.50.0`** (minor). Séma-migráció nincs. **Deploy még nem történt.**

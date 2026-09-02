@@ -146,6 +146,50 @@ describe("monthlyDelivery", () => {
     expect(await monthlyDelivery(other.id)).toHaveLength(1);
   });
 
+  it("narrows the series to the selected products", async () => {
+    // The rows carrying no product are the unmatched publisher lines; a product
+    // filter drops them from the denominator too, which is why coverage reads
+    // far higher under a filter than overall.
+    await db.insert(monitoring).values([
+      row({ product: "SZK", impressions: 1000, clicks: 10 }),
+      row({ product: "HK", impressions: 2000, clicks: 20 }),
+      row({ product: null, impressions: 7000, clicks: 70 }),
+    ]);
+
+    expect((await monthlyDelivery(erste.id))[0]).toMatchObject({
+      impressions: 10000,
+    });
+    expect((await monthlyDelivery(erste.id, 6, ["SZK"]))[0]).toMatchObject({
+      impressions: 1000,
+      clicks: 10,
+    });
+    expect(
+      (await monthlyDelivery(erste.id, 6, ["SZK", "HK"]))[0],
+    ).toMatchObject({ impressions: 3000, clicks: 30 });
+    expect(await monthlyDelivery(erste.id, 6, ["VAL"])).toEqual([]);
+  });
+
+  it("keeps matched impressions inside the product scope", async () => {
+    const [message] = await db
+      .insert(messages)
+      .values({
+        clientId: erste.id,
+        number: 1,
+        variant: "a",
+        audience: "SZK_x",
+        topic: "SZK_topic",
+      })
+      .returning();
+    await db.insert(monitoring).values([
+      row({ product: "SZK", impressions: 800, messageId: message.id }),
+      row({ product: "SZK", impressions: 200 }),
+      row({ product: "HK", impressions: 5000, messageId: message.id }),
+    ]);
+
+    const [szk] = await monthlyDelivery(erste.id, 6, ["SZK"]);
+    expect(szk).toMatchObject({ impressions: 1000, matchedImpressions: 800 });
+  });
+
   it("returns an empty series when nothing was ever imported", async () => {
     expect(await monthlyDelivery(erste.id)).toEqual([]);
   });

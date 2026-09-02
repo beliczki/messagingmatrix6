@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { withSession } from "@/lib/scoped";
 import { resolveDayScope } from "@/lib/day-scope";
-import { listStripCreatives, STRIP_PAGE } from "@/lib/dashboard-creatives";
+import {
+  listStripCreatives,
+  STRIP_PAGE,
+  type StripSort,
+} from "@/lib/dashboard-creatives";
 
 // Paging for the dashboard creative strip — the page renders the first page
 // itself, this serves every page the strip scrolls into.
@@ -16,12 +20,14 @@ export const GET = withSession(async ({ req, claims }) => {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
+  const sort: StripSort = url.searchParams.get("cs") === "ctr" ? "ctr" : "time";
   const page = await listStripCreatives(
     claims.cid,
     scope,
     offset,
     STRIP_PAGE,
     products,
+    sort,
   );
   return NextResponse.json(page);
 });

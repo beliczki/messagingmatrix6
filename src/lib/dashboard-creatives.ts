@@ -12,7 +12,13 @@ import {
 } from "drizzle-orm";
 import type { PgColumn } from "drizzle-orm/pg-core";
 import { db } from "@/db";
-import { audiences, creatives, messages, uploadedFiles } from "@/db/schema";
+import {
+  audiences,
+  creatives,
+  messages,
+  monitoring,
+  uploadedFiles,
+} from "@/db/schema";
 import { groupCreativeVersions } from "@/lib/group-creative-versions";
 import { listAllTemplates } from "@/lib/templates";
 import type { DayScope } from "@/lib/day-scope";
@@ -97,6 +103,39 @@ export type StripPage = {
 
 export const STRIP_PAGE = 24;
 
+/** How the strip is ordered. */
+export type StripSort = "time" | "ctr";
+
+/**
+ * Impressions an MC must have delivered before its CTR is allowed to rank it.
+ *
+ * A creative that ran twice and was clicked once reads as a 50% CTR; without a
+ * floor the top of the list is noise. 100k is where the rate stops moving on
+ * this account's volumes.
+ */
+export const CTR_MIN_IMPRESSIONS = 100_000;
+
+/**
+ * Measured CTR per MC, as a subquery: matched monitoring rows only, summed over
+ * every report period, and only MCs past the impression floor.
+ *
+ * Matched only, because an unmatched row is by definition not attributable to
+ * the MC whose tile would be ranked by it. All periods rather than the day
+ * scope, because the scope is a day and monitoring keeps months — an MC's rate
+ * is a property of its whole run, not of the window the strip is showing.
+ */
+function mcPerformance() {
+  return sql`(
+    select ${monitoring.mcNumber} as mc_number,
+           ${monitoring.mcVariant} as mc_variant,
+           sum(${monitoring.clicks})::float8 / sum(${monitoring.impressions}) as ctr
+    from ${monitoring}
+    where ${monitoring.messageId} is not null
+    group by ${monitoring.mcNumber}, ${monitoring.mcVariant}
+    having sum(${monitoring.impressions}) >= ${CTR_MIN_IMPRESSIONS}
+  )`;
+}
+
 /** Templates that render at least one of the strip's two sizes. */
 function stripTemplates(): Map<string, string[]> {
   const out = new Map<string, string[]>();
@@ -121,6 +160,9 @@ function stripTemplates(): Map<string, string[]> {
  * size its template carries, so a page can hand back more tiles than its
  * limit. The alternative — paging by tile — would need the template fan-out
  * inside SQL.
+ *
+ * `sort: "ctr"` reorders by measured click-through instead, and narrows the
+ * list to the MCs that have earned a rate worth ranking — see `mcPerformance`.
  */
 export async function listStripCreatives(
   clientId: number,
@@ -128,9 +170,22 @@ export async function listStripCreatives(
   offset = 0,
   limit = STRIP_PAGE,
   products: string[] = [],
+  sort: StripSort = "time",
 ): Promise<StripPage> {
   const templates = stripTemplates();
   const templateNames = [...templates.keys()];
+
+  // Ranking by CTR also NARROWS the strip: an MC with no matched reporting, or
+  // with too little of it to trust, has no rate to be ranked by and drops out
+  // rather than trailing the list on a null.
+  const perf = sort === "ctr" ? mcPerformance() : null;
+  const ctrOf = (num: PgColumn, variant: PgColumn) =>
+    sql`(select p.ctr from ${perf} p
+          where p.mc_number = ${num} and p.mc_variant = ${variant})`;
+  const rankedOnly = (num: PgColumn, variant: PgColumn) =>
+    perf
+      ? sql`(${num}, ${variant}) in (select p.mc_number, p.mc_variant from ${perf} p)`
+      : undefined;
 
   // A product narrows both sources, but it reaches them differently: a
   // creative carries its own product column, while a cell's product hangs off
@@ -152,6 +207,7 @@ export async function listStripCreatives(
     isNull(creatives.archivedAt),
     inArray(creatives.fileDimensions, STRIP_SIZES),
     products.length ? inArray(creatives.product, products) : undefined,
+    rankedOnly(creatives.mcNumber, creatives.mcVariant),
   );
   // Same rule the Creative Library applies to its matrix tiles: live cells
   // only, and only templates that actually render at one of these sizes.
@@ -163,24 +219,35 @@ export async function listStripCreatives(
       ? inArray(messages.template, templateNames)
       : sql`false`,
     productKeys ? inArray(messages.audience, productKeys) : undefined,
+    rankedOnly(messages.number, messages.variant),
   );
 
   const windowed = (base: ReturnType<typeof and>, col: PgColumn) =>
     and(base, gte(col, scope.from), lte(col, scope.to));
 
-  const inWindow = await sourceCount(
-    windowed(liveCreative, creatives.updatedAt),
-    windowed(liveMessage, messages.updatedAt),
-  );
-  const fallback = inWindow === 0;
-  const total = fallback
+  // Ranking by CTR drops the day window entirely. The rate is measured over
+  // whole report periods, and on live data the window would gut the list: of
+  // the 74 MCs past the impression floor, a 7-day window holds 9 — and no
+  // uploaded creative at all. "Best performing" is an all-time question.
+  const inWindow =
+    sort === "ctr"
+      ? 0
+      : await sourceCount(
+          windowed(liveCreative, creatives.updatedAt),
+          windowed(liveMessage, messages.updatedAt),
+        );
+  const windowless = sort === "ctr" || inWindow === 0;
+  // `fallback` says "the window was empty, so this is the latest-changed list"
+  // — never true on the CTR ordering, which does not claim a window at all.
+  const fallback = sort !== "ctr" && inWindow === 0;
+  const total = windowless
     ? await sourceCount(liveCreative, liveMessage)
     : inWindow;
 
-  const creativeWhere = fallback
+  const creativeWhere = windowless
     ? liveCreative
     : windowed(liveCreative, creatives.updatedAt);
-  const messageWhere = fallback
+  const messageWhere = windowless
     ? liveMessage
     : windowed(liveMessage, messages.updatedAt);
 
@@ -189,6 +256,20 @@ export async function listStripCreatives(
   // The messages side is DISTINCT ON (number, variant) because one MC lives in
   // as many cells as it has audiences — the Creative Library collapses those
   // to one tile too, and without it a single edited MC fills the whole strip.
+  // `rate` is null on the time ordering and never selected for; on the CTR
+  // ordering both branches carry the MC's measured rate and it leads the sort,
+  // with the recency line kept as the tiebreaker.
+  const rate = perf
+    ? {
+        uploaded: ctrOf(creatives.mcNumber, creatives.mcVariant),
+        mc: sql`(select p.ctr from ${perf} p
+                  where p.mc_number = m.number and p.mc_variant = m.variant)`,
+      }
+    : { uploaded: sql`null::float8`, mc: sql`null::float8` };
+  const order = perf
+    ? sql`order by rate desc nulls last, changed_at desc, kind, row_id desc`
+    : sql`order by changed_at desc, kind, row_id desc`;
+
   const cursor = (await db.execute<{
     kind: string;
     row_id: number;
@@ -196,25 +277,30 @@ export async function listStripCreatives(
   }>(sql`
     select kind, row_id, changed_at from (
       select 'uploaded' as kind, ${creatives.id} as row_id,
-             ${creatives.updatedAt} as changed_at
+             ${creatives.updatedAt} as changed_at,
+             ${rate.uploaded} as rate
       from ${creatives}
       where ${creativeWhere}
       union all
-      select 'mc' as kind, m.id as row_id, m.updated_at as changed_at
+      select 'mc' as kind, m.id as row_id, m.updated_at as changed_at,
+             ${rate.mc} as rate
       from (
         select distinct on (${messages.number}, ${messages.variant})
-               ${messages.id} as id, ${messages.updatedAt} as updated_at
+               ${messages.id} as id, ${messages.updatedAt} as updated_at,
+               ${messages.number} as number, ${messages.variant} as variant
         from ${messages}
         where ${messageWhere}
         order by ${messages.number}, ${messages.variant},
                  ${messages.updatedAt} desc, ${messages.id} desc
       ) m
     ) u
-    order by changed_at desc, kind, row_id desc
+    ${order}
     limit ${limit} offset ${offset}
   `)) as unknown as Array<{ kind: string; row_id: number; changed_at: string }>;
 
-  const creativeIds = cursor.filter((r) => r.kind === "uploaded").map((r) => r.row_id);
+  const creativeIds = cursor
+    .filter((r) => r.kind === "uploaded")
+    .map((r) => r.row_id);
   const messageIds = cursor.filter((r) => r.kind === "mc").map((r) => r.row_id);
 
   const [uploadedItems, mcItems] = await Promise.all([
@@ -324,7 +410,9 @@ async function hydrateMc(
 
   const out: McStripItem[] = [];
   for (const r of rows) {
-    const sizes = r.message.template ? (templates.get(r.message.template) ?? []) : [];
+    const sizes = r.message.template
+      ? (templates.get(r.message.template) ?? [])
+      : [];
     sizes.forEach((size, i) => {
       out.push({
         kind: "mc",

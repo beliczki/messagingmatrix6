@@ -32,6 +32,20 @@ describe("resolveDayScope", () => {
     expect(resolveDayScope("2026-08-31", "week", NOW).range).toBe("day");
   });
 
+  it("spans 30 days inclusive of the anchor day", () => {
+    const s = resolveDayScope("2026-09-01", "30d", NOW);
+    expect(s.range).toBe("30d");
+    // 30 days inclusive: 3 Aug .. 1 Sept, not 2 Aug.
+    expect(s.from).toBe("2026-08-03 00:00:00");
+    expect(s.to).toBe("2026-09-01 23:59:59");
+    expect(s.label).toBe("3 Aug – 1 Sept");
+  });
+
+  it("falls back to a single day for an unknown range", () => {
+    expect(resolveDayScope("2026-09-01", "90d", NOW).range).toBe("day");
+    expect(resolveDayScope("2026-09-01", undefined, NOW).range).toBe("day");
+  });
+
   it("crosses month and year boundaries", () => {
     expect(shiftDay("2026-09-01", -1)).toBe("2026-08-31");
     expect(shiftDay("2026-01-01", -1)).toBe("2025-12-31");

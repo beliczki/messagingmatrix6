@@ -3,7 +3,10 @@
 // UTC day and its bounds are plain string comparisons — the same comparison
 // the stored format is already ordered by.
 
-export type ScopeRange = "day" | "7d";
+export type ScopeRange = "day" | "7d" | "30d";
+
+/** How many days back a range reaches from its anchor day, inclusive. */
+const RANGE_SPAN: Record<ScopeRange, number> = { day: 1, "7d": 7, "30d": 30 };
 
 export type DayScope = {
   /** Anchor day, `YYYY-MM-DD` (UTC). The range always ends on this day. */
@@ -56,11 +59,12 @@ export function resolveDayScope(
     d && DATE_RE.test(d) && !Number.isNaN(Date.parse(`${d}T00:00:00Z`)) && d <= today
       ? d
       : today;
-  const range: ScopeRange = r === "7d" ? "7d" : "day";
-  const start = range === "7d" ? shiftDay(date, -6) : date;
+  const range: ScopeRange =
+    r === "7d" ? "7d" : r === "30d" ? "30d" : "day";
+  const start = shiftDay(date, -(RANGE_SPAN[range] - 1));
 
   let label: string;
-  if (range === "7d") {
+  if (range !== "day") {
     label = `${prettyDay(start)} – ${prettyDay(date)}`;
   } else if (date === today) {
     label = "Today";

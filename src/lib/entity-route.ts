@@ -98,6 +98,8 @@ export function makeItemRoute<R extends Row, I>(cfg: {
   update: (cid: number, id: number, expected: number, input: I) => Promise<Mut<R>>;
   archive: (cid: number, id: number, expected: number) => Promise<Mut<R>>;
   pickWritable: (body: unknown) => I;
+  /** Map a known validation error to a 400 message; return null to rethrow. */
+  validationError?: (e: unknown) => string | null;
   /** Include result.cascadedMessageIds in the DELETE response (audiences/topics). */
   cascade?: boolean;
 }) {
@@ -117,7 +119,14 @@ export function makeItemRoute<R extends Row, I>(cfg: {
     const body = await req.json().catch(() => null);
     const expected = readClientVersion(req, body);
     if (expected === null) return missingVersion();
-    const input = cfg.pickWritable(body);
+    let input: I;
+    try {
+      input = cfg.pickWritable(body);
+    } catch (e) {
+      const msg = cfg.validationError?.(e);
+      if (msg === null || msg === undefined) throw e;
+      return NextResponse.json({ error: msg }, { status: 400 });
+    }
     const before = await cfg.get(claims.cid, id);
     const result = await cfg.update(claims.cid, id, expected, input);
     if (!result.ok) {

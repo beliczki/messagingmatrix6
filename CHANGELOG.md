@@ -5,6 +5,44 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.53.0] — 2026-09-03
+
+### Added
+- **Every creative can now carry its Google Drive delivery location** — the
+  parent folder link you paste, and the direct file link derived from it. Four
+  nullable columns on `creatives` (migration `0011`), holding *ids* rather than
+  the pasted URL, so the same folder pasted with `?usp=sharing` or a `/u/0/`
+  prefix still groups as one folder.
+- **The upload queue takes the folder link once per batch.** Paste it in the
+  queue header and it lands on every queued creative, including files dropped
+  afterwards; the single-file upload dialog has its own field. A creative's
+  folder stays editable in its detail dialog, where the resolved file link is
+  shown read-only next to it.
+- **"Drive link check" in the Creative Library toolbar** resolves (or
+  re-verifies) the file link of every creative in the current filtered view, and
+  reports *unreachable folder* separately from *file not found in folder* — an
+  unreachable folder means the link is not shared "anyone with the link", which
+  would show a share viewer a request-access page instead of the creative.
+- **Share pages show where the creatives came from:** the distinct delivery
+  folders in the gallery header, and the parent folder on each creative in the
+  detail view. The links ride the existing share snapshot, so they are frozen at
+  share-creation time like the rest of it.
+- **`scripts/drive-backfill.ts`** fills in the links of already-imported
+  creatives from a list of folder links (`--file links.txt`), dry-run by
+  default. It never repoints a creative that already claims another folder
+  unless `--overwrite` is passed.
+- **MCP:** `list_creatives` rows carry `drive_folder_url` + `drive_file_url`,
+  `list_mc` rows carry `drive_folders` (the distinct folders of that MC's
+  creatives), and `creative_update` accepts `fields.driveFolderUrl`. No new
+  tool — the links are simply visible where creatives and MCs are listed.
+
+### Changed
+- `makeItemRoute` gained the `validationError` hook `makeCollectionRoute`
+  already had, so a malformed link is a 400 on PATCH instead of a 500.
+- Changing or clearing a creative's folder drops the file link derived from the
+  old one, rather than leaving a link pointing into a folder the creative no
+  longer claims.
+
 ## [6.52.0] — 2026-09-02
 
 ### Fixed

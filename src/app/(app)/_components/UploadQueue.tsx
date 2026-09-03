@@ -35,6 +35,15 @@ type Props = {
     update: (patch: Partial<QueueItem["metadata"]>) => void;
   }) => ReactNode;
   /**
+   * Batch-level fields rendered once above the item list — for metadata that is
+   * a property of the whole drop rather than of one file (the creatives' Drive
+   * parent-folder link). Writes onto every editable item via applyToAll.
+   */
+  batchForm?: (args: {
+    applyToAll: (patch: Record<string, string>) => void;
+    count: number;
+  }) => ReactNode;
+  /**
    * Commit one item — typically POST /api/{creatives|assets} with the metadata
    * + uploadedFileId. Throws on failure (the queue marks it errored).
    */
@@ -236,11 +245,12 @@ export function useUploadQueue({
 }
 
 export default function UploadQueue(props: Props) {
-  const { renderForm } = props;
+  const { renderForm, batchForm } = props;
   const {
     items,
     addFiles,
     update,
+    applyToAll,
     commitAll,
     discard,
     clearDone,
@@ -306,6 +316,11 @@ export default function UploadQueue(props: Props) {
             <X className="size-4" />
           </button>
         </header>
+        {open && batchForm ? (
+          <div className="upload-queue__batch border-b border-slate-100 px-3 py-2">
+            {batchForm({ applyToAll, count: total })}
+          </div>
+        ) : null}
         {open ? (
           <div className="upload-queue__items flex-1 overflow-y-auto p-2">
             {items.map((item) => (

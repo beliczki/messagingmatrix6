@@ -1,6 +1,7 @@
 import { makeItemRoute } from "@/lib/entity-route";
 import {
   archiveCreative,
+  CreativeError,
   getCreative,
   pickWritable,
   updateCreative,
@@ -13,4 +14,5 @@ export const { GET, PATCH, DELETE } = makeItemRoute({
   update: updateCreative,
   archive: archiveCreative,
   pickWritable,
+  validationError: (e) => (e instanceof CreativeError ? e.message : null),
 });

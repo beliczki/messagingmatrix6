@@ -1,6 +1,7 @@
 import { makeCollectionRoute } from "@/lib/entity-route";
 import {
   createCreative,
+  CreativeError,
   listCreatives,
   pickWritable,
 } from "@/lib/entities/creatives";
@@ -12,4 +13,5 @@ export const { GET, POST } = makeCollectionRoute({
   list: listCreatives,
   create: createCreative,
   pickWritable,
+  validationError: (e) => (e instanceof CreativeError ? e.message : null),
 });

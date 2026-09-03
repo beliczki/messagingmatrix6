@@ -532,6 +532,16 @@ export const creatives = pgTable(
     fileDimensions: text("file_dimensions"),
     familyKey: text("family_key"),
     comment: text("comment"),
+    // Google Drive delivery location (I4). The folder is what the user pastes
+    // at upload time and can edit later; the file id is *computed* by listing
+    // that folder and matching file_name, so it is read-only in the UI. IDs,
+    // not URLs: a pasted link arrives in many shapes (?usp=sharing, /u/0/) and
+    // the share header groups creatives by folder. checked_at is the last
+    // resolve attempt — folder set + file null + checked_at set = "not found".
+    driveFolderId: text("drive_folder_id"),
+    driveFolderName: text("drive_folder_name"),
+    driveFileId: text("drive_file_id"),
+    driveCheckedAt: text("drive_checked_at"),
     version: integer("version").notNull().default(1),
     createdAt: text("created_at")
       .notNull()

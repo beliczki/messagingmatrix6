@@ -6,6 +6,11 @@ import MediaEntityDialog, {
   type UploadedFile,
 } from "../_components/MediaEntityDialog";
 import { parseCreativeFilename } from "@/lib/parse-creative-filename";
+import {
+  driveFileUrl,
+  driveFolderUrl,
+  parseDriveFolderId,
+} from "@/lib/drive-link";
 
 type Creative = {
   id: number;
@@ -24,6 +29,9 @@ type Creative = {
   fileSize: string | null;
   fileDimensions: string | null;
   comment: string | null;
+  driveFolderId: string | null;
+  driveFolderName: string | null;
+  driveFileId: string | null;
   version: number;
   createdAt: string;
   archivedAt: string | null;
@@ -40,6 +48,7 @@ type Draft = {
   mcNumber: string;
   mcVariant: string;
   comment: string;
+  driveFolderUrl: string;
 };
 
 function toDraft(c: Creative): Draft {
@@ -54,6 +63,7 @@ function toDraft(c: Creative): Draft {
     mcNumber: c.mcNumber !== null ? String(c.mcNumber) : "",
     mcVariant: c.mcVariant ?? "",
     comment: c.comment ?? "",
+    driveFolderUrl: driveFolderUrl(c.driveFolderId) ?? "",
   };
 }
 
@@ -78,6 +88,11 @@ function diffPayload(snapshot: Creative, draft: Draft): Record<string, unknown> 
   }
   if ((snapshot.mcVariant ?? "") !== draft.mcVariant) out.mcVariant = draft.mcVariant || null;
   if ((snapshot.comment ?? "") !== draft.comment) out.comment = draft.comment || null;
+  // Compare ids, not text: the same folder pasted as /u/0/ or with ?usp=sharing
+  // is not an edit, and re-saving it would drop the resolved file link.
+  if (parseDriveFolderId(draft.driveFolderUrl) !== snapshot.driveFolderId) {
+    out.driveFolderUrl = draft.driveFolderUrl;
+  }
   return out;
 }
 
@@ -186,6 +201,24 @@ export default function CreativeDetailDialog({
             <input value={draft.mcVariant} onChange={(e) => setDraft({ ...draft, mcVariant: e.target.value })} className={inputCls} />
           </DraftField>
           <div className="col-span-2">
+            <DraftField label="Drive parent folder link">
+              <input
+                value={draft.driveFolderUrl}
+                onChange={(e) =>
+                  setDraft({ ...draft, driveFolderUrl: e.target.value })
+                }
+                placeholder="https://drive.google.com/drive/folders/…"
+                className={
+                  draft.driveFolderUrl.trim() !== "" &&
+                  parseDriveFolderId(draft.driveFolderUrl) === null
+                    ? `${inputCls} border-red-400`
+                    : inputCls
+                }
+              />
+            </DraftField>
+            <DriveLinks creative={current} />
+          </div>
+          <div className="col-span-2">
             <DraftField label="Comment">
               <textarea
                 value={draft.comment}
@@ -198,6 +231,41 @@ export default function CreativeDetailDialog({
         </div>
       )}
     />
+  );
+}
+
+/** The file link is derived, never typed: it is looked up by listing the parent
+ *  folder and matching the file name, so it is shown read-only next to the
+ *  folder field — with the reason spelled out while it is missing. */
+function DriveLinks({ creative }: { creative: Creative }) {
+  const folder = driveFolderUrl(creative.driveFolderId);
+  const fileHref = driveFileUrl(creative.driveFileId);
+  if (!folder) return null;
+  return (
+    <div className="drive-links mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[10px] text-slate-500">
+      <a
+        href={folder}
+        target="_blank"
+        rel="noreferrer"
+        className="drive-links__link text-slate-600 underline hover:text-slate-900"
+      >
+        {creative.driveFolderName ?? "Open folder"} ↗
+      </a>
+      {fileHref ? (
+        <a
+          href={fileHref}
+          target="_blank"
+          rel="noreferrer"
+          className="drive-links__link text-slate-600 underline hover:text-slate-900"
+        >
+          Direct file ↗
+        </a>
+      ) : (
+        <span className="drive-links__pending">
+          Direct file link not resolved yet — run the Drive link health check.
+        </span>
+      )}
+    </div>
   );
 }
 

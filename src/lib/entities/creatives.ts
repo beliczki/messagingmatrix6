@@ -1,6 +1,9 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { creatives, nowUtc, type Creative } from "@/db/schema";
+import { parseDriveFolderId } from "@/lib/drive-link";
+
+export class CreativeError extends Error {}
 
 const WRITABLE_FIELDS = [
   "brand",
@@ -21,7 +24,13 @@ const WRITABLE_FIELDS = [
 ] as const;
 type WritableField = (typeof WRITABLE_FIELDS)[number];
 
-export type CreativeInput = Partial<Pick<Creative, WritableField>>;
+// driveFolderId is writable but never taken raw: it is derived from the link
+// the user pastes (driveFolderUrl), so a malformed link is a 400 instead of a
+// stored string nothing can resolve. driveFileId/driveFolderName/driveCheckedAt
+// are machine-owned — only the resolver writes them.
+export type CreativeInput = Partial<Pick<Creative, WritableField>> & {
+  driveFolderId?: string | null;
+};
 
 export function pickWritable(input: unknown): CreativeInput {
   if (typeof input !== "object" || input === null) return {};
@@ -29,6 +38,16 @@ export function pickWritable(input: unknown): CreativeInput {
   const out: Record<string, unknown> = {};
   for (const f of WRITABLE_FIELDS) {
     if (f in src) out[f] = src[f];
+  }
+  if ("driveFolderUrl" in src) {
+    const raw = typeof src.driveFolderUrl === "string" ? src.driveFolderUrl.trim() : "";
+    if (raw === "") {
+      out.driveFolderId = null;
+    } else {
+      const id = parseDriveFolderId(raw);
+      if (!id) throw new CreativeError("not a Google Drive folder link");
+      out.driveFolderId = id;
+    }
   }
   return out as CreativeInput;
 }
@@ -99,10 +118,19 @@ export async function updateCreative(
   const current = await getCreative(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
+  // A different (or cleared) folder invalidates everything the resolver
+  // derived from the old one — the stored file link would otherwise keep
+  // pointing into a folder this creative no longer claims to live in.
+  const folderMoved =
+    input.driveFolderId !== undefined &&
+    input.driveFolderId !== current.driveFolderId;
   const [updated] = await db
     .update(creatives)
     .set({
       ...input,
+      ...(folderMoved
+        ? { driveFileId: null, driveFolderName: null, driveCheckedAt: null }
+        : {}),
       version: sql`${creatives.version} + 1`,
       updatedAt: nowUtc,
     })

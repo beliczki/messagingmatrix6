@@ -52,8 +52,9 @@ import {
   restoreMessage,
   updateMessage,
 } from "@/lib/entities/messages";
-import { isNull } from "drizzle-orm";
+import { isNotNull, isNull } from "drizzle-orm";
 import { periodDateKey } from "@/lib/period";
+import { driveFileUrl, driveFolderUrl } from "@/lib/drive-link";
 import { listVisibleTemplates, readTemplate } from "@/lib/templates";
 import { collectStalePreviews } from "@/lib/previews";
 import { shootPreviews } from "@/lib/preview-shooter";
@@ -357,7 +358,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
     "list_mc",
     {
       description:
-        "List messages (MCs). Returns a LEAN projection by default (id, number, variant, audience, topic, version_no, pmmid, status, start_date, end_date, template, name, headline) — pass verbose=true for the full row (copy/styles/custom_css/images/video). Each row also carries preview_urls: a {size: url} map of generated PNG screenshots of the rendered HTML creative (e.g. \"300x250\") — fetch with the same Authorization bearer; empty {} when no preview has been generated yet. Paging: limit (default 100, MAX 5000 — set this explicitly to fetch more than 100 in one call) and offset (skip N rows; stable order is number,variant, so offset paging is gap-free for a full export). Filters: topic_key, audience_key, product (matches either audience.product or topic.product), status. Default excludes soft-archived rows; pass include_archived=true to see them.",
+        "List messages (MCs). Returns a LEAN projection by default (id, number, variant, audience, topic, version_no, pmmid, status, start_date, end_date, template, name, headline) — pass verbose=true for the full row (copy/styles/custom_css/images/video). Each row also carries preview_urls: a {size: url} map of generated PNG screenshots of the rendered HTML creative (e.g. \"300x250\") — fetch with the same Authorization bearer; empty {} when no preview has been generated yet. Paging: limit (default 100, MAX 5000 — set this explicitly to fetch more than 100 in one call) and offset (skip N rows; stable order is number,variant, so offset paging is gap-free for a full export). Filters: topic_key, audience_key, product (matches either audience.product or topic.product), status. Default excludes soft-archived rows; pass include_archived=true to see them. Each row also carries drive_folders: the distinct Google Drive delivery folders of the creatives filed under this MC number+variant ([] when none is recorded).",
       inputSchema: {
         topic_key: z.string().optional(),
         audience_key: z.string().optional(),
@@ -464,8 +465,43 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
         urls[p.size] = previewUrl(ctx.origin ?? "", p.id, p.updatedAt);
         urlsByMessage.set(p.messageId, urls);
       }
+      // Where the delivered files of each MC live on Drive — one grouped query
+      // for the page, so listing an MC also answers "does this one have a
+      // delivery folder at all?".
+      const numbers = [...new Set(rows.map((r) => r.number))];
+      const driveRows = numbers.length
+        ? await db
+            .select({
+              mcNumber: creatives.mcNumber,
+              mcVariant: creatives.mcVariant,
+              driveFolderId: creatives.driveFolderId,
+              driveFolderName: creatives.driveFolderName,
+            })
+            .from(creatives)
+            .where(
+              and(
+                eq(creatives.clientId, ctx.clientId),
+                isNotNull(creatives.driveFolderId),
+                inArray(creatives.mcNumber, numbers),
+              ),
+            )
+        : [];
+      const foldersByMc = new Map<string, { url: string; name: string | null }[]>();
+      for (const d of driveRows) {
+        const key = `${d.mcNumber}|${d.mcVariant ?? ""}`;
+        const list = foldersByMc.get(key) ?? [];
+        const url = driveFolderUrl(d.driveFolderId)!;
+        if (!list.some((f) => f.url === url)) {
+          list.push({ url, name: d.driveFolderName });
+        }
+        foldersByMc.set(key, list);
+      }
       return jsonResult(
-        rows.map((r) => ({ ...r, preview_urls: urlsByMessage.get(r.id) ?? {} })),
+        rows.map((r) => ({
+          ...r,
+          preview_urls: urlsByMessage.get(r.id) ?? {},
+          drive_folders: foldersByMc.get(`${r.number}|${r.variant ?? ""}`) ?? [],
+        })),
       );
     },
   );
@@ -474,7 +510,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
     "list_assets",
     {
       description:
-        "List media assets (images, videos, logos, etc.) for the active client. Use this to look up the right `file_name` to drop into an MC's `image1..6` / `video1` field. Filters are AND-combined: file_name_contains and visual_keyword_contains are case-insensitive LIKE matches (use them for keyword search, e.g. visual_keyword_contains='fitzone' to find the sport-themed George banner); brand/product/type are exact matches against the indexed columns. Default excludes soft-archived rows; pass include_archived=true to see them. Default limit 100, max 1000.",
+        "List media assets (images, videos, logos, etc.) for the active client. Use this to look up the right `file_name` to drop into an MC's `image1..6` / `video1` field. Filters are AND-combined: file_name_contains and visual_keyword_contains are case-insensitive LIKE matches (use them for keyword search, e.g. visual_keyword_contains='fitzone' to find the sport-themed George banner); brand/product/type are exact matches against the indexed columns. Default excludes soft-archived rows; pass include_archived=true to see them. Default limit 100, max 1000. Each row also carries drive_folder_url (the delivery folder on Google Drive — set by whoever uploaded the creative, editable via creative_update) and drive_file_url (the direct link to the file, RESOLVED from that folder by name — read-only). A null drive_folder_url means nobody recorded where this creative was delivered from; a folder without a file url means the resolver has not found it there yet.",
       inputSchema: {
         file_name_contains: z.string().optional(),
         visual_keyword_contains: z.string().optional(),
@@ -553,7 +589,15 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
         .where(and(...conds))
         .orderBy(creatives.id)
         .limit(limit);
-      return jsonResult(rows);
+      // Hand over the finished links, not just the ids — an agent should not
+      // have to know how a Drive URL is spelled.
+      return jsonResult(
+        rows.map((r) => ({
+          ...r,
+          drive_folder_url: driveFolderUrl(r.driveFolderId),
+          drive_file_url: driveFileUrl(r.driveFileId),
+        })),
+      );
     },
   );
 
@@ -2066,7 +2110,7 @@ function registerCreativeWriteTools(server: McpServer, ctx: McpContext): void {
     "creative_update",
     {
       description:
-        "Update a creative-library row by id. Required: id, version (current optimistic-lock version from list_creatives). Optional fields object with any writable column. Returns version_conflict with the current row if version is stale.",
+        "Update a creative-library row by id. Required: id, version (current optimistic-lock version from list_creatives). Optional fields object with any writable column. To record where a creative was delivered from, pass fields.driveFolderUrl with the Google Drive FOLDER link (a file link is rejected; \"\" clears it). Changing the folder drops the resolved drive_file_url — it is re-derived by the Drive link health check, and cannot be written by hand. Returns version_conflict with the current row if version is stale.",
       inputSchema: {
         id: z.number().int(),
         version: z.number().int(),
@@ -2078,12 +2122,13 @@ function registerCreativeWriteTools(server: McpServer, ctx: McpContext): void {
       if (limited) return limited;
       const existing = await getCreative(ctx.clientId, id);
       if (!existing) return errorResult(`creative ${id} not found`);
-      const result = await updateCreative(
-        ctx.clientId,
-        id,
-        version,
-        pickCreativeWritable(fields ?? {}),
-      );
+      let writable;
+      try {
+        writable = pickCreativeWritable(fields ?? {});
+      } catch (e) {
+        return errorResult((e as Error).message);
+      }
+      const result = await updateCreative(ctx.clientId, id, version, writable);
       if (!result.ok) {
         return errorResult("version_conflict", { current: result.current });
       }

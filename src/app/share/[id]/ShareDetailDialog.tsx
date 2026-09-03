@@ -64,6 +64,8 @@ export type DialogItem =
         fileFormat: string | null;
         fileDimensions: string | null;
         comment: string | null;
+        driveFolderId?: string | null;
+        driveFolderName?: string | null;
       };
       file:
         | {
@@ -264,6 +266,17 @@ export default function ShareDetailDialog({
               <span className="share-detail-dialog__subtitle truncate text-xs text-slate-500">
                 {subtitle}
               </span>
+            ) : null}
+            {item.kind === "creative" && item.creative.driveFolderId ? (
+              <a
+                href={`https://drive.google.com/drive/folders/${item.creative.driveFolderId}`}
+                target="_blank"
+                rel="noreferrer"
+                className="share-detail-dialog__drive drive-links__link shrink-0 text-xs text-slate-500 underline hover:text-slate-900"
+                title="Open the delivery folder on Google Drive"
+              >
+                {item.creative.driveFolderName ?? "Drive folder"} ↗
+              </a>
             ) : null}
           </div>
           <button

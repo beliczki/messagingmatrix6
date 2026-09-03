@@ -435,6 +435,9 @@ Persisted localStorage kulcsok:
 | **UploadDialog** | `upload-dialog` (globalis) | 366–376 |
 | **CreativeMetadataForm** | `creative-metadata-form` + belül `form-grid` | 687–772 |
 | **QueueItemForm** | `upload-queue__item-form` + `form-grid` | 777–809 |
+| **DriveFolderBatchField** (batch-szintű Drive mappalink a queue fejlécében) | `drive-folder-field` + `form-field` / `form-field__label` / `form-field__hint` | – |
+| **DriveHealthCheck** (jobb-toolbar akció) | `drive-health` (`--collapsed`), belül `drive-health__run` (`toolbar-btn`), `__scope`, `__error`, `__report`, `__line` | – |
+| Drive-linkek a kreatív-detailben | `drive-links` + `drive-links__link` / `drive-links__pending` | – |
 | **ViewControls** (right toolbar nyitva) | `creative-library-view-controls` | 400–428 |
 | ToggleBtn (grid/list/masonry) | `toggle-btn` (globalis) | 430–451 |
 | **Local `Field`** (form label wrapper, duplicate) | `form-field` (globalis) | 811–826 |
@@ -862,6 +865,8 @@ A fejléc két sávra bomlott. Amit meglévő névből vettünk: `commented-only
 | --- | --- | --- |
 | Share tényei a fejléc jobb felső sarkában | `share-gallery__meta` | komment-szám + „captured" dátum; korábban külön alsó sorban élt |
 | Leírás sor (opcionális) | `share-gallery__description` | csak ha a share-nek van description-je |
+| Drive-mappák sora (opcionális, 2026-09-03) | `share-gallery__drive` + `__drive-label` / `__drive-link` | a share-ben szereplő kreatívok **distinct** leadási mappái; csak ha a snapshot tartalmaz mappalinket |
+| Drive-mappa a detail-dialog fejlécében | `share-detail-dialog__drive` (+ `drive-links__link`) | egy kreatívnál a szülőmappa, a cím/méret/subtitle mellett |
 | Vezérlő sáv (2. sor) | `share-gallery__controls` | balra a szűrők, jobbra a `__control-actions` |
 | Jobb oldali vezérlő-csoport | `share-gallery__control-actions` | View + Image preview + Download all |
 | Image preview kapcsoló | `share-gallery__image-toggle` (+`--active`) | a `preview-pane__image-toggle` (MC editor) formája, slate palettán |

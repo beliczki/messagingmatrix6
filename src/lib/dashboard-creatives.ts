@@ -48,6 +48,9 @@ export type StripCreative = {
   fileSize: string | null;
   fileDimensions: string | null;
   comment: string | null;
+  driveFolderId: string | null;
+  driveFolderName: string | null;
+  driveFileId: string | null;
   version: number;
   createdAt: string;
   updatedAt: string;

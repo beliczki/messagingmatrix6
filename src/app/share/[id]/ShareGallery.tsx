@@ -70,6 +70,9 @@ export type SnapshotCreative = {
   fileFormat: string | null;
   fileDimensions: string | null;
   comment: string | null;
+  driveFolderId?: string | null;
+  driveFolderName?: string | null;
+  driveFileId?: string | null;
 };
 
 export type SnapshotFile = {
@@ -150,6 +153,19 @@ export default function ShareGallery({
     }
     return out;
   }, [matrixItems, creatives, filesById]);
+
+  // Where these creatives were delivered from. The snapshot froze the links at
+  // share time, so a folder resolved later will not appear on an older share.
+  const driveFolders = useMemo(() => {
+    const byId = new Map<string, string>();
+    for (const c of creatives) {
+      if (!c.driveFolderId) continue;
+      if (!byId.has(c.driveFolderId)) {
+        byId.set(c.driveFolderId, c.driveFolderName ?? "Delivery folder");
+      }
+    }
+    return [...byId].map(([id, name]) => ({ id, name }));
+  }, [creatives]);
 
   const sizeOptions = useMemo(() => {
     const s = new Set<string>();
@@ -405,6 +421,22 @@ export default function ShareGallery({
         {shareDescription ? (
           <div className="share-gallery__description mx-auto max-w-6xl truncate px-4 pb-1.5 text-[11px] text-slate-500">
             {shareDescription}
+          </div>
+        ) : null}
+        {driveFolders.length > 0 ? (
+          <div className="share-gallery__drive mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-0.5 px-4 pb-1.5 text-[11px] text-slate-500">
+            <span className="share-gallery__drive-label">Drive:</span>
+            {driveFolders.map((f) => (
+              <a
+                key={f.id}
+                href={`https://drive.google.com/drive/folders/${f.id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="share-gallery__drive-link text-slate-600 underline hover:text-slate-900"
+              >
+                {f.name} ↗
+              </a>
+            ))}
           </div>
         ) : null}
         {/* Row 2 — everything that changes what you see. What narrows the set

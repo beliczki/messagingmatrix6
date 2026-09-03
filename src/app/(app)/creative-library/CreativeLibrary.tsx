@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import clsx from "clsx";import { trimEmptyCountSegments } from "@/lib/count-segments";
 
+import { parseDriveFolderId } from "@/lib/drive-link";
 import { Masonry } from "../_components/Masonry";
 import ToolbarUpload from "../_components/ToolbarUpload";
 import UploadDialog, { type UploadResult } from "../_components/UploadDialog";
@@ -48,6 +49,7 @@ const SIZE_QUICK_SELECT: { presets: QuickPreset[] } = {
 import ArchiveToggle from "../_components/ArchiveToggle";
 import RightToolbar from "../_components/RightToolbar";
 import CreativeDetailDialog from "./CreativeDetailDialog";
+import DriveHealthCheck from "./DriveHealthCheck";
 import MatrixDetailDialog from "./MatrixDetailDialog";
 import ShareCreateDialog from "./ShareCreateDialog";
 import { useLongPress } from "@/app/_components/useLongPress";
@@ -118,6 +120,9 @@ type Creative = {
   fileSize: string | null;
   fileDimensions: string | null;
   comment: string | null;
+  driveFolderId: string | null;
+  driveFolderName: string | null;
+  driveFileId: string | null;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -307,6 +312,9 @@ export default function CreativeLibrary() {
     renderForm: ({ item, update }) => (
       <QueueItemForm item={item} update={update} />
     ),
+    batchForm: ({ applyToAll, count }) => (
+      <DriveFolderBatchField applyToAll={applyToAll} count={count} />
+    ),
     commitItem: async (item: QueueItem) => {
       if (!item.uploadedFileId) throw new Error("file not uploaded");
       const r = await fetch("/api/creatives", {
@@ -324,6 +332,7 @@ export default function CreativeLibrary() {
             : null,
           mcVariant: item.metadata.mcVariant || null,
           comment: item.metadata.comment || null,
+          driveFolderUrl: item.metadata.driveFolderUrl || null,
           fileId: item.uploadedFileId,
           fileName: item.uploadedFilename,
           fileSize: item.uploadedSize ? String(item.uploadedSize) : null,
@@ -406,6 +415,11 @@ export default function CreativeLibrary() {
           fileSize: null,
           fileDimensions: size,
           comment: null,
+          // A matrix tile is rendered live from the template, not delivered as
+          // a file — there is nothing on Drive to point at.
+          driveFolderId: null,
+          driveFolderName: null,
+          driveFileId: null,
           version: m.version,
           createdAt: m.updatedAt,
           updatedAt: m.updatedAt,
@@ -785,6 +799,12 @@ export default function CreativeLibrary() {
             <>
               {selectionBlock}
               <LibraryViewSwitcher view={view} setView={setView} collapsed={collapsed} />
+              <DriveHealthCheck
+                collapsed={collapsed}
+                creativeIds={filtered.flatMap((c) =>
+                  c.kind === "uploaded" ? [c.id] : [],
+                )}
+              />
               <ArchiveToggle
                 showArchived={showArchived}
                 onChange={setShowArchived}
@@ -1178,6 +1198,7 @@ function CreativeMetadataForm({
   const [mcNumber, setMcNumber] = useState("");
   const [mcVariant, setMcVariant] = useState("");
   const [comment, setComment] = useState("");
+  const [driveFolderUrl, setDriveFolderUrl] = useState("");
   const qc = useQueryClient();
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
@@ -1195,6 +1216,7 @@ function CreativeMetadataForm({
         mcNumber: mcNumber ? Number(mcNumber) : null,
         mcVariant: mcVariant || null,
         comment: comment || null,
+        driveFolderUrl: driveFolderUrl || null,
         fileId: file.fileId,
         fileName: file.filename,
         fileSize: file.sizeBytes ? String(file.sizeBytes) : null,
@@ -1234,6 +1256,19 @@ function CreativeMetadataForm({
       <Field label="Comment">
         <input value={comment} onChange={(e) => setComment(e.target.value)} className={inputCls} />
       </Field>
+      <Field label="Drive parent folder link">
+        <input
+          value={driveFolderUrl}
+          onChange={(e) => setDriveFolderUrl(e.target.value)}
+          placeholder="https://drive.google.com/drive/folders/…"
+          className={clsx(
+            inputCls,
+            driveFolderUrl.trim() !== "" &&
+              parseDriveFolderId(driveFolderUrl) === null &&
+              "border-red-400",
+          )}
+        />
+      </Field>
       <button
         type="submit"
         disabled={submitting}
@@ -1251,6 +1286,53 @@ function CreativeMetadataForm({
 
 const inputCls =
   "input-box w-full rounded border border-slate-300 px-2 py-1 text-xs focus:border-slate-500 focus:outline-none";
+
+// The Drive parent folder is a property of the whole delivery batch, not of one
+// file: you paste the folder link once and it lands on every queued creative
+// (including files dropped afterwards). Per-creative correction happens later in
+// the detail dialog — a full URL would not fit the per-item field grid.
+function DriveFolderBatchField({
+  applyToAll,
+  count,
+}: {
+  applyToAll: (patch: Record<string, string>) => void;
+  count: number;
+}) {
+  const [value, setValue] = useState("");
+  const folderId = parseDriveFolderId(value);
+  const invalid = value.trim() !== "" && folderId === null;
+
+  // Re-apply on every new drop, so late arrivals inherit the same folder.
+  useEffect(() => {
+    if (folderId) applyToAll({ driveFolderUrl: value });
+  }, [folderId, value, count, applyToAll]);
+
+  return (
+    <label className="drive-folder-field form-field block">
+      <div className="form-field__label mb-0.5 text-[9px] uppercase tracking-wide text-slate-500">
+        Drive parent folder link
+      </div>
+      <input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        placeholder="https://drive.google.com/drive/folders/…"
+        className={clsx(
+          "input-box w-full rounded border px-1.5 py-0.5 text-xs focus:outline-none",
+          invalid
+            ? "border-red-400 focus:border-red-500"
+            : "border-slate-200 focus:border-slate-500",
+        )}
+      />
+      <div className="form-field__hint mt-0.5 text-[10px] text-slate-500">
+        {invalid
+          ? "Not a Drive folder link — paste the folder, not a file."
+          : folderId
+            ? `Applied to all ${count} file${count === 1 ? "" : "s"} in this batch.`
+            : "Optional — the direct file link is resolved from it."}
+      </div>
+    </label>
+  );
+}
 
 function QueueItemForm({
   item,

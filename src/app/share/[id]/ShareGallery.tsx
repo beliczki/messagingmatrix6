@@ -9,6 +9,7 @@ import {
 } from "react";
 import {
   Check,
+  ChevronDown,
   Columns3,
   Download,
   ImageIcon,
@@ -20,6 +21,7 @@ import {
 import clsx from "clsx";
 import PublicMatrixPreview from "./PublicMatrixPreview";
 import ImagePreviewToggle from "./ImagePreviewToggle";
+import GoogleDriveIcon from "./GoogleDriveIcon";
 import { Masonry } from "../../(app)/_components/Masonry";
 import ShareDetailDialog, {
   type DialogItem,
@@ -154,18 +156,44 @@ export default function ShareGallery({
     return out;
   }, [matrixItems, creatives, filesById]);
 
-  // Where these creatives were delivered from. The snapshot froze the links at
-  // share time, so a folder resolved later will not appear on an older share.
+  // Where these creatives were delivered from, and which MCs sit in each folder
+  // — with more than one folder in a share, "which one holds what" is the only
+  // useful thing the list can say. The snapshot froze the links at share time,
+  // so a folder resolved later will not appear on an older share.
   const driveFolders = useMemo(() => {
-    const byId = new Map<string, string>();
+    const byId = new Map<string, { name: string; mcs: Set<string> }>();
     for (const c of creatives) {
       if (!c.driveFolderId) continue;
-      if (!byId.has(c.driveFolderId)) {
-        byId.set(c.driveFolderId, c.driveFolderName ?? "Delivery folder");
+      const entry = byId.get(c.driveFolderId) ?? {
+        name: c.driveFolderName ?? "Delivery folder",
+        mcs: new Set<string>(),
+      };
+      if (c.mcNumber !== null && c.mcNumber !== undefined) {
+        entry.mcs.add(`MC${c.mcNumber}${c.mcVariant ?? ""}`);
       }
+      byId.set(c.driveFolderId, entry);
     }
-    return [...byId].map(([id, name]) => ({ id, name }));
+    return [...byId].map(([id, v]) => ({
+      id,
+      name: v.name,
+      mcs: [...v.mcs].sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true }),
+      ),
+    }));
   }, [creatives]);
+
+  // The image-preview switch swaps a live render for a stored PNG. When every
+  // item in the share is already a delivered image there is nothing to swap, so
+  // the control would only offer a no-op.
+  const canImagePreview = useMemo(
+    () =>
+      items.some(
+        (it) =>
+          it.kind !== "creative" ||
+          !(it.file?.mimeType?.startsWith("image/") ?? false),
+      ),
+    [items],
+  );
 
   const sizeOptions = useMemo(() => {
     const s = new Set<string>();
@@ -423,22 +451,6 @@ export default function ShareGallery({
             {shareDescription}
           </div>
         ) : null}
-        {driveFolders.length > 0 ? (
-          <div className="share-gallery__drive mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-0.5 px-4 pb-1.5 text-[11px] text-slate-500">
-            <span className="share-gallery__drive-label">Drive:</span>
-            {driveFolders.map((f) => (
-              <a
-                key={f.id}
-                href={`https://drive.google.com/drive/folders/${f.id}`}
-                target="_blank"
-                rel="noreferrer"
-                className="share-gallery__drive-link text-slate-600 underline hover:text-slate-900"
-              >
-                {f.name} ↗
-              </a>
-            ))}
-          </div>
-        ) : null}
         {/* Row 2 — everything that changes what you see. What narrows the set
             sits left under the title; what changes how it is rendered or taken
             away sits right. */}
@@ -465,12 +477,14 @@ export default function ShareGallery({
           </button>
           <div className="share-gallery__control-actions ml-auto flex flex-wrap items-center gap-2">
             <ViewSwitcher view={view} setView={setView} />
-            <ImagePreviewToggle
-              on={imagePreview}
-              onChange={setImagePreview}
-              ready={imageReady.length}
-              total={filtered.length}
-            />
+            {canImagePreview ? (
+              <ImagePreviewToggle
+                on={imagePreview}
+                onChange={setImagePreview}
+                ready={imageReady.length}
+                total={filtered.length}
+              />
+            ) : null}
             <button
               type="button"
               onClick={downloadAll}
@@ -491,6 +505,7 @@ export default function ShareGallery({
                 ? `Bundling… ${zipProgress}%`
                 : `Download all (${downloadTargets.length})`}
             </button>
+            <DriveFolderButton folders={driveFolders} />
           </div>
         </div>
       </header>
@@ -635,6 +650,94 @@ function ViewSwitcher({
 // items on screen actually have a stored PNG, so a mismatch with the Download
 // all count is visible without switching modes. Amber when they disagree —
 // same language the Creative Library uses for missing previews.
+type DriveFolder = { id: string; name: string; mcs: string[] };
+
+const driveFolderHref = (id: string) =>
+  `https://drive.google.com/drive/folders/${id}`;
+
+/** The delivery folder(s) behind the shared creatives, next to Download all —
+ *  one folder is a plain link, several become a menu that says which MC lives
+ *  where, because that is the question a second folder raises. */
+function DriveFolderButton({ folders }: { folders: DriveFolder[] }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDocMouseDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  if (folders.length === 0) return null;
+
+  const btnCls =
+    "share-gallery__drive-btn inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50";
+
+  if (folders.length === 1) {
+    const f = folders[0];
+    return (
+      <a
+        href={driveFolderHref(f.id)}
+        target="_blank"
+        rel="noreferrer"
+        title={`Open ${f.name} on Google Drive`}
+        className={btnCls}
+      >
+        <GoogleDriveIcon />
+        Google Drive
+      </a>
+    );
+  }
+
+  return (
+    <div ref={ref} className="share-gallery__drive relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        title="Open a delivery folder on Google Drive"
+        className={btnCls}
+      >
+        <GoogleDriveIcon />
+        Google Drive
+        <span className="share-gallery__drive-count rounded-full bg-slate-100 px-1.5 text-[10px] font-medium text-slate-600">
+          {folders.length}
+        </span>
+        <ChevronDown className="size-3.5 text-slate-400" />
+      </button>
+      {open ? (
+        <div className="share-gallery__drive-menu absolute right-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-md border border-slate-200 bg-white p-1 shadow-lg">
+          {folders.map((f) => (
+            <a
+              key={f.id}
+              href={driveFolderHref(f.id)}
+              target="_blank"
+              rel="noreferrer"
+              className="share-gallery__drive-menu-item flex flex-col gap-0.5 rounded px-2 py-1.5 hover:bg-slate-50"
+            >
+              <span className="flex items-center gap-1.5 text-xs font-medium text-slate-800">
+                <GoogleDriveIcon className="size-3" />
+                {f.name}
+              </span>
+              <span className="text-[10px] text-slate-500">
+                {f.mcs.length > 0 ? f.mcs.join(" · ") : "no MC number on these files"}
+              </span>
+            </a>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function SizePill({
   options,
   counts,

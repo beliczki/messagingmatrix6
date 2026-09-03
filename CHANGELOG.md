@@ -5,6 +5,19 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.55.0] — 2026-09-04
+
+### Changed
+- **The share page's Drive link is a button now**, bordered and carrying the
+  Google Drive mark, sitting after "Download all" instead of as a text line
+  under the title. With several delivery folders behind one share it becomes a
+  menu that names each folder and the MC numbers inside it — with more than one
+  folder, "which one holds what" is the only useful thing the list can say.
+- **The image-preview switch is hidden when it cannot do anything.** It swaps a
+  live render for a stored PNG, so on a share whose items are all delivered
+  images it only offered a no-op. (The detail dialog already only showed it for
+  live-rendered items.)
+
 ## [6.54.2] — 2026-09-03
 
 ### Fixed

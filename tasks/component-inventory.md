@@ -867,7 +867,7 @@ A fejléc két sávra bomlott. Amit meglévő névből vettünk: `commented-only
 | --- | --- | --- |
 | Share tényei a fejléc jobb felső sarkában | `share-gallery__meta` | komment-szám + „captured" dátum; korábban külön alsó sorban élt |
 | Leírás sor (opcionális) | `share-gallery__description` | csak ha a share-nek van description-je |
-| Drive-mappák sora (opcionális, 2026-09-03) | `share-gallery__drive` + `__drive-label` / `__drive-link` | a share-ben szereplő kreatívok **distinct** leadási mappái; csak ha a snapshot tartalmaz mappalinket |
+| Drive-gomb a vezérlő sávban (2026-09-04) | `share-gallery__drive-btn` — több mappánál `share-gallery__drive` (wrapper) + `__drive-count` + `__drive-menu` / `__drive-menu-item` | a Download all UTÁN, borderes gomb Google Drive ikonnal (`GoogleDriveIcon.tsx`, mert a lucide nem szállít márkajelet); egy mappánál sima link, többnél dropdown, ami MC-szám szerint mondja meg, melyik mappában mi van |
 | Drive-mappa a detail-dialog fejlécében | `share-detail-dialog__drive` (+ `drive-links__link`) | egy kreatívnál a szülőmappa, a cím/méret/subtitle mellett |
 | Vezérlő sáv (2. sor) | `share-gallery__controls` | balra a szűrők, jobbra a `__control-actions` |
 | Jobb oldali vezérlő-csoport | `share-gallery__control-actions` | View + Image preview + Download all |

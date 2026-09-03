@@ -104,7 +104,7 @@ export default function DriveHealthCheck({
   }
 
   return (
-    <div className="drive-health px-3">
+    <div className="drive-health">
       <button
         type="button"
         onClick={run}

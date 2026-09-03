@@ -5,6 +5,13 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.54.1] — 2026-09-03
+
+### Changed
+- The Drive link check sits at the bottom of the Creative Library toolbar, under
+  "Show archived", and no longer carries its own horizontal padding — the
+  toolbar body already provides it, so it lines up with its neighbours.
+
 ## [6.54.0] — 2026-09-03
 
 ### Added

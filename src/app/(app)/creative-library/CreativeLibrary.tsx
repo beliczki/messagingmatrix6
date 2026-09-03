@@ -830,17 +830,17 @@ export default function CreativeLibrary() {
             <>
               {selectionBlock}
               <LibraryViewSwitcher view={view} setView={setView} collapsed={collapsed} />
-              <DriveHealthCheck
-                collapsed={collapsed}
-                creativeIds={filtered.flatMap((c) =>
-                  c.kind === "uploaded" ? [c.id] : [],
-                )}
-              />
               <ArchiveToggle
                 showArchived={showArchived}
                 onChange={setShowArchived}
                 collapsed={collapsed}
                 className="mt-auto"
+              />
+              <DriveHealthCheck
+                collapsed={collapsed}
+                creativeIds={filtered.flatMap((c) =>
+                  c.kind === "uploaded" ? [c.id] : [],
+                )}
               />
               <ToolbarUpload
                 collapsed={collapsed}

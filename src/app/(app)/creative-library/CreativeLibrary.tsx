@@ -1426,7 +1426,11 @@ function SelectableItem({
   return (
     <div
       className={clsx(
-        "selectable-item relative",
+        // `isolate` keeps the ring and the checkbox below inside this tile's own
+        // stacking context. Without it their z-20 competes with the whole page,
+        // so a selected tile painted over the sticky toolbar (z-10) and through
+        // any filter dropdown open above it.
+        "selectable-item relative isolate",
         selected && "selectable-item--selected",
       )}
       onPointerDown={longPress.onPointerDown}

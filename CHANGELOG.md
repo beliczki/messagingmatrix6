@@ -5,6 +5,15 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.54.2] — 2026-09-03
+
+### Fixed
+- **Filter dropdowns open above the selected tiles again.** A selected creative's
+  ring and checkbox carried a page-wide z-20, so with a selection active they
+  painted over the sticky toolbar (z-10) and through any open filter menu. The
+  tile now isolates its own stacking context, which keeps those overlays where
+  they belong without touching the toolbar's layer.
+
 ## [6.54.1] — 2026-09-03
 
 ### Changed

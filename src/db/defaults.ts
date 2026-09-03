@@ -65,6 +65,13 @@ export const DEFAULT_CREATIVE_PARSING_RULES = {
   brand: { type: "segment", index: 0, separator: "_" },
   product: { type: "segment", index: 1, separator: "_" },
   type: { type: "extension_type" },
+  // BRAND_PRODUCT_MC<number>_<variant>_… — the MC token is the naming
+  // convention across every surface, so the upload queue can fill both in.
+  // The variant rule takes a SINGLE lowercase letter only: a handful of legacy
+  // files carry a different token there (va / px / bg / c1), and those are not
+  // variants — leaving the field blank for a human beats guessing wrong.
+  mcNumber: { type: "pattern", pattern: "MC(\\d+)", group: 1 },
+  mcVariant: { type: "pattern", pattern: "MC\\d+_([a-z])_", group: 1 },
 };
 
 export type ConfigSeed = Array<{

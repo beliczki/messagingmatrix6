@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, type ReactNode } from "react";
-import { Loader2, Check, CircleAlert, X, Trash2 } from "lucide-react";
+import { Loader2, Check, CircleAlert, X, Trash2, Maximize2 } from "lucide-react";
 import clsx from "clsx";
 import { parseFilename, type ParseRules } from "@/lib/parse-filename";
 
@@ -23,9 +23,23 @@ export type QueueItem = {
   metadata: Record<string, string>;
 };
 
-type Props = {
+export type QueueOptions = {
   category: "creative" | "asset";
   parsingRules: ParseRules;
+  /**
+   * Commit one item — typically POST /api/{creatives|assets} with the metadata
+   * + uploadedFileId. Throws on failure (the queue marks it errored).
+   */
+  commitItem: (item: QueueItem) => Promise<void>;
+  onAllDone?: () => void;
+};
+
+export type UploadQueueApi = ReturnType<typeof useUploadQueue>;
+
+type PanelProps = {
+  /** The queue state, owned by the caller so the same drop can also be shown
+   *  in the big batch dialog — the panel is one of two views over it. */
+  queue: UploadQueueApi;
   /**
    * Render the per-item metadata form. Caller decides which fields to expose
    * (creatives have more than assets) and how to commit the entity.
@@ -43,12 +57,8 @@ type Props = {
     applyToAll: (patch: Record<string, string>) => void;
     count: number;
   }) => ReactNode;
-  /**
-   * Commit one item — typically POST /api/{creatives|assets} with the metadata
-   * + uploadedFileId. Throws on failure (the queue marks it errored).
-   */
-  commitItem: (item: QueueItem) => Promise<void>;
-  onAllDone?: () => void;
+  /** Open the same queue in the big batch window. */
+  onExpand?: () => void;
 };
 
 export function useDropTarget(onFiles: (files: File[]) => void) {
@@ -85,7 +95,7 @@ export function useUploadQueue({
   parsingRules,
   commitItem,
   onAllDone,
-}: Pick<Props, "category" | "parsingRules" | "commitItem" | "onAllDone">) {
+}: QueueOptions) {
   const [items, setItems] = useState<QueueItem[]>([]);
   const [open, setOpen] = useState(false);
 
@@ -244,11 +254,17 @@ export function useUploadQueue({
   };
 }
 
-export default function UploadQueue(props: Props) {
-  const { renderForm, batchForm } = props;
+/** The floating panel view of a queue. The same queue can be shown at the same
+ *  time in the big batch dialog — expanding is a change of view, not of state,
+ *  so nothing is lost on the way there and back. */
+export default function UploadQueuePanel({
+  queue,
+  renderForm,
+  batchForm,
+  onExpand,
+}: PanelProps) {
   const {
     items,
-    addFiles,
     update,
     applyToAll,
     commitAll,
@@ -261,11 +277,11 @@ export default function UploadQueue(props: Props) {
     done,
     errored,
     ready,
-  } = useUploadQueue(props);
+  } = queue;
 
-  return {
-    addFiles,
-    panel: total === 0 ? null : (
+  if (total === 0) return null;
+
+  return (
       <div
         className={clsx(
           "upload-queue fixed bottom-0 right-0 z-40 m-4 flex w-[440px] flex-col rounded-xl border border-slate-200 bg-white shadow-2xl transition",
@@ -305,6 +321,19 @@ export default function UploadQueue(props: Props) {
               Clear done
             </button>
           ) : null}
+          {onExpand ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onExpand();
+              }}
+              aria-label="Open in the big window"
+              title="Open in the big window"
+              className="upload-queue__expand rounded p-1 text-slate-500 hover:bg-slate-100"
+            >
+              <Maximize2 className="size-4" />
+            </button>
+          ) : null}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -321,28 +350,27 @@ export default function UploadQueue(props: Props) {
             {batchForm({ applyToAll, count: total })}
           </div>
         ) : null}
-        {open ? (
-          <div className="upload-queue__items flex-1 overflow-y-auto p-2">
-            {items.map((item) => (
-              <ItemRow
-                key={item.localId}
-                item={item}
-                onDiscard={() => discard(item.localId)}
-                onUpdate={(patch) => {
-                  const merged: Record<string, string> = { ...item.metadata };
-                  for (const [k, v] of Object.entries(patch)) {
-                    if (typeof v === "string") merged[k] = v;
-                  }
-                  update(item.localId, { metadata: merged });
-                }}
-                renderForm={renderForm}
-              />
-            ))}
-          </div>
-        ) : null}
-      </div>
-    ),
-  };
+      {open ? (
+        <div className="upload-queue__items flex-1 overflow-y-auto p-2">
+          {items.map((item) => (
+            <ItemRow
+              key={item.localId}
+              item={item}
+              onDiscard={() => discard(item.localId)}
+              onUpdate={(patch) => {
+                const merged: Record<string, string> = { ...item.metadata };
+                for (const [k, v] of Object.entries(patch)) {
+                  if (typeof v === "string") merged[k] = v;
+                }
+                update(item.localId, { metadata: merged });
+              }}
+              renderForm={renderForm}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function ItemRow({
@@ -354,7 +382,7 @@ function ItemRow({
   item: QueueItem;
   onDiscard: () => void;
   onUpdate: (patch: Partial<QueueItem["metadata"]>) => void;
-  renderForm: Props["renderForm"];
+  renderForm: PanelProps["renderForm"];
 }) {
   return (
     <div className={`upload-queue__item upload-queue__item--${item.status} mb-2 rounded-md border border-slate-200 bg-white p-2 text-xs`}>

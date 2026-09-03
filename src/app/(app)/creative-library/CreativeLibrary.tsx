@@ -26,11 +26,14 @@ import clsx from "clsx";import { trimEmptyCountSegments } from "@/lib/count-segm
 import { parseDriveFolderId } from "@/lib/drive-link";
 import { Masonry } from "../_components/Masonry";
 import ToolbarUpload from "../_components/ToolbarUpload";
-import UploadDialog, { type UploadResult } from "../_components/UploadDialog";
-import UploadQueue, {
+import UploadQueuePanel, {
   useDropTarget,
+  useUploadQueue,
   type QueueItem,
 } from "../_components/UploadQueue";
+import BatchUploadDialog, {
+  type BatchColumn,
+} from "../_components/BatchUploadDialog";
 import MultiPill, {
   ALL_NONE_QUICK_SELECT,
   type QuickPreset,
@@ -93,6 +96,17 @@ type TemplateInfo = {
   previewFile?: string | null;
   externalUrl?: string | null;
 };
+
+// Batch-window columns for a creative. Same keys the filename parser fills in,
+// same order as the queue panel's per-item form.
+const CREATIVE_UPLOAD_COLUMNS: BatchColumn[] = [
+  { key: "brand", label: "Brand" },
+  { key: "product", label: "Product" },
+  { key: "type", label: "Type" },
+  { key: "template", label: "Template" },
+  { key: "mcNumber", label: "MC#" },
+  { key: "mcVariant", label: "Variant" },
+];
 
 function useDebouncedValue<T>(value: T, delayMs: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -306,15 +320,9 @@ export default function CreativeLibrary() {
   });
 
   const qcCommit = useQueryClient();
-  const queue = UploadQueue({
+  const queue = useUploadQueue({
     category: "creative",
     parsingRules,
-    renderForm: ({ item, update }) => (
-      <QueueItemForm item={item} update={update} />
-    ),
-    batchForm: ({ applyToAll, count }) => (
-      <DriveFolderBatchField applyToAll={applyToAll} count={count} />
-    ),
     commitItem: async (item: QueueItem) => {
       if (!item.uploadedFileId) throw new Error("file not uploaded");
       const r = await fetch("/api/creatives", {
@@ -467,6 +475,17 @@ export default function CreativeLibrary() {
     for (const c of items) if (c.type) s.add(c.type);
     return [...s].sort();
   }, [items]);
+  // Datalist suggestions for the big upload window — the values already in the
+  // library, so a batch stays consistent with what is there without locking the
+  // field (the filename parser can produce a value nobody has used yet).
+  const uploadColumnOptions = useMemo(
+    () => ({
+      product: productOptions,
+      type: typeOptions,
+      template: templates.map((t) => t.name),
+    }),
+    [productOptions, typeOptions, templates],
+  );
   const sizeOptions = useMemo(() => {
     const s = new Set<string>();
     for (const c of items) if (c.fileDimensions) s.add(c.fileDimensions);
@@ -725,18 +744,30 @@ export default function CreativeLibrary() {
           )}
         </div>
 
-        {queue.panel}
-
-        <UploadDialog
-          open={uploadOpen}
-          category="creative"
-          onClose={() => setUploadOpen(false)}
-          onUploaded={() => {
-            qc.invalidateQueries({ queryKey: ["files", "creative"] });
-          }}
-          metadataForm={({ file, submit, submitting }) => (
-            <CreativeMetadataForm file={file} submit={submit} submitting={submitting} />
+        {/* One queue, two views: the floating panel while you work on the page,
+            the big window when you want the whole batch as a table. */}
+        <UploadQueuePanel
+          queue={queue}
+          onExpand={() => setUploadOpen(true)}
+          renderForm={({ item, update }) => (
+            <QueueItemForm item={item} update={update} />
           )}
+          batchForm={({ applyToAll, count }) => (
+            <DriveFolderBatchField applyToAll={applyToAll} count={count} />
+          )}
+        />
+
+        <BatchUploadDialog
+          open={uploadOpen}
+          queue={queue}
+          title="Upload creatives"
+          block="creative-upload"
+          columns={CREATIVE_UPLOAD_COLUMNS}
+          optionsFor={uploadColumnOptions}
+          batchForm={({ applyToAll, count }) => (
+            <DriveFolderBatchField applyToAll={applyToAll} count={count} />
+          )}
+          onClose={() => setUploadOpen(false)}
         />
 
         <ShareCreateDialog
@@ -1179,108 +1210,6 @@ function ListRow({
         {formatListDate(creative.updatedAt)}
       </div>
     </button>
-  );
-}
-
-function CreativeMetadataForm({
-  file,
-  submit,
-  submitting,
-}: {
-  file: UploadResult | null;
-  submit: (extra: Record<string, unknown>) => Promise<void>;
-  submitting: boolean;
-}) {
-  const [brand, setBrand] = useState("");
-  const [product, setProduct] = useState("");
-  const [type, setType] = useState("");
-  const [template, setTemplate] = useState("");
-  const [mcNumber, setMcNumber] = useState("");
-  const [mcVariant, setMcVariant] = useState("");
-  const [comment, setComment] = useState("");
-  const [driveFolderUrl, setDriveFolderUrl] = useState("");
-  const qc = useQueryClient();
-
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!file) return;
-    const r = await fetch("/api/creatives", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        brand: brand || null,
-        product: product || null,
-        type: type || null,
-        template: template || null,
-        mcNumber: mcNumber ? Number(mcNumber) : null,
-        mcVariant: mcVariant || null,
-        comment: comment || null,
-        driveFolderUrl: driveFolderUrl || null,
-        fileId: file.fileId,
-        fileName: file.filename,
-        fileSize: file.sizeBytes ? String(file.sizeBytes) : null,
-        fileDimensions: file.dimensions,
-      }),
-    });
-    if (!r.ok) {
-      alert(await r.text());
-      return;
-    }
-    qc.invalidateQueries({ queryKey: ["creatives"] });
-    await submit({});
-  }
-
-  return (
-    <form onSubmit={onSubmit} className="creative-metadata-form space-y-2 text-xs">
-      <div className="form-grid grid grid-cols-2 gap-2">
-        <Field label="Brand">
-          <input value={brand} onChange={(e) => setBrand(e.target.value)} className={inputCls} />
-        </Field>
-        <Field label="Product">
-          <input value={product} onChange={(e) => setProduct(e.target.value)} className={inputCls} />
-        </Field>
-        <Field label="Type">
-          <input value={type} onChange={(e) => setType(e.target.value)} className={inputCls} />
-        </Field>
-        <Field label="Template">
-          <input value={template} onChange={(e) => setTemplate(e.target.value)} className={inputCls} />
-        </Field>
-        <Field label="MC number">
-          <input value={mcNumber} onChange={(e) => setMcNumber(e.target.value)} className={inputCls} />
-        </Field>
-        <Field label="MC variant">
-          <input value={mcVariant} onChange={(e) => setMcVariant(e.target.value)} className={inputCls} />
-        </Field>
-      </div>
-      <Field label="Comment">
-        <input value={comment} onChange={(e) => setComment(e.target.value)} className={inputCls} />
-      </Field>
-      <Field label="Drive parent folder link">
-        <input
-          value={driveFolderUrl}
-          onChange={(e) => setDriveFolderUrl(e.target.value)}
-          placeholder="https://drive.google.com/drive/folders/…"
-          className={clsx(
-            inputCls,
-            driveFolderUrl.trim() !== "" &&
-              parseDriveFolderId(driveFolderUrl) === null &&
-              "border-red-400",
-          )}
-        />
-      </Field>
-      <button
-        type="submit"
-        disabled={submitting}
-        className={clsx(
-          "toolbar-btn--primary mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white",
-          submitting && "opacity-50",
-        )}
-      >
-        {submitting ? <Loader2 className="size-3.5 animate-spin" /> : null}
-        Save creative
-      </button>
-    </form>
   );
 }
 

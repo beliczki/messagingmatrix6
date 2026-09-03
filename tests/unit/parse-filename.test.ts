@@ -4,6 +4,7 @@ import {
   parseFilename,
   type ParseRules,
 } from "@/lib/parse-filename";
+import { DEFAULT_CREATIVE_PARSING_RULES } from "@/db/defaults";
 
 const ERSTE_RULES: ParseRules = {
   brand: { type: "segment", index: 0, separator: "_" },
@@ -118,5 +119,44 @@ describe("mediaKindFromFilename", () => {
   it("returns null for an extension the importer does not know", () => {
     expect(mediaKindFromFilename("notes.txt")).toBeNull();
     expect(mediaKindFromFilename("noextension")).toBeNull();
+  });
+});
+
+describe("MC number + variant rules (DEFAULT_CREATIVE_PARSING_RULES)", () => {
+  it("reads both out of the delivery naming convention", () => {
+    const { fields } = parseFilename(
+      "ERSTE_SZA_MC324_b_DiakszamlaQ3_n2_1080x1080.jpg",
+      DEFAULT_CREATIVE_PARSING_RULES as ParseRules,
+    );
+    expect(fields.brand).toBe("ERSTE");
+    expect(fields.product).toBe("SZA");
+    expect(fields.type).toBe("image");
+    expect(fields.mcNumber).toBe("324");
+    expect(fields.mcVariant).toBe("b");
+  });
+
+  it("leaves the variant blank where the token is not one — never guesses", () => {
+    // 48 of the 3145 live creatives carry va / vc / px / bg / c1 here, and the
+    // library files them all under variant "a". A wrong prefill is worse than
+    // an empty field the uploader fills in.
+    for (const name of [
+      "ERSTE_HITEL_MC3_va_68b555b_babavaro_n1_1080x1080.mp4",
+      "ERSTE_HITEL_MC24_px_Munkashitel_prospecting_1_n1_1080x1080.jpg",
+      "ERSTE_SZA_MC343_bg_Teads_Cseperedo_n1_960x540.png",
+      "ERSTE_SZA_MC347_c1_Cseperedo_prospecting_n1_1080x1080.png",
+    ]) {
+      const { fields } = parseFilename(name, DEFAULT_CREATIVE_PARSING_RULES as ParseRules);
+      expect(fields.mcNumber).toBe(name.match(/MC(\d+)/)![1]);
+      expect(fields.mcVariant).toBeUndefined();
+    }
+  });
+
+  it("still parses an MCx (no number) name without inventing a number", () => {
+    const { fields } = parseFilename(
+      "ERSTE_MARKET_MCx_e_genZbefektetes_2026Q1_n1_300x250.jpg",
+      DEFAULT_CREATIVE_PARSING_RULES as ParseRules,
+    );
+    expect(fields.mcNumber).toBeUndefined();
+    expect(fields.mcVariant).toBeUndefined();
   });
 });

@@ -5,6 +5,27 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.54.0] — 2026-09-03
+
+### Added
+- **The upload queue and the big upload window are two views of one batch.** The
+  Creative Library's upload button now opens the same table-with-a-"Set for all"-row
+  window the Assets library has (drop as many files as you like, or click to
+  choose), and the floating queue panel gained an expand button that opens that
+  window on the batch already in it — nothing is lost on the way there or back.
+  The window is now one shared component, `BatchUploadDialog`, with the columns,
+  the title and the semantic class prefix supplied by each library.
+- **The filename parser fills in MC number and variant.** The shipped parsing
+  rules only covered brand, product and type, so `ERSTE_SZA_MC324_b_…` left both
+  MC fields empty in the upload queue. The variant rule deliberately takes a
+  single lowercase letter only: 48 of the 3145 live creatives carry a different
+  token there (`va`, `px`, `bg`, `c1`) which is not a variant, and a blank field
+  someone fills in beats a wrong prefill.
+
+### Removed
+- The single-file "Upload creative" dialog, which had no drag & drop and no
+  batch fields. Its job is done by the big window.
+
 ## [6.53.0] — 2026-09-03
 
 ### Added

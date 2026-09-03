@@ -432,8 +432,8 @@ Persisted localStorage kulcsok:
 | ListRow delete | `creative-row__delete-btn` | – |
 | **EmptyState** | `empty-state` + `creative-library__empty` | 828–859 |
 | Empty Upload gomb | `toolbar-btn--primary` | – |
-| **UploadDialog** | `upload-dialog` (globalis) | 366–376 |
-| **CreativeMetadataForm** | `creative-metadata-form` + belül `form-grid` | 687–772 |
+| **BatchUploadDialog** (a nagy feltöltő ablak) | `creative-upload-dialog` + `creative-upload-table` (a közös `_components/BatchUploadDialog` `block` prefixe) | – |
+| Feltöltési sor kinyitása a nagy ablakba | `upload-queue__expand` | – |
 | **QueueItemForm** | `upload-queue__item-form` + `form-grid` | 777–809 |
 | **DriveFolderBatchField** (batch-szintű Drive mappalink a queue fejlécében) | `drive-folder-field` + `form-field` / `form-field__label` / `form-field__hint` | – |
 | **DriveHealthCheck** (jobb-toolbar akció) | `drive-health` (`--collapsed`), belül `drive-health__run` (`toolbar-btn`), `__scope`, `__error`, `__report`, `__line` | – |
@@ -847,6 +847,8 @@ Added an 11th workflow status `ARCHIVED`, sitting next to `INACTIVE` semanticall
 
 | Mi | Class | Megjegyzés |
 | --- | --- | --- |
+> **2026-09-03 óta közös komponens:** a nagy feltöltő ablak a `_components/BatchUploadDialog.tsx`, az osztálynevek prefixe a hívó `block` propja — Assets: `asset-upload`, Creative Library: `creative-upload`. A queue-t a hívó birtokolja (`useUploadQueue`), így a Creative Library ugyanazt a batch-et mutatja a lebegő panelen és a nagy ablakban is.
+
 | Modal root | `asset-upload-dialog modal` | 90vw × 90vh, max-w-6xl (header-dialog méret) |
 | Header strip | `asset-upload-dialog__header modal__header` | – |
 | Cím / fájlszámláló | `asset-upload-dialog__title` / `__count` | – |

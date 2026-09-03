@@ -1549,3 +1549,26 @@ Tartalom: fogalom-szótár (MC / audience / topic / channel / DCO-nonDCO / PMMID
 - **11.2 újraírva:** az eredeti „először minimális link-mező, integráció csak később" ajánlásom **elavult** — a user már tovább ment és lemérte, hogy a teljes Drive-út olcsó (nincs OAuth, nincs dep). Helyette az FR-B három nyitott kérdésére adtam ajánlást (generikus `kind`-mezős link-store; sidecar tábla, nem oszlop; és a state-kérdés a legfontosabb, mert a doksi-státusz és a `messages.status` kettőzése garantáltan szétcsúszik).
 
 **Brain:** a doksi bement thoughtként (`6da7f5d6-43be-4537-a67f-58c3afe335eb`, „MM6 — Képességek és terv 2026-09-03"). Az első, hibás kerettel felvitt változat (`5de4bb33…`) átcímkézve ELAVULT-ra. A 2. thought (workflow-terv) akkor megy be, ha a workflow-agenttel elkészül.
+
+---
+
+## 2026-09-03 — I4 Drive-linkek a kreatívokon: TELJES SZÁLLÍTÁS + DEPLOY — 6.52.0 + 6.53.0
+
+**User-kérés (szó szerint):** „minden feltöltött kreatívhoz tartozik egy drive link és egy parent drive folder link, a drive folder a fontosabb (ezt visszamenőleg is ki lehet tölteni), a file linket meg ha megadtam a folder linket akkor már ki lehet nyomozni programozottan" + share-fejlécbe a mappalinkek + minden kép/videó nézegetésnél a szülőmappa. Pontosítások: parent editálható, **file link számított és nem editálható**; a backfill darabokban, csak kreatívokra, a 600 legfrissebbre; MCP-ben nem kell külön tool, de listázáskor látszódjon.
+
+**A terv és a tíz szelet: lásd az I4 szekciót fent** (mind `[x]`, a lemért tényekkel együtt).
+
+**A négy mérés, ami a tervet eldöntötte (élesben, API-kulccsal):** (1) a Leadás-mappa listázása kulccsal **200 / 42 fájl** → nincs OAuth; (2) a mappa neve `files.get`-tel jön → `drive_folder_name` ingyen; (3) auth nélküli file-link **200** → külsősnek is nyílik; (4) 42 Drive-fájl ↔ **42 `creatives` sor** → a fájlnév-join tart. **Két korlát:** a kulcs **nem adja a `parents` mezőt** (fájlból nem lehet mappát visszakeresni) és **csak az anyone-with-link mappákat látja** (a MARKET-gyökér `files.get` → 404, listázás → **0 elem, nem hiba**) — ezért indul minden mappából, és ezért méri a resolver külön a mappa elérhetőségét.
+
+**Verzió:** `6.52.0` → **`6.53.0`** (minor: 4 új oszlop + migráció `0011` + új route + új UI + MCP-mezők). Suite **749/749 zöld** (+36), `tsc` tiszta.
+
+**DEPLOYOLVA 6.52.0 + 6.53.0 (2026-09-03):** commit `9cb2883`, push origin main, box `5fbbdf2`→`9cb2883`, box `package.json` **6.53.0**.
+- **`GOOGLE_DRIVE_API_KEY` felvéve a box `/var/www/mm6-erste/.env`-jébe** (mentés: `.env.bak-20260903-drivekey`), `pm2 restart --update-env`. A boxról ellenőrizve: a Drive-listázás onnan is **200-at ad valódi fájlnevekkel** — van kifelé menő elérés a googleapis.com-ra.
+- **Migráció `0011`:** a shared Postgresen már fent volt (lokálból futott a tunnelen), a boxi `db:migrate` így no-op → „migrations applied successfully". Ellenőrizve: `creatives` **3145 sor**, `drive_folder_id`/`drive_file_id` mindenhol NULL (ez a helyes kiindulás a backfill előtt).
+- `npm run build` sikeres, `pm2 restart mm6-erste` → **Ready 1417ms**, online. Health (localhost:6001): `/` 307 · `/login` 200 · `/creative-library` 307 · `/mcp` 401. Publikus host: `erste.messagingmatrix.ai/login` **200**.
+- ⚠️ **A `drizzle-kit` nem olvassa a `.env.local`-t** (lokálban `export $(grep '^DATABASE_URL=' .env.local)` kell a `db:migrate` elé); a boxon a `.env` miatt ez nem gond.
+
+**Nyitva (a useré):**
+- **A 600-as backfill élesben** — a mappalinkek listája kell hozzá: `ACTIVE_CLIENT_KEY=erste npx tsx scripts/drive-backfill.ts --file links.txt` (dry-run), majd `--apply`.
+- **Böngészős smoke:** feltöltő queue batch-mezője · kreatív-detail mappa/file link · toolbar „Drive link check" riportja · share-fejléc mappasora.
+- `docs/MM6_PURPOSE_STATE_CAPABILITIES.md` 9.1/9.7 még „I4 = terv kész, építésre vár"-t ír — frissítendő, ha a doksi tovább él.

@@ -19,8 +19,9 @@ import {
   Sun,
   Moon,
 } from "lucide-react";
-import { useEffect, useState, type ComponentType, type SVGProps } from "react";
+import { useState, type ComponentType, type SVGProps } from "react";
 import clsx from "clsx";
+import { useThemeSwitch } from "./useThemeSwitch";
 
 type NavUser = { email: string; role: string };
 type NavClient = { key: string; name: string };
@@ -55,43 +56,8 @@ export function Sidebar({ user, client, version, onOpenUsers, onOpenSettings }: 
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
-  // Light/dark toggle — per-browser, mirrors the existing mm6_theme mechanism
-  // (localStorage + a `.dark` class on <html>, set pre-hydration by the inline
-  // script in the root layout). Light/dark only; "system" is dropped. Init from
-  // the class the inline script already applied to avoid a hydration flash.
-  const [dark, setDark] = useState(false);
-  useEffect(() => {
-    setDark(document.documentElement.classList.contains("dark"));
-  }, []);
-  function setTheme(next: boolean, e?: React.MouseEvent) {
-    const apply = () => {
-      setDark(next);
-      document.documentElement.classList.toggle("dark", next);
-      try {
-        localStorage.setItem("mm6_theme", next ? "dark" : "light");
-      } catch {
-        // ignore storage failures
-      }
-    };
-    const root = document.documentElement;
-    // Concentric-circle reveal centred on the click point: the View Transitions
-    // API freezes the current page as a static snapshot and paints the new theme
-    // under a circle that grows from where you clicked to cover the viewport
-    // (see the ::view-transition rules + --theme-switch-x/y in globals.css).
-    if (e) {
-      root.style.setProperty("--theme-switch-x", `${e.clientX}px`);
-      root.style.setProperty("--theme-switch-y", `${e.clientY}px`);
-    }
-    const doc = document as Document & {
-      startViewTransition?: (cb: () => void) => unknown;
-    };
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (!reduce && typeof doc.startViewTransition === "function") {
-      doc.startViewTransition(apply);
-    } else {
-      apply();
-    }
-  }
+  // Light/dark toggle — shared with the public share page (useThemeSwitch).
+  const { dark, setTheme } = useThemeSwitch();
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });

@@ -22,6 +22,8 @@ import clsx from "clsx";
 import PublicMatrixPreview from "./PublicMatrixPreview";
 import ImagePreviewToggle from "./ImagePreviewToggle";
 import GoogleDriveIcon from "./GoogleDriveIcon";
+import ThemeToggle from "@/app/_components/ThemeToggle";
+import { bgClassFor, type PreviewBg } from "./preview-bg";
 import { Masonry } from "../../(app)/_components/Masonry";
 import ShareDetailDialog, {
   type DialogItem,
@@ -86,7 +88,6 @@ export type SnapshotFile = {
 };
 
 type ViewMode = "grid" | "list" | "masonry";
-export type PreviewBg = "light" | "dark" | "checker";
 
 type Item = DialogItem & { size: string | null };
 
@@ -102,23 +103,6 @@ type Props = {
 };
 
 const AUTHOR_NAME_KEY = "mm6_share_author_name";
-
-export function bgStyleFor(bg: PreviewBg): React.CSSProperties {
-  if (bg === "dark") return { backgroundColor: "#1f2937" };
-  if (bg === "checker") {
-    return {
-      backgroundColor: "#f9fafb",
-      backgroundImage:
-        "linear-gradient(45deg, #d1d5db 25%, transparent 25%), " +
-        "linear-gradient(-45deg, #d1d5db 25%, transparent 25%), " +
-        "linear-gradient(45deg, transparent 75%, #d1d5db 75%), " +
-        "linear-gradient(-45deg, transparent 75%, #d1d5db 75%)",
-      backgroundSize: "20px 20px",
-      backgroundPosition: "0 0, 0 10px, 10px -10px, -10px 0px",
-    };
-  }
-  return { backgroundColor: "#ffffff" };
-}
 
 export default function ShareGallery({
   shareId,
@@ -416,10 +400,18 @@ export default function ShareGallery({
             about it (how many comments it has collected, when it was captured). */}
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-2">
           <div className="share-gallery__brand flex shrink-0 items-center gap-2">
+            {/* Same pair the app sidebar uses — the dark mark is white, so it
+                survives the themed header background. */}
             <img
               src="/mmatrix.svg"
               alt="Messaging Matrix"
-              className="share-gallery__logo size-6"
+              className="share-gallery__logo size-6 dark:hidden"
+            />
+            <img
+              src="/mmatrix-dark.svg"
+              alt=""
+              aria-hidden
+              className="share-gallery__logo share-gallery__logo--dark hidden size-6 dark:block"
             />
             <span className="share-gallery__client-name text-sm font-semibold text-slate-900">
               {clientName}
@@ -476,6 +468,7 @@ export default function ShareGallery({
             Commented only
           </button>
           <div className="share-gallery__control-actions ml-auto flex flex-wrap items-center gap-2">
+            <ThemeToggle />
             <ViewSwitcher view={view} setView={setView} />
             {canImagePreview ? (
               <ImagePreviewToggle
@@ -1023,8 +1016,7 @@ function ItemCard({
       className="share-gallery__card creative-card cursor-pointer overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm transition hover:border-slate-400 hover:shadow-md"
     >
       <div
-        className="share-gallery__card-thumb creative-card__thumb relative aspect-[4/3]"
-        style={bgStyleFor(bg)}
+        className={`share-gallery__card-thumb creative-card__thumb relative aspect-[4/3] ${bgClassFor(bg)}`}
       >
         {item.kind === "matrix" && imageMode ? (
           <StoredPreview
@@ -1097,8 +1089,7 @@ function MasonryTile({
           onOpen();
         }
       }}
-      className="share-gallery__masonry-tile media-tile group block w-full cursor-pointer overflow-hidden rounded-md transition hover:ring-2 hover:ring-slate-300"
-      style={bgStyleFor(bg)}
+      className={`share-gallery__masonry-tile media-tile group block w-full cursor-pointer overflow-hidden rounded-md transition hover:ring-2 hover:ring-slate-300 ${bgClassFor(bg)}`}
     >
       {item.kind === "matrix" && imageMode ? (
         <StoredPreview
@@ -1155,8 +1146,7 @@ function ItemRow({
       className="share-gallery__row flex cursor-pointer items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 shadow-sm transition hover:border-slate-400 hover:shadow-md"
     >
       <div
-        className="share-gallery__row-thumb size-16 shrink-0 overflow-hidden rounded"
-        style={bgStyleFor(bg)}
+        className={`share-gallery__row-thumb size-16 shrink-0 overflow-hidden rounded ${bgClassFor(bg)}`}
       >
         {item.kind === "matrix" && imageMode ? (
           <StoredPreview

@@ -5,6 +5,33 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.56.0] — 2026-09-04
+
+### Added
+- **The share page carries the app's light/dark switch**, in front of the view
+  buttons, sharing the sidebar's state and its view-transition reveal — both now
+  run on one `useThemeSwitch` hook instead of two copies of the same logic. The
+  header logo swaps to the white mark in dark, as it does in the app.
+- The share footer prints the app version next to the client name.
+
+### Fixed
+- **The preview background follows the theme again.** The share views drew the
+  transparency checker as an inline style, a copy of the app's CSS that could
+  never react to dark mode; they use the app's `preview-viewport--*` classes
+  now, whose checker has a dark variant. Same fix in the detail dialog's stage.
+- The comment composer sat on `bg-slate-50/60`, an opacity variant the dark
+  compatibility layer does not map, so it stayed a pale block on a dark panel.
+- A skipped view transition (another one running, document not visible) no
+  longer surfaces as an uncaught `InvalidStateError`; the theme applied either
+  way, only the animation was lost.
+
+### Changed
+- The Drive icon is an outline in `currentColor` rather than the colour brand
+  mark, so it sits in a row of lucide icons without shouting over them.
+- In the detail dialog the delivery folder is a bordered "Google Drive" button
+  next to Download, matching the gallery, instead of an underlined text link
+  beside the filename.
+
 ## [6.55.0] — 2026-09-04
 
 ### Changed

@@ -867,8 +867,10 @@ A fejléc két sávra bomlott. Amit meglévő névből vettünk: `commented-only
 | --- | --- | --- |
 | Share tényei a fejléc jobb felső sarkában | `share-gallery__meta` | komment-szám + „captured" dátum; korábban külön alsó sorban élt |
 | Leírás sor (opcionális) | `share-gallery__description` | csak ha a share-nek van description-je |
+| Téma-kapcsoló (2026-09-04) | `theme-toggle` + `theme-toggle__btn` (`_components/ThemeToggle.tsx`) | a sidebar light/dark pilljének toolbar-méretű változata; közös állapot a `useThemeSwitch` hookon |
+| Verzió a láblécben (2026-09-04) | `share-gallery__version` | `Shared from … · MessagingMatrix v6.x.y` |
 | Drive-gomb a vezérlő sávban (2026-09-04) | `share-gallery__drive-btn` — több mappánál `share-gallery__drive` (wrapper) + `__drive-count` + `__drive-menu` / `__drive-menu-item` | a Download all UTÁN, borderes gomb Google Drive ikonnal (`GoogleDriveIcon.tsx`, mert a lucide nem szállít márkajelet); egy mappánál sima link, többnél dropdown, ami MC-szám szerint mondja meg, melyik mappában mi van |
-| Drive-mappa a detail-dialog fejlécében | `share-detail-dialog__drive` (+ `drive-links__link`) | egy kreatívnál a szülőmappa, a cím/méret/subtitle mellett |
+| Drive-mappa a detail-dialog fejlécében | `share-detail-dialog__drive` (+ `toolbar-btn`) | 2026-09-04: aláhúzott szövegből **borderes gomb** lett a Download mellett, ugyanazzal az outline Drive-ikonnal, mint a galéria |
 | Vezérlő sáv (2. sor) | `share-gallery__controls` | balra a szűrők, jobbra a `__control-actions` |
 | Jobb oldali vezérlő-csoport | `share-gallery__control-actions` | View + Image preview + Download all |
 | Image preview kapcsoló | `share-gallery__image-toggle` (+`--active`) | a `preview-pane__image-toggle` (MC editor) formája, slate palettán |

@@ -15,6 +15,8 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import ImagePreviewToggle from "./ImagePreviewToggle";
+import { bgClassFor, type PreviewBg } from "./preview-bg";
+import GoogleDriveIcon from "./GoogleDriveIcon";
 import AnnotationLayer, {
   type Annotation,
   type AnnotationMode,
@@ -22,7 +24,6 @@ import AnnotationLayer, {
 } from "./AnnotationLayer";
 import ModalBackdrop from "@/app/(app)/_components/ModalBackdrop";
 
-type PreviewBg = DialogPreviewBg;
 
 export type DialogItem =
   | {
@@ -85,7 +86,6 @@ export type ShareCommentRow = {
   createdAt: string;
 };
 
-export type DialogPreviewBg = "light" | "dark" | "checker";
 
 type Props = {
   shareId: string;
@@ -115,22 +115,6 @@ function parseSize(size: string): { w: number; h: number; landscape: boolean } {
   return { w, h, landscape: w > h };
 }
 
-function bgStyleFor(bg: PreviewBg): React.CSSProperties {
-  if (bg === "dark") return { backgroundColor: "#1f2937" };
-  if (bg === "checker") {
-    return {
-      backgroundColor: "#f9fafb",
-      backgroundImage:
-        "linear-gradient(45deg, #d1d5db 25%, transparent 25%), " +
-        "linear-gradient(-45deg, #d1d5db 25%, transparent 25%), " +
-        "linear-gradient(45deg, transparent 75%, #d1d5db 75%), " +
-        "linear-gradient(-45deg, transparent 75%, #d1d5db 75%)",
-      backgroundSize: "20px 20px",
-      backgroundPosition: "0 0, 0 10px, 10px -10px, -10px 0px",
-    };
-  }
-  return { backgroundColor: "#ffffff" };
-}
 
 function parseAnnotation(raw: string | null | undefined): Annotation | null {
   if (!raw) return null;
@@ -267,17 +251,6 @@ export default function ShareDetailDialog({
                 {subtitle}
               </span>
             ) : null}
-            {item.kind === "creative" && item.creative.driveFolderId ? (
-              <a
-                href={`https://drive.google.com/drive/folders/${item.creative.driveFolderId}`}
-                target="_blank"
-                rel="noreferrer"
-                className="share-detail-dialog__drive drive-links__link shrink-0 text-xs text-slate-500 underline hover:text-slate-900"
-                title="Open the delivery folder on Google Drive"
-              >
-                {item.creative.driveFolderName ?? "Drive folder"} ↗
-              </a>
-            ) : null}
           </div>
           <button
             onClick={navigateNext}
@@ -300,6 +273,18 @@ export default function ShareDetailDialog({
             ) : null}
             <BgToggle bg={bg} setBg={setBg} />
             <DownloadAction item={item} shareId={shareId} />
+            {item.kind === "creative" && item.creative.driveFolderId ? (
+              <a
+                href={`https://drive.google.com/drive/folders/${item.creative.driveFolderId}`}
+                target="_blank"
+                rel="noreferrer"
+                title={`Open ${item.creative.driveFolderName ?? "the delivery folder"} on Google Drive`}
+                className="share-detail-dialog__drive toolbar-btn inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
+              >
+                <GoogleDriveIcon className="size-3" />
+                Google Drive
+              </a>
+            ) : null}
             <button
               onClick={onClose}
               aria-label="Close"
@@ -313,8 +298,7 @@ export default function ShareDetailDialog({
         <div className="share-detail-dialog__body flex flex-1 overflow-hidden">
           <section className="share-detail-dialog__pane--preview flex flex-1 flex-col overflow-hidden bg-slate-50">
             <div
-              className="share-detail-dialog__preview-stage flex flex-1 items-center justify-center overflow-hidden p-4"
-              style={bgStyleFor(bg)}
+              className={`share-detail-dialog__preview-stage flex flex-1 items-center justify-center overflow-hidden p-4 ${bgClassFor(bg)}`}
             >
               <PreviewBody
                 item={item}
@@ -768,7 +752,7 @@ function CommentForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="comment-form shrink-0 space-y-2 border-t border-slate-200 bg-slate-50/60 px-3 py-3"
+      className="comment-form shrink-0 space-y-2 border-t border-slate-200 bg-slate-50 px-3 py-3"
     >
       <div className="comment-form__annotate flex flex-wrap items-center gap-1.5">
         <span className="comment-form__annotate-label text-[10px] uppercase tracking-wide text-slate-500">

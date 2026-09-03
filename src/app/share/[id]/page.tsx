@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { eq, sql } from "drizzle-orm";
 import { notFound } from "next/navigation";
+import pkg from "../../../../package.json";
 import { db } from "@/db";
 import { clients, creatives, messages, shareGalleries } from "@/db/schema";
 import {
@@ -95,7 +96,8 @@ export default async function SharePage({
         files={fileRows}
       />
       <footer className="share-gallery__footer mx-auto max-w-6xl px-6 py-4 text-center text-[11px] text-slate-400">
-        Shared from {client.name} · MessagingMatrix
+        Shared from {client.name} · MessagingMatrix{" "}
+        <span className="share-gallery__version font-mono">v{pkg.version}</span>
       </footer>
     </div>
   );

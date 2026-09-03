@@ -1572,3 +1572,17 @@ Tartalom: fogalom-szótár (MC / audience / topic / channel / DCO-nonDCO / PMMID
 - **A 600-as backfill élesben** — a mappalinkek listája kell hozzá: `ACTIVE_CLIENT_KEY=erste npx tsx scripts/drive-backfill.ts --file links.txt` (dry-run), majd `--apply`.
 - **Böngészős smoke:** feltöltő queue batch-mezője · kreatív-detail mappa/file link · toolbar „Drive link check" riportja · share-fejléc mappasora.
 - `docs/MM6_PURPOSE_STATE_CAPABILITIES.md` 9.1/9.7 még „I4 = terv kész, építésre vár"-t ír — frissítendő, ha a doksi tovább él.
+
+## 2026-09-03 (folytatás) — feltöltő UX + MC-parse: 6.54.0 + 6.54.1 (DEPLOYOLVA)
+
+**User élesben tesztelt, három lelet:** (1) „nagy ablakban nem megy a drag and drop" · (2) „kis ablakban nincs ott a bulk edit" · (3) „jó lenne ha át lehetne menni a kicsi ablakból a nagyba" · (4) „miért nem tudja kiolvasni az MC és variantot? hát tök világos a fájlnevekből" · (5) „drive check box mehet a show archived gomb alá alulra".
+
+- **(2) nem volt hiba:** a böngészőben még a `v6.51.0` bundle futott (a sidebar verziója árulta el); reload után ott a batch-mező. Tanulság: élő teszt előtt a sidebar verziószámát nézzük.
+- **(1) + (3) — a nagy ablak most a közös batch-ablak.** A Creative Library feltöltő gombja eddig az egyfájlos `UploadDialog`-ot nyitotta (nincs drop, nincs batch-mező), miközben az Assets oldalon **már létezett** a jó forma (táblázat + „Set for all" sor + drop). Ez lett közössé: `_components/BatchUploadDialog.tsx`, a `block` prop adja az osztálynév-prefixet (`asset-upload` / `creative-upload`), a **queue-t a hívó birtokolja** (`useUploadQueue`) — ezért tud a lebegő panel és a nagy ablak **ugyanarra a batch-re** nézni. A panel fejlécében új `upload-queue__expand` gomb nyitja a nagyot. Az egyfájlos dialógus + a `CreativeMetadataForm` **törölve** (elérhetetlen maradt volna).
+- **(4) nem a parser hibája: a szabályok nem kérték.** A `DEFAULT_CREATIVE_PARSING_RULES` csak brand/product/type-ot definiált — MC-re és variánsra soha nem volt szabály. Két pattern-szabály került be, **a teljes élő korpuszon ellenőrizve (3145 fájlnév)**: a szám 3145/3145-ben egyezik a DB-vel; a variáns **egyetlen kisbetűt** fogad (`MC\d+_([a-z])_`) → 3097 pontos egyezés, **0 rossz**, és a maradék 48 (ahol `va`/`vc`/`px`/`bg`/`c1` áll a helyén, a könyvtár pedig `a` variánsnak veszi) **üresen marad** — rossz előtöltés helyett a user tölti ki. A négy kliens tárolt configja (mind a szállított defaulton állt) helyben frissítve → **reload után azonnal él, deploy nélkül is**.
+- **(5)** A Drive link check a toolbar aljára, a Show archived alá került; a saját `px-3`-ja elhagyva (a `right-toolbar__body` már ad paddinget).
+
+**Verzió:** `6.53.0` → **`6.54.0`** (minor: új feltöltő-ablak, közös komponens, parse-szabályok) → **`6.54.1`** (patch: toolbar-sorrend). Unit suite 238 zöld, `tsc` tiszta, build sikeres.
+
+**DEPLOYOLVA (2026-09-03):** commit `ab8d2da` + `9f0…` (6.54.1), box `9cb2883`→`6.54.1`, build 38.2s, `pm2 restart` után `/login` 200 · `/creative-library` 307.
+

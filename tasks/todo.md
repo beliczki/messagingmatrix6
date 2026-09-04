@@ -1586,3 +1586,42 @@ Tartalom: fogalom-szótár (MC / audience / topic / channel / DCO-nonDCO / PMMID
 
 **DEPLOYOLVA (2026-09-03):** commit `ab8d2da` + `9f0…` (6.54.1), box `9cb2883`→`6.54.1`, build 38.2s, `pm2 restart` után `/login` 200 · `/creative-library` 307.
 
+
+## Checkpoint 2026-09-04 — `MM6_PURPOSE_STATE_CAPABILITIES.md` frissítve a 6.57.0 állapotra (docs-only)
+
+A user jelezte: **kész a Drive-integráció a leadási/preview-share ágon, most a brief-slide draft connection jön.** A doksi `6.39.0`-s állapotot írt, közben **18 minor** ment ki — nem csak a Drive-pontot frissítettem, hanem az egész doksit végigvittem. Most **536 sor**. (A `todo.md:1574` maga kérte ezt a frissítést.)
+
+**Amit átírtam:**
+- **Fejléc + 3. fejezet:** `6.39.0` → **`6.57.0`**, 613 → **749 teszt**. Új adatszámok: **635 MC 2 753 cellában** (a régi „~826 nonDCO MC" félrevezető volt — cella ≠ MC), ebből **688 nonDCO cella**, ~3 145 kreatív.
+- **Új 4.0 Dashboard szakasz** (I1 leszállt: nap-scope, termék-szűrő, Delivery + Matrix-coverage chartok, CTR-rendezésű kreatív-csík) — eddig nem is szerepelt a doksiban, pedig a sidebar kliens-nevéről elérhető.
+- **4.2 / 4.8 / 5. / 6. kiegészítve** a Drive-résszel (batch mappalink, health check hat kimenettel, share-fejléc distinct mappái, `drive_folder_url`/`drive_file_url`/`drive_folders` a meglévő MCP toolokon — **nem született új tool**).
+- **9.1 teljesen átírva:** „nulla Google-integráció" → **„a Drive-oldal kész (6.53.0), a Slides-oldal nincs"**. Bent maradt három tartós korlát: nincs Slides/Sheets API, nincs mappa-figyelés (a link **hivatkozás, nem ingest**), és a kulcsos hívás **nem adja vissza a `parents`-et** → csak mappa→fájl irány megy.
+- **9.4 + 11.2 átírva:** a kreatív-oldal kész, az MC↔Slides oldal az **FR-B**, aminek a `todo.md`-ben már konkrét lépéssora van (`documents` tábla soft-linkkel → `/api/documents/*` → MCP → vékony UI).
+- **9.7 táblázat:** I4 / I1 / I6 → ✅ szállítva. **A „az adat elavult" figyelmeztetés törölve** — a monitoring 2026 augusztusáig friss (20,1M megjelenés, +29%); helyette az maradt, hogy a **mátrixhoz kötött arány 35%** (júniusban 78% volt), mert a nem matrixolt publisher-sorok nőnek gyorsabban.
+- **10. táblázat:** 5. és 8b. → ✅; összegzés újraszámolva **18 sorból 11 ✅ / 2 🟡 / 5 ⛔** (a korábbi „11 lépésből 7" a részsorok miatt nem stimmelt).
+- **12. kérdéssor:** a „marad-e a Leadás mappa" kérdés **megválaszoltra** állítva, és bekerült egy új kérdés (approve-állapot a share-en vagy `messages.status`) — mert az FR-B state-kérdésével együtt kell eldönteni: **hol lakik a fázis**.
+
+**A doksi verdiktje most:** a folyamat leadási–megosztási fele kész; ami maradt (1. brief, 3. slide-link, 7. slides update, 11. task close) **két döntésre vezethető vissza** — hol él a brief-doksi linkje+státusza (FR-B), és hol él a munkadarab állapota (FR-C vs. `messages.status`).
+
+**Brain:** a mostani frissítés **még nem ment be** thoughtként — a 2026-09-03-i `6da7f5d6` thought a `6.39.0` állapotot írja le, tehát a Drive-részben elavult. Eldöntendő: új thought a friss állapotról (a régit ELAVULT-ra címkézve, ahogy az `5de4bb33`-mal tettük), vagy megvárjuk a workflow-tervet és egyben megy be a kettő.
+
+---
+
+## 2026-09-04 — Dashboard: a szűrők megjegyzése — 6.58.0
+
+**User:** „a dashboard meg kéne jegyezze a filterek beállítását, legutóbbi date filter, product filter".
+
+**Szállítva:** `src/lib/dashboard-view.ts` (kodek + `viewHref`), `_dashboard/RememberView.tsx` (süti-író kliens), és a `page.tsx`-ben a csupasz `/` → tárolt nézet redirect.
+
+**Két döntés, amit meg kellett hozni:**
+- **Süti, nem localStorage.** A dashboard szándékosan server component, az állapota az URL — az olvasó tehát a szerver. localStorage-dzsel az alapértelmezett dashboard felvillanna, majd kliensoldalról írná át magát.
+- **A PILL-t jegyzi meg, nem a dátumot.** A „Yesterday" mindig a mostani naphoz képesti tegnapot jelenti, a nyilakkal elnavigált tetszőleges nap pedig sima „today"-ként jön vissza. Egy hét múlva egy befagyasztott dátumra nyíló, üres dashboard nem preferenciának, hanem üzemzavarnak látszana.
+- **Explicit paraméter mindig nyer** a megjegyzett nézet fölött (megosztott link is), és az alapértelmezett nézetért nem redirectelünk.
+
+**Ellenőrizve böngészőben, lokális prod buildben, öt eset:** (1) friss csupasz `/` → nincs redirect; (2) nézetválasztás → süti `r=30d&back=0&p=SZK&cs=ctr`; (3) csupasz `/` → `?d=2026-09-04&r=30d&p=SZK&cs=ctr`, az aktív pill „Last 30 days"; (4) explicit link felülírja; (5) „Yesterday" → `?d=2026-09-03&r=day` a mai naphoz képest.
+
+**Teszt:** új `tests/unit/dashboard-view.test.ts` (6 — oda-vissza kódolás, Yesterday-pill, ismeretlen süti visszautasítása, mai naphoz horgonyzás, product+sort az URL-ben, alapértelmezett felismerése). Suite **758/758 zöld**. Build sikeres.
+
+**⚠️ Megjegyzés a session-hez:** ez a szelet a **6.57.0**-ra ült rá — a 6.53–6.57 más sessionökben készült (share phone layout, Drive ikonok, creative-library fixek), a teszt-szám időközben 706 → 752-re nőtt. A saját változtatásom konfliktus nélkül alkalmazható volt.
+
+**Verzió:** `6.57.0` → **`6.58.0`** (minor). Séma-migráció nincs. **Deploy még nem történt.**

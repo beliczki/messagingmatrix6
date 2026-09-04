@@ -5,6 +5,21 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.58.0] — 2026-09-04
+
+### Added
+- **The dashboard remembers the view you left it in** — the date scope, the
+  product filter and the creative-strip ordering. Opening `/` with no
+  parameters restores it; any explicit parameter, including a link someone
+  shared, still wins.
+  - It remembers the **chosen pill, not a frozen date**: "Yesterday" comes back
+    as yesterday-relative-to-now, and a day reached with the arrows comes back
+    as plain today. Restoring the dashboard onto a stale, empty day would read
+    as an outage rather than as a preference.
+  - Stored in a cookie rather than localStorage because the reader is the server
+    component itself — the alternative is a flash of the default dashboard
+    followed by a client-side rewrite.
+
 ## [6.57.0] — 2026-09-04
 
 ### Added

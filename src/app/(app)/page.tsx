@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import {
@@ -46,10 +47,18 @@ import {
 import { libraryCounts, productInventory } from "@/lib/dashboard-products";
 import { shareItemCount } from "@/lib/share-metadata";
 import { compactNumber, monthlyDelivery } from "@/lib/dashboard-monitoring";
+import {
+  DASHBOARD_VIEW_COOKIE,
+  decodeView,
+  encodeView,
+  isDefaultView,
+  viewHref,
+} from "@/lib/dashboard-view";
 import CoverageTile from "./_dashboard/CoverageTile";
 import CreativeStrip from "./_dashboard/CreativeStrip";
 import DeliveryTrend from "./_dashboard/DeliveryTrend";
 import ProductFilter from "./_dashboard/ProductFilter";
+import RememberView from "./_dashboard/RememberView";
 
 export const dynamic = "force-dynamic";
 
@@ -182,6 +191,18 @@ export default async function Dashboard({
   if (!claims) redirect("/login");
 
   const sp = await searchParams;
+
+  // A bare `/` restores the last view the user chose here. Only a bare one:
+  // any explicit parameter — including a link someone shared — wins over the
+  // remembered view, and a remembered default is not worth a redirect.
+  const bare = !sp.d && !sp.r && !sp.p && !sp.cs;
+  if (bare) {
+    const stored = decodeView(
+      (await cookies()).get(DASHBOARD_VIEW_COOKIE)?.value,
+    );
+    if (stored && !isDefaultView(stored)) redirect(viewHref(stored));
+  }
+
   const scope = resolveDayScope(sp.d, sp.r);
   const creativeSort: StripSort = sp.cs === "ctr" ? "ctr" : "time";
   const products = (sp.p ?? "")
@@ -220,8 +241,18 @@ export default async function Dashboard({
   const events = digest.reduce((s, r) => s + r.n, 0);
   const unpublished = feeds.filter((f) => f.uploadedToAdformAt === null).length;
 
+  // What a bare `/` will restore next time. The anchor is stored as "today or
+  // yesterday" rather than as a date — see `dashboard-view.ts`.
+  const rememberedView = encodeView({
+    range: scope.range,
+    back: scope.range === "day" && scope.date === shiftDay(todayUtc(), -1) ? 1 : 0,
+    products,
+    sort: creativeSort,
+  });
+
   return (
     <div className="dashboard flex h-full flex-col">
+      <RememberView value={rememberedView} />
       {/* Same sticky toolbar every other screen opens with — title, then the
           filters, then a count on the right. The client is named in the
           sidebar on every screen, so repeating it here cost a heading's worth

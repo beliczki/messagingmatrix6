@@ -21,7 +21,7 @@ import {
 import clsx from "clsx";
 import PublicMatrixPreview from "./PublicMatrixPreview";
 import ImagePreviewToggle from "./ImagePreviewToggle";
-import GoogleDriveIcon from "./GoogleDriveIcon";
+import GoogleDriveIcon from "@/app/_components/GoogleDriveIcon";
 import ThemeToggle from "@/app/_components/ThemeToggle";
 import { bgClassFor, type PreviewBg } from "./preview-bg";
 import { Masonry } from "../../(app)/_components/Masonry";

@@ -867,6 +867,7 @@ A fejléc két sávra bomlott. Amit meglévő névből vettünk: `commented-only
 | --- | --- | --- |
 | Share tényei a fejléc jobb felső sarkában | `share-gallery__meta` | komment-szám + „captured" dátum; korábban külön alsó sorban élt |
 | Leírás sor (opcionális) | `share-gallery__description` | csak ha a share-nek van description-je |
+| Drive ikon (globális, 2026-09-04) | `_components/GoogleDriveIcon.tsx` | a user rajzolta outline mark (`public/google-drive-lucide-outline.svg`) inline-olva, `currentColor` stroke — a share Drive-gombjai és a Creative Library Drive-vezérlői is ezt használják |
 | Téma-kapcsoló (2026-09-04) | `theme-toggle` + `theme-toggle__btn` (`_components/ThemeToggle.tsx`) | a sidebar light/dark pilljének toolbar-méretű változata; közös állapot a `useThemeSwitch` hookon |
 | Verzió a láblécben (2026-09-04) | `share-gallery__version` | `Shared from … · MessagingMatrix v6.x.y` |
 | Drive-gomb a vezérlő sávban (2026-09-04) | `share-gallery__drive-btn` — több mappánál `share-gallery__drive` (wrapper) + `__drive-count` + `__drive-menu` / `__drive-menu-item` | a Download all UTÁN, borderes gomb Google Drive ikonnal (`GoogleDriveIcon.tsx`, mert a lucide nem szállít márkajelet); egy mappánál sima link, többnél dropdown, ami MC-szám szerint mondja meg, melyik mappában mi van |

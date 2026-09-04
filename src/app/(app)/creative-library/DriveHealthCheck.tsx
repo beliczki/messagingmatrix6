@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { FolderSearch, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import GoogleDriveIcon from "@/app/_components/GoogleDriveIcon";
 import clsx from "clsx";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -97,7 +98,7 @@ export default function DriveHealthCheck({
         {running ? (
           <Loader2 className="size-4 animate-spin" />
         ) : (
-          <FolderSearch className="size-4" />
+          <GoogleDriveIcon className="size-4" />
         )}
       </button>
     );
@@ -118,7 +119,7 @@ export default function DriveHealthCheck({
         {running ? (
           <Loader2 className="size-3.5 animate-spin" />
         ) : (
-          <FolderSearch className="size-3.5" />
+          <GoogleDriveIcon className="size-3.5" />
         )}
         Drive link check
         <span className="drive-health__scope ml-auto text-[10px] text-slate-400">

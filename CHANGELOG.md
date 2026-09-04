@@ -5,6 +5,14 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.56.1] — 2026-09-04
+
+### Changed
+- The Drive glyph now uses the outline mark drawn for it
+  (`public/google-drive-lucide-outline.svg`), inlined so it takes the button's
+  colour. One component for both surfaces: the share page's Drive buttons and
+  the Creative Library's Drive link check and folder link.
+
 ## [6.56.0] — 2026-09-04
 
 ### Added

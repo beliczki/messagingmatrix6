@@ -16,7 +16,7 @@ import {
 import clsx from "clsx";
 import ImagePreviewToggle from "./ImagePreviewToggle";
 import { bgClassFor, type PreviewBg } from "./preview-bg";
-import GoogleDriveIcon from "./GoogleDriveIcon";
+import GoogleDriveIcon from "@/app/_components/GoogleDriveIcon";
 import AnnotationLayer, {
   type Annotation,
   type AnnotationMode,

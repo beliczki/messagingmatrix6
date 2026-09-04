@@ -11,6 +11,7 @@ import {
   driveFolderUrl,
   parseDriveFolderId,
 } from "@/lib/drive-link";
+import GoogleDriveIcon from "@/app/_components/GoogleDriveIcon";
 
 type Creative = {
   id: number;
@@ -247,9 +248,10 @@ function DriveLinks({ creative }: { creative: Creative }) {
         href={folder}
         target="_blank"
         rel="noreferrer"
-        className="drive-links__link text-slate-600 underline hover:text-slate-900"
+        className="drive-links__link inline-flex items-center gap-1 text-slate-600 underline hover:text-slate-900"
       >
-        {creative.driveFolderName ?? "Open folder"} ↗
+        <GoogleDriveIcon className="size-3" />
+        {creative.driveFolderName ?? "Open folder"}
       </a>
       {fileHref ? (
         <a

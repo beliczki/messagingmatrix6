@@ -5,6 +5,12 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.56.2] — 2026-09-04
+
+### Changed
+- Drive icon: heavier stroke and the redrawn geometry, in step with
+  `public/google-drive-lucide-outline.svg`.
+
 ## [6.56.1] — 2026-09-04
 
 ### Changed

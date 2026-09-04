@@ -5,6 +5,18 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.57.0] — 2026-09-04
+
+### Added
+- **The share page has a phone layout.** The header stacks: a larger logo and
+  client name, then the share title on its own line at its own size (the
+  "/ Shared Creatives /" crumbs are chrome a small screen can do without), then
+  the comment count and capture date left-aligned under it. The filter controls
+  grew to a comfortable tap size, and the right-hand action row — download,
+  Drive, view, image preview, theme — collapses into one "Actions" menu whose
+  rows are full width and say what they do, grouped under section labels.
+  Nothing changes above the `sm` breakpoint.
+
 ## [6.56.2] — 2026-09-04
 
 ### Changed

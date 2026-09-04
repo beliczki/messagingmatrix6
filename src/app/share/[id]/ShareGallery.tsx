@@ -23,6 +23,7 @@ import PublicMatrixPreview from "./PublicMatrixPreview";
 import ImagePreviewToggle from "./ImagePreviewToggle";
 import GoogleDriveIcon from "@/app/_components/GoogleDriveIcon";
 import ThemeToggle from "@/app/_components/ThemeToggle";
+import ShareActionsMenu from "./ShareActionsMenu";
 import { bgClassFor, type PreviewBg } from "./preview-bg";
 import { Masonry } from "../../(app)/_components/Masonry";
 import ShareDetailDialog, {
@@ -398,34 +399,40 @@ export default function ShareGallery({
       <header className="share-gallery__header sticky top-0 z-20 border-b border-slate-200 bg-white">
         {/* Row 1 — what this share IS: identity, plus the two read-only facts
             about it (how many comments it has collected, when it was captured). */}
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-2">
+        <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
           <div className="share-gallery__brand flex shrink-0 items-center gap-2">
             {/* Same pair the app sidebar uses — the dark mark is white, so it
                 survives the themed header background. */}
             <img
               src="/mmatrix.svg"
               alt="Messaging Matrix"
-              className="share-gallery__logo size-6 dark:hidden"
+              className="share-gallery__logo size-8 dark:hidden sm:size-6"
             />
             <img
               src="/mmatrix-dark.svg"
               alt=""
               aria-hidden
-              className="share-gallery__logo share-gallery__logo--dark hidden size-6 dark:block"
+              className="share-gallery__logo share-gallery__logo--dark hidden size-8 dark:block sm:size-6"
             />
-            <span className="share-gallery__client-name text-sm font-semibold text-slate-900">
+            <span className="share-gallery__client-name text-base font-semibold text-slate-900 sm:text-sm">
               {clientName}
             </span>
           </div>
+          {/* On a phone the title gets its own line and its own size; the
+              "/ Shared Creatives /" crumbs are chrome the small screen can do
+              without. */}
           <div className="share-gallery__breadcrumb flex min-w-0 items-baseline gap-1.5 text-sm">
-            <span className="text-slate-400">/</span>
-            <span className="text-slate-500">Shared Creatives</span>
-            <span className="text-slate-400">/</span>
-            <span className="truncate font-semibold text-slate-900" title={shareTitle ?? undefined}>
+            <span className="hidden text-slate-400 sm:inline">/</span>
+            <span className="hidden text-slate-500 sm:inline">Shared Creatives</span>
+            <span className="hidden text-slate-400 sm:inline">/</span>
+            <span
+              className="truncate text-lg font-semibold text-slate-900 sm:text-sm"
+              title={shareTitle ?? undefined}
+            >
               {shareTitle ?? "Untitled share"}
             </span>
           </div>
-          <div className="share-gallery__meta ml-auto flex shrink-0 items-center gap-2 text-[11px] text-slate-500">
+          <div className="share-gallery__meta flex shrink-0 items-center gap-2 text-[11px] text-slate-500 sm:ml-auto">
             {commentsLoaded ? (
               <span className="inline-flex items-center gap-1">
                 <MessageSquare className="size-3" />
@@ -458,7 +465,7 @@ export default function ShareGallery({
             onClick={() => setCommentedOnly((v) => !v)}
             title={commentedOnly ? "Show all items" : "Show only commented items"}
             className={clsx(
-              "commented-only-toggle inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs font-medium transition",
+              "commented-only-toggle inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition sm:px-2 sm:py-1 sm:text-xs",
               commentedOnly
                 ? "border-slate-900 bg-slate-900 text-white"
                 : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
@@ -467,7 +474,22 @@ export default function ShareGallery({
             <MessageSquare className="size-3.5" />
             Commented only
           </button>
-          <div className="share-gallery__control-actions ml-auto flex flex-wrap items-center gap-2">
+          <ShareActionsMenu
+            className="share-gallery__control-menu ml-auto sm:hidden"
+            view={view}
+            setView={setView}
+            imagePreview={imagePreview}
+            setImagePreview={setImagePreview}
+            canImagePreview={canImagePreview}
+            imageReadyCount={imageReady.length}
+            totalCount={filtered.length}
+            downloadCount={downloadTargets.length}
+            zipping={zipping}
+            zipProgress={zipProgress}
+            onDownloadAll={downloadAll}
+            driveFolders={driveFolders}
+          />
+          <div className="share-gallery__control-actions ml-auto hidden flex-wrap items-center gap-2 sm:flex">
             <ThemeToggle />
             <ViewSwitcher view={view} setView={setView} />
             {canImagePreview ? (
@@ -761,11 +783,11 @@ function SizePill({
   }, [open]);
   if (options.length === 0) return null;
   return (
-    <div ref={ref} className="multi-pill relative text-xs">
+    <div ref={ref} className="multi-pill relative text-sm sm:text-xs">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="multi-pill__button flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-700 hover:bg-slate-50"
+        className="multi-pill__button flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-slate-700 hover:bg-slate-50 sm:px-2 sm:py-1"
       >
         <span>Size</span>
         {values.size > 0 ? (

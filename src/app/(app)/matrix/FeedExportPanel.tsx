@@ -230,8 +230,6 @@ export default function FeedExportPanel({
         product={product!}
         messages={filteredMessages}
         messageIds={filteredIds}
-        audiences={audiences}
-        topics={topics}
       />
     </>
   );

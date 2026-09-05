@@ -5,6 +5,14 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.61.1] — 2026-09-05
+
+### Removed
+- **The feed-rows block is out of the export dialog.** Putting the table there
+  cramped the export's own setup, and the dialog is not the place to browse
+  rows — it is the place to decide what goes out. The preview lives outside it,
+  on the toolbar panel's `Preview feed rows` checkbox, and only there.
+
 ## [6.61.0] — 2026-09-05
 
 ### Added

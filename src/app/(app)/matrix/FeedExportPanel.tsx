@@ -1,12 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import clsx from "clsx";
 import Link from "next/link";
-import { Download, AlertTriangle } from "lucide-react";
-import AppDialog from "../_components/AppDialog";
-import FeedView from "./FeedView";
+import { Download, AlertTriangle, Check } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { type Audience, type Filters, type Message, type Topic } from "./types";
+import { type Filters, type Message } from "./types";
 import FeedExportDialog from "./FeedExportDialog";
 
 
@@ -35,13 +34,14 @@ const SERVING_STATUSES = new Set(["ACTIVE", "INACTIVE"]);
 export default function FeedExportPanel({
   filters,
   filteredMessages,
-  audiences,
-  topics,
+  feedPreview,
+  onFeedPreviewChange,
 }: {
   filters: Filters;
   filteredMessages: Message[];
-  audiences: Audience[];
-  topics: Topic[];
+  /** Whether the matrix canvas is showing the feed table instead of a view. */
+  feedPreview: boolean;
+  onFeedPreviewChange: (on: boolean) => void;
 }) {
   const products = [...filters.products];
   const statuses = [...filters.statuses];
@@ -63,7 +63,6 @@ export default function FeedExportPanel({
   });
 
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
 
   const liveExport = useMemo(() => {
     if (!historyQ.data) return null;
@@ -162,19 +161,34 @@ export default function FeedExportPanel({
           </div>
         )}
 
-        {/* Preview before committing to the export flow: this is where the
-            retired Feed view lives now — what the feed currently holds for this
-            selection, in the feed's own columns. */}
-        <label className="feed-export-panel__preview-toggle mt-3 flex cursor-pointer items-center gap-2 text-[11px] font-medium text-slate-700">
-          <input
-            type="checkbox"
-            checked={previewOpen}
-            onChange={(e) => setPreviewOpen(e.target.checked)}
-            disabled={filteredMessages.length === 0}
-            className="form-field__checkbox size-3.5 accent-slate-900"
-          />
+        {/* Preview before committing to the export flow: what the feed holds
+            for this selection, in the feed's own columns. It takes over the
+            matrix canvas rather than opening a dialog, so a row click can still
+            open that MC in the editor — a table inside a dialog cannot. */}
+        <button
+          type="button"
+          onClick={() => onFeedPreviewChange(!feedPreview)}
+          disabled={filteredMessages.length === 0}
+          title="Show the feed rows on the canvas instead of the current view"
+          className={clsx(
+            "feed-export-panel__preview-toggle mt-3 flex w-full items-center gap-1.5 rounded border px-2 py-1 text-xs disabled:opacity-50",
+            feedPreview
+              ? "feed-export-panel__preview-toggle--active border-text-primary bg-text-primary text-background"
+              : "border-border bg-surface text-text-primary hover:bg-surface-alt",
+          )}
+        >
+          <span
+            className={clsx(
+              "flex size-3.5 items-center justify-center rounded-sm border",
+              feedPreview
+                ? "border-background bg-background text-text-primary"
+                : "border-border-subtle",
+            )}
+          >
+            {feedPreview && <Check className="size-2.5" strokeWidth={3} />}
+          </span>
           Preview feed rows
-        </label>
+        </button>
 
         <button
           type="button"
@@ -197,32 +211,6 @@ export default function FeedExportPanel({
           </div>
         ) : null}
       </div>
-
-      <AppDialog
-        open={previewOpen}
-        onClose={() => setPreviewOpen(false)}
-        ariaLabel="Feed rows preview"
-      >
-        <div className="feed-preview-dialog flex h-full flex-col overflow-hidden">
-          <header className="feed-preview-dialog__header border-b border-slate-200 px-6 py-4 pr-14">
-            <h2 className="text-base font-semibold text-slate-900">
-              Feed rows · <span className="font-mono text-sm">{product}</span>
-            </h2>
-            <p className="feed-preview-dialog__hint mt-0.5 text-xs text-slate-500">
-              All {filteredMessages.length} row
-              {filteredMessages.length === 1 ? "" : "s"} of this selection, in the
-              feed&apos;s own columns. Nothing is exported from here.
-            </p>
-          </header>
-          <div className="feed-preview-dialog__body flex-1 overflow-hidden">
-            <FeedView
-              messages={filteredMessages}
-              audiences={audiences}
-              topics={topics}
-            />
-          </div>
-        </div>
-      </AppDialog>
 
       <FeedExportDialog
         open={dialogOpen}

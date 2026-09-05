@@ -8,6 +8,9 @@ import clsx from "clsx";import { trimEmptyCountSegments } from "@/lib/count-segm
 import { ReactFlowProvider } from "@xyflow/react";
 import GridView from "./GridView";
 import SankeyView from "./_views/SankeyView";
+import SankeyMetricPanel from "./_views/SankeyMetricPanel";
+import type { SankeyMetric } from "./_tree/buildSankey";
+import FeedView from "./FeedView";
 import TreeView from "./_views/TreeView";
 import TreeViewNavigator, {
   TreeViewNavigatorControls,
@@ -148,6 +151,38 @@ function loadPersisted(): Partial<PersistedState> {
 
 export default function MatrixWorkspace() {
   const [view, setView] = useState<View>("grid");
+  // The feed table takes over the canvas instead of opening in a dialog — a
+  // table inside a dialog cannot open a row's MC without stacking a second
+  // dialog on top. Transient on purpose: it is a look at the export, not a view.
+  const [feedPreview, setFeedPreview] = useState(false);
+  // What the sankey's ribbon widths mean, and which report period the delivery
+  // metrics come from. Owned here because the switch lives in the RightToolbar
+  // while the weighting is applied on the canvas.
+  const [metric, setMetric] = useState<SankeyMetric>("messages");
+  const [metricPeriod, setMetricPeriod] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("mm6_sankey_metric");
+      if (v === "messages" || v === "impressions" || v === "cost") setMetric(v);
+      setMetricPeriod(localStorage.getItem("mm6_sankey_period"));
+    } catch {}
+  }, []);
+
+  const chooseMetric = useCallback((m: SankeyMetric) => {
+    setMetric(m);
+    try {
+      localStorage.setItem("mm6_sankey_metric", m);
+    } catch {}
+  }, []);
+
+  const choosePeriod = useCallback((p: string | null) => {
+    setMetricPeriod(p);
+    try {
+      if (p === null) localStorage.removeItem("mm6_sankey_period");
+      else localStorage.setItem("mm6_sankey_period", p);
+    } catch {}
+  }, []);
   const [density, setDensity] = useState<Density>("detailed");
   const [transposed, setTransposed] = useState<boolean>(true);
   const [hideInactive, setHideInactive] = useState<boolean>(false);
@@ -987,7 +1022,14 @@ export default function MatrixWorkspace() {
         />
 
         <div className="relative flex-1 overflow-hidden">
-          {view === "grid" ? (
+          {feedPreview ? (
+            <FeedView
+              messages={feedExportMessages}
+              audiences={audiences}
+              topics={topics}
+              onOpenMessage={(id) => setOpenMessageId(id)}
+            />
+          ) : view === "grid" ? (
             <GridView
               audiences={filtered.auds}
               topics={filtered.tops}
@@ -1043,6 +1085,8 @@ export default function MatrixWorkspace() {
               topics={filtered.tops}
               messages={filtered.msgs}
               onOpenMessage={(id) => setOpenMessageId(id)}
+              metric={metric}
+              metricPeriod={metricPeriod}
             />
           )}
         </div>
@@ -1059,7 +1103,10 @@ export default function MatrixWorkspace() {
                   { value: "tree", icon: <GitFork className="size-4" />, label: "Decision tree view" },
                 ]}
                 value={view}
-                onChange={setView}
+                onChange={(v) => {
+                  setFeedPreview(false);
+                  setView(v);
+                }}
               />
               {view === "grid" ? (
                 <CycleIconButton
@@ -1102,7 +1149,10 @@ export default function MatrixWorkspace() {
             <div className="flex h-full flex-col gap-3">
               <ViewControls
                 view={view}
-                setView={setView}
+                setView={(v) => {
+                  setFeedPreview(false);
+                  setView(v);
+                }}
                 density={density}
                 setDensity={setDensity}
               />
@@ -1130,8 +1180,16 @@ export default function MatrixWorkspace() {
                 <ExportPanel
                   filters={filters}
                   filteredMessages={feedExportMessages}
-                  audiences={audiences}
-                  topics={topics}
+                  feedPreview={feedPreview}
+                  onFeedPreviewChange={setFeedPreview}
+                />
+              ) : null}
+              {view === "sankey" ? (
+                <SankeyMetricPanel
+                  metric={metric}
+                  setMetric={chooseMetric}
+                  period={metricPeriod}
+                  setPeriod={choosePeriod}
                 />
               ) : null}
               {view === "tree" || view === "sankey" ? <TreeViewNavigator /> : null}

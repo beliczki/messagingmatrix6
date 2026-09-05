@@ -27,8 +27,11 @@ import {
   buildSankeyData,
   layoutSankey,
   SANKEY_NODE_WIDTH,
+  type MetricRows,
+  type SankeyMetric,
   type SankeyNodeDatum,
 } from "../_tree/buildSankey";
+import { formatMetric, useMessageMetrics } from "./useMessageMetrics";
 import {
   platformToken,
   STATUS_COLOR,
@@ -111,7 +114,8 @@ const HighlightContext = createContext<{
 
 type SankeyNodeData = {
   label: string;
-  count: number;
+  /** Already formatted for the active metric — the node pill shows it as-is. */
+  countLabel: string;
   messageId?: number;
   expandLevel?: number;
   onOpenMessage: (id: number) => void;
@@ -163,8 +167,8 @@ function SankeyNodeBox({ id, data }: NodeProps) {
         className="sankey-view__pill"
         title={
           expandTarget !== undefined
-            ? `${d.label} — ${d.count} · click to show all`
-            : `${d.label} — ${d.count}`
+            ? `${d.label} — ${d.countLabel} · click to show all`
+            : `${d.label} — ${d.countLabel}`
         }
         role={clickable ? "button" : undefined}
         tabIndex={clickable ? 0 : undefined}
@@ -186,7 +190,7 @@ function SankeyNodeBox({ id, data }: NodeProps) {
           </span>
         ) : null}
         <span className="sankey-view__label">{d.label}</span>
-        <span className="sankey-view__count">{d.count}</span>
+        <span className="sankey-view__count">{d.countLabel}</span>
       </span>
       <Handle
         type="source"
@@ -237,6 +241,10 @@ type SankeyViewProps = {
   topics: Topic[];
   messages: Message[];
   onOpenMessage: (id: number) => void;
+  /** What the ribbon widths mean; chosen in the RightToolbar. */
+  metric: SankeyMetric;
+  /** Report period the delivery metrics come from. */
+  metricPeriod: string | null;
 };
 
 // The sankey shares the ReactFlowProvider that MatrixGrid puts around the whole
@@ -247,6 +255,8 @@ export default function SankeyView({
   topics,
   messages,
   onOpenMessage,
+  metric,
+  metricPeriod,
 }: SankeyViewProps) {
   const isDark = useIsDarkMode();
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -285,15 +295,35 @@ export default function SankeyView({
     }
   }, [treeStructureQ.data]);
 
-  const graph = useMemo(() => {
+  const metricsQ = useMessageMetrics(metricPeriod, metric !== "messages");
+  const metricRows = useMemo<MetricRows | undefined>(() => {
+    if (metric === "messages" || !metricsQ.data) return undefined;
+    return new Map(
+      metricsQ.data.rows.map((r) => [
+        r.messageId,
+        {
+          impressions: r.impressions,
+          cost: r.cost,
+          conversions: r.conversions,
+        },
+      ]),
+    );
+  }, [metric, metricsQ.data]);
+
+  const { graph, metricIsEmpty } = useMemo(() => {
     const folded = buildSankeyData(
       { auds: audiences, tops: topics, msgs: messages },
       parsed.levels,
       COLUMN_CAP,
       expanded,
+      metric,
+      metricRows,
     );
-    return layoutSankey(folded.nodes, folded.links);
-  }, [audiences, topics, messages, parsed.levels, expanded]);
+    return {
+      graph: layoutSankey(folded.nodes, folded.links),
+      metricIsEmpty: folded.metricIsEmpty,
+    };
+  }, [audiences, topics, messages, parsed.levels, expanded, metric, metricRows]);
 
   const nodeById = useMemo(
     () => new Map(graph.nodes.map((n) => [n.id, n])),
@@ -402,7 +432,7 @@ export default function SankeyView({
             : `sankey-view__node-wrap--lvl-${n.level % LEVEL_COLOR_CYCLE}`;
         const data: SankeyNodeData = {
           label: n.label,
-          count: n.count,
+          countLabel: formatMetric(n.count, metric, true),
           onOpenMessage,
           onToggleExpand: toggleExpand,
         };
@@ -420,7 +450,7 @@ export default function SankeyView({
           data: data as unknown as Record<string, unknown>,
         };
       }),
-    [graph.nodes, onOpenMessage, toggleExpand],
+    [graph.nodes, onOpenMessage, toggleExpand, metric],
   );
 
   const rfEdges = useMemo<Edge[]>(
@@ -454,7 +484,15 @@ export default function SankeyView({
     if (hover.kind === "node") {
       const n = nodeById.get(hover.id);
       if (!n) return null;
-      return { title: n.label, value: n.count, statuses: n.statusCounts };
+      return {
+        title: n.label,
+        value: formatMetric(n.count, metric),
+        messages: n.messageCount,
+        // Shown even at zero, on purpose: a blank would read as "no data" when
+        // it means "nothing converted", and the two are not the same answer.
+        conversions: metric === "messages" ? null : n.conversions,
+        statuses: n.statusCounts,
+      };
     }
     const l = graph.links.find((x) => x.id === hover.id);
     if (!l) return null;
@@ -462,10 +500,12 @@ export default function SankeyView({
     const t = nodeById.get(idOf(l.target));
     return {
       title: `${s?.label ?? "?"} → ${t?.label ?? "?"}`,
-      value: l.value,
+      value: formatMetric(l.value, metric),
+      messages: null,
+      conversions: null,
       statuses: null,
     };
-  }, [hover, nodeById, graph.links]);
+  }, [hover, nodeById, graph.links, metric]);
 
   if (treeStructureQ.isLoading) {
     return (
@@ -488,6 +528,23 @@ export default function SankeyView({
           <p className="empty-state__hint mt-3 text-xs text-slate-500">
             The sankey reads the same string as the tree. Edit it in{" "}
             <strong>Settings → Structure → Decision tree structure</strong>.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (metricIsEmpty) {
+    return (
+      <div className="sankey-view sankey-view--empty flex h-full items-center justify-center p-8">
+        <div className="empty-state max-w-md rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
+          <h2 className="empty-state__title text-base font-semibold text-slate-900">
+            Nothing delivered here
+          </h2>
+          <p className="empty-state__hint mt-1 text-sm text-slate-500">
+            No {metric === "cost" ? "cost" : "impressions"} in the selected
+            report period could be tied to any message in this filter. The
+            structure is still there — switch the weight back to MC to see it.
           </p>
         </div>
       </div>
@@ -539,8 +596,22 @@ export default function SankeyView({
         >
           <div className="sankey-view__tooltip-title">{tooltip.title}</div>
           <div className="sankey-view__tooltip-value">
-            {tooltip.value} message{tooltip.value === 1 ? "" : "s"}
+            {tooltip.value}
+            {metric === "messages"
+              ? ` message${tooltip.value === "1" ? "" : "s"}`
+              : ""}
           </div>
+          {tooltip.messages !== null && metric !== "messages" ? (
+            <div className="sankey-view__tooltip-value">
+              {tooltip.messages} message{tooltip.messages === 1 ? "" : "s"}
+            </div>
+          ) : null}
+          {tooltip.conversions !== null ? (
+            <div className="sankey-view__tooltip-value">
+              {tooltip.conversions} conversion
+              {tooltip.conversions === 1 ? "" : "s"}
+            </div>
+          ) : null}
           {tooltip.statuses
             ? Object.entries(tooltip.statuses)
                 .sort((a, b) => b[1] - a[1])

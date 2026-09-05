@@ -26,11 +26,25 @@ import { groupValue, messageRows } from "./buildTree";
 import type { TreeLevel } from "./parseTreeStructure";
 import type { Audience, Message, Topic } from "../types";
 
+/** What the ribbon widths mean. `messages` needs no monitoring data at all. */
+export type SankeyMetric = "messages" | "impressions" | "cost";
+
+/** Per-message delivery for the chosen report period, keyed by message id. */
+export type MetricRows = Map<
+  number,
+  { impressions: number; cost: number; conversions: number }
+>;
+
 export type SankeyNodeDatum = {
   id: string;
   label: string;
   level: number;
+  /** The weight the diagram is drawn on — the active metric's total. */
   count: number;
+  /** Always the number of messages, whatever the active metric is. */
+  messageCount: number;
+  /** Conversions attributed to this node in the chosen period. */
+  conversions: number;
   /** True for the synthetic per-column fold node. */
   isOther: boolean;
   /** How many real nodes this Other folds in. 0 on real nodes. */
@@ -161,13 +175,42 @@ export function buildSankeyData(
   levels: TreeLevel[],
   cap: number,
   expandedLevels: Set<number> = new Set(),
-): { nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[] } {
+  metric: SankeyMetric = "messages",
+  metrics?: MetricRows,
+): { nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[]; metricIsEmpty: boolean } {
   if (levels.length === 0 || data.msgs.length === 0) {
-    return { nodes: [], links: [] };
+    return { nodes: [], links: [], metricIsEmpty: false };
   }
 
   const { nodes: aggs, links: linkAggs } = buildGraph(data, levels);
-  if (aggs.length === 0) return { nodes: [], links: [] };
+  if (aggs.length === 0) return { nodes: [], links: [], metricIsEmpty: false };
+
+  // Weight of one message under the active metric. A message with no monitoring
+  // row weighs nothing — it did not deliver, as far as the report knows.
+  function weigh(id: number): number {
+    if (metric === "messages") return 1;
+    const m = metrics?.get(id);
+    if (!m) return 0;
+    return metric === "cost" ? m.cost : m.impressions;
+  }
+  function sumWeight(rows: Iterable<number>): number {
+    let total = 0;
+    for (const id of rows) total += weigh(id);
+    return total;
+  }
+  function sumConversions(rows: Iterable<number>): number {
+    let total = 0;
+    for (const id of rows) total += metrics?.get(id)?.conversions ?? 0;
+    return total;
+  }
+
+  // Nothing in this selection delivered under the chosen metric. d3-sankey
+  // cannot lay out an all-zero graph, and a diagram of zeroes would say nothing
+  // anyway, so the caller is told to render the empty state instead.
+  const metricIsEmpty =
+    metric !== "messages" &&
+    aggs.every((n) => sumWeight(n.rows) === 0);
+  if (metricIsEmpty) return { nodes: [], links: [], metricIsEmpty: true };
 
   const statusById = new Map(data.msgs.map((m) => [m.id, m.status ?? ""]));
   function statusesOf(rows: Iterable<number>): Record<string, number> {
@@ -193,7 +236,7 @@ export function buildSankeyData(
 
   for (const [level, columnNodes] of byLevel) {
     const ranked = [...columnNodes].sort(
-      (a, b) => b.rows.size - a.rows.size || a.label.localeCompare(b.label),
+      (a, b) => sumWeight(b.rows) - sumWeight(a.rows) || a.label.localeCompare(b.label),
     );
     // Folding a single leftover would render "Other (1)" — a row that costs as
     // much as the node it hides.
@@ -207,7 +250,9 @@ export function buildSankeyData(
         id: n.id,
         label: n.label,
         level,
-        count: n.rows.size,
+        count: sumWeight(n.rows),
+        messageCount: n.rows.size,
+        conversions: sumConversions(n.rows),
         isOther: false,
         foldedGroups: 0,
         statusCounts: statusesOf(n.rows),
@@ -228,7 +273,9 @@ export function buildSankeyData(
         id: oid,
         label: `Other (${foldList.length})`,
         level,
-        count: rows.size,
+        count: sumWeight(rows),
+        messageCount: rows.size,
+        conversions: sumConversions(rows),
         isOther: true,
         foldedGroups: foldList.length,
         statusCounts: statusesOf(rows),
@@ -263,11 +310,11 @@ export function buildSankeyData(
       id,
       source,
       target,
-      value: rows.size,
+      value: sumWeight(rows),
     }),
   );
 
-  return { nodes, links };
+  return { nodes, links, metricIsEmpty: false };
 }
 
 /**

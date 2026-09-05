@@ -141,10 +141,14 @@ function nodesAt<T extends { level: number }>(nodes: T[], level: number): T[] {
 
 describe("buildSankeyData", () => {
   it("returns nothing without levels or messages", () => {
-    expect(buildSankeyData(fixture(), [], 10)).toEqual({ nodes: [], links: [] });
+    expect(buildSankeyData(fixture(), [], 10)).toEqual({
+      nodes: [],
+      links: [],
+      metricIsEmpty: false,
+    });
     expect(
       buildSankeyData({ auds: [], tops: [], msgs: [] }, LEVELS, 10),
-    ).toEqual({ nodes: [], links: [] });
+    ).toEqual({ nodes: [], links: [], metricIsEmpty: false });
   });
 
   it("merges an entity into ONE node however many parents feed it", () => {
@@ -248,5 +252,64 @@ describe("layoutSankey", () => {
       expect(l.path.startsWith("M")).toBe(true);
       expect(l.width).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("buildSankeyData — metric weighting", () => {
+  const metrics = new Map([
+    [1, { impressions: 100, cost: 1000, conversions: 2 }],
+    [2, { impressions: 50, cost: 500, conversions: 0 }],
+    // messages 3-6 delivered nothing the report could see.
+  ]);
+
+  it("weighs nodes and ribbons by the chosen metric", () => {
+    const { nodes, links } = buildSankeyData(
+      fixture(),
+      LEVELS,
+      100,
+      new Set(),
+      "impressions",
+      metrics,
+    );
+    // A1 carries messages 1, 2 and 3 → 100 + 50 + 0.
+    const a1 = nodesAt(nodes, 0).find((n) => n.label === "A1");
+    expect(a1?.count).toBe(150);
+    // The message count is kept alongside, so the tooltip can still say three.
+    expect(a1?.messageCount).toBe(3);
+    const t1 = nodesAt(nodes, 1).find((n) => n.label === "T1");
+    expect(links.find((l) => l.source === a1?.id && l.target === t1?.id)?.value).toBe(150);
+  });
+
+  it("sums conversions per node whatever the weighting is", () => {
+    const { nodes } = buildSankeyData(
+      fixture(),
+      LEVELS,
+      100,
+      new Set(),
+      "cost",
+      metrics,
+    );
+    expect(nodesAt(nodes, 0).find((n) => n.label === "A1")?.conversions).toBe(2);
+    expect(nodesAt(nodes, 0).find((n) => n.label === "A3")?.conversions).toBe(0);
+  });
+
+  it("reports an empty metric rather than laying out a graph of zeroes", () => {
+    const out = buildSankeyData(
+      fixture(),
+      LEVELS,
+      100,
+      new Set(),
+      "cost",
+      new Map(),
+    );
+    expect(out.metricIsEmpty).toBe(true);
+    expect(out.nodes).toEqual([]);
+  });
+
+  it("still counts messages when no metric is chosen", () => {
+    const { nodes } = buildSankeyData(fixture(), LEVELS, 100);
+    const a1 = nodesAt(nodes, 0).find((n) => n.label === "A1");
+    expect(a1?.count).toBe(3);
+    expect(a1?.messageCount).toBe(3);
   });
 });

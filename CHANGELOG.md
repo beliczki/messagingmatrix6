@@ -5,6 +5,39 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.64.0] — 2026-09-06
+
+### Added
+- **Weight the sankey by delivery, not just by structure.** A `Weight by`
+  switch in the right toolbar — `MC` / `Impr.` / `Cost` — drives the ribbon
+  widths and the node numbers, with a report-period selector beside it
+  (`monitoring` is monthly, so a period is the finest slice that exists). New
+  `GET /api/monitoring/message-metrics`, aggregating impressions, cost and
+  conversions per message for one period.
+  - **Every delivery mode states its own coverage**, because only monitoring
+    rows the importer could tie to a matrix message can be drawn on the matrix's
+    structure. On the live August report that is 13% of the cost — a weighted
+    diagram that stayed quiet about the other 87% would read as "this is where
+    the money went" while showing an eighth of it. Under 70% the line turns
+    amber.
+  - Unlike the dashboard's query this one keeps `impressions = 0` rows. There
+    they are the 1x1 click trackers that wreck CTR; here dropping them would
+    delete 62% of the spend.
+  - A selection where nothing delivered gets an explicit empty state rather than
+    a laid-out graph of zeroes.
+- **Conversions on the node tooltip**, shown even when zero — a blank would read
+  as "no data" when it means "nothing converted", and those are different
+  answers. (Today the report attributes 9 of August's 120 conversions to a
+  message; the number is there so that gap is visible rather than assumed.)
+
+### Changed
+- **The feed preview takes over the matrix canvas instead of opening a dialog.**
+  A table inside a dialog cannot open a row's MC without stacking a second
+  dialog on it, so rows were dead. On the canvas a row click opens the editor
+  like anywhere else. The toggle is now a check button in the export panel,
+  matching the preview pane's `Skip animation` control, and switching view
+  clears the preview.
+
 ## [6.63.0] — 2026-09-05
 
 ### Fixed

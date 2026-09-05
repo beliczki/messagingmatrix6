@@ -5,7 +5,7 @@ import { Rss, Table2 } from "lucide-react";
 import ToggleBtn from "../_components/ToggleBtn";
 import MatrixExportPanel from "./MatrixExportPanel";
 import FeedExportPanel from "./FeedExportPanel";
-import type { Audience, Filters, Message, Topic } from "./types";
+import type { Filters, Message } from "./types";
 
 type ExportMode = "matrix" | "feed";
 
@@ -19,13 +19,13 @@ const STORAGE_KEY = "mm6_matrix_export_mode";
 export default function ExportPanel({
   filters,
   filteredMessages,
-  audiences,
-  topics,
+  feedPreview,
+  onFeedPreviewChange,
 }: {
   filters: Filters;
   filteredMessages: Message[];
-  audiences: Audience[];
-  topics: Topic[];
+  feedPreview: boolean;
+  onFeedPreviewChange: (on: boolean) => void;
 }) {
   const [mode, setMode] = useState<ExportMode>("matrix");
 
@@ -67,8 +67,8 @@ export default function ExportPanel({
           <FeedExportPanel
             filters={filters}
             filteredMessages={filteredMessages}
-            audiences={audiences}
-            topics={topics}
+            feedPreview={feedPreview}
+            onFeedPreviewChange={onFeedPreviewChange}
           />
         )}
       </div>

@@ -5,6 +5,18 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.59.1] — 2026-09-05
+
+### Fixed
+- **`grep` reported nothing for `feed-export.ts`, silently.** The feed-diff row
+  key joins advert_id and reporting_label with a NUL character — a good
+  separator, because it cannot occur in feed data — but it was written as a raw
+  byte rather than the `\u0000` escape. That made the whole file read as binary
+  to text tools, and `grep` answers a binary file with zero matches and no
+  error. It is now the escape: the string produced is identical, and the file is
+  searchable again. Found while auditing that same file, where the search said
+  the code was not there.
+
 ## [6.59.0] — 2026-09-05
 
 ### Added

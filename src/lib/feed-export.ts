@@ -664,7 +664,13 @@ function rowKey(row: FeedRow, columns: string[]): string {
   const advertIdCol = findColumnByCleanName(columns, "advert_id");
   const reportingCol = findColumnByCleanName(columns, "reportinglabel");
   if (advertIdCol && reportingCol) {
-    return `${row[advertIdCol] ?? ""} ${row[reportingCol] ?? ""}`;
+    // NUL joins the two halves because it cannot occur in feed data, so the key
+    // is unambiguous. Written as the ESCAPE, never as the character itself: a
+    // raw NUL byte makes the whole file "binary" to text tools, and grep then
+    // reports zero matches for it SILENTLY instead of erroring — the worst
+    // possible failure in the file that holds the feed-export invariants.
+    // (It was a raw byte until 6.59.1; the string produced is identical.)
+    return `${row[advertIdCol] ?? ""}\u0000${row[reportingCol] ?? ""}`;
   }
   return columns.length > 0 ? row[columns[0]] ?? "" : "";
 }

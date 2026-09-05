@@ -105,6 +105,51 @@ A pipeline nagy része megvan, **a v5 canvas-rendererből semmit nem érdemes á
 - **Nagyságrend:** 1 nap a becsületes v1-re (matched + „nincs MC" ág, hónapválasztó, product szűrő),
   ha a struktúrát a meglévő `treeStructure` configból örökli.
 
+## 5b. Renderelés — library-választás (2026-09-05, friss npm adatok)
+
+A v5 sankey azért lett nehéz, mert **mindent kézzel csinált**: saját layout (`SankeyLayout.js`,
+646 sor), saját canvas-renderer (`SankeyRenderer.js`, 1015 sor), saját hit-testing és
+szövegtördelés. Ebből ma a nehéz rész — a layout — 3 kB-os kész lib.
+
+| Csomag | Legutóbbi kiadás | gzip | Mit ad |
+|---|---|---:|---|
+| `d3-sankey@0.12.3` | 2019-09 | **3 kB** (2 dep) | csak layout: node x/y + szalag vastagság. A de-facto szabvány, a nivo és sok más is ezt hívja. Nem fejlesztik, mert kész van. |
+| `@nivo/sankey@0.99.0` | 2025-05 | 62 kB (12 dep) | React + SVG komponens d3-sankey fölött, kész hover/highlight/tooltip, `theme` prop. React 19 peer OK. |
+| `echarts@6.1.0` + `echarts-for-react@3.0.6` | 2026-05 / 2026-01 | 359 kB (teljes; core+SankeyChart tree-shakelve jóval kevesebb) | canvas, beépített `emphasis: { focus: "adjacency" }`, node-drag, aktívan karbantartott |
+| `recharts@3.10.1` | 2026-07 | 144 kB | van `<Sankey>`, de a leggyengébb: alap layout, kevés interakció |
+
+**Javaslat: `d3-sankey` a layoutra + saját SVG render a TreeView mintájára.**
+
+Indok: a TreeView-nál a React Flow azért nyert, mert a *nehéz részt* (pan/zoom, node-mint-React-
+komponens, él-routing) adta. Sankey-nél a nehéz rész a layout — azt a d3-sankey adja 3 kB-ban, a
+maradék ~200–250 sor SVG path. Cserébe pontosan a projekt vizuális nyelvén szólal meg: ugyanaz a
+node-doboz, ugyanazok a `.tree-view__node-wrap--lvl-0..5` szintszínek, CSS-változós dark mode,
+szemantikus osztálynevek — ezt sem a nivo `theme` propja, sem az ECharts canvas nem tudja megadni.
+
+**Bónusz opció:** a d3-sankey koordinátáit be lehet tolni a **meglévő React Flow-ba** (node = a
+TreeView node komponense, él = custom `BaseEdge` kitöltött path-tel). Így a pan/zoom/collapse/
+minimap ingyen jön a TreeView-ból, és tényleg egy nézet két megjelenítése lesz. A xyflow ezt nem
+adja készen (a szalagvastagságot magunknak kell rajzolni), de közösségi példa van rá.
+
+**ECharts csak akkor**, ha később több egzotikus chart is kell (heatmap, sunburst, treemap) — akkor
+egyszerre térül meg a 300+ kB. Egyetlen nézetért nem.
+
+**Amit biztosan ne:** a v5 canvas-renderer portolása. 3040 sor olyan kód, amiből ma ~250 sor kell.
+
+### Rajzolási best practice-ek (amit a v5 nem csinált)
+
+- **Top-N + „Egyéb (N)" node oszloponként.** 960 üzenet-levél olvashatatlan; ~15–20 node/oszlop a
+  határ, a többi egy összevont node-ba. A d3-sankey `nodeSort`-tal a sorrend is kézben tartható.
+- **Csak a node-okat címkézzük, a szalagokat soha.** Az érték tooltipbe megy — különben a diagram
+  szöveglevessé válik.
+- **Hover = a teljes útvonal kiemelése**, nem csak a szomszédos él (ECharts-ban `focus: "adjacency"`,
+  saját rendernél előre kiszámolt path-halmaz).
+- **Halvány alap + egy kiemelő szín**, nem szivárvány. A `--lvl-N` tokenek már megvannak.
+- **A „nincs MC" ág legyen szándékosan semleges szürke** — ne versenyezzen figyelemért, de látszódjon,
+  hogy vastag.
+- Ciklusveszély nálunk nincs (szigorúan szintezett a struktúra), így a d3-sankey/nivo
+  ciklus-korlátozása nem probléma.
+
 ## 6. Javaslat
 
 **Amit én építenék (v1):** a monitoring oldalra egy „Flow" nézet, `product → strategy → topic → MC`

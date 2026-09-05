@@ -219,7 +219,7 @@ Reuse: a `MultiPill` már fogad opciónkénti extrát és rendereli az opció-so
 - [x] **D1.2** `statusCounts` a `MatrixGrid`-ben → `MatrixToolbar` (`:80-85`) → `MultiPill`. **Fontos:** a számot a **státusz-szűrő alkalmazása ELŐTTI** részhalmazon kell képezni (product + search + axis + hide-inactive már ráment), különben minden kiválasztott státusz önmagát számolná, a ki nem választottak meg mindig 0-t mutatnának.
 - ⚠️ Default: ugyanez a prop a Product-szűrőre is rámegy (egy hívási sor), ha a user kéri — nem külön munka.
 
-### SV — Sankey view + Feed view kivezetése + egyesített Export box (TERV, 2026-09-05, jóváhagyásra vár)
+### SV — Sankey view + Feed view kivezetése + egyesített Export box (✅ KÉSZ + DEPLOYOLVA, 6.60.0–6.60.2, 2026-09-05)
 
 **Kérés (user, 2026-09-05):** a Feed view mint nézet szűnjön meg (a hatalmas tábla nem nézet), a helyére
 Sankey kerüljön; a feed-táblázat költözzön az export modulba egy kapcsoló mögé; a jobb toolbar Export
@@ -235,64 +235,72 @@ súllyal, és külön munka marad). A szakértés library-választása és rajzo
 1:1 érvényesek itt is.
 
 #### SV.1 — Sankey view (`_views/SankeyView.tsx`)
-- [ ] **SV.1.1** `d3-sankey` + `@types/d3-sankey` dependency (3 kB, csak layout).
-- [ ] **SV.1.2** `_tree/buildSankey.ts` — a **meglévő** `parseTreeStructure` + `buildTree` kimenetéből
+- [x] **SV.1.1** `d3-sankey` + `@types/d3-sankey` dependency (3 kB, csak layout).
+- [x] **SV.1.2** `_tree/buildSankey.ts` — a **meglévő** `parseTreeStructure` + `buildTree` kimenetéből
       (`TreeData`: `nodes[{id,level,label,count,parentId,platform,messageId}]` + `edges`) d3-sankey
       gráf: node = tree-node, link value = a cél-node `count`-ja. Nincs új parser, nincs új config.
-- [ ] **SV.1.3** Top-N + „Other (N)" összevonás oszloponként (default 20). E nélkül a Messages-szint
+- [x] **SV.1.3** Top-N + „Other (N)" összevonás oszloponként (default 20). E nélkül a Messages-szint
       2700 levele olvashatatlan. `nodeSort`-tal a sorrend determinisztikus (count desc, majd label).
-- [ ] **SV.1.4** SVG render a TreeView vizuális nyelvén: ugyanaz a node-doboz, ugyanazok a
+- [x] **SV.1.4** SVG render a TreeView vizuális nyelvén: ugyanaz a node-doboz, ugyanazok a
       `--lvl-0..5` / `--plat-*` csík-tokenek, CSS-változós dark mode, szemantikus osztálynevek
       (`sankey-view__node`, `__ribbon`, `__label`, `__count`). Csak node-ok kapnak címkét, szalag soha.
-- [ ] **SV.1.5** Interakció: hover = a **teljes útvonal** kiemelése (előre számolt path-halmaz) +
+- [x] **SV.1.5** Interakció: hover = a **teljes útvonal** kiemelése (előre számolt path-halmaz) +
       tooltip (count + státusz-bontás); leaf klikk → `onOpenMessage`; archivált levél halványan
       (`row--archived`, a TreeView mintájára).
-- [ ] **SV.1.6** Pan/zoom = **ReactFlow, egyből** (user döntés, 2026-09-05; a szakértés „bónusz opciója").
+- [x] **SV.1.6** Pan/zoom = **ReactFlow, egyből** (user döntés, 2026-09-05; a szakértés „bónusz opciója").
       A d3-sankey koordinátái mennek a meglévő `@xyflow/react` canvasra: node `position={x0,y0}` +
       `width/height` a layoutból, él = custom edge a d3 `sankeyLinkHorizontal()` path-ával,
       `strokeWidth = link.width`. Így a pan/zoom/minimap és a toolbar `TreeViewNavigator` szekciója
       ingyen jön (a `ReactFlowProvider` már a `MatrixGrid`-en ül), és a Sankey tényleg a Tree másik
       megjelenítése lesz. A node-nak rejtett `Handle`-ök kellenek (left target / right source), hogy az
       él kirajzolódjon.
-- [ ] **SV.1.7** Loading / invalid-structure / empty state a `TreeView` három állapotának pontos
+- [x] **SV.1.7** Loading / invalid-structure / empty state a `TreeView` három állapotának pontos
       mintájára (ugyanaz az `empty-state` doboz, ugyanaz a „Settings → Structure" mutató szöveg).
 
 #### SV.2 — Feed view kivezetése
-- [ ] **SV.2.1** `types.ts`: `View = "grid" | "sankey" | "tree"` (a `"feed"` kikerül).
-- [ ] **SV.2.2** `MatrixGrid` hydrate-guard (`:196`): a perzisztált `"feed"` érték **`"grid"`-re migrál**,
+- [x] **SV.2.1** `types.ts`: `View = "grid" | "sankey" | "tree"` (a `"feed"` kikerül).
+- [x] **SV.2.2** `MatrixGrid` hydrate-guard (`:196`): a perzisztált `"feed"` érték **`"grid"`-re migrál**,
       különben a mentett állapotú userek üres nézetet kapnának.
-- [ ] **SV.2.3** View-kapcsoló mindkét alakja: `CycleIconButton` (collapsed) + `ViewControls`
+- [x] **SV.2.3** View-kapcsoló mindkét alakja: `CycleIconButton` (collapsed) + `ViewControls`
       (expanded) — Feed helyére Sankey, ikon `Waypoints` (lucide), label „Sankey view".
-- [ ] **SV.2.4** `FeedView.tsx` **marad a fájlfában**, de már csak a `FeedExportDialog` importálja.
+- [x] **SV.2.4** `FeedView.tsx` **marad a fájlfában**, de már csak a `FeedExportDialog` importálja.
 
 #### SV.3 — Feed-tábla az export modulba
-- [ ] **SV.3.1** `FeedView` kap opcionális `onOpenMessage`-et: ha nincs, a sorok nem kattinthatók
+- [x] **SV.3.1** `FeedView` kap opcionális `onOpenMessage`-et: ha nincs, a sorok nem kattinthatók
       (dialógusban nem nyitunk MessageEditort a dialógus fölé).
-- [ ] **SV.3.2** `FeedExportDialog`: „Feed rows" nyitható blokk a **Diff details `<details>` mintájára**,
+- [x] **SV.3.2** `FeedExportDialog`: „Feed rows" nyitható blokk a **Diff details `<details>` mintájára**,
       benne a `<FeedView>` a dialógus saját `messages`-ével — ugyanaz a `feedStructure` oszlopkészlet,
       ugyanaz a kliensoldali pattern-kiértékelés, mint a régi nézetben.
-- [ ] **SV.3.3** `audiences` + `topics` átvezetése `MatrixGrid` → `FeedExportPanel` → `FeedExportDialog`
+- [x] **SV.3.3** `audiences` + `topics` átvezetése `MatrixGrid` → `FeedExportPanel` → `FeedExportDialog`
       (a `FeedView` ezekből oldja fel az `{{audiences[...]}}` placeholdereket).
 
 #### SV.4 — Egyesített Export box a jobb toolbarban (grid view)
-- [ ] **SV.4.1** `ExportPanel.tsx` — egy doboz, tetején **Matrix | Feed** kapcsoló a meglévő
+- [x] **SV.4.1** `ExportPanel.tsx` — egy doboz, tetején **Matrix | Feed** kapcsoló a meglévő
       `mode-switch` / `ToggleBtn` nyelven (nem új token), alatta a választott ág setupja.
-- [ ] **SV.4.2** Matrix ág = a mostani `MatrixExportPanel` tartalma változatlanul (filter-chipek +
+- [x] **SV.4.2** Matrix ág = a mostani `MatrixExportPanel` tartalma változatlanul (filter-chipek +
       Download XLSX). Feed ág = a mostani `FeedExportPanel` változatlanul, **a gating-figyelmeztetéssel
       együtt** (egy product + ACTIVE/INACTIVE), plusz a „Live: vN / Default / uploaded" blokk.
-- [ ] **SV.4.3** Az ág-választás perzisztál: `mm6_matrix_export_mode` (a `mm6_<page>_<thing>` konvenció).
-- [ ] **SV.4.4** A `view === "feed"` ág törlése a `MatrixGrid` toolbar-renderjéből.
+- [x] **SV.4.3** Az ág-választás perzisztál: `mm6_matrix_export_mode` (a `mm6_<page>_<thing>` konvenció).
+- [x] **SV.4.4** A `view === "feed"` ág törlése a `MatrixGrid` toolbar-renderjéből.
 
 #### SV.5 — Doksi + zárás
-- [ ] **SV.5.1** `tasks/component-inventory.md`: `sankey-view__*` család + az `export-panel` kapcsoló;
+- [x] **SV.5.1** `tasks/component-inventory.md`: `sankey-view__*` család + az `export-panel` kapcsoló;
       a `feed-export-panel` / `matrix-export-panel` bejegyzések „mostantól az `export-panel` ágai".
-- [ ] **SV.5.2** `docs/REBUILD_SPEC.md` §6.2: a Feed nézet leírása átkerül az export-dialógushoz,
+- [x] **SV.5.2** `docs/REBUILD_SPEC.md` §6.2: a Feed nézet leírása átkerül az export-dialógushoz,
       a Sankey a 3. nézet lesz (a §18.10 „out of scope — Sankey" pont törlendő).
-- [ ] **SV.5.3** Verzió: `6.59.1` → **`6.60.0`** (minor: új nézet + eltávolított nézet + toolbar-átalakítás)
+- [x] **SV.5.3** Verzió: `6.59.1` → **`6.60.0`** (minor: új nézet + eltávolított nézet + toolbar-átalakítás)
       + `CHANGELOG.md`.
 
 **Amit NEM csinálunk:** nincs `sankeyStructure` config, nincs cost-dimenzió a matrix-sankey-ben,
 nincs v5 canvas-renderer portolás, nincs napi/animált bontás.
+
+**DEPLOYOLVA 6.60.0 + 6.60.1 + 6.60.2 (2026-09-05):** commitok `cae6f7d` → `e124024` → `de380e0`, box `a868804`→`de380e0`, build 38.4s / 41s, `npm install` a boxon is kellett (**új dependency: `d3-sankey` 3 kB + `@types/d3-sankey`**), `pm2 restart mm6-erste --update-env` → online. **Séma-migráció nincs** (`git diff --name-only a868804..de380e0 -- db/migrations` üres). Health: `/` 307 · `/login` 200 · `/matrix` 307 · `/feeds` 307 · `/monitoring` 307 · `/api/feed-exports` 401 · `/mcp` 401 · publikus `erste.messagingmatrix.ai/login` **200**. Élőben ellenőrizve: Sankey renderel (SZK 677 → pro 444 / rem 233 → audience → topic → MC, Other-láncokkal), hover = teljes útvonal + tooltip státusz-bontással, Navigator ráköt, Export box Matrix|Feed kapcsolóval és perzisztálva, „Feed rows" checkbox mögött a feed tábla a dialógusban.
+
+**Két utólagos javítás, mindkettő élőben talált:**
+- **6.60.1 — a címkék egymásra csúsztak a sűrű oszlopokban.** A node magassága arányos az értékével, tehát ahol egy `Other` viszi a flow 90%-át, a maradék húsz sub-pixel csík: az egyetlen garantált elválasztás a node-ok közti `nodePadding`, ami 10px-en nem ért túl egy 18px-es címke-pillen. 22px lett, és a canvas magassága a legmagasabb oszlophoz igazodik.
+- **6.60.2 — a tooltip rossz sarokban nyílt.** Az utolsó `mousemove`-ból pozicionált, de a `mouseover` ugyanarra a pozícióra **előbb** tüzel, tehát a minta mindig egy mozdulattal késett — az első hovernél pedig egyáltalán nem volt minta, és a tooltip a canvas origójába esett. A hover-esemény most viszi a saját koordinátáit, a canvas szélénél beszorítva.
+
+**Amit szándékosan NEM csináltunk:** nincs `sankeyStructure` config (a `treeStructure` hajtja mindkét nézetet), nincs cost-dimenzió a matrix-sankey-ben (az a monitoring oldalra való — `tasks/cost-sankey-szakertes.md`), nincs v5 canvas-renderer portolás.
 
 ---
 

@@ -20,6 +20,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useQuery } from "@tanstack/react-query";
+import { ChevronRight, ChevronDown } from "lucide-react";
 import clsx from "clsx";
 import { parseTreeStructure } from "../_tree/parseTreeStructure";
 import { buildTree } from "../_tree/buildTree";
@@ -50,10 +51,11 @@ async function fetchTreeStructure(): Promise<string> {
   return typeof v === "string" ? v : "";
 }
 
-// How many groups a column shows before the rest fold into "Other". Past ~20
-// the ribbons are thinner than their own labels and the diagram stops saying
-// anything — the folded mass stays visible as one grey branch instead.
-const TOP_N_PER_COLUMN = 20;
+// How many children ONE parent shows before its overflow folds into its own
+// "Other". Per parent, not per column: a node you can see must be a node you can
+// follow (see the note at the top of buildSankey.ts).
+const TOP_N_PER_PARENT = 10;
+const EXPANDED_STORAGE_KEY = "mm6_sankey_expanded_v1";
 // Width declared to xyflow per node: the bar plus the label pill. It is what
 // fitView measures, so labels stay inside the fitted viewport. Only the bar and
 // the pill take pointer events — the rest of the box lets ribbons through.
@@ -67,6 +69,20 @@ const LEVEL_COLOR_CYCLE = 6;
 // Matches the max-width in globals.css plus the offset it is drawn at.
 const TOOLTIP_W = 274;
 const TOOLTIP_H = 120;
+
+function loadExpanded(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(EXPANDED_STORAGE_KEY);
+    if (!raw) return new Set();
+    const arr = JSON.parse(raw);
+    return new Set(
+      Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : [],
+    );
+  } catch {
+    return new Set();
+  }
+}
 
 function idOf(x: string | SankeyNodeDatum): string {
   return typeof x === "string" ? x : x.id;
@@ -91,7 +107,10 @@ type SankeyNodeData = {
   label: string;
   count: number;
   messageId?: number;
+  expandTargetId?: string;
+  isExpanded?: boolean;
   onOpenMessage: (id: number) => void;
+  onToggleExpand: (parentId: string) => void;
 };
 
 type SankeyEdgeData = {
@@ -106,6 +125,16 @@ function SankeyNodeBox({ id, data }: NodeProps) {
   const { highlight, setHover } = useContext(HighlightContext);
   const dimmed = highlight !== null && !highlight.nodes.has(id);
   const isLeaf = d.messageId !== undefined;
+  const expandTarget = d.expandTargetId;
+  const clickable = isLeaf || expandTarget !== undefined;
+
+  // A leaf opens its MC; anything else that is clickable is a fold handle —
+  // either the parent whose children overflow, or that parent's Other, which is
+  // a shortcut for the same toggle.
+  function activate() {
+    if (isLeaf) d.onOpenMessage(d.messageId as number);
+    else if (expandTarget !== undefined) d.onToggleExpand(expandTarget);
+  }
 
   return (
     <div
@@ -113,6 +142,7 @@ function SankeyNodeBox({ id, data }: NodeProps) {
         "sankey-view__node",
         dimmed && "sankey-view__node--dim",
         isLeaf && "sankey-view__node--leaf",
+        expandTarget !== undefined && "sankey-view__node--expandable",
       )}
       onMouseEnter={(e) => setHover({ kind: "node", id }, e)}
       onMouseLeave={(e) => setHover(null, e)}
@@ -126,23 +156,34 @@ function SankeyNodeBox({ id, data }: NodeProps) {
       <span className="sankey-view__bar" />
       <span
         className="sankey-view__pill"
-        title={`${d.label} — ${d.count}`}
-        role={isLeaf ? "button" : undefined}
-        tabIndex={isLeaf ? 0 : undefined}
-        onClick={
-          isLeaf ? () => d.onOpenMessage(d.messageId as number) : undefined
+        title={
+          expandTarget !== undefined
+            ? `${d.label} — ${d.count} · click to ${d.isExpanded ? "collapse" : "show all"}`
+            : `${d.label} — ${d.count}`
         }
+        role={clickable ? "button" : undefined}
+        tabIndex={clickable ? 0 : undefined}
+        onClick={clickable ? activate : undefined}
         onKeyDown={
-          isLeaf
+          clickable
             ? (e) => {
                 if (e.key === "Enter" || e.key === " ") {
                   e.preventDefault();
-                  d.onOpenMessage(d.messageId as number);
+                  activate();
                 }
               }
             : undefined
         }
       >
+        {expandTarget !== undefined ? (
+          <span className="sankey-view__chevron" aria-hidden>
+            {d.isExpanded ? (
+              <ChevronDown className="size-3" />
+            ) : (
+              <ChevronRight className="size-3" />
+            )}
+          </span>
+        ) : null}
         <span className="sankey-view__label">{d.label}</span>
         <span className="sankey-view__count">{d.count}</span>
       </span>
@@ -210,6 +251,24 @@ export default function SankeyView({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [hover, setHoverState] = useState<HoverTarget>(null);
   const [tooltipAt, setTooltipAt] = useState({ x: 0, y: 0 });
+  // Parents the user opened. Persisted like the tree's expanded set, so a
+  // branch you drilled into is still open when you come back.
+  const [expanded, setExpanded] = useState<Set<string>>(loadExpanded);
+
+  const toggleExpand = useCallback((parentId: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(parentId)) next.delete(parentId);
+      else next.add(parentId);
+      try {
+        window.localStorage.setItem(
+          EXPANDED_STORAGE_KEY,
+          JSON.stringify([...next]),
+        );
+      } catch {}
+      return next;
+    });
+  }, []);
 
   const treeStructureQ = useQuery({
     queryKey: ["config", "treeStructure"],
@@ -230,9 +289,9 @@ export default function SankeyView({
       { auds: audiences, tops: topics, msgs: messages },
       parsed.levels,
     );
-    const folded = foldToTopN(tree, TOP_N_PER_COLUMN);
+    const folded = foldToTopN(tree, TOP_N_PER_PARENT, expanded);
     return layoutSankey(folded.nodes, folded.links);
-  }, [audiences, topics, messages, parsed.levels]);
+  }, [audiences, topics, messages, parsed.levels, expanded]);
 
   const nodeById = useMemo(
     () => new Map(graph.nodes.map((n) => [n.id, n])),
@@ -343,8 +402,13 @@ export default function SankeyView({
           label: n.label,
           count: n.count,
           onOpenMessage,
+          onToggleExpand: toggleExpand,
         };
         if (n.messageId !== undefined) data.messageId = n.messageId;
+        if (n.expandTargetId !== undefined) {
+          data.expandTargetId = n.expandTargetId;
+          data.isExpanded = n.isExpanded ?? false;
+        }
         return {
           id: n.id,
           type: "sankeyNode",
@@ -357,7 +421,7 @@ export default function SankeyView({
           data: data as unknown as Record<string, unknown>,
         };
       }),
-    [graph.nodes, onOpenMessage],
+    [graph.nodes, onOpenMessage, toggleExpand],
   );
 
   const rfEdges = useMemo<Edge[]>(

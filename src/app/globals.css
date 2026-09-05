@@ -454,6 +454,22 @@ html.dark {
   .sankey-view__node--dim {
     opacity: 0.25;
   }
+  /* A fold handle: the parent whose children overflow, and its own Other, both
+     toggle the same expansion. The chevron is the tree's, so the two views
+     spell "there is more under this" the same way. */
+  .sankey-view__node--expandable .sankey-view__pill {
+    cursor: pointer;
+  }
+  .sankey-view__node--expandable .sankey-view__pill:hover {
+    border-color: #94a3b8;
+  }
+  .sankey-view__chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: #64748b;
+  }
   /* xyflow needs handles for an edge to render at all; the sankey draws its own
      path, so they only have to exist. */
   .sankey-view__handle {

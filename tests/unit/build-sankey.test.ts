@@ -142,6 +142,20 @@ function fixture(): TreeData {
   return buildTree({ auds, tops, msgs }, levels);
 }
 
+function idFor(tree: TreeData, label: string): string {
+  const n = tree.nodes.find((x) => x.label === label);
+  if (!n) throw new Error(`no node labelled ${label}`);
+  return n.id;
+}
+
+function countsPerLevel(
+  nodes: Array<{ level: number; count: number }>,
+): Array<[number, number]> {
+  const per = new Map<number, number>();
+  for (const n of nodes) per.set(n.level, (per.get(n.level) ?? 0) + n.count);
+  return [...per.entries()].sort((a, b) => a[0] - b[0]);
+}
+
 describe("foldToTopN", () => {
   it("returns nothing for an empty tree", () => {
     expect(foldToTopN({ nodes: [], edges: [] }, 5)).toEqual({
@@ -150,62 +164,89 @@ describe("foldToTopN", () => {
     });
   });
 
-  it("keeps every group when the column fits under the cap", () => {
-    const { nodes } = foldToTopN(fixture(), 10);
+  it("never folds the root column — it has no parent to expand from", () => {
+    const { nodes } = foldToTopN(fixture(), 1);
     const level0 = nodes.filter((n) => n.level === 0);
     expect(level0.map((n) => n.label).sort()).toEqual(["A1", "A2", "A3", "A4"]);
     expect(level0.some((n) => n.isOther)).toBe(false);
   });
 
-  it("folds everything past the cap into one Other node", () => {
-    const { nodes } = foldToTopN(fixture(), 2);
-    const level0 = nodes.filter((n) => n.level === 0);
-    // The two biggest audiences survive; A3 (2) + A4 (1) fold together.
-    expect(level0.filter((n) => !n.isOther).map((n) => n.label)).toEqual([
-      "A1",
-      "A2",
-    ]);
-    const other = level0.find((n) => n.isOther);
-    expect(other?.id).toBe(otherNodeId(0));
-    expect(other?.label).toBe("Other (2)");
-    expect(other?.count).toBe(3);
+  it("folds per parent, so only the parent that overflows gets an Other", () => {
+    const tree = fixture();
+    const { nodes } = foldToTopN(tree, 2);
+    // A1 has 4 leaves and the cap is 2, so two fold. A2 has 3: folding one
+    // leftover would render "Other (1)", so it shows all three instead.
+    const a1Other = nodes.find((n) => n.id === otherNodeId(idFor(tree, "A1")));
+    expect(a1Other?.label).toBe("Other (2)");
+    expect(a1Other?.count).toBe(2);
+    for (const label of ["A2", "A3", "A4"]) {
+      expect(
+        nodes.find((n) => n.id === otherNodeId(idFor(tree, label))),
+      ).toBeUndefined();
+    }
   });
 
-  it("keeps the folded mass flowing to the next column instead of dropping it", () => {
-    const { nodes, links } = foldToTopN(fixture(), 2);
-    // The messages under A3/A4 are never reachable as their own leaves — they
-    // continue as one grey branch, so the Other chain carries their count
-    // forward as-is.
-    const chain = links.find(
-      (l) => l.source === otherNodeId(0) && l.target === otherNodeId(1),
-    );
-    expect(chain?.value).toBe(3);
-    // The leaf column's Other holds both: the 3 carried through plus the 5
-    // leaves of A1/A2 that did not make the cap themselves.
-    const otherLeaf = nodes.find((n) => n.id === otherNodeId(1));
-    expect(otherLeaf?.count).toBe(8);
+  it("keeps every visible parent's children reachable from that parent", () => {
+    // The regression this rule exists for: with a per-COLUMN cap, a visible
+    // node's whole subtree could lose the column-wide ranking and disappear
+    // into a shared Other, so a node on screen led nowhere.
+    const tree = fixture();
+    const { nodes, links } = foldToTopN(tree, 2);
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    const outgoing = new Map<string, number>();
+    for (const l of links) {
+      expect(byId.has(l.source as string)).toBe(true);
+      expect(byId.has(l.target as string)).toBe(true);
+      outgoing.set(
+        l.source as string,
+        (outgoing.get(l.source as string) ?? 0) + l.value,
+      );
+    }
+    // Every non-leaf node passes its whole count on to nodes that exist.
+    for (const n of nodes) {
+      if (n.messageId !== undefined || n.level > 0) continue;
+      expect(outgoing.get(n.id)).toBe(n.count);
+    }
   });
 
   it("conserves the message count at every level", () => {
     for (const cap of [1, 2, 3, 10]) {
-      const { nodes } = foldToTopN(fixture(), cap);
-      const perLevel = new Map<number, number>();
-      for (const n of nodes) {
-        perLevel.set(n.level, (perLevel.get(n.level) ?? 0) + n.count);
-      }
       // 10 messages, and neither level may lose or double-count one.
-      expect([...perLevel.entries()].sort()).toEqual([
+      expect(countsPerLevel(foldToTopN(fixture(), cap).nodes)).toEqual([
         [0, 10],
         [1, 10],
       ]);
     }
   });
 
-  it("carries the folded groups' status breakdown into the Other node", () => {
-    const { nodes } = foldToTopN(fixture(), 2);
-    const other = nodes.find((n) => n.id === otherNodeId(0));
-    // A3 and A4 contribute one ACTIVE each; A3's second message is PREVIEW.
-    expect(other?.statusCounts).toEqual({ ACTIVE: 2, PREVIEW: 1 });
+  it("shows every child of a parent the user expanded", () => {
+    const tree = fixture();
+    const a1 = idFor(tree, "A1");
+    const { nodes } = foldToTopN(tree, 2, new Set([a1]));
+    expect(nodes.find((n) => n.id === otherNodeId(a1))).toBeUndefined();
+    expect(nodes.filter((n) => n.level === 1)).toHaveLength(10);
+    expect(nodes.find((n) => n.id === a1)?.isExpanded).toBe(true);
+  });
+
+  it("marks the overflowing parent and its Other with the same expand target", () => {
+    const tree = fixture();
+    const a1 = idFor(tree, "A1");
+    const { nodes } = foldToTopN(tree, 2);
+    expect(nodes.find((n) => n.id === a1)?.expandTargetId).toBe(a1);
+    expect(nodes.find((n) => n.id === otherNodeId(a1))?.expandTargetId).toBe(a1);
+    // A2 does not overflow, so its pill is not a fold handle.
+    expect(
+      nodes.find((n) => n.id === idFor(tree, "A2"))?.expandTargetId,
+    ).toBeUndefined();
+  });
+
+  it("carries the folded children's status breakdown into the Other", () => {
+    const tree = fixture();
+    const { nodes } = foldToTopN(tree, 2);
+    const other = nodes.find((n) => n.id === otherNodeId(idFor(tree, "A1")));
+    // A1's four messages are one ACTIVE and three PREVIEW; the two biggest by
+    // the label tie-break stay, so the fold holds two PREVIEW ones.
+    expect(other?.statusCounts).toEqual({ PREVIEW: 2 });
   });
 });
 

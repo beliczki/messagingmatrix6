@@ -5,6 +5,31 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.62.0] — 2026-09-05
+
+### Fixed
+- **A node you can see is now a node you can follow.** The sankey capped each
+  *column* at its top 20, which broke the diagram's basic promise: a visible
+  audience's every topic could lose the column-wide ranking to other audiences'
+  topics and vanish into one shared `Other`, so hovering a node plainly on
+  screen led into grey nothing. At the leaf level it was worse — every MC has a
+  count of 1, so the tie broke alphabetically and `MC332` fell out simply for
+  sorting after `MC330` and `MC331`.
+  - The cap is **per parent** now. A visible node always shows its own largest
+    children, and only its own overflow folds into its own `Other`. An audience
+    with four topics shows four topics and no `Other` at all.
+  - Folding a single leftover is skipped — `Other (1)` costs a row and says
+    nothing.
+  - The root column is never folded: it is the entry point, and there is no
+    parent above it whose pill could serve as the handle.
+
+### Added
+- **Drill into a fold.** A parent whose children overflow carries the tree's
+  chevron; clicking it — or clicking its `Other`, which is a shortcut for the
+  same toggle — shows all of them, and clicking again collapses back. What you
+  opened is remembered in `mm6_sankey_expanded_v1`, so a branch you drilled into
+  is still open when you come back.
+
 ## [6.61.1] — 2026-09-05
 
 ### Removed

@@ -6,14 +6,20 @@
 // structure is.
 //
 // Two things the tree does not need and the sankey does:
-//   1. Top-N folding. A Messages leaf level has thousands of nodes; a column of
-//      thousands of 1px ribbons is not a diagram. Everything past the top N in
-//      a column folds into one "Other" node, and that node forwards its flow to
-//      the next column's "Other" so the folded mass stays visible all the way to
-//      the right edge instead of vanishing mid-diagram.
+//   1. Folding. A Messages leaf level has thousands of nodes; a column of
+//      thousands of 1px ribbons is not a diagram.
 //   2. Absolute geometry. d3-sankey computes x0/x1/y0/y1 per node and a width
 //      per link; we hand those coordinates to xyflow rather than letting xyflow
 //      lay anything out.
+//
+// The folding rule is **per parent**, and that is the whole point. An earlier
+// version capped each COLUMN at its top N, which broke the diagram's basic
+// promise: a node you can see must be a node you can follow. With a column cap,
+// a visible audience's every topic could lose the column-wide ranking to other
+// audiences' topics and vanish into one shared Other — so hovering a node that
+// is plainly on screen led into grey nothing. Per parent, a visible node always
+// shows its own children, and only its own overflow folds into its own Other,
+// which the user can expand.
 
 import {
   sankey as d3Sankey,
@@ -27,13 +33,20 @@ export type SankeyNodeDatum = {
   label: string;
   level: number;
   count: number;
-  /** True for the synthetic per-column fold node. */
+  /** True for a synthetic fold node. */
   isOther: boolean;
-  /** How many real groups this Other node folds in. 0 on real nodes. */
+  /** How many real groups this Other folds in. 0 on real nodes and on the
+   *  pass-through Others that only carry a collapsed branch rightwards. */
   foldedGroups: number;
   statusCounts: Record<string, number>;
   messageId?: number;
   platform?: string;
+  /** Set on a real node that has more children than the cap: clicking it shows
+   *  all of them. Also set on its Other, pointing at the same parent, so the
+   *  fold node is a shortcut for the same action. */
+  expandTargetId?: string;
+  /** Whether that target is currently expanded — drives the chevron. */
+  isExpanded?: boolean;
   // Written by d3-sankey during layout.
   x0?: number;
   x1?: number;
@@ -65,16 +78,17 @@ export const SANKEY_COLUMN_GAP = 260;
 export const SANKEY_NODE_WIDTH = 14;
 // The gap between two stacked nodes is the ONLY separation the layout
 // guarantees: a node's own height is proportional to its value, so in a column
-// where one Other node holds 90% of the flow the other twenty are sub-pixel
-// slivers. The padding therefore has to clear a label pill (~18px) on its own,
-// or the labels sit on top of each other.
+// where one node holds most of the flow the rest are sub-pixel slivers. The
+// padding therefore has to clear a label pill (~18px) on its own, or the labels
+// sit on top of each other.
 export const SANKEY_NODE_PADDING = 22;
 /** Vertical room reserved per node: one padding gap plus room for the bar. */
 const MIN_ROW_HEIGHT = 34;
 const MIN_CANVAS_HEIGHT = 420;
 
-export function otherNodeId(level: number): string {
-  return `other:${level}`;
+/** The fold node that holds one parent's overflow. */
+export function otherNodeId(parentId: string): string {
+  return `other:${parentId}`;
 }
 
 function addStatusCounts(
@@ -86,34 +100,60 @@ function addStatusCounts(
   }
 }
 
+// Biggest first; ties (every message leaf has count 1) break on the label so the
+// order is stable across renders.
+function rank(a: TreeNode, b: TreeNode): number {
+  return b.count - a.count || a.label.localeCompare(b.label);
+}
+
+function realDatum(n: TreeNode): SankeyNodeDatum {
+  const d: SankeyNodeDatum = {
+    id: n.id,
+    label: n.label,
+    level: n.level,
+    count: n.count,
+    isOther: false,
+    foldedGroups: 0,
+    statusCounts: n.statusCounts,
+  };
+  if (n.messageId !== undefined) d.messageId = n.messageId;
+  if (n.platform !== undefined) d.platform = n.platform;
+  return d;
+}
+
 /**
- * Folds each column down to its `topN` largest nodes.
+ * Folds each parent's children down to its `topN` largest.
  *
- * A node is only considered at all when its parent survived the fold — the
- * subtree under a folded node is not re-attached to the root, it flows through
- * the Other chain. That keeps every message accounted for exactly once at every
- * level, which is what makes the ribbon widths add up.
+ * `expanded` holds the ids of parents the user opened; their children are all
+ * shown. A parent whose overflow is a single node is never folded either —
+ * "Other (1)" costs a row and says nothing.
  */
 export function foldToTopN(
   tree: TreeData,
   topN: number,
+  expanded: Set<string> = new Set(),
 ): { nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[] } {
   if (tree.nodes.length === 0) return { nodes: [], links: [] };
 
   const maxLevel = tree.nodes.reduce((m, n) => Math.max(m, n.level), 0);
-  const byLevel = new Map<number, TreeNode[]>();
+  const childrenOf = new Map<string, TreeNode[]>();
+  const roots: TreeNode[] = [];
   for (const n of tree.nodes) {
-    const arr = byLevel.get(n.level) ?? [];
-    arr.push(n);
-    byLevel.set(n.level, arr);
+    if (n.parentId === null) {
+      roots.push(n);
+    } else {
+      const arr = childrenOf.get(n.parentId) ?? [];
+      arr.push(n);
+      childrenOf.set(n.parentId, arr);
+    }
   }
 
-  const kept = new Set<string>();
   const nodes: SankeyNodeDatum[] = [];
+  const datumById = new Map<string, SankeyNodeDatum>();
   // Keyed by the id pair so parallel edges collapse into one ribbon (several
-  // folded children of the same parent share one ribbon to Other). The endpoints
-  // live in the value, not parsed back out of the key — node ids embed
-  // user-entered values and are not safe to split apart.
+  // folded children of the same parent share one ribbon to that parent's
+  // Other). The endpoints live in the value, not parsed back out of the key —
+  // node ids embed user-entered values and are not safe to split apart.
   const flows = new Map<
     string,
     { source: string; target: string; value: number }
@@ -126,71 +166,92 @@ export function foldToTopN(
     else flows.set(key, { source, target, value });
   }
 
-  // Flow arriving into this level's Other node from the previous level's.
-  let carry = 0;
-  let carryStatuses: Record<string, number> = {};
+  function push(d: SankeyNodeDatum): SankeyNodeDatum {
+    nodes.push(d);
+    datumById.set(d.id, d);
+    return d;
+  }
 
-  for (let level = 0; level <= maxLevel; level++) {
-    const all = byLevel.get(level) ?? [];
-    const reachable =
-      level === 0
-        ? all
-        : all.filter((n) => n.parentId !== null && kept.has(n.parentId));
-    const ranked = [...reachable].sort(
-      (a, b) => b.count - a.count || a.label.localeCompare(b.label),
-    );
-    const keepList = ranked.slice(0, topN);
-    const foldList = ranked.slice(topN);
+  // The root column is never folded: there is no parent above it whose pill
+  // could serve as the expand handle, and it is the diagram's entry point.
+  let keptReal = [...roots].sort(rank);
+  for (const n of keptReal) push(realDatum(n));
+  // Fold nodes rendered at the previous level, which must carry their collapsed
+  // branch onwards.
+  let openOthers: SankeyNodeDatum[] = [];
 
-    for (const n of keepList) {
-      kept.add(n.id);
-      const datum: SankeyNodeDatum = {
-        id: n.id,
-        label: n.label,
-        level,
-        count: n.count,
-        isOther: false,
-        foldedGroups: 0,
-        statusCounts: n.statusCounts,
-      };
-      if (n.messageId !== undefined) datum.messageId = n.messageId;
-      if (n.platform !== undefined) datum.platform = n.platform;
-      nodes.push(datum);
+  for (let level = 1; level <= maxLevel; level++) {
+    const nextKept: TreeNode[] = [];
+    const nextOthers: SankeyNodeDatum[] = [];
+
+    for (const parent of keptReal) {
+      const children = [...(childrenOf.get(parent.id) ?? [])].sort(rank);
+      if (children.length === 0) continue;
+
+      const isExpanded = expanded.has(parent.id);
+      // Folding a single leftover would render "Other (1)" — a row that costs
+      // as much as the node it hides.
+      const overflows = children.length > topN + 1;
+      const keepList = isExpanded || !overflows ? children : children.slice(0, topN);
+      const foldList = isExpanded || !overflows ? [] : children.slice(topN);
+
+      if (overflows) {
+        const parentDatum = datumById.get(parent.id);
+        if (parentDatum) {
+          parentDatum.expandTargetId = parent.id;
+          parentDatum.isExpanded = isExpanded;
+        }
+      }
+
+      for (const c of keepList) {
+        nextKept.push(c);
+        push(realDatum(c));
+        addFlow(parent.id, c.id, c.count);
+      }
+
+      if (foldList.length > 0) {
+        const statusCounts: Record<string, number> = {};
+        let count = 0;
+        for (const c of foldList) {
+          addStatusCounts(statusCounts, c.statusCounts);
+          count += c.count;
+          addFlow(parent.id, otherNodeId(parent.id), c.count);
+        }
+        nextOthers.push(
+          push({
+            id: otherNodeId(parent.id),
+            label: `Other (${foldList.length})`,
+            level,
+            count,
+            isOther: true,
+            foldedGroups: foldList.length,
+            statusCounts,
+            expandTargetId: parent.id,
+            isExpanded: false,
+          }),
+        );
+      }
     }
 
-    const foldedCount = foldList.reduce((s, n) => s + n.count, 0);
-    const otherCount = foldedCount + carry;
-    if (otherCount > 0) {
-      const statusCounts: Record<string, number> = { ...carryStatuses };
-      for (const n of foldList) addStatusCounts(statusCounts, n.statusCounts);
-      nodes.push({
-        id: otherNodeId(level),
-        label: foldList.length > 0 ? `Other (${foldList.length})` : "Other",
+    // A collapsed branch keeps flowing to the right edge instead of ending
+    // mid-diagram: each Other continues into one Other of its own, carrying the
+    // same mass. It is not expandable — the fold node that started the chain is.
+    for (const o of openOthers) {
+      const cont = push({
+        id: otherNodeId(o.id),
+        label: "Other",
         level,
-        count: otherCount,
+        count: o.count,
         isOther: true,
-        foldedGroups: foldList.length,
-        statusCounts,
+        foldedGroups: 0,
+        statusCounts: o.statusCounts,
       });
+      nextOthers.push(cont);
+      addFlow(o.id, cont.id, o.count);
     }
 
-    if (level > 0) {
-      for (const n of reachable) {
-        const target = kept.has(n.id) ? n.id : otherNodeId(level);
-        addFlow(n.parentId as string, target, n.count);
-      }
-      if (carry > 0) {
-        addFlow(otherNodeId(level - 1), otherNodeId(level), carry);
-      }
-    }
-
-    if (level < maxLevel) {
-      carry = otherCount;
-      for (const n of foldList) addStatusCounts(carryStatuses, n.statusCounts);
-    } else {
-      carry = 0;
-      carryStatuses = {};
-    }
+    keptReal = nextKept;
+    openOthers = nextOthers;
   }
 
   const links: SankeyLinkDatum[] = [...flows.entries()].map(

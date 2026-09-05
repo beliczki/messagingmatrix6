@@ -5,6 +5,35 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.63.0] — 2026-09-05
+
+### Fixed
+- **The sankey drew paths where it should have drawn entities.** A tree node is
+  a path — `buildTree` keys nodes on the whole chain of ancestors, because in a
+  tree every node has exactly one parent. A sankey node is a thing: one topic is
+  one node, with ribbons arriving from every audience that uses it. Reusing the
+  tree's node identity duplicated every topic and every card once per audience,
+  which is the opposite of what the diagram is for — and it is also what made it
+  unreadable. On the live Erste filter the two identities differ by an order of
+  magnitude:
+
+  | level | as paths | as entities |
+  |---|---:|---:|
+  | topic | 446 | **27** |
+  | MC | 681 | **54** |
+
+  The sankey now walks the structure levels itself and merges on the entity,
+  sharing the row assembly and per-level grouping with the tree so the two views
+  still cannot disagree about what the structure is. A card carried by several
+  audiences is one leaf weighing several messages.
+- **Folding is a safety valve again, not a routine crop.** With entity nodes the
+  columns are small, so the cap went back to per column — and in a DAG that is
+  finally honest: an `Other` inherits its members' own links, so a folded
+  audience's flow still arrives at the real topics it feeds. Nothing is left
+  leading nowhere and no grey chain has to be strung to the right edge. The cap
+  is 120, expandable per column by clicking the `Other`, and `Other (1)` is
+  still never rendered.
+
 ## [6.62.0] — 2026-09-05
 
 ### Fixed

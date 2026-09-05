@@ -1,52 +1,47 @@
-// Turns the TreeData the tree view already builds into a d3-sankey graph.
+// Builds the sankey graph from the same `treeStructure` levels the tree view
+// uses — but as a DAG, not a tree, and that distinction is the whole file.
 //
-// The sankey is not a second data model — it is the same `treeStructure`
-// hierarchy drawn with ribbons instead of boxes. Everything here operates on
-// `buildTree()`'s output, so the two views can never disagree about what the
-// structure is.
+// A tree node is a PATH: `buildTree` keys nodes on the whole chain of ancestors,
+// because in a tree every node has exactly one parent. A sankey node is an
+// ENTITY: one topic is one node, with ribbons arriving from every audience that
+// uses it. Merging on the entity is not a nicety, it is what a sankey is for —
+// and it is also what makes the diagram fit. On the live Erste filter the two
+// identities differ by an order of magnitude:
 //
-// Two things the tree does not need and the sankey does:
-//   1. Folding. A Messages leaf level has thousands of nodes; a column of
-//      thousands of 1px ribbons is not a diagram.
-//   2. Absolute geometry. d3-sankey computes x0/x1/y0/y1 per node and a width
-//      per link; we hand those coordinates to xyflow rather than letting xyflow
-//      lay anything out.
+//     level      as paths   as entities
+//     topic         446          27
+//     MC            681          54
 //
-// The folding rule is **per parent**, and that is the whole point. An earlier
-// version capped each COLUMN at its top N, which broke the diagram's basic
-// promise: a node you can see must be a node you can follow. With a column cap,
-// a visible audience's every topic could lose the column-wide ranking to other
-// audiences' topics and vanish into one shared Other — so hovering a node that
-// is plainly on screen led into grey nothing. Per parent, a visible node always
-// shows its own children, and only its own overflow folds into its own Other,
-// which the user can expand.
+// So this module walks the levels itself rather than reusing `buildTree`'s
+// output. It shares the row assembly and the per-level grouping with the tree
+// (`messageRows` / `groupValue`), so the two views can never disagree about what
+// the structure is — only about whether a node is a path or a thing.
 
 import {
   sankey as d3Sankey,
   sankeyLeft,
   sankeyLinkHorizontal,
 } from "d3-sankey";
-import type { TreeData, TreeNode } from "./buildTree";
+import { groupValue, messageRows } from "./buildTree";
+import type { TreeLevel } from "./parseTreeStructure";
+import type { Audience, Message, Topic } from "../types";
 
 export type SankeyNodeDatum = {
   id: string;
   label: string;
   level: number;
   count: number;
-  /** True for a synthetic fold node. */
+  /** True for the synthetic per-column fold node. */
   isOther: boolean;
-  /** How many real groups this Other folds in. 0 on real nodes and on the
-   *  pass-through Others that only carry a collapsed branch rightwards. */
+  /** How many real nodes this Other folds in. 0 on real nodes. */
   foldedGroups: number;
   statusCounts: Record<string, number>;
+  /** A message to open when a leaf is clicked. A card carried by several
+   *  audiences is one node, so this is its first message in row order. */
   messageId?: number;
   platform?: string;
-  /** Set on a real node that has more children than the cap: clicking it shows
-   *  all of them. Also set on its Other, pointing at the same parent, so the
-   *  fold node is a shortcut for the same action. */
-  expandTargetId?: string;
-  /** Whether that target is currently expanded — drives the chevron. */
-  isExpanded?: boolean;
+  /** Set on an Other: clicking it expands that whole column. */
+  expandLevel?: number;
   // Written by d3-sankey during layout.
   x0?: number;
   x1?: number;
@@ -86,185 +81,199 @@ export const SANKEY_NODE_PADDING = 22;
 const MIN_ROW_HEIGHT = 34;
 const MIN_CANVAS_HEIGHT = 420;
 
-/** The fold node that holds one parent's overflow. */
-export function otherNodeId(parentId: string): string {
-  return `other:${parentId}`;
+/** The fold node that holds one column's overflow. */
+export function otherNodeId(level: number): string {
+  return `other:${level}`;
 }
 
-function addStatusCounts(
-  into: Record<string, number>,
-  from: Record<string, number>,
-): void {
-  for (const [k, v] of Object.entries(from)) {
-    into[k] = (into[k] ?? 0) + v;
+type NodeAgg = {
+  id: string;
+  level: number;
+  label: string;
+  rows: Set<number>;
+  platforms: Set<string>;
+  messageId?: number;
+};
+
+/**
+ * The full DAG: one node per (level, entity), one link per (source, target)
+ * entity pair, both weighted by the number of distinct messages flowing through.
+ */
+function buildGraph(
+  data: { auds: Audience[]; tops: Topic[]; msgs: Message[] },
+  levels: TreeLevel[],
+): { nodes: NodeAgg[]; links: Map<string, { source: string; target: string; rows: Set<number> }> } {
+  const nodeMap = new Map<string, NodeAgg>();
+  const linkMap = new Map<
+    string,
+    { source: string; target: string; rows: Set<number> }
+  >();
+
+  for (const row of messageRows(data)) {
+    let prevId: string | null = null;
+    for (let i = 0; i < levels.length; i++) {
+      const gv = groupValue(levels[i], row);
+      const id = `${i}:${gv.key}`;
+
+      let agg = nodeMap.get(id);
+      if (!agg) {
+        agg = {
+          id,
+          level: i,
+          label: gv.label,
+          rows: new Set(),
+          platforms: new Set(),
+        };
+        if (levels[i].kind === "messages") agg.messageId = row.message.id;
+        nodeMap.set(id, agg);
+      }
+      agg.rows.add(row.message.id);
+      if (row.audience.buyingPlatform) agg.platforms.add(row.audience.buyingPlatform);
+
+      if (prevId !== null) {
+        const key = `${prevId}->${id}`;
+        let link = linkMap.get(key);
+        if (!link) {
+          link = { source: prevId, target: id, rows: new Set() };
+          linkMap.set(key, link);
+        }
+        link.rows.add(row.message.id);
+      }
+      prevId = id;
+    }
   }
-}
 
-// Biggest first; ties (every message leaf has count 1) break on the label so the
-// order is stable across renders.
-function rank(a: TreeNode, b: TreeNode): number {
-  return b.count - a.count || a.label.localeCompare(b.label);
-}
-
-function realDatum(n: TreeNode): SankeyNodeDatum {
-  const d: SankeyNodeDatum = {
-    id: n.id,
-    label: n.label,
-    level: n.level,
-    count: n.count,
-    isOther: false,
-    foldedGroups: 0,
-    statusCounts: n.statusCounts,
-  };
-  if (n.messageId !== undefined) d.messageId = n.messageId;
-  if (n.platform !== undefined) d.platform = n.platform;
-  return d;
+  return { nodes: [...nodeMap.values()], links: linkMap };
 }
 
 /**
- * Folds each parent's children down to its `topN` largest.
+ * Folds a column that runs past `cap` down to its largest nodes.
  *
- * `expanded` holds the ids of parents the user opened; their children are all
- * shown. A parent whose overflow is a single node is never folded either —
- * "Other (1)" costs a row and says nothing.
+ * In a DAG the fold is cheap and honest: the Other node inherits the folded
+ * nodes' own links, so a folded audience's flow still arrives at the real topics
+ * it feeds. Nothing has to be chained into a second Other to keep the diagram
+ * connected, and no visible node is left leading nowhere.
+ *
+ * `expandedLevels` holds the columns the user opened; those are never folded.
  */
-export function foldToTopN(
-  tree: TreeData,
-  topN: number,
-  expanded: Set<string> = new Set(),
+export function buildSankeyData(
+  data: { auds: Audience[]; tops: Topic[]; msgs: Message[] },
+  levels: TreeLevel[],
+  cap: number,
+  expandedLevels: Set<number> = new Set(),
 ): { nodes: SankeyNodeDatum[]; links: SankeyLinkDatum[] } {
-  if (tree.nodes.length === 0) return { nodes: [], links: [] };
-
-  const maxLevel = tree.nodes.reduce((m, n) => Math.max(m, n.level), 0);
-  const childrenOf = new Map<string, TreeNode[]>();
-  const roots: TreeNode[] = [];
-  for (const n of tree.nodes) {
-    if (n.parentId === null) {
-      roots.push(n);
-    } else {
-      const arr = childrenOf.get(n.parentId) ?? [];
-      arr.push(n);
-      childrenOf.set(n.parentId, arr);
-    }
+  if (levels.length === 0 || data.msgs.length === 0) {
+    return { nodes: [], links: [] };
   }
 
+  const { nodes: aggs, links: linkAggs } = buildGraph(data, levels);
+  if (aggs.length === 0) return { nodes: [], links: [] };
+
+  const statusById = new Map(data.msgs.map((m) => [m.id, m.status ?? ""]));
+  function statusesOf(rows: Iterable<number>): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const id of rows) {
+      const st = statusById.get(id);
+      if (st === undefined || st === "") continue;
+      out[st] = (out[st] ?? 0) + 1;
+    }
+    return out;
+  }
+
+  const byLevel = new Map<number, NodeAgg[]>();
+  for (const n of aggs) {
+    const arr = byLevel.get(n.level) ?? [];
+    arr.push(n);
+    byLevel.set(n.level, arr);
+  }
+
+  // Which real node each id renders as: itself, or its column's Other.
+  const renderAs = new Map<string, string>();
   const nodes: SankeyNodeDatum[] = [];
-  const datumById = new Map<string, SankeyNodeDatum>();
-  // Keyed by the id pair so parallel edges collapse into one ribbon (several
-  // folded children of the same parent share one ribbon to that parent's
-  // Other). The endpoints live in the value, not parsed back out of the key —
-  // node ids embed user-entered values and are not safe to split apart.
-  const flows = new Map<
-    string,
-    { source: string; target: string; value: number }
-  >();
 
-  function addFlow(source: string, target: string, value: number): void {
-    const key = `${source}->${target}`;
-    const prev = flows.get(key);
-    if (prev) prev.value += value;
-    else flows.set(key, { source, target, value });
-  }
+  for (const [level, columnNodes] of byLevel) {
+    const ranked = [...columnNodes].sort(
+      (a, b) => b.rows.size - a.rows.size || a.label.localeCompare(b.label),
+    );
+    // Folding a single leftover would render "Other (1)" — a row that costs as
+    // much as the node it hides.
+    const folds = !expandedLevels.has(level) && ranked.length > cap + 1;
+    const keepList = folds ? ranked.slice(0, cap) : ranked;
+    const foldList = folds ? ranked.slice(cap) : [];
 
-  function push(d: SankeyNodeDatum): SankeyNodeDatum {
-    nodes.push(d);
-    datumById.set(d.id, d);
-    return d;
-  }
-
-  // The root column is never folded: there is no parent above it whose pill
-  // could serve as the expand handle, and it is the diagram's entry point.
-  let keptReal = [...roots].sort(rank);
-  for (const n of keptReal) push(realDatum(n));
-  // Fold nodes rendered at the previous level, which must carry their collapsed
-  // branch onwards.
-  let openOthers: SankeyNodeDatum[] = [];
-
-  for (let level = 1; level <= maxLevel; level++) {
-    const nextKept: TreeNode[] = [];
-    const nextOthers: SankeyNodeDatum[] = [];
-
-    for (const parent of keptReal) {
-      const children = [...(childrenOf.get(parent.id) ?? [])].sort(rank);
-      if (children.length === 0) continue;
-
-      const isExpanded = expanded.has(parent.id);
-      // Folding a single leftover would render "Other (1)" — a row that costs
-      // as much as the node it hides.
-      const overflows = children.length > topN + 1;
-      const keepList = isExpanded || !overflows ? children : children.slice(0, topN);
-      const foldList = isExpanded || !overflows ? [] : children.slice(topN);
-
-      if (overflows) {
-        const parentDatum = datumById.get(parent.id);
-        if (parentDatum) {
-          parentDatum.expandTargetId = parent.id;
-          parentDatum.isExpanded = isExpanded;
-        }
-      }
-
-      for (const c of keepList) {
-        nextKept.push(c);
-        push(realDatum(c));
-        addFlow(parent.id, c.id, c.count);
-      }
-
-      if (foldList.length > 0) {
-        const statusCounts: Record<string, number> = {};
-        let count = 0;
-        for (const c of foldList) {
-          addStatusCounts(statusCounts, c.statusCounts);
-          count += c.count;
-          addFlow(parent.id, otherNodeId(parent.id), c.count);
-        }
-        nextOthers.push(
-          push({
-            id: otherNodeId(parent.id),
-            label: `Other (${foldList.length})`,
-            level,
-            count,
-            isOther: true,
-            foldedGroups: foldList.length,
-            statusCounts,
-            expandTargetId: parent.id,
-            isExpanded: false,
-          }),
-        );
-      }
-    }
-
-    // A collapsed branch keeps flowing to the right edge instead of ending
-    // mid-diagram: each Other continues into one Other of its own, carrying the
-    // same mass. It is not expandable — the fold node that started the chain is.
-    for (const o of openOthers) {
-      const cont = push({
-        id: otherNodeId(o.id),
-        label: "Other",
+    for (const n of keepList) {
+      renderAs.set(n.id, n.id);
+      const d: SankeyNodeDatum = {
+        id: n.id,
+        label: n.label,
         level,
-        count: o.count,
-        isOther: true,
+        count: n.rows.size,
+        isOther: false,
         foldedGroups: 0,
-        statusCounts: o.statusCounts,
-      });
-      nextOthers.push(cont);
-      addFlow(o.id, cont.id, o.count);
+        statusCounts: statusesOf(n.rows),
+      };
+      if (n.messageId !== undefined) d.messageId = n.messageId;
+      if (n.platforms.size === 1) d.platform = [...n.platforms][0];
+      nodes.push(d);
     }
 
-    keptReal = nextKept;
-    openOthers = nextOthers;
+    if (foldList.length > 0) {
+      const oid = otherNodeId(level);
+      const rows = new Set<number>();
+      for (const n of foldList) {
+        renderAs.set(n.id, oid);
+        for (const r of n.rows) rows.add(r);
+      }
+      nodes.push({
+        id: oid,
+        label: `Other (${foldList.length})`,
+        level,
+        count: rows.size,
+        isOther: true,
+        foldedGroups: foldList.length,
+        statusCounts: statusesOf(rows),
+        expandLevel: level,
+      });
+    }
   }
 
-  const links: SankeyLinkDatum[] = [...flows.entries()].map(
-    ([id, { source, target, value }]) => ({ id, source, target, value }),
+  // Re-point every link at whatever its endpoints render as, merging the ones
+  // that collapse onto the same pair. A link's weight is the number of distinct
+  // messages on it, so merged links union their rows rather than adding counts —
+  // two folded audiences feeding one topic must not count a message twice.
+  const merged = new Map<
+    string,
+    { source: string; target: string; rows: Set<number> }
+  >();
+  for (const l of linkAggs.values()) {
+    const source = renderAs.get(l.source);
+    const target = renderAs.get(l.target);
+    if (source === undefined || target === undefined) continue;
+    const key = `${source}->${target}`;
+    let entry = merged.get(key);
+    if (!entry) {
+      entry = { source, target, rows: new Set() };
+      merged.set(key, entry);
+    }
+    for (const r of l.rows) entry.rows.add(r);
+  }
+
+  const links: SankeyLinkDatum[] = [...merged.entries()].map(
+    ([id, { source, target, rows }]) => ({
+      id,
+      source,
+      target,
+      value: rows.size,
+    }),
   );
 
   return { nodes, links };
 }
 
 /**
- * Runs the d3-sankey layout over a folded graph and attaches the ribbon path
- * for each link. `sankeyLeft` pins every node to its own tree level, which is
- * what we want — the columns ARE the structure levels, not a derived depth.
+ * Runs the d3-sankey layout and attaches the ribbon path for each link.
+ * `sankeyLeft` pins every node to its own structure level, which is what we
+ * want — the columns ARE the structure levels, not a derived depth.
  */
 export function layoutSankey(
   nodes: SankeyNodeDatum[],

@@ -43,7 +43,7 @@ export type TreeData = {
   edges: TreeEdge[];
 };
 
-type Row = {
+export type Row = {
   message: Message;
   audience: Audience;
   topic: Topic;
@@ -52,7 +52,10 @@ type Row = {
 // Extract the value used to group a row at a particular level. Returns "(none)"
 // when the underlying field is null/empty, so empty values get their own bucket
 // instead of being dropped silently.
-function groupValue(level: TreeLevel, row: Row): { key: string; label: string } {
+export function groupValue(
+  level: TreeLevel,
+  row: Row,
+): { key: string; label: string } {
   if (level.kind === "audience") {
     return { key: `aud:${row.audience.key}`, label: row.audience.name || row.audience.key };
   }
@@ -60,8 +63,12 @@ function groupValue(level: TreeLevel, row: Row): { key: string; label: string } 
     return { key: `top:${row.topic.key}`, label: row.topic.name || row.topic.key };
   }
   if (level.kind === "messages") {
+    // Keyed by the CARD, not the row. In the tree this changes nothing — the
+    // path prefix already separates copies of a card that sit under different
+    // audiences — but the sankey merges on this key, and there one MC300a is
+    // one node however many audiences carry it.
     const mc = `MC${row.message.number}${row.message.variant}`;
-    return { key: `msg:${row.message.id}`, label: mc };
+    return { key: `mc:${mc}`, label: mc };
   }
   // group level
   const entity = level.source === "audience" ? row.audience : row.topic;
@@ -83,6 +90,28 @@ function statusBreakdown(
     out[s] = (out[s] ?? 0) + 1;
   }
   return out;
+}
+
+/**
+ * Pairs every message with its audience and topic. A message whose audience or
+ * topic is not in the current slice is dropped — it has no place to sit on any
+ * of the levels. Shared with the sankey so the two views walk identical rows.
+ */
+export function messageRows(data: {
+  auds: Audience[];
+  tops: Topic[];
+  msgs: Message[];
+}): Row[] {
+  const audByKey = new Map(data.auds.map((a) => [a.key, a]));
+  const topByKey = new Map(data.tops.map((t) => [t.key, t]));
+  const rows: Row[] = [];
+  for (const m of data.msgs) {
+    const audience = audByKey.get(m.audience);
+    const topic = topByKey.get(m.topic);
+    if (!audience || !topic) continue;
+    rows.push({ message: m, audience, topic });
+  }
+  return rows;
 }
 
 export function buildTree(

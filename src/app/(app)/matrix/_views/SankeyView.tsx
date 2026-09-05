@@ -20,12 +20,11 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import clsx from "clsx";
 import { parseTreeStructure } from "../_tree/parseTreeStructure";
-import { buildTree } from "../_tree/buildTree";
 import {
-  foldToTopN,
+  buildSankeyData,
   layoutSankey,
   SANKEY_NODE_WIDTH,
   type SankeyNodeDatum,
@@ -51,20 +50,18 @@ async function fetchTreeStructure(): Promise<string> {
   return typeof v === "string" ? v : "";
 }
 
-// How many children ONE parent shows before its overflow folds into its own
-// "Other". Per parent, not per column: a node you can see must be a node you can
-// follow (see the note at the top of buildSankey.ts).
+// How many nodes a column shows before the rest fold into its "Other".
 //
-// The cap is small because per-parent folding multiplies down the levels: the
-// live Erste filter alone holds 90 audiences over 446 distinct audience/topic
-// pairs, so at 10 the leaf column ran past 150 rows and the fitted diagram was a
-// grey smear. Eight keeps the opening view legible; the chevrons open the rest.
-const TOP_N_PER_PARENT = 8;
+// Generous on purpose. Because nodes are entities rather than paths, the columns
+// are small to begin with — the live Erste filter has 27 topics and 54 MC cards
+// where the path-shaped version had 446 and 681 — so most columns never fold at
+// all and the cap is a safety valve for unfiltered data, not a routine crop.
+const COLUMN_CAP = 120;
 // A tall graph must not be crushed to fit. Below ~0.35 the pills stop being
 // readable at all, so the initial fit stops there and the user pans instead —
 // the minimap in the toolbar shows what is off-screen.
 const FIT_VIEW_OPTIONS = { minZoom: 0.35, maxZoom: 1 } as const;
-const EXPANDED_STORAGE_KEY = "mm6_sankey_expanded_v1";
+const EXPANDED_STORAGE_KEY = "mm6_sankey_expanded_v2";
 // Width declared to xyflow per node: the bar plus the label pill. It is what
 // fitView measures, so labels stay inside the fitted viewport. Only the bar and
 // the pill take pointer events — the rest of the box lets ribbons through.
@@ -79,14 +76,14 @@ const LEVEL_COLOR_CYCLE = 6;
 const TOOLTIP_W = 274;
 const TOOLTIP_H = 120;
 
-function loadExpanded(): Set<string> {
+function loadExpanded(): Set<number> {
   if (typeof window === "undefined") return new Set();
   try {
     const raw = window.localStorage.getItem(EXPANDED_STORAGE_KEY);
     if (!raw) return new Set();
     const arr = JSON.parse(raw);
     return new Set(
-      Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : [],
+      Array.isArray(arr) ? arr.filter((x) => typeof x === "number") : [],
     );
   } catch {
     return new Set();
@@ -116,10 +113,9 @@ type SankeyNodeData = {
   label: string;
   count: number;
   messageId?: number;
-  expandTargetId?: string;
-  isExpanded?: boolean;
+  expandLevel?: number;
   onOpenMessage: (id: number) => void;
-  onToggleExpand: (parentId: string) => void;
+  onToggleExpand: (level: number) => void;
 };
 
 type SankeyEdgeData = {
@@ -134,7 +130,7 @@ function SankeyNodeBox({ id, data }: NodeProps) {
   const { highlight, setHover } = useContext(HighlightContext);
   const dimmed = highlight !== null && !highlight.nodes.has(id);
   const isLeaf = d.messageId !== undefined;
-  const expandTarget = d.expandTargetId;
+  const expandTarget = d.expandLevel;
   const clickable = isLeaf || expandTarget !== undefined;
 
   // A leaf opens its MC; anything else that is clickable is a fold handle —
@@ -167,7 +163,7 @@ function SankeyNodeBox({ id, data }: NodeProps) {
         className="sankey-view__pill"
         title={
           expandTarget !== undefined
-            ? `${d.label} — ${d.count} · click to ${d.isExpanded ? "collapse" : "show all"}`
+            ? `${d.label} — ${d.count} · click to show all`
             : `${d.label} — ${d.count}`
         }
         role={clickable ? "button" : undefined}
@@ -186,11 +182,7 @@ function SankeyNodeBox({ id, data }: NodeProps) {
       >
         {expandTarget !== undefined ? (
           <span className="sankey-view__chevron" aria-hidden>
-            {d.isExpanded ? (
-              <ChevronDown className="size-3" />
-            ) : (
-              <ChevronRight className="size-3" />
-            )}
+            <ChevronRight className="size-3" />
           </span>
         ) : null}
         <span className="sankey-view__label">{d.label}</span>
@@ -262,13 +254,13 @@ export default function SankeyView({
   const [tooltipAt, setTooltipAt] = useState({ x: 0, y: 0 });
   // Parents the user opened. Persisted like the tree's expanded set, so a
   // branch you drilled into is still open when you come back.
-  const [expanded, setExpanded] = useState<Set<string>>(loadExpanded);
+  const [expanded, setExpanded] = useState<Set<number>>(loadExpanded);
 
-  const toggleExpand = useCallback((parentId: string) => {
+  const toggleExpand = useCallback((level: number) => {
     setExpanded((prev) => {
       const next = new Set(prev);
-      if (next.has(parentId)) next.delete(parentId);
-      else next.add(parentId);
+      if (next.has(level)) next.delete(level);
+      else next.add(level);
       try {
         window.localStorage.setItem(
           EXPANDED_STORAGE_KEY,
@@ -294,11 +286,12 @@ export default function SankeyView({
   }, [treeStructureQ.data]);
 
   const graph = useMemo(() => {
-    const tree = buildTree(
+    const folded = buildSankeyData(
       { auds: audiences, tops: topics, msgs: messages },
       parsed.levels,
+      COLUMN_CAP,
+      expanded,
     );
-    const folded = foldToTopN(tree, TOP_N_PER_PARENT, expanded);
     return layoutSankey(folded.nodes, folded.links);
   }, [audiences, topics, messages, parsed.levels, expanded]);
 
@@ -414,10 +407,7 @@ export default function SankeyView({
           onToggleExpand: toggleExpand,
         };
         if (n.messageId !== undefined) data.messageId = n.messageId;
-        if (n.expandTargetId !== undefined) {
-          data.expandTargetId = n.expandTargetId;
-          data.isExpanded = n.isExpanded ?? false;
-        }
+        if (n.expandLevel !== undefined) data.expandLevel = n.expandLevel;
         return {
           id: n.id,
           type: "sankeyNode",

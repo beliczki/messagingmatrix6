@@ -53,7 +53,9 @@ export default function FeedView({
   messages: Message[];
   audiences: Audience[];
   topics: Topic[];
-  onOpenMessage: (id: number) => void;
+  /** Omitted when the table is embedded in a dialog — a row click there would
+   *  stack the MessageEditor on top of the export dialog. Rows stay read-only. */
+  onOpenMessage?: (id: number) => void;
 }) {
   const feedStructureQ = useQuery({
     queryKey: ["config", "feedStructure"],
@@ -231,9 +233,11 @@ export default function FeedView({
             return (
               <tr
                 key={m.id}
-                onClick={() => onOpenMessage(m.id)}
+                onClick={onOpenMessage ? () => onOpenMessage(m.id) : undefined}
                 className={clsx(
-                  "matrix-feed__row matrix-feed__row--clickable cursor-pointer border-b border-slate-100 hover:bg-slate-50",
+                  "matrix-feed__row border-b border-slate-100 hover:bg-slate-50",
+                  onOpenMessage &&
+                    "matrix-feed__row--clickable cursor-pointer",
                   m.archivedAt && "matrix-feed__row--archived row--archived",
                 )}
               >

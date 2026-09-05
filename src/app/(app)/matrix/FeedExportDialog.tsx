@@ -8,7 +8,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, AlertTriangle, CheckCircle2 } from "lucide-react";
 import AppDialog from "../_components/AppDialog";
 import BaselinePicker from "./BaselinePicker";
-import { type Message } from "./types";
+import FeedView from "./FeedView";
+import { type Audience, type Message, type Topic } from "./types";
 import {
   DEFAULT_SIGNAL_COLUMN,
   isValidSignalColumn,
@@ -138,12 +139,16 @@ export default function FeedExportDialog({
   product,
   messages,
   messageIds,
+  audiences,
+  topics,
 }: {
   open: boolean;
   onClose: () => void;
   product: string;
   messages: Message[];
   messageIds: number[];
+  audiences: Audience[];
+  topics: Topic[];
 }) {
   const router = useRouter();
   const qc = useQueryClient();
@@ -370,6 +375,9 @@ export default function FeedExportDialog({
               preview={previewQ.data ?? null}
               previewLoading={previewQ.isLoading}
               previewError={previewQ.error as Error | null}
+              messages={messages}
+              audiences={audiences}
+              topics={topics}
             />
           ) : (
             <PostEmitView
@@ -407,6 +415,9 @@ function PreEmitForm({
   preview,
   previewLoading,
   previewError,
+  messages,
+  audiences,
+  topics,
 }: {
   forceNewVersion: boolean;
   notes: string;
@@ -427,7 +438,12 @@ function PreEmitForm({
   preview: PreviewResponse | null;
   previewLoading: boolean;
   previewError: Error | null;
+  messages: Message[];
+  audiences: Audience[];
+  topics: Topic[];
 }) {
+  const [showRows, setShowRows] = useState(false);
+
   return (
     <div className="space-y-4">
       <div className="feed-export-dialog__options space-y-3">
@@ -593,6 +609,34 @@ function PreEmitForm({
       ) : null}
       </div>
 
+      {/* The feed table used to be a matrix view of its own. It is not a view —
+          it is what this export is about to send, so it lives here, behind a
+          toggle, and only mounts when asked (evaluating the feed patterns for
+          every row is the expensive part). */}
+      <div className="feed-export-dialog__rows border-t border-slate-200 pt-4">
+        <label className="feed-export-dialog__rows-toggle flex cursor-pointer items-center gap-2 text-xs font-medium text-slate-700">
+          <input
+            type="checkbox"
+            checked={showRows}
+            onChange={(e) => setShowRows(e.target.checked)}
+            className="form-field__checkbox size-3.5 accent-slate-900"
+          />
+          Feed rows
+          <span className="font-normal text-slate-500">
+            — all {messages.length} row{messages.length === 1 ? "" : "s"} of this
+            selection, in the feed&apos;s own columns
+          </span>
+        </label>
+        {showRows ? (
+          <div className="feed-export-dialog__rows-table mt-2 max-h-[50vh] overflow-auto rounded border border-slate-200">
+            <FeedView
+              messages={messages}
+              audiences={audiences}
+              topics={topics}
+            />
+          </div>
+        ) : null}
+      </div>
 
       {error ? (
         <div className="rounded border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">

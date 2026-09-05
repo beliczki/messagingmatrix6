@@ -184,7 +184,7 @@ export function platformToken(p: string | null | undefined): string | null {
   return (PLATFORM_TOKENS as readonly string[]).includes(v) ? v : null;
 }
 
-export type View = "grid" | "feed" | "tree";
+export type View = "grid" | "sankey" | "tree";
 export type Density = "detailed" | "compact" | "dense";
 
 // Which matrix world the grid shows. "dco" = template-driven messages

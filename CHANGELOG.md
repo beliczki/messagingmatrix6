@@ -5,6 +5,44 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.60.0] — 2026-09-05
+
+### Added
+- **Sankey view.** The matrix's third view draws the same hierarchy the tree
+  draws — the same `treeStructure` string from Settings → Structure, parsed by
+  the same `parseTreeStructure` and built by the same `buildTree` — as ribbons
+  whose width is the message count. It is one structure with two renderings, not
+  a second data model, so the two views can never disagree about what the
+  structure is.
+  - Layout comes from `d3-sankey` (3 kB, layout only); the drawing is ours, on
+    the xyflow canvas the tree already uses. That means pan, zoom and the right
+    toolbar's Navigator (minimap + zoom controls) work on the sankey the same
+    way they work on the tree, with no second set of controls to learn.
+  - **Every column folds to its 20 largest groups.** A leaf column of thousands
+    of one-message ribbons is not a diagram. What does not make the cut folds
+    into a neutral grey `Other (N)` node, and that node forwards its flow to the
+    next column's Other — so the folded mass stays visible all the way to the
+    right edge instead of vanishing mid-diagram. Every message is still counted
+    exactly once in every column.
+  - Hovering a node or a ribbon lights the **whole route** it sits on, ancestors
+    and descendants, and dims everything else; the tooltip gives the count and
+    its status breakdown. Node bars carry the tree's level and buying-platform
+    colours, so a group keeps its colour when you switch views. A leaf opens its
+    MC.
+
+### Changed
+- **The Feed view is retired; the feed table moved into the feed export.** The
+  table was never a view of the matrix — a few thousand rows of feed columns
+  answers exactly one question, "what is about to go out", and that question
+  belongs to the export. It now sits in the feed-export dialog behind a **Feed
+  rows** checkbox, and only renders when asked. A persisted `view: "feed"` falls
+  back to the grid.
+- **One Export box in the right toolbar, with a Matrix / Feed switch.** Both
+  exports are reachable from the grid now, each bringing its own setup: the
+  matrix branch its filter chips and XLSX download, the feed branch its gate
+  (one product, ACTIVE/INACTIVE only), its live-version summary and its export
+  dialog. The switch remembers which branch you used.
+
 ## [6.59.1] — 2026-09-05
 
 ### Fixed

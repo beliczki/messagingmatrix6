@@ -360,6 +360,175 @@ html.dark {
     background: #334155;
     color: #e2e8f0;
   }
+  /* Sankey view (xyflow-backed, d3-sankey layout). Same structure as the tree —
+     same treeStructure string, same level/platform colour tokens — drawn as
+     ribbons whose width is the message count. The node's xyflow box is wider
+     than the bar so fitView reserves room for the label; only the bar and the
+     label pill take pointer events, so ribbons stay hoverable underneath. */
+  .sankey-view {
+    background: var(--surface, #f8fafc);
+  }
+  .sankey-view__node-wrap {
+    background: transparent;
+    border: 0;
+    pointer-events: none;
+  }
+  .sankey-view__node {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    height: 100%;
+    pointer-events: none;
+  }
+  .sankey-view__bar {
+    width: 14px;
+    height: 100%;
+    min-height: 3px;
+    border-radius: 2px;
+    background: #94a3b8;
+    pointer-events: auto;
+    flex-shrink: 0;
+  }
+  /* Bar colour = the tree's level stripe palette, so a group keeps its colour
+     when you switch between the two views. */
+  .sankey-view__node-wrap--lvl-0 .sankey-view__bar { background: #3b82f6; }
+  .sankey-view__node-wrap--lvl-1 .sankey-view__bar { background: #8b5cf6; }
+  .sankey-view__node-wrap--lvl-2 .sankey-view__bar { background: #10b981; }
+  .sankey-view__node-wrap--lvl-3 .sankey-view__bar { background: #f59e0b; }
+  .sankey-view__node-wrap--lvl-4 .sankey-view__bar { background: #f43f5e; }
+  .sankey-view__node-wrap--lvl-5 .sankey-view__bar { background: #0ea5e9; }
+  .sankey-view__node-wrap--plat-dv360 .sankey-view__bar { background: var(--plat-dv360); }
+  .sankey-view__node-wrap--plat-adform .sankey-view__bar { background: var(--plat-adform); }
+  /* The folded branch is deliberately neutral: visible as mass, never competing
+     with the named groups for attention. */
+  .sankey-view__node-wrap--other .sankey-view__bar { background: #94a3b8; }
+
+  .sankey-view__pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 190px;
+    padding: 2px 6px;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    background: #ffffff;
+    font-size: 11px;
+    line-height: 1.2;
+    pointer-events: auto;
+    white-space: nowrap;
+  }
+  html.dark .sankey-view__pill {
+    background: #1a1a1a;
+    border-color: #334155;
+  }
+  .sankey-view__label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 500;
+    color: var(--text-primary, #0f172a);
+  }
+  .sankey-view__count {
+    flex-shrink: 0;
+    padding: 0 5px;
+    border-radius: 9999px;
+    background: #e2e8f0;
+    color: #334155;
+    font-size: 10px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  html.dark .sankey-view__count {
+    background: #334155;
+    color: #cbd5e1;
+  }
+  .sankey-view__node--leaf .sankey-view__pill {
+    cursor: pointer;
+  }
+  .sankey-view__node--leaf .sankey-view__label {
+    color: #1d4ed8;
+  }
+  .sankey-view__node--leaf .sankey-view__pill:hover .sankey-view__label {
+    text-decoration: underline;
+  }
+  .sankey-view__node--dim {
+    opacity: 0.25;
+  }
+  /* xyflow needs handles for an edge to render at all; the sankey draws its own
+     path, so they only have to exist. */
+  .sankey-view__handle {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .sankey-view__ribbon {
+    fill: none;
+    stroke: #94a3b8;
+    stroke-opacity: 0.32;
+  }
+  .sankey-view__ribbon--lvl-0 { stroke: #3b82f6; }
+  .sankey-view__ribbon--lvl-1 { stroke: #8b5cf6; }
+  .sankey-view__ribbon--lvl-2 { stroke: #10b981; }
+  .sankey-view__ribbon--lvl-3 { stroke: #f59e0b; }
+  .sankey-view__ribbon--lvl-4 { stroke: #f43f5e; }
+  .sankey-view__ribbon--lvl-5 { stroke: #0ea5e9; }
+  .sankey-view__ribbon--other { stroke: #94a3b8; }
+  /* Hovering anything dims everything off the route and lifts everything on it. */
+  .sankey-view__ribbon--dim { stroke-opacity: 0.07; }
+  .sankey-view__ribbon--on { stroke-opacity: 0.6; }
+  .sankey-view__ribbon-hit {
+    fill: none;
+    stroke: transparent;
+    pointer-events: stroke;
+    cursor: default;
+  }
+
+  .sankey-view__tooltip {
+    position: absolute;
+    z-index: 10;
+    pointer-events: none;
+    max-width: 260px;
+    padding: 6px 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background: #ffffff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    font-size: 11px;
+    color: var(--text-primary, #0f172a);
+  }
+  html.dark .sankey-view__tooltip {
+    background: #1a1a1a;
+    border-color: #334155;
+  }
+  .sankey-view__tooltip-title {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .sankey-view__tooltip-value {
+    margin-top: 1px;
+    color: #64748b;
+    font-variant-numeric: tabular-nums;
+  }
+  .sankey-view__tooltip-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+  }
+  .sankey-view__tooltip-status-name {
+    flex: 1 1 auto;
+    color: #475569;
+  }
+  html.dark .sankey-view__tooltip-status-name {
+    color: #94a3b8;
+  }
+  .sankey-view__tooltip-status-count {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+  }
+
   /* Docked variant: minimap lives in the RightToolbar NAVIGATOR section,
      not on top of the canvas. Strip the Panel's absolute positioning and let
      it fill its parent's box. */

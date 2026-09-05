@@ -18,13 +18,11 @@ export default function MatrixExportPanel({ filters }: { filters: Filters }) {
     window.location.href = `/api/export/matrix-xlsx${qs ? `?${qs}` : ""}`;
   }
 
+  // The box and the "Export" title belong to ExportPanel, which owns the
+  // Matrix/Feed switch; this renders only the matrix branch's own setup.
   return (
-    <div className="matrix-export-panel rounded-md border border-slate-200 bg-white p-3">
-      <div className="matrix-export-panel__title text-[10px] font-medium uppercase tracking-wider text-slate-500">
-        Matrix export
-      </div>
-
-      <div className="matrix-export-panel__filters mt-2 flex flex-wrap items-center gap-1.5">
+    <div className="matrix-export-panel">
+      <div className="matrix-export-panel__filters flex flex-wrap items-center gap-1.5">
         {(products.length ? products : ["All products"]).map((label) => (
           <span
             key={`p-${label}`}

@@ -27,6 +27,9 @@ export type TreeNode = {
   // share one. Absent when the subtree mixes platforms or carries none, so a
   // consumer can tell "all adform" apart from "mixed" and fall back.
   platform?: string;
+  // How the node's `count` splits by message status. Sums to `count`. The tree
+  // ignores it; the sankey tooltip breaks the ribbon down with it.
+  statusCounts: Record<string, number>;
 };
 
 export type TreeEdge = {
@@ -67,6 +70,21 @@ function groupValue(level: TreeLevel, row: Row): { key: string; label: string } 
   return { key: `${level.source}.${level.field}:${v}`, label: v };
 }
 
+// Splits a node's message set by status. Runs over the deduped row set, so a
+// message that reaches the node once counts once.
+function statusBreakdown(
+  rows: Set<number>,
+  statusById: Map<number, string>,
+): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const id of rows) {
+    const s = statusById.get(id);
+    if (s === undefined) continue;
+    out[s] = (out[s] ?? 0) + 1;
+  }
+  return out;
+}
+
 export function buildTree(
   data: { auds: Audience[]; tops: Topic[]; msgs: Message[] },
   levels: TreeLevel[],
@@ -76,6 +94,9 @@ export function buildTree(
   }
   const audById = new Map(data.auds.map((a) => [a.key, a]));
   const topById = new Map(data.tops.map((t) => [t.key, t]));
+  const statusById = new Map(
+    data.msgs.map((m) => [m.id, m.status ?? ""] as const),
+  );
 
   // Each message yields one root-to-leaf path. We dedupe nodes by their
   // (levelIdx, pathSoFar) cumulative identity.
@@ -143,6 +164,7 @@ export function buildTree(
         label: n.label,
         count: n.rows.size,
         parentId: n.parentId,
+        statusCounts: statusBreakdown(n.rows, statusById),
       };
       if (n.messageId !== undefined) out.messageId = n.messageId;
       if (n.entityKey !== undefined) out.entityKey = n.entityKey;

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Download, AlertTriangle } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
-import { type Filters, type Message } from "./types";
+import { type Audience, type Filters, type Message, type Topic } from "./types";
 import FeedExportDialog from "./FeedExportDialog";
 
 
@@ -33,9 +33,13 @@ const SERVING_STATUSES = new Set(["ACTIVE", "INACTIVE"]);
 export default function FeedExportPanel({
   filters,
   filteredMessages,
+  audiences,
+  topics,
 }: {
   filters: Filters;
   filteredMessages: Message[];
+  audiences: Audience[];
+  topics: Topic[];
 }) {
   const products = [...filters.products];
   const statuses = [...filters.statuses];
@@ -118,12 +122,10 @@ export default function FeedExportPanel({
 
   return (
     <>
-      <div className="feed-export-panel rounded-md border border-slate-200 bg-white p-3">
-        <div className="feed-export-panel__title text-[10px] font-medium uppercase tracking-wider text-slate-500">
-          Feed export
-        </div>
-
-        <div className="feed-export-panel__filters mt-2 flex flex-wrap items-center gap-1.5">
+      {/* The box and the "Export" title belong to ExportPanel, which owns the
+          Matrix/Feed switch; this renders only the feed branch's own setup. */}
+      <div className="feed-export-panel">
+        <div className="feed-export-panel__filters flex flex-wrap items-center gap-1.5">
           {filterChips.map((c) => (
             <span
               key={c.key}
@@ -185,6 +187,8 @@ export default function FeedExportPanel({
         product={product!}
         messages={filteredMessages}
         messageIds={filteredIds}
+        audiences={audiences}
+        topics={topics}
       />
     </>
   );

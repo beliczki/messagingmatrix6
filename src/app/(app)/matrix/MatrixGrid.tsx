@@ -2,19 +2,18 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LayoutList, List, Grip, Table2, ListFilter, Pencil, GitFork } from "lucide-react";
+import { LayoutList, List, Grip, Table2, Waypoints, Pencil, GitFork } from "lucide-react";
 import clsx from "clsx";import { trimEmptyCountSegments } from "@/lib/count-segments";
 
 import { ReactFlowProvider } from "@xyflow/react";
 import GridView from "./GridView";
-import FeedView from "./FeedView";
+import SankeyView from "./_views/SankeyView";
 import TreeView from "./_views/TreeView";
 import TreeViewNavigator, {
   TreeViewNavigatorControls,
 } from "./_views/TreeViewNavigator";
-import FeedExportPanel from "./FeedExportPanel";
 import EditModePanel from "./EditModePanel";
-import MatrixExportPanel from "./MatrixExportPanel";
+import ExportPanel from "./ExportPanel";
 import MatrixToolbar from "./MatrixToolbar";
 import MessageEditor from "./MessageEditor";
 import CreateMcDialog from "./CreateMcDialog";
@@ -22,6 +21,7 @@ import DeleteMcDialog from "./DeleteMcDialog";
 import HeaderDetailDialog from "./HeaderDetailDialog";
 import RightToolbar from "../_components/RightToolbar";
 import CycleIconButton from "../_components/CycleIconButton";
+import ToggleBtn from "../_components/ToggleBtn";
 import ArchiveToggle from "../_components/ArchiveToggle";
 import {
   type Audience,
@@ -193,7 +193,11 @@ export default function MatrixWorkspace() {
 
   useEffect(() => {
     const p = loadPersisted();
-    if (p.view === "grid" || p.view === "feed" || p.view === "tree") setView(p.view);
+    // "feed" is a retired view (the feed table moved into the feed-export
+    // dialog). A persisted "feed" would leave the page with nothing to render,
+    // so it lands on the grid instead.
+    if (p.view === "grid" || p.view === "sankey" || p.view === "tree") setView(p.view);
+    else if (p.view === "feed") setView("grid");
     const persistedDensity = p.density as string | undefined;
     if (persistedDensity === "detailed" || persistedDensity === "compact" || persistedDensity === "dense") {
       setDensity(persistedDensity);
@@ -1034,10 +1038,10 @@ export default function MatrixWorkspace() {
               onOpenMessage={(id) => setOpenMessageId(id)}
             />
           ) : (
-            <FeedView
+            <SankeyView
+              audiences={filtered.auds}
+              topics={filtered.tops}
               messages={filtered.msgs}
-              audiences={audiences}
-              topics={topics}
               onOpenMessage={(id) => setOpenMessageId(id)}
             />
           )}
@@ -1051,7 +1055,7 @@ export default function MatrixWorkspace() {
               <CycleIconButton
                 options={[
                   { value: "grid", icon: <Table2 className="size-4" />, label: "Grid view" },
-                  { value: "feed", icon: <ListFilter className="size-4" />, label: "Feed view" },
+                  { value: "sankey", icon: <Waypoints className="size-4" />, label: "Sankey view" },
                   { value: "tree", icon: <GitFork className="size-4" />, label: "Decision tree view" },
                 ]}
                 value={view}
@@ -1084,7 +1088,7 @@ export default function MatrixWorkspace() {
                   <Pencil className="size-4" />
                 </button>
               ) : null}
-              {view === "tree" ? (
+              {view === "tree" || view === "sankey" ? (
                 <TreeViewNavigatorControls orientation="vertical" />
               ) : null}
               <ArchiveToggle
@@ -1122,14 +1126,15 @@ export default function MatrixWorkspace() {
                   />
                 )
               ) : null}
-              {view === "grid" ? <MatrixExportPanel filters={filters} /> : null}
-              {view === "feed" ? (
-                <FeedExportPanel
+              {view === "grid" ? (
+                <ExportPanel
                   filters={filters}
                   filteredMessages={feedExportMessages}
+                  audiences={audiences}
+                  topics={topics}
                 />
               ) : null}
-              {view === "tree" ? <TreeViewNavigator /> : null}
+              {view === "tree" || view === "sankey" ? <TreeViewNavigator /> : null}
               <ArchiveToggle
                 showArchived={showArchived}
                 onChange={setShowArchived}
@@ -1229,9 +1234,9 @@ function ViewControls({
             <Table2 className="size-3.5" />
             Grid
           </ToggleBtn>
-          <ToggleBtn active={view === "feed"} onClick={() => setView("feed")}>
-            <ListFilter className="size-3.5" />
-            Feed
+          <ToggleBtn active={view === "sankey"} onClick={() => setView("sankey")}>
+            <Waypoints className="size-3.5" />
+            Sankey
           </ToggleBtn>
           <ToggleBtn active={view === "tree"} onClick={() => setView("tree")}>
             <GitFork className="size-3.5" />
@@ -1274,36 +1279,6 @@ function ViewControls({
         </div>
       ) : null}
     </div>
-  );
-}
-
-function ToggleBtn({
-  active,
-  onClick,
-  children,
-  title,
-  ariaLabel,
-}: {
-  active: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-  title?: string;
-  ariaLabel?: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      title={title}
-      aria-label={ariaLabel ?? title}
-      className={clsx(
-        "toggle-btn flex flex-1 items-center justify-center gap-1.5 rounded px-2 py-1",
-        active
-          ? "toggle-btn--active bg-slate-900 text-white"
-          : "text-slate-700 hover:bg-slate-100",
-      )}
-    >
-      {children}
-    </button>
   );
 }
 

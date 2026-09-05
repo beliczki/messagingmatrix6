@@ -924,3 +924,16 @@ A lap gyökere `dashboard`. Meglévő névből vettük: `toolbar-btn` (nap-lépt
 | Alsó összeszámláló csempék | `count-tile` + `__label` / `__value` / `__note` (két használat: „all products", illetve az MC-csempén „in N cells") | „Library · all time"; a `__note` („all products") csak azon a csempén és csak aktív product-szűrőnél, aminek nincs product-dimenziója (Text formatting) |
 | Panel akció-slot | `panel__action` | a `panel__link` („Open →") helyén; egy panelnek vagy linkje van, vagy akciója |
 | Kreatív-csík rendezés-váltó | `creative-sort` + `__option` (`--active`) | Time / CTR; a jobb-toolbaros inline rounded group nyelvén |
+
+### Sankey view + egyesített Export box (6.60.0, 2026-09-05)
+
+**Új semantic class-ok:** `sankey-view`, `sankey-view--loading`, `sankey-view--error`, `sankey-view--empty`, `sankey-view__node-wrap` (+ `--lvl-0..5`, `--plat-dv360`, `--plat-adform`, `--other`), `sankey-view__node` (+ `--dim`, `--leaf`), `sankey-view__bar`, `sankey-view__pill`, `sankey-view__label`, `sankey-view__count`, `sankey-view__handle`, `sankey-view__ribbon-group`, `sankey-view__ribbon` (+ `--lvl-0..5`, `--other`, `--dim`, `--on`), `sankey-view__ribbon-hit`, `sankey-view__tooltip` (+ `-title`, `-value`, `-status`, `-status-name`, `-status-count`) — mind `app/globals.css` `@layer components`.
+
+**A színek nem újak:** a `--lvl-0..5` és `--plat-*` értékek ugyanazok, mint a `tree-view__node-wrap--*` csíkoké; a sankey a bar háttereként és a szalag stroke-jaként használja őket. Egy csoport ugyanazt a színt viszi a két nézet között. Az `Other` ág szándékosan semleges szürke (`#94a3b8`) — látszódjon a tömege, de ne versenyezzen figyelemért.
+
+**Node-geometria:** az xyflow node doboza szélesebb (`14 + 6 + 190` px), mint a látható sáv, hogy a `fitView` helyet hagyjon a címkének. A doboz `pointer-events: none`, csak a `__bar` és a `__pill` fogad egeret — így a mögötte futó szalagok hoverelhetők maradnak.
+
+- `export-panel` (6.60.0) — a jobb toolbar egyetlen export-doboza grid view-ban (`rounded-md border border-slate-200 bg-white p-3`), az `edit-mode-panel` vizuális ikertestvére. `__title` = "Export", `__switch` = `toggle-group` + `ToggleBtn` (Matrix `Table2` / Feed `Rss`), `__body` = a választott ág. A választás perzisztál: `mm6_matrix_export_mode`.
+- `matrix-export-panel` és `feed-export-panel` **már nem hozzák a saját dobozukat és címüket** — azt az `export-panel` viszi. Csak a saját setupjukat renderelik; a feed ág gated (amber) változata továbbra is a saját figyelmeztető dobozát adja.
+- `ToggleBtn` átköltözött `matrix/MatrixGrid.tsx`-ből `_components/ToggleBtn.tsx`-be, mert most két modul használja (View/Density kapcsolók + Export kapcsoló). A markup és a `toggle-btn` / `toggle-btn--active` osztályok változatlanok.
+- `feed-export-dialog__rows` + `__rows-toggle` + `__rows-table` (6.60.0) — a nyugalmazott Feed nézet táblázata a feed-export dialógusban, checkbox mögött. A `FeedView` **csak bekapcsolva mountol** (a feed-patternek kiértékelése soronként a drága rész), és `onOpenMessage` nélkül kapja meg a sorokat, így a dialógus fölé nem nyílik MessageEditor.

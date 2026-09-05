@@ -5,6 +5,16 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.61.0] — 2026-09-05
+
+### Added
+- **Preview feed rows, from the toolbar panel.** The feed table was reachable
+  only from inside the export dialog, next to the diff — which answers "what is
+  this export sending", not "what does the feed hold right now". A checkbox
+  above the Export button now opens the same table for the current selection as
+  its own preview, with nothing exported from there. Both places keep their
+  copy: one is the pre-flight look, the other the in-flight one.
+
 ## [6.60.2] — 2026-09-05
 
 ### Fixed

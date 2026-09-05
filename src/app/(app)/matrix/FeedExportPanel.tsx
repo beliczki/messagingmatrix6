@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Download, AlertTriangle } from "lucide-react";
+import AppDialog from "../_components/AppDialog";
+import FeedView from "./FeedView";
 import { useQuery } from "@tanstack/react-query";
 import { type Audience, type Filters, type Message, type Topic } from "./types";
 import FeedExportDialog from "./FeedExportDialog";
@@ -61,6 +63,7 @@ export default function FeedExportPanel({
   });
 
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const liveExport = useMemo(() => {
     if (!historyQ.data) return null;
@@ -159,11 +162,25 @@ export default function FeedExportPanel({
           </div>
         )}
 
+        {/* Preview before committing to the export flow: this is where the
+            retired Feed view lives now — what the feed currently holds for this
+            selection, in the feed's own columns. */}
+        <label className="feed-export-panel__preview-toggle mt-3 flex cursor-pointer items-center gap-2 text-[11px] font-medium text-slate-700">
+          <input
+            type="checkbox"
+            checked={previewOpen}
+            onChange={(e) => setPreviewOpen(e.target.checked)}
+            disabled={filteredMessages.length === 0}
+            className="form-field__checkbox size-3.5 accent-slate-900"
+          />
+          Preview feed rows
+        </label>
+
         <button
           type="button"
           onClick={() => setDialogOpen(true)}
           disabled={filteredMessages.length === 0}
-          className="toolbar-btn--primary mt-3 flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          className="toolbar-btn--primary mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
         >
           <Download className="size-4" />
           Export
@@ -180,6 +197,32 @@ export default function FeedExportPanel({
           </div>
         ) : null}
       </div>
+
+      <AppDialog
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        ariaLabel="Feed rows preview"
+      >
+        <div className="feed-preview-dialog flex h-full flex-col overflow-hidden">
+          <header className="feed-preview-dialog__header border-b border-slate-200 px-6 py-4 pr-14">
+            <h2 className="text-base font-semibold text-slate-900">
+              Feed rows · <span className="font-mono text-sm">{product}</span>
+            </h2>
+            <p className="feed-preview-dialog__hint mt-0.5 text-xs text-slate-500">
+              All {filteredMessages.length} row
+              {filteredMessages.length === 1 ? "" : "s"} of this selection, in the
+              feed&apos;s own columns. Nothing is exported from here.
+            </p>
+          </header>
+          <div className="feed-preview-dialog__body flex-1 overflow-hidden">
+            <FeedView
+              messages={filteredMessages}
+              audiences={audiences}
+              topics={topics}
+            />
+          </div>
+        </div>
+      </AppDialog>
 
       <FeedExportDialog
         open={dialogOpen}

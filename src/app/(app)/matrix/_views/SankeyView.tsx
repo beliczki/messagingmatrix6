@@ -63,6 +63,10 @@ const NODE_BOX_WIDTH = SANKEY_NODE_WIDTH + 6 + 190;
 const MIN_BAR_HEIGHT = 3;
 // Same cycle length as the tree's level stripes (.sankey-view__*--lvl-0..5).
 const LEVEL_COLOR_CYCLE = 6;
+// Room the tooltip needs, so it can be kept inside the canvas near an edge.
+// Matches the max-width in globals.css plus the offset it is drawn at.
+const TOOLTIP_W = 274;
+const TOOLTIP_H = 120;
 
 function idOf(x: string | SankeyNodeDatum): string {
   return typeof x === "string" ? x : x.id;
@@ -72,9 +76,15 @@ type HoverTarget = { kind: "node" | "link"; id: string } | null;
 
 type Highlight = { nodes: Set<string>; links: Set<string> } | null;
 
+/** Where the tooltip goes: the hover event carries its own coordinates rather
+ *  than the view sampling the last mousemove — `mouseover` fires BEFORE the
+ *  `mousemove` at the same position, so a sampled position is always one move
+ *  stale, and on the first hover after mount there is nothing sampled at all. */
+type HoverAt = { clientX: number; clientY: number };
+
 const HighlightContext = createContext<{
   highlight: Highlight;
-  setHover: (t: HoverTarget) => void;
+  setHover: (t: HoverTarget, at: HoverAt) => void;
 }>({ highlight: null, setHover: () => {} });
 
 type SankeyNodeData = {
@@ -104,8 +114,8 @@ function SankeyNodeBox({ id, data }: NodeProps) {
         dimmed && "sankey-view__node--dim",
         isLeaf && "sankey-view__node--leaf",
       )}
-      onMouseEnter={() => setHover({ kind: "node", id })}
-      onMouseLeave={() => setHover(null)}
+      onMouseEnter={(e) => setHover({ kind: "node", id }, e)}
+      onMouseLeave={(e) => setHover(null, e)}
     >
       <Handle
         type="target"
@@ -170,8 +180,8 @@ function SankeyRibbon({ id, data }: EdgeProps) {
         d={d.path}
         strokeWidth={Math.max(d.ribbonWidth, 8)}
         className="sankey-view__ribbon-hit"
-        onMouseEnter={() => setHover({ kind: "link", id })}
-        onMouseLeave={() => setHover(null)}
+        onMouseEnter={(e) => setHover({ kind: "link", id }, e)}
+        onMouseLeave={(e) => setHover(null, e)}
       />
     </g>
   );
@@ -198,10 +208,6 @@ export default function SankeyView({
 }: SankeyViewProps) {
   const isDark = useIsDarkMode();
   const containerRef = useRef<HTMLDivElement | null>(null);
-  // Where the pointer was when the current hover started. Kept in a ref so
-  // moving the mouse does not re-render the canvas; it is read once, when the
-  // hover target changes.
-  const pointerRef = useRef({ x: 0, y: 0 });
   const [hover, setHoverState] = useState<HoverTarget>(null);
   const [tooltipAt, setTooltipAt] = useState({ x: 0, y: 0 });
 
@@ -301,8 +307,18 @@ export default function SankeyView({
     return { nodes, links };
   }, [hover, inLinks, outLinks, graph.links]);
 
-  const setHover = useCallback((t: HoverTarget) => {
-    if (t !== null) setTooltipAt({ ...pointerRef.current });
+  const setHover = useCallback((t: HoverTarget, at: HoverAt) => {
+    if (t !== null) {
+      const box = containerRef.current?.getBoundingClientRect();
+      // Keep the whole box on the canvas — near the right or bottom edge an
+      // unclamped offset would push it out of view.
+      const x = at.clientX - (box?.left ?? 0);
+      const y = at.clientY - (box?.top ?? 0);
+      setTooltipAt({
+        x: Math.max(0, Math.min(x, (box?.width ?? x) - TOOLTIP_W)),
+        y: Math.max(0, Math.min(y, (box?.height ?? y) - TOOLTIP_H)),
+      });
+    }
     setHoverState(t);
   }, []);
 
@@ -432,17 +448,7 @@ export default function SankeyView({
   }
 
   return (
-    <div
-      className="sankey-view relative h-full w-full"
-      ref={containerRef}
-      onMouseMove={(e) => {
-        const box = containerRef.current?.getBoundingClientRect();
-        pointerRef.current = {
-          x: e.clientX - (box?.left ?? 0),
-          y: e.clientY - (box?.top ?? 0),
-        };
-      }}
-    >
+    <div className="sankey-view relative h-full w-full" ref={containerRef}>
       <HighlightContext.Provider value={highlightCtx}>
         <ReactFlow
           nodes={rfNodes}

@@ -5,6 +5,16 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.60.2] — 2026-09-05
+
+### Fixed
+- **The sankey tooltip could open in the wrong corner.** It was placed from the
+  last sampled mousemove, but `mouseover` fires before the `mousemove` at the
+  same position — so the position was always one move stale, and on the first
+  hover after mount there was nothing sampled at all and the tooltip landed at
+  the canvas origin. The hover now carries its own coordinates, clamped so the
+  box stays on the canvas near an edge.
+
 ## [6.60.1] — 2026-09-05
 
 ### Fixed

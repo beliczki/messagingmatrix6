@@ -314,6 +314,16 @@ nincs v5 canvas-renderer portolás, nincs napi/animált bontás.
 
 A `buildSankey` mostantol maga jarja a szinteket es entitasra merge-el, de a sor-osszeallitast (`messageRows`) es a szintenkenti csoportositast (`groupValue`) megosztja a Tree-vel, hogy a ket nezet tovabbra se tudjon mast mondani a strukturarol. Egy tobb audience-ben szereplo kartya **egy** level, ami tobb uzenetet nyom. A fold visszament oszloponkentire (cap 120) — DAG-ban ez vegre oszinte: az `Other` orokli a tagjai sajat linkjeit, tehat egy behajtogatott audience folyama tovabbra is a valodi topicokba erkezik; nincs sehova nem vezeto node, es nem kell szurke lancot huzni a jobb szelig. 809 teszt zold, box `6.63.0`.
 
+**6.64.0 (user, 2026-09-06) — metrika-sulyozas + feed preview a vaszonra.**
+
+*Push-back es a valasz:* megmertem a `monitoring` tablat, mielott barmit terveztem. Augusztusban a **cost 13%-a**, az **impressions 35%-a** kotheto uzenethez, a **120 konverziobol 9**. Ezt elmondtam, a user igy is kerte a kapcsolot („mutassa ha nulla, es ki fogjuk deriteni hogy a report jobb legyen es legyen adat") — tehat megepult, **de minden delivery-mod kiirja a sajat lefedettseget** (70% alatt amber). Fontos arnyalat a `dashboard-monitoring.ts`-bol: product-szurovel a lefedettseg sokkal jobb (SZK-n 85%), es a matrix mindig szurve van — a 13% a szuretlen szam.
+
+*Amit epitettunk:* `Weight by` doboz a jobb toolbarban (MC / Impr. / Cost) + riport-idoszak valaszto; uj `GET /api/monitoring/message-metrics` + `lib/sankey-metrics.ts`. **Csapda, amit kikerultunk:** a dashboard query eldobja az `impressions = 0` sorokat (1x1 click trackerek, a CTR miatt helyesen), de a cost 62%-a azokon ul — ez a lekerdezes ezert NEM dobja el oket. Konverzio a node-tooltipen, **nullanal is kiirva** (az ures sor „nincs adat"-ot jelentene, nem „nem konvertalt"-at). Ha semmi nem szallitott, explicit empty state jon, nem nullakbol allo layout.
+
+*Feed preview:* a tabla kikerult a dialogusbol es **atveszi a matrix vasznat** — dialoguson belul egy sor nem tudja megnyitni az MC-t egy masodik dialogus-layer nelkul, tehat a sorok holtak voltak. A kapcsolo mostantol **pipas gomb** a `preview-pane__skip-anim` mintajara. Elohen ellenorizve: sor-klikk → MC editor nyilik; Cost modban a tooltip „292 309 Ft · 27 messages · 2 conversions". 813 teszt zold, box `6.64.0`.
+
+*Nyitva a userenel:* a konverzio-import javitasa (120-bol 9 matchel) — ha ez import-hiba es nem valosag, az a kovetkezo lepes.
+
 **Amit szándékosan NEM csináltunk:** nincs `sankeyStructure` config (a `treeStructure` hajtja mindkét nézetet), nincs cost-dimenzió a matrix-sankey-ben (az a monitoring oldalra való — `tasks/cost-sankey-szakertes.md`), nincs v5 canvas-renderer portolás.
 
 ---

@@ -5,6 +5,7 @@ import {
   eq,
   gte,
   inArray,
+  isNotNull,
   isNull,
   lte,
   or,
@@ -20,6 +21,7 @@ import {
   uploadedFiles,
 } from "@/db/schema";
 import { groupCreativeVersions } from "@/lib/group-creative-versions";
+import { isPlaced, type PlacedMessage } from "@/lib/entities/messages";
 import { listAllTemplates } from "@/lib/templates";
 import type { DayScope } from "@/lib/day-scope";
 
@@ -65,7 +67,9 @@ export type StripFile = {
   dimensions: string | null;
 };
 
-export type StripMessage = typeof messages.$inferSelect;
+// The strip renders matrix cells, and its query is placed-only — so the item
+// carries a placed row, which is also what the detail dialog downstream needs.
+export type StripMessage = PlacedMessage;
 
 /** An uploaded creative — a delivered file in the Creative Library. */
 export type UploadedStripItem = {
@@ -409,26 +413,39 @@ async function hydrateMc(
         eq(audiences.key, messages.audience),
       ),
     )
-    .where(and(eq(messages.clientId, clientId), inArray(messages.id, ids)));
+    // Drafts stay out of the recent-MC strip: it is a view of the matrix, and
+    // a draft carries no audience to resolve a product from.
+    .where(
+      and(
+        eq(messages.clientId, clientId),
+        inArray(messages.id, ids),
+        isNotNull(messages.audience),
+      ),
+    );
 
   const out: McStripItem[] = [];
   for (const r of rows) {
-    const sizes = r.message.template
-      ? (templates.get(r.message.template) ?? [])
+    // Excluded in SQL above; restated here because drizzle types the columns
+    // from the schema, not from the predicate. Bound to a const so the
+    // narrowing survives into the forEach closure below.
+    const message = r.message;
+    if (!isPlaced(message)) continue;
+    const sizes = message.template
+      ? (templates.get(message.template) ?? [])
       : [];
     sizes.forEach((size, i) => {
       out.push({
         kind: "mc",
         // The Creative Library's own scheme for matrix ids — negative, and
         // spaced by size index so one message's sizes stay distinct.
-        id: -(r.message.id * 1000 + i + 1),
-        changedAt: r.message.updatedAt,
-        mcLabel: `MC${r.message.number}${r.message.variant}`,
-        topic: r.message.topic,
+        id: -(message.id * 1000 + i + 1),
+        changedAt: message.updatedAt,
+        mcLabel: `MC${message.number}${message.variant}`,
+        topic: message.topic,
         size,
-        template: r.message.template!,
+        template: message.template!,
         product: r.product ?? null,
-        message: r.message,
+        message,
       });
     });
   }
@@ -462,6 +479,7 @@ async function attachTopics(
       and(
         eq(messages.clientId, clientId),
         isNull(messages.archivedAt),
+        isNotNull(messages.audience),
         or(
           ...pairs.map((p) =>
             and(eq(messages.number, p.number), eq(messages.variant, p.variant)),
@@ -472,6 +490,9 @@ async function attachTopics(
 
   const byPair = new Map<string, string[]>();
   for (const r of rows) {
+    // Same as above: the query is placed-only, the guard is the type-level
+    // restatement of it.
+    if (r.topic === null) continue;
     const key = `${r.number}|${r.variant}`;
     const cur = byPair.get(key);
     if (cur) cur.push(r.topic);

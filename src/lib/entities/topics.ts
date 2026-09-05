@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, isNull, max, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { config, messages, topics, nowUtc, type Topic } from "@/db/schema";
 import { evaluatePattern } from "@/lib/patterns";
@@ -72,10 +72,15 @@ async function mcCountsByTopic(
   const rows = await db
     .select({ key: messages.topic, n: count() })
     .from(messages)
-    .where(eq(messages.clientId, clientId))
+    // Scoped by AUDIENCE, not by topic: a draft's topic is a suggested name and
+    // may happen to spell a real topic key, which would inflate that topic's MC
+    // count with work that is not in the matrix yet.
+    .where(and(eq(messages.clientId, clientId), isNotNull(messages.audience)))
     .groupBy(messages.topic);
   const m = new Map<string, number>();
-  for (const r of rows) m.set(r.key, r.n);
+  // Placed rows always carry a topic (check `messages_placed_has_topic`); the
+  // guard restates that for the type system.
+  for (const r of rows) if (r.key !== null) m.set(r.key, r.n);
   return m;
 }
 

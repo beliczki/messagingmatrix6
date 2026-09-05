@@ -1,32 +1,24 @@
-// Draft test-creatives (MCP `generate_test_creative`) — staging rows outside
-// the matrix. Created with full validation up front (template / sizes / tag
-// tokens / image filenames) so an agent gets one actionable error instead of
-// a broken render. Rendering is async: startDraftRender is fired-and-forgotten
-// by the MCP tool and progress is derived from draft_previews row counts
-// (see getDraftStatus) — no job table.
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+// Draft test-creatives for the agentic path (MCP `generate_test_creative`).
+//
+// A draft is NOT a separate table any more: it is a `messages` row with no
+// audience (see the schema checks and entities/messages.ts). That is what lets
+// everything here be a thin layer over the ordinary message machinery —
+// previews are `message_previews` with their existing version-based staleness,
+// so render progress is DERIVED from which sizes have a fresh row rather than
+// tracked in a job table or a render_status column.
+//
+// What this module still owns is the up-front VALIDATION: an agent gets one
+// actionable error listing every problem, instead of a row that renders broken.
+import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
-import {
-  draftMessages,
-  draftPreviews,
-  nowUtc,
-  type Message,
-} from "@/db/schema";
+import { messagePreviews, messages, type Message } from "@/db/schema";
+import { createDraft } from "@/lib/entities/messages";
 import { getFileByFilename } from "@/lib/entities/files";
-import { shootItems } from "@/lib/preview-shooter";
-import { writeFile as writeStorageFile, deleteStorageFile } from "@/lib/storage";
+import { collectStalePreviews } from "@/lib/previews";
+import { shootPreviews } from "@/lib/preview-shooter";
 import { readTemplate } from "@/lib/templates";
-import { createMessage } from "./messages";
 
 export class DraftError extends Error {}
-
-export type DraftMessage = typeof draftMessages.$inferSelect;
-export type DraftPreview = typeof draftPreviews.$inferSelect;
-
-// Rendering is considered stalled when the in-process render promise died
-// (pm2 restart) — detected as "rendering" for longer than this with sizes
-// still missing. Computed in getDraftStatus, never stored.
-const STALLED_AFTER_SECONDS = 10 * 60;
 
 const DRAFT_TEXT_FIELDS = [
   "name",
@@ -55,17 +47,31 @@ const DRAFT_IMAGE_FIELDS = [
   "image6",
 ] as const;
 
-export type DraftInput = { template: string; sizes: string[] } & Partial<
+export type TestCreativeInput = { template: string; sizes?: string[] } & Partial<
   Record<(typeof DRAFT_TEXT_FIELDS)[number], string>
 > &
   Partial<Record<(typeof DRAFT_IMAGE_FIELDS)[number], string>>;
 
+export type DraftPreviewRow = {
+  id: number;
+  size: string;
+  messageVersion: number;
+  updatedAt: string;
+};
+
+/** Every size the draft's template defines, or [] when it has no html template. */
+export function draftSizes(draft: Message): string[] {
+  if (!draft.template) return [];
+  const t = readTemplate(draft.template);
+  return t && t.kind === "html" ? t.sizes : [];
+}
+
 // All-or-nothing validation: every problem is collected and reported in one
 // error so the calling agent can fix its input in a single round.
-export async function createDraft(
+export async function createTestCreative(
   clientId: number,
-  input: DraftInput,
-): Promise<DraftMessage> {
+  input: TestCreativeInput,
+): Promise<{ draft: Message; sizes: string[] }> {
   const template = readTemplate(input.template);
   if (!template) {
     throw new DraftError(`template '${input.template}' not found`);
@@ -78,10 +84,11 @@ export async function createDraft(
 
   const problems: string[] = [];
 
-  if (input.sizes.length === 0) {
+  const requested = input.sizes ?? template.sizes;
+  if (requested.length === 0) {
     problems.push("sizes must name at least one size");
   }
-  const badSizes = input.sizes.filter((s) => !template.sizes.includes(s));
+  const badSizes = requested.filter((s) => !template.sizes.includes(s));
   if (badSizes.length > 0) {
     problems.push(
       `unknown size(s) ${badSizes.join(", ")} — template '${input.template}' has: ${template.sizes.join(", ")}`,
@@ -110,291 +117,108 @@ export async function createDraft(
 
   if (problems.length > 0) throw new DraftError(problems.join("; "));
 
-  const [row] = await db
-    .insert(draftMessages)
-    .values({
-      clientId,
-      template: input.template,
-      sizes: JSON.stringify(input.sizes),
-      ...Object.fromEntries(
-        [...DRAFT_TEXT_FIELDS, ...DRAFT_IMAGE_FIELDS]
-          .filter((f) => input[f] !== undefined)
-          .map((f) => [f, input[f]]),
-      ),
-    })
-    .returning();
-  return row!;
+  const draft = await createDraft(clientId, {
+    template: input.template,
+    ...Object.fromEntries(
+      [...DRAFT_TEXT_FIELDS, ...DRAFT_IMAGE_FIELDS]
+        .filter((f) => input[f] != null)
+        .map((f) => [f, input[f]]),
+    ),
+  });
+  return { draft, sizes: requested };
 }
 
-// Render every requested size to a PNG. Fired-and-forgotten by the MCP tool
-// (`void startDraftRender(...)`); progress = draft_previews rows appearing.
-// Queues on the shared shooter mutex behind message-preview batches.
+/**
+ * Fire-and-forget render of the given sizes. Progress is not stored: it is read
+ * back off message_previews by getDraftStatus, so a render that dies with the
+ * server process simply leaves those sizes missing rather than leaving a status
+ * column stuck on "rendering".
+ */
 export async function startDraftRender(
   clientId: number,
-  draft: DraftMessage,
-  opts: { baseUrl?: string } = {},
+  draftId: number,
+  sizes: string[],
 ): Promise<void> {
-  await db
-    .update(draftMessages)
-    .set({ renderStatus: "rendering", renderStartedAt: nowUtc, updatedAt: nowUtc })
-    .where(eq(draftMessages.id, draft.id));
-
-  const sizes = JSON.parse(draft.sizes) as string[];
-  const results = await shootItems(
-    clientId,
-    sizes.map((size) => ({
-      template: draft.template,
-      row: draft as unknown as Record<string, unknown>,
-      size,
-      persist: async (buf) => {
-        const stored = await writeStorageFile(buf, "preview", ".png");
-        const [row] = await db
-          .insert(draftPreviews)
-          .values({
-            clientId,
-            draftId: draft.id,
-            size,
-            storageKey: stored.storagePath,
-          })
-          .returning();
-        return { id: row!.id, updatedAt: row!.updatedAt };
-      },
-    })),
-    { baseUrl: opts.baseUrl },
-  );
-
-  const errors = Object.fromEntries(
-    results.filter((r) => !r.ok).map((r) => [r.size, (r as { error: string }).error]),
-  );
-  const anyOk = results.some((r) => r.ok);
-  await db
-    .update(draftMessages)
-    .set({
-      renderStatus: anyOk ? "done" : "failed",
-      renderError: Object.keys(errors).length > 0 ? JSON.stringify(errors) : null,
-      updatedAt: nowUtc,
-    })
-    .where(eq(draftMessages.id, draft.id));
-}
-
-export type DraftStatus = {
-  draft: DraftMessage;
-  previews: DraftPreview[];
-  // "pending" | "rendering" | "done" | "failed" | "stalled"
-  status: string;
-  totalSizes: number;
-  doneSizes: number;
-  percent: number;
-  elapsedSeconds: number | null;
-  errors: Record<string, string>;
-};
-
-function parseUtc(ts: string): number {
-  return new Date(ts.replace(" ", "T") + "Z").getTime();
-}
-
-export async function getDraftStatus(
-  clientId: number,
-  id: number,
-): Promise<DraftStatus | null> {
-  const draft = await getDraftRow(clientId, id);
-  if (!draft) return null;
-  const previews = await listDraftPreviews(clientId, id);
-
-  const totalSizes = (JSON.parse(draft.sizes) as string[]).length;
-  const doneSizes = previews.length;
-  const elapsedSeconds = draft.renderStartedAt
-    ? Math.max(0, Math.round((Date.now() - parseUtc(draft.renderStartedAt)) / 1000))
-    : null;
-
-  let status = draft.renderStatus;
-  if (
-    status === "rendering" &&
-    elapsedSeconds !== null &&
-    elapsedSeconds > STALLED_AFTER_SECONDS &&
-    doneSizes < totalSizes
-  ) {
-    // The in-process render promise is gone (server restart) — the row would
-    // say "rendering" forever. Recreating the draft is the v1 recovery path.
-    status = "stalled";
-  }
-
-  return {
-    draft,
-    previews,
-    status,
-    totalSizes,
-    doneSizes,
-    percent: totalSizes === 0 ? 100 : Math.round((doneSizes / totalSizes) * 100),
-    elapsedSeconds,
-    errors: draft.renderError ? (JSON.parse(draft.renderError) as Record<string, string>) : {},
-  };
-}
-
-async function getDraftRow(
-  clientId: number,
-  id: number,
-): Promise<DraftMessage | null> {
-  const [row] = await db
-    .select()
-    .from(draftMessages)
-    .where(and(eq(draftMessages.clientId, clientId), eq(draftMessages.id, id)))
-    .limit(1);
-  return row ?? null;
+  const { stale } = await collectStalePreviews(clientId, {
+    messageIds: [draftId],
+  });
+  const wanted = stale.filter((s) => sizes.includes(s.size));
+  if (wanted.length === 0) return;
+  await shootPreviews(clientId, wanted);
 }
 
 export async function listDraftPreviews(
   clientId: number,
-  draftId: number,
-): Promise<DraftPreview[]> {
-  return db
-    .select()
-    .from(draftPreviews)
-    .where(
-      and(eq(draftPreviews.clientId, clientId), eq(draftPreviews.draftId, draftId)),
-    )
-    .orderBy(draftPreviews.size);
-}
-
-// Bulk variant for the drafts list view — one query instead of per-draft.
-export async function listPreviewsForDrafts(
-  clientId: number,
   draftIds: number[],
-): Promise<DraftPreview[]> {
-  if (draftIds.length === 0) return [];
-  return db
-    .select()
-    .from(draftPreviews)
+): Promise<Map<number, DraftPreviewRow[]>> {
+  const out = new Map<number, DraftPreviewRow[]>();
+  if (draftIds.length === 0) return out;
+  const rows = await db
+    .select({
+      id: messagePreviews.id,
+      messageId: messagePreviews.messageId,
+      size: messagePreviews.size,
+      messageVersion: messagePreviews.messageVersion,
+      updatedAt: messagePreviews.updatedAt,
+    })
+    .from(messagePreviews)
     .where(
       and(
-        eq(draftPreviews.clientId, clientId),
-        inArray(draftPreviews.draftId, draftIds),
+        eq(messagePreviews.clientId, clientId),
+        inArray(messagePreviews.messageId, draftIds),
       ),
-    )
-    .orderBy(draftPreviews.size);
-}
-
-export async function listDrafts(
-  clientId: number,
-  opts: { includePromoted?: boolean; limit?: number } = {},
-): Promise<DraftMessage[]> {
-  return db
-    .select()
-    .from(draftMessages)
-    .where(
-      and(
-        eq(draftMessages.clientId, clientId),
-        ...(opts.includePromoted ? [] : [isNull(draftMessages.promotedMessageId)]),
-      ),
-    )
-    .orderBy(desc(draftMessages.id))
-    .limit(Math.min(opts.limit ?? 500, 1000));
-}
-
-export async function getDraft(
-  clientId: number,
-  id: number,
-): Promise<{ draft: DraftMessage; previews: DraftPreview[] } | null> {
-  const draft = await getDraftRow(clientId, id);
-  if (!draft) return null;
-  return { draft, previews: await listDraftPreviews(clientId, id) };
-}
-
-// Hard delete (deliberate departure from the archivedAt convention — drafts
-// are throwaway staging). Row first (version-checked, previews cascade), then
-// the storage objects: a crash in between orphans regenerable PNGs at worst,
-// never rows pointing at deleted bytes (same ordering principle as the
-// shooter's "row points at the new object before the old one is deleted").
-export async function deleteDraft(
-  clientId: number,
-  id: number,
-  expectedVersion: number,
-): Promise<
-  | { ok: true; draft: DraftMessage }
-  | { ok: false; current: DraftMessage | null }
-> {
-  const previews = await listDraftPreviews(clientId, id);
-  const [deleted] = await db
-    .delete(draftMessages)
-    .where(
-      and(
-        eq(draftMessages.clientId, clientId),
-        eq(draftMessages.id, id),
-        eq(draftMessages.version, expectedVersion),
-      ),
-    )
-    .returning();
-  if (!deleted) {
-    return { ok: false, current: await getDraftRow(clientId, id) };
+    );
+  for (const r of rows) {
+    const list = out.get(r.messageId) ?? [];
+    list.push(r);
+    out.set(r.messageId, list);
   }
-  for (const p of previews) {
-    await deleteStorageFile(p.storageKey);
-  }
-  return { ok: true, draft: deleted };
+  return out;
 }
 
-// Promote a draft into the matrix: a real messages row at (audience, topic)
-// via createMessage (numbering / pmmid / trafficking all standard), with the
-// draft back-linked through promotedMessageId as the double-promote guard.
-// The draft row stays (previews keep serving) — same philosophy as
-// promoteCreative, where the source record remains the file record.
-export async function promoteDraft(
+export type DraftStatus = {
+  status: "pending" | "rendering" | "done";
+  totalSizes: number;
+  doneSizes: number;
+  percent: number;
+  previews: DraftPreviewRow[];
+  /** Sizes whose stored preview predates the draft's current version. */
+  staleSizes: string[];
+};
+
+/**
+ * Render progress, derived rather than stored. A size counts as done when its
+ * preview row was shot at the draft's CURRENT version — so editing a draft
+ * makes its previews stale again, which is the same rule the matrix uses and
+ * the reason there is nothing extra to keep in sync.
+ */
+export async function getDraftStatus(
   clientId: number,
   draftId: number,
-  opts: {
-    audienceKey: string;
-    topicKey: string;
-    requestedNumber?: number | "new";
-    requestedVariant?: string;
-  },
-): Promise<{ message: Message; draft: DraftMessage }> {
-  const draft = await getDraftRow(clientId, draftId);
-  if (!draft) throw new DraftError(`draft ${draftId} not found`);
-  if (draft.promotedMessageId != null) {
-    throw new DraftError(
-      `draft ${draftId} is already promoted (message ${draft.promotedMessageId})`,
-    );
-  }
+): Promise<DraftStatus | null> {
+  const [draft] = await db
+    .select()
+    .from(messages)
+    .where(and(eq(messages.clientId, clientId), eq(messages.id, draftId)))
+    .limit(1);
+  if (!draft || draft.status !== "DRAFT") return null;
 
-  return db.transaction(async () => {
-    const message = await createMessage(
-      clientId,
-      {
-        audience: opts.audienceKey,
-        topic: opts.topicKey,
-        template: draft.template,
-        ...Object.fromEntries(
-          [...DRAFT_TEXT_FIELDS, ...DRAFT_IMAGE_FIELDS]
-            .filter((f) => f !== "name" && draft[f] != null)
-            .map((f) => [f, draft[f]]),
-        ),
-        name: draft.name ?? undefined,
-      },
-      {
-        requestedNumber: opts.requestedNumber,
-        requestedVariant: opts.requestedVariant,
-      },
-    );
-
-    const [updated] = await db
-      .update(draftMessages)
-      .set({
-        promotedMessageId: message.id,
-        version: draft.version + 1,
-        updatedAt: nowUtc,
-      })
-      .where(
-        and(
-          eq(draftMessages.id, draftId),
-          eq(draftMessages.version, draft.version),
-        ),
-      )
-      .returning();
-    if (!updated) {
-      throw new DraftError(
-        `draft ${draftId} changed concurrently during promotion — retry`,
-      );
-    }
-    return { message, draft: updated };
-  });
+  const previews = (await listDraftPreviews(clientId, [draftId])).get(draftId) ?? [];
+  const sizes = draftSizes(draft);
+  const fresh = previews.filter((p) => p.messageVersion === draft.version);
+  const stale = previews.filter((p) => p.messageVersion !== draft.version);
+  const doneSizes = fresh.length;
+  return {
+    status:
+      doneSizes === 0
+        ? "pending"
+        : doneSizes < sizes.length
+          ? "rendering"
+          : "done",
+    totalSizes: sizes.length,
+    doneSizes,
+    percent: sizes.length === 0 ? 0 : Math.round((doneSizes / sizes.length) * 100),
+    previews,
+    staleSizes: stale.map((p) => p.size),
+  };
 }

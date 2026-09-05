@@ -28,6 +28,11 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import PreviewPane from "../_components/PreviewPane";
+import {
+  BIRTH_STATUS,
+  DEFAULT_STATUS_COLORS,
+  type McStatus,
+} from "@/lib/mc-status";
 
 type FileInfo = {
   name: string;
@@ -78,25 +83,19 @@ type Message = {
   [k: string]: unknown;
 };
 
-const DEFAULT_STATUS_COLORS: Record<string, string> = {
-  INCOMING: "#8B5CF6",
-  NAMING: "#F59E0B",
-  CONTENT: "#EC4899",
-  PREVIEW: "#3B82F6",
-  APPROVED: "#10B981",
-  ACTIVE: "#06B6D4",
-  INACTIVE: "#9CA3AF",
-  ERROR: "#EF4444",
-  DEAD: "#64748B",
-  MEMORY: "#06B6D4",
-};
-
+// This editor previews template chrome against a status colour; the palette
+// comes from the canonical defaults so it cannot list a status the rest of the
+// app has dropped (it used to carry its own INCOMING/NAMING/CONTENT/MEMORY).
 function statusColorFor(
   status: string | null | undefined,
   custom: Record<string, string> = {},
 ): string {
-  const s = (status || "INCOMING").toUpperCase();
-  return custom[s] || DEFAULT_STATUS_COLORS[s] || DEFAULT_STATUS_COLORS.INCOMING;
+  const s = (status || BIRTH_STATUS).toUpperCase();
+  return (
+    custom[s] ||
+    DEFAULT_STATUS_COLORS[s as McStatus] ||
+    DEFAULT_STATUS_COLORS[BIRTH_STATUS]
+  );
 }
 
 const STORAGE_KEY = "mm6_templates_editor_state_v1";

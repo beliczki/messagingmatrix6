@@ -72,11 +72,14 @@ describe("messages — numbering on create", () => {
     expect(m.versionNo).toBe(1);
   });
 
-  it("new message defaults to INCOMING status; an explicit status wins", async () => {
+  // The default moved from INCOMING to PREVIEW on 2026-09-05: a card reaches
+  // the matrix with its template and content already in place, so the operator
+  // was flipping every new card to PREVIEW by hand.
+  it("new message defaults to PREVIEW status; an explicit status wins", async () => {
     await seedAudienceAndTopic(erste.id, "aud1", "top1");
     await seedAudienceAndTopic(erste.id, "aud2", "top2");
     const def = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
-    expect(def.status).toBe("INCOMING");
+    expect(def.status).toBe("PREVIEW");
     const explicit = await createMessage(erste.id, {
       topic: "top2",
       audience: "aud2",

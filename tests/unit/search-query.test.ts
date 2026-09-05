@@ -57,6 +57,35 @@ describe("parseSearchQuery", () => {
     expect(m(fields({ free: "174" }))).toBe(false);
   });
 
+  it("mc: anchors on the whole number — mc:21 is not MC321 or MC210", () => {
+    const m = parseSearchQuery("mc:21");
+    expect(m(fields({ mc: "mc21a" }))).toBe(true);
+    expect(m(fields({ mc: "mc21c" }))).toBe(true);
+    // The prod bug (2026-09-04): mc:21 filled the grid with MC321's cells.
+    expect(m(fields({ mc: "mc321a" }))).toBe(false);
+    expect(m(fields({ mc: "mc210a" }))).toBe(false);
+    expect(m(fields({ mc: "mc121b" }))).toBe(false);
+  });
+
+  it("mc: with a variant matches only that variant", () => {
+    const m = parseSearchQuery("mc:21a");
+    expect(m(fields({ mc: "mc21a" }))).toBe(true);
+    expect(m(fields({ mc: "mc21b" }))).toBe(false);
+    expect(m(fields({ mc: "mc321a" }))).toBe(false);
+  });
+
+  it("mc: accepts the label spelling too", () => {
+    const m = parseSearchQuery("mc:mc21a");
+    expect(m(fields({ mc: "mc21a" }))).toBe(true);
+    expect(m(fields({ mc: "mc21b" }))).toBe(false);
+  });
+
+  it("mc: still substring-matches a non-label value (the matrix packs the pmmid in)", () => {
+    const m = parseSearchQuery("mc:m_315-v_c");
+    expect(m(fields({ mc: "mc315c a_sza-t_app-m_315-v_c-n_1" }))).toBe(true);
+    expect(m(fields({ mc: "mc315a a_sza-t_app-m_315-v_a-n_1" }))).toBe(false);
+  });
+
   it("multiple terms are AND-ed", () => {
     const m = parseSearchQuery("a:retail s:perf");
     expect(m(fields({ audience: "retail-eu", strategy: "performance" }))).toBe(true);

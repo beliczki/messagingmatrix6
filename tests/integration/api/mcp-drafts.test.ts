@@ -1,102 +1,79 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
-import { eq } from "drizzle-orm";
+
+// The chromium shoot is not vitest-testable, so the shooter is mocked. Its
+// absence is also what these tests want: rendering is fire-and-forget, and the
+// point being checked is that the DRAFT ROW and its claimed number exist the
+// moment the tool returns, whether or not a PNG ever lands.
+vi.mock("@/lib/preview-shooter", async (orig) => {
+  const actual = await orig<typeof import("@/lib/preview-shooter")>();
+  return { ...actual, shootPreviews: vi.fn(async () => []) };
+});
+
 import { db } from "@/db";
+import { clients, audiences, topics, messages } from "@/db/schema";
+import { buildMcpServer, _resetMcpRateLimitForTests } from "@/lib/mcp";
 import {
-  audiences,
-  clients,
-  draftMessages,
-  draftPreviews,
-  topics,
-  uploadedFiles,
-} from "@/db/schema";
-import type { ShootItem } from "@/lib/preview-shooter";
-import { createTestDb, type TestDb } from "../../helpers/test-db";
-
-// The chromium shoot is not vitest-testable — shootItems is mocked; its default
-// implementation "succeeds" by invoking each item's persist with a fake PNG,
-// exercising the real draft_previews insert path. Storage is stubbed so no
-// bytes land on disk (everything else on the module stays real).
-vi.mock("@/lib/preview-shooter", () => ({
-  shootItems: vi.fn(),
-  shootPreviews: vi.fn(),
-}));
-vi.mock("@/lib/storage", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/storage")>()),
-  writeFile: vi.fn(async () => ({
-    storagePath: "previews/draft-test.png",
-    sha256: "test-sha",
-    sizeBytes: 3,
-  })),
-  deleteStorageFile: vi.fn(async () => {}),
-}));
-
-import { shootItems } from "@/lib/preview-shooter";
-import { buildMcpServer } from "@/lib/mcp";
+  createTestDb,
+  withActiveClientKey,
+  type TestDb,
+} from "../../helpers/test-db";
 
 let h: TestDb;
 let erste: { id: number };
 
-const ORIGIN = "https://erste.messagingmatrix.ai";
+const DECK = "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789";
 
-async function connect(scope: "full" | "read" = "full") {
-  const server = buildMcpServer({
-    clientId: erste.id,
-    userId: "u",
-    scope,
-    origin: ORIGIN,
-  });
-  const [clientT, serverT] = InMemoryTransport.createLinkedPair();
-  await server.connect(serverT);
-  const client = new Client({ name: "test", version: "1.0.0" });
-  await client.connect(clientT);
-  return client;
-}
-
-type ToolResult = {
+type Handler = (args: Record<string, unknown>) => Promise<{
+  content: { type: string; text: string }[];
   isError?: boolean;
-  content: { type: string; text?: string }[];
-  structuredContent?: unknown;
-};
+}>;
 
-function parsed(res: ToolResult): any {
-  return JSON.parse(res.content[0]!.text!);
+function getHandler(clientId: number, toolName: string): Handler {
+  const server = buildMcpServer({ clientId, userId: "test-user", scope: "full" });
+  const registry = (server as unknown as {
+    _registeredTools: Record<string, { handler: Handler }>;
+  })._registeredTools;
+  const tool = registry[toolName];
+  if (!tool) throw new Error(`tool ${toolName} not registered`);
+  return tool.handler;
 }
 
-async function waitForStatus(
-  client: Client,
-  draftId: number,
-  wanted: string,
-): Promise<any> {
-  for (let i = 0; i < 100; i++) {
-    const res = (await client.callTool({
-      name: "draft_status",
-      arguments: { draft_id: draftId },
-    })) as ToolResult;
-    const body = parsed(res);
-    if (body.status === wanted) return body;
-    await new Promise((r) => setTimeout(r, 20));
-  }
-  throw new Error(`draft ${draftId} never reached '${wanted}'`);
+async function callTool(
+  clientId: number,
+  toolName: string,
+  args: Record<string, unknown>,
+) {
+  const res = await getHandler(clientId, toolName)(args);
+  const text = res.content[0]?.text ?? "";
+  return {
+    isError: !!res.isError,
+    text,
+    json: res.isError ? null : JSON.parse(text),
+  };
 }
 
 beforeEach(async () => {
-  vi.mocked(shootItems).mockImplementation(
-    async (_clientId, items: ShootItem[]) => {
-      const out = [];
-      for (const item of items) {
-        const persisted = await item.persist(Buffer.from("png"));
-        out.push({ size: item.size, ok: true as const, ...persisted });
-      }
-      return out;
-    },
-  );
+  _resetMcpRateLimitForTests();
   h = await createTestDb();
   [erste] = await db
     .insert(clients)
     .values({ key: "erste", name: "Erste" })
     .returning();
+  await db.insert(audiences).values({
+    clientId: erste.id,
+    key: "SZK_visitors",
+    name: "Visitors",
+    product: "SZK",
+    orderIndex: 1,
+  });
+  await db.insert(topics).values({
+    clientId: erste.id,
+    key: "SZK_brand",
+    name: "Brand",
+    product: "SZK",
+    orderIndex: 1,
+  });
+  withActiveClientKey("erste");
 });
 
 afterEach(async () => {
@@ -104,240 +81,238 @@ afterEach(async () => {
 });
 
 describe("generate_test_creative", () => {
-  it("rejects bad size + tag + missing image in ONE error and creates nothing", async () => {
-    const client = await connect();
-    const res = (await client.callTool({
-      name: "generate_test_creative",
-      arguments: {
-        template: "html",
-        sizes: ["300x250", "111x111"],
-        template_variant_classes: "fullSurfaceImage notAClass",
-        background_images: ["missing.png"],
-      },
-    })) as ToolResult;
-    expect(res.isError).toBe(true);
-    const text = res.content[0]!.text!;
-    expect(text).toMatch(/111x111/);
-    expect(text).toMatch(/notAClass/);
-    expect(text).toMatch(/missing\.png/);
-    expect(await db.select().from(draftMessages)).toHaveLength(0);
-    await client.close();
-  });
-
-  it("stages a draft, renders async, and draft_status reaches 100%", async () => {
-    await db.insert(uploadedFiles).values({
-      id: "f-bg",
-      clientId: erste.id,
-      filename: "bg.png",
-      originalFilename: "bg.png",
-      storagePath: "asset/bg.png",
-      category: "asset",
-    });
-    const client = await connect();
-    const res = (await client.callTool({
-      name: "generate_test_creative",
-      arguments: {
-        template: "html",
-        sizes: ["300x250", "970x250"],
-        name: "Agent test",
-        headline: "Generated headline",
-        cta: "Érdekel",
-        flash: "Új!",
-        template_variant_classes: "fullSurfaceImage teal",
-        background_images: ["bg.png"],
-      },
-    })) as ToolResult;
-    expect(res.isError).toBeFalsy();
-    const body = parsed(res);
-    expect(body).toMatchObject({
+  it("claims an MC number and returns it with the draft", async () => {
+    const res = await callTool(erste.id, "generate_test_creative", {
       template: "html",
-      status: "rendering",
-      sizes: ["300x250", "970x250"],
+      headline: "Agent copy",
     });
+    expect(res.isError).toBe(false);
+    expect(res.json.draft_id).toBeGreaterThan(0);
+    expect(res.json.mc_label).toMatch(/^MC\d+a$/);
+    expect(res.json.mc_number).toBeGreaterThan(0);
 
-    const done = await waitForStatus(client, body.draft_id, "done");
-    expect(done).toMatchObject({
-      total_sizes: 2,
-      done_sizes: 2,
-      percent: 100,
-      errors: {},
+    const [row] = await db.select().from(messages);
+    expect(row).toMatchObject({
+      status: "DRAFT",
+      audience: null,
+      headline: "Agent copy",
+      pmmid: null,
     });
-    expect(typeof done.elapsed_seconds).toBe("number");
-    expect(done.previews).toHaveLength(2);
-    expect(
-      done.previews.every((p: { url: string }) =>
-        p.url.startsWith(`${ORIGIN}/api/draft-previews/`),
-      ),
-    ).toBe(true);
-    await client.close();
+  });
+
+  it("records the brief and the working topic in the same call", async () => {
+    const res = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+      brief_link: `https://docs.google.com/presentation/d/${DECK}/edit`,
+      working_topic: "társasház (munkacím)",
+    });
+    expect(res.isError).toBe(false);
+    const [row] = await db.select().from(messages);
+    expect(row!.briefId).not.toBeNull();
+    expect(row!.topic).toBe("társasház (munkacím)");
+  });
+
+  it("reports every input problem at once and creates nothing", async () => {
+    const res = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+      sizes: ["1x1", "2x2"],
+      template_variant_classes: "notAToken",
+    });
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(/unknown size/);
+    expect(res.text).toMatch(/unknown template_variant_classes/);
+    expect(await db.select().from(messages)).toHaveLength(0);
+  });
+
+  it("refuses a template that is not html", async () => {
+    const res = await callTool(erste.id, "generate_test_creative", {
+      template: "definitely-not-a-template",
+    });
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(/not found/);
   });
 });
 
-describe("draft_status / list_drafts / draft_get", () => {
-  async function seedDraft(over: Record<string, unknown> = {}) {
-    const [d] = await db
-      .insert(draftMessages)
-      .values({
-        clientId: erste.id,
-        template: "html",
-        sizes: '["300x250","970x250"]',
-        headline: "Seeded",
-        ...over,
-      })
-      .returning();
-    return d!;
-  }
-
-  it("derives percent from the preview rows that already landed", async () => {
-    const d = await seedDraft({ renderStatus: "rendering" });
-    await db.insert(draftPreviews).values({
-      clientId: erste.id,
-      draftId: d.id,
-      size: "300x250",
-      storageKey: "previews/one.png",
+describe("the claimed number is really held", () => {
+  it("blocks mc_create from taking it", async () => {
+    const draft = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
     });
-    const client = await connect();
-    const res = (await client.callTool({
-      name: "draft_status",
-      arguments: { draft_id: d.id },
-    })) as ToolResult;
-    expect(parsed(res)).toMatchObject({
-      status: "rendering",
-      total_sizes: 2,
-      done_sizes: 1,
-      percent: 50,
+    const res = await callTool(erste.id, "mc_create", {
+      audience_key: "SZK_visitors",
+      topic_key: "SZK_brand",
+      mc_number: draft.json.mc_number,
     });
-    await client.close();
-  });
-
-  it("list_drafts hides promoted drafts by default; draft_get returns full fields", async () => {
-    const kept = await seedDraft();
-    await seedDraft({ promotedMessageId: null });
-    const client = await connect();
-
-    const list = parsed(
-      (await client.callTool({ name: "list_drafts", arguments: {} })) as ToolResult,
-    );
-    expect(list).toHaveLength(2);
-
-    const got = parsed(
-      (await client.callTool({
-        name: "draft_get",
-        arguments: { draft_id: kept.id },
-      })) as ToolResult,
-    );
-    expect(got).toMatchObject({
-      draft_id: kept.id,
-      headline: "Seeded",
-      sizes: ["300x250", "970x250"],
-      render_errors: {},
-      previews: [],
-    });
-    await client.close();
-  });
-
-  it("show_draft_previews returns widget structuredContent with absolute URLs", async () => {
-    const d = await seedDraft({ name: "Widget draft", renderStatus: "done" });
-    await db.insert(draftPreviews).values([
-      { clientId: erste.id, draftId: d.id, size: "300x250", storageKey: "k1" },
-      { clientId: erste.id, draftId: d.id, size: "970x250", storageKey: "k2" },
-    ]);
-    const client = await connect("read");
-    const res = (await client.callTool({
-      name: "show_draft_previews",
-      arguments: { draft_id: d.id },
-    })) as ToolResult;
-    const sc = res.structuredContent as {
-      name: string;
-      previews: { label: string; size: string; url: string }[];
-    };
-    expect(sc.name).toBe("Widget draft");
-    expect(sc.previews.map((p) => p.size)).toEqual(["300x250", "970x250"]);
-    expect(
-      sc.previews.every((p) => p.url.startsWith(`${ORIGIN}/api/draft-previews/`)),
-    ).toBe(true);
-    await client.close();
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(/reserved by a draft/);
   });
 });
 
-describe("draft_delete / draft_promote / scopes", () => {
-  it("hard-deletes a draft without an explicit version", async () => {
-    const [d] = await db
-      .insert(draftMessages)
-      .values({ clientId: erste.id, template: "html", sizes: '["300x250"]' })
-      .returning();
-    const client = await connect();
-    const res = (await client.callTool({
-      name: "draft_delete",
-      arguments: { draft_id: d!.id },
-    })) as ToolResult;
-    expect(parsed(res)).toEqual({ ok: true, deleted: d!.id });
-    expect(await db.select().from(draftMessages)).toHaveLength(0);
-    await client.close();
+describe("list_drafts / draft_get / draft_status", () => {
+  it("lists open drafts and drops them once promoted", async () => {
+    const draft = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+      name: "One",
+    });
+    expect((await callTool(erste.id, "list_drafts", {})).json).toHaveLength(1);
+
+    await callTool(erste.id, "draft_promote", {
+      draft_id: draft.json.draft_id,
+      audience_key: "SZK_visitors",
+      topic_key: "SZK_brand",
+    });
+    // Once placed it is an ordinary MC — list_mc's job, not list_drafts'.
+    expect((await callTool(erste.id, "list_drafts", {})).json).toHaveLength(0);
   });
 
-  it("promotes into the matrix once, refuses the second time", async () => {
-    await db.insert(audiences).values({
-      clientId: erste.id,
-      key: "VAL_x",
-      name: "Val X",
-      orderIndex: 1,
+  it("draft_get returns the content and the claimed label", async () => {
+    const draft = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+      headline: "Look at this",
     });
-    await db.insert(topics).values({
-      clientId: erste.id,
-      key: "topic_one",
-      name: "Topic One",
-      orderIndex: 1,
+    const got = await callTool(erste.id, "draft_get", {
+      draft_id: draft.json.draft_id,
     });
-    const [d] = await db
-      .insert(draftMessages)
-      .values({
-        clientId: erste.id,
-        template: "html",
-        sizes: '["300x250"]',
-        headline: "Promote me",
-      })
-      .returning();
-    const client = await connect();
-    const first = (await client.callTool({
-      name: "draft_promote",
-      arguments: { draft_id: d!.id, audience_key: "VAL_x", topic_key: "topic_one" },
-    })) as ToolResult;
-    expect(first.isError).toBeFalsy();
-    const body = parsed(first);
-    expect(body.message).toMatchObject({
-      number: 1,
-      variant: "a",
+    expect(got.json).toMatchObject({
+      headline: "Look at this",
+      mc_label: draft.json.mc_label,
+      status: "DRAFT",
+    });
+  });
+
+  it("draft_status reports pending while no preview has landed", async () => {
+    const draft = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+    });
+    const st = await callTool(erste.id, "draft_status", {
+      draft_id: draft.json.draft_id,
+    });
+    expect(st.json).toMatchObject({ status: "pending", done_sizes: 0 });
+    expect(st.json.percent).toBe(0);
+  });
+
+  it("draft_get refuses an id that is not a draft", async () => {
+    const draft = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+    });
+    await callTool(erste.id, "draft_promote", {
+      draft_id: draft.json.draft_id,
+      audience_key: "SZK_visitors",
+      topic_key: "SZK_brand",
+    });
+    const got = await callTool(erste.id, "draft_get", {
+      draft_id: draft.json.draft_id,
+    });
+    expect(got.isError).toBe(true);
+  });
+});
+
+describe("draft_promote", () => {
+  it("keeps the number and gives the row a cell", async () => {
+    const draft = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
       headline: "Promote me",
-      audience: "VAL_x",
-      topic: "topic_one",
     });
-    expect(body.draft.promoted_message_id).toBe(body.message.id);
-
-    const second = (await client.callTool({
-      name: "draft_promote",
-      arguments: { draft_id: d!.id, audience_key: "VAL_x", topic_key: "topic_one" },
-    })) as ToolResult;
-    expect(second.isError).toBe(true);
-    expect(second.content[0]!.text).toMatch(/already promoted/);
-    await client.close();
+    const res = await callTool(erste.id, "draft_promote", {
+      draft_id: draft.json.draft_id,
+      audience_key: "SZK_visitors",
+      topic_key: "SZK_brand",
+    });
+    expect(res.isError).toBe(false);
+    expect(res.json.message).toMatchObject({
+      id: draft.json.draft_id, // same row, not a copy
+      number: draft.json.mc_number,
+      audience: "SZK_visitors",
+      topic: "SZK_brand",
+      status: "PREVIEW",
+      headline: "Promote me",
+    });
+    expect(res.json.message.pmmid).toBeTruthy();
   });
 
-  it("read scope sees the draft read tools but not the writes", async () => {
-    const client = await connect("read");
-    const { tools } = await client.listTools();
-    const names = tools.map((t) => t.name);
-    expect(names).toEqual(
-      expect.arrayContaining([
-        "list_drafts",
-        "draft_get",
-        "draft_status",
-        "show_draft_previews",
-      ]),
-    );
-    expect(names).not.toContain("generate_test_creative");
-    expect(names).not.toContain("draft_delete");
-    expect(names).not.toContain("draft_promote");
-    await client.close();
+  it("refuses a topic that does not exist yet", async () => {
+    const draft = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+    });
+    const res = await callTool(erste.id, "draft_promote", {
+      draft_id: draft.json.draft_id,
+      audience_key: "SZK_visitors",
+      topic_key: "not_a_topic",
+    });
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(/create the topic first/);
+  });
+});
+
+describe("brief_attach / list_briefs", () => {
+  it("is idempotent across link spellings and can link a draft", async () => {
+    const draft = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+    });
+    const first = await callTool(erste.id, "brief_attach", {
+      link: `https://docs.google.com/presentation/d/${DECK}/edit#slide=id.g1`,
+      label: "Q4 deck",
+      draft_id: draft.json.draft_id,
+    });
+    expect(first.json.linked_draft_id).toBe(draft.json.draft_id);
+
+    const second = await callTool(erste.id, "brief_attach", {
+      link: `https://drive.google.com/file/d/${DECK}/view`,
+    });
+    expect(second.json.brief_id).toBe(first.json.brief_id);
+
+    const briefs = await callTool(erste.id, "list_briefs", {});
+    expect(briefs.json).toHaveLength(1);
+    expect(briefs.json[0]).toMatchObject({
+      slides_file_id: DECK,
+      open_drafts: 1,
+      promoted: 0,
+    });
+  });
+
+  it("moves a brief's count from open to promoted", async () => {
+    const draft = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+      brief_link: DECK,
+    });
+    await callTool(erste.id, "draft_promote", {
+      draft_id: draft.json.draft_id,
+      audience_key: "SZK_visitors",
+      topic_key: "SZK_brand",
+    });
+    const briefs = await callTool(erste.id, "list_briefs", {});
+    expect(briefs.json[0]).toMatchObject({ open_drafts: 0, promoted: 1 });
+  });
+
+  it("refuses a folder link and says what to paste", async () => {
+    const res = await callTool(erste.id, "brief_attach", {
+      link: "https://drive.google.com/drive/folders/1idXHYJYnXRNEW6jmhZ7RW8XCzT269xbe",
+    });
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(/FOLDER link/);
+  });
+});
+
+describe("draft_delete", () => {
+  it("archives the draft and keeps its number retired", async () => {
+    const draft = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+    });
+    const res = await callTool(erste.id, "draft_delete", {
+      draft_id: draft.json.draft_id,
+    });
+    expect(res.isError).toBe(false);
+    expect((await callTool(erste.id, "list_drafts", {})).json).toHaveLength(0);
+
+    // The number must not come back into circulation: an archived card can be
+    // restored, and a restore that collided with a reused number would be a
+    // silent data loss.
+    const mc = await callTool(erste.id, "mc_create", {
+      audience_key: "SZK_visitors",
+      topic_key: "SZK_brand",
+      mc_number: draft.json.mc_number,
+    });
+    expect(mc.isError).toBe(true);
+    expect(mc.text).toMatch(/retired/);
   });
 });

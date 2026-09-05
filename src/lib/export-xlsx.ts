@@ -3,7 +3,12 @@ import xlsx from "node-xlsx";
 import { db } from "@/db";
 import { listAudiences } from "@/lib/entities/audiences";
 import { listTopics } from "@/lib/entities/topics";
-import { listMessages } from "@/lib/entities/messages";
+// The XLSX export IS the matrix on a sheet, so it takes the placed rows only —
+// a draft has no cell to occupy in it.
+import {
+  listPlacedMessages,
+  type PlacedMessage,
+} from "@/lib/entities/messages";
 import {
   audiences,
   assets,
@@ -269,7 +274,7 @@ export async function exportMatrixXlsx(
   const [allAuds, allTops, allMsgs] = await Promise.all([
     listAudiences(clientId),
     listTopics(clientId),
-    listMessages(clientId),
+    listPlacedMessages(clientId),
   ]);
 
   const productSel = new Set(opts.products);
@@ -313,7 +318,7 @@ export async function exportMatrixXlsx(
     const audKeys = new Set(audsP.map((a) => a.key));
     const topKeys = new Set(topsP.map((t) => t.key));
 
-    const buckets = new Map<string, Message[]>();
+    const buckets = new Map<string, PlacedMessage[]>();
     for (const m of msgs) {
       if (!audKeys.has(m.audience) || !topKeys.has(m.topic)) continue;
       const key = `${m.topic} ${m.audience}`;
@@ -346,7 +351,7 @@ export async function exportMatrixXlsx(
   // MCs sheet: one row per unique (number, variant); representative = the
   // sibling on the first audience in matrix order (content fields are synced
   // across siblings, so the pick only needs to be deterministic).
-  const byCard = new Map<string, Message[]>();
+  const byCard = new Map<string, PlacedMessage[]>();
   for (const m of scopedMsgs) {
     const key = `${m.number}|${m.variant}`;
     const group = byCard.get(key);

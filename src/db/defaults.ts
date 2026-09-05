@@ -1,3 +1,4 @@
+import { DEFAULT_STATUS_COLORS } from "@/lib/mc-status";
 // Default config values written for a freshly-created client (Spec §17.6).
 // A new Telekom or Proficio deploy boots with these so Settings has something
 // to render and login branding works on first paint.
@@ -15,19 +16,9 @@ export const DEFAULT_LOOK_AND_FEEL = {
   secondaryColor3: "#d1d5db",
   secondaryColor4: "#9ca3af",
   cobranding: { enabled: false, logoUrl: "" },
-  statusColors: {
-    INCOMING: "#9ca3af",
-    NAMING: "#f59e0b",
-    CONTENT: "#3b82f6",
-    PREVIEW: "#a855f7",
-    APPROVED: "#10b981",
-    ACTIVE: "#22c55e",
-    INACTIVE: "#6b7280",
-    ARCHIVED: "#4b5563",
-    ERROR: "#ef4444",
-    DEAD: "#000000",
-    MEMORY: "#ec4899",
-  },
+  // From @/lib/mc-status so the Design tab, the branding CSS vars and this
+  // default cannot disagree about which statuses exist.
+  statusColors: { ...DEFAULT_STATUS_COLORS },
 };
 
 export const DEFAULT_PATTERNS = {

@@ -387,7 +387,8 @@ export default function CreativeLibrary() {
   // MC may appear across multiple audiences in the messages table — they
   // share content, so we dedupe by `${number}|${variant}|${size}`. Status
   // filter: live nézet csak ACTIVE-ot mutat; archived nézet minden egyebet
-  // (INCOMING/NAMING/CONTENT/PREVIEW/APPROVED/INACTIVE/ERROR/DEAD/MEMORY).
+  // (PREVIEW/APPROVED/INACTIVE/DEAD). DRAFT nem jut idáig: a rács adata
+  // placed-only, a draftnak pedig nincs cellája.
   const matrixItems: LibraryItem[] = useMemo(() => {
     if (messages.length === 0 || templates.length === 0) return [];
     const seen = new Set<string>();

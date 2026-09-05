@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { config } from "@/db/schema";
 import { activeClientId } from "@/lib/active-client";
 import { DEFAULT_LOOK_AND_FEEL } from "@/db/defaults";
+import { MC_STATUSES, statusSlug } from "@/lib/mc-status";
 
 export type LookAndFeel = typeof DEFAULT_LOOK_AND_FEEL;
 
@@ -51,16 +52,11 @@ export function lookAndFeelToCssVars(laf: LookAndFeel): Record<string, string> {
     "--brand-secondary-3": laf.secondaryColor3,
     "--brand-secondary-4": laf.secondaryColor4,
     "--font-base": `"${laf.fontFamily}", system-ui, sans-serif`,
-    "--status-incoming": sc.INCOMING,
-    "--status-naming": sc.NAMING,
-    "--status-content": sc.CONTENT,
-    "--status-preview": sc.PREVIEW,
-    "--status-approved": sc.APPROVED,
-    "--status-active": sc.ACTIVE,
-    "--status-inactive": sc.INACTIVE,
-    "--status-archived": sc.ARCHIVED,
-    "--status-error": sc.ERROR,
-    "--status-dead": sc.DEAD,
-    "--status-memory": sc.MEMORY,
+    // Derived from the canonical status list rather than written out again —
+    // a hand-kept copy here is how --status-planned never came to exist while
+    // PLANNED rows did.
+    ...Object.fromEntries(
+      MC_STATUSES.map((st) => [`--status-${statusSlug(st)}`, sc[st]]),
+    ),
   };
 }

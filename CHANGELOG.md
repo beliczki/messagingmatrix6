@@ -5,6 +5,114 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.59.0] — 2026-09-05
+
+### Added
+- **DRAFT: work can now be taken on before it has a place in the matrix.** A
+  draft is not a separate table — it is a `messages` row with `status='DRAFT'`
+  and no audience, which is what keeps it out of the grid. Being a real message
+  row is the point: number allocation, variants, versioning and previews all
+  work on it unchanged, so **a draft's MC number is reserved from the moment the
+  work arrives** — the number stops moving between "we agreed to do this" and
+  "it is in the matrix".
+  - Three DB check constraints hold the model up, rather than convention:
+    `DRAFT ⟺ no audience` (both directions), a placed row always has a topic,
+    and a draft never has a PMMID (so the by-PMMID lookup that copy and move
+    resolve their sources through cannot pick one up).
+  - New `briefs` table: the Google Slides deck a draft came in on. Several
+    drafts can share one brief. It stores the Drive **file ID**, not the URL, so
+    the same deck pasted three ways is one brief.
+  - A draft may carry a suggested topic NAME that is not a real topic key yet;
+    promotion is what forces it to resolve. Promotion will not mint a topic —
+    that is how the topics dimension avoids filling up with near-duplicates.
+  - **Promotion updates the row rather than replacing it**, so the number, the
+    brief link and the edit history survive it. The audience, the topic and the
+    status land in one write, because the schema ties them together.
+  - A draft's number is allocated above **both** axes and is held against both,
+    so nothing can take it while the work is in progress. Trying to claim it
+    says so: "MC number 701 is reserved by a draft".
+  - The image-AND-feed-row case: the draft becomes one card, and the second axis
+    is a copy of it under the same number.
+- **The `/drafts` page is now the intake surface**, grouped by the brief each
+  piece of work came in on. Each group header carries `N open · M promoted` —
+  the useful half of a close check, with nothing to keep in sync, because both
+  numbers are counted from the work itself.
+  - **Attach a brief by pasting its link.** The Drive file id is what gets
+    stored, so the editor link and the Drive link of one deck are one brief
+    rather than two. Pasting a folder link says so instead of storing it.
+  - A brief is a pointer, not an owner: archiving or deleting one leaves the
+    drafts alone.
+  - Draft previews are ordinary message previews now, which means they inherit
+    the existing staleness rule — an out-of-date preview is marked as stale
+    rather than shown as if it were current.
+  - New side toolbar on the page for starting a draft and attaching a brief.
+- **Agents work the same surface.** The MCP draft tools keep their names, so
+  nothing an agent already calls breaks, but they now drive the same drafts the
+  page shows. `generate_test_creative` returns the **claimed MC label** along
+  with the draft id — the agent knows which number it just took — and accepts
+  `brief_link` and `working_topic` so intake is structured in one call.
+  - New `brief_attach` (link → brief, optionally linking a draft in the same
+    call) and `list_briefs` (with the open/promoted counts).
+  - `draft_status` progress is now **derived** rather than stored: a size counts
+    as done when its preview was shot at the draft's current version. Editing a
+    draft therefore drops the percentage back, which is the same staleness rule
+    the matrix uses — and there is no render-status column or job table left to
+    get stuck.
+  - `draft_delete` archives rather than hard-deletes, so a discarded draft's
+    number stays retired instead of quietly returning to circulation.
+
+- **The MC lifecycle is six statuses instead of twelve**, and lives in one place
+  (`src/lib/mc-status.ts`) instead of six:
+  `DRAFT → PREVIEW → APPROVED → ACTIVE → INACTIVE`, plus `DEAD`.
+  - **A new card is born in PREVIEW.** By the time an MC is placed it has its
+    template and its content, so the earlier statuses described a moment that
+    had already passed — every new card was being flipped to PREVIEW by hand.
+  - Archiving is the `archived_at` column, not a status. It already was: the
+    ARCHIVED status held no rows while nine rows were archived.
+  - `INCOMING`, `NAMING`, `CONTENT`, `MEMORY`, `ARCHIVED`, `ERROR` and the
+    never-quite-legal `PLANNED` are gone.
+
+### Removed
+- **The `draft_messages` and `draft_previews` tables**, the `entities/drafts.ts`
+  shadow of the message machinery, and the `/api/draft-previews/<id>` route. A
+  draft is a message now, so all three were duplicates of something that already
+  worked. Both tables were empty on every client; nothing was migrated.
+- **Six hand-kept copies of the status list.** The matrix filter, the editor
+  dropdown, the Design tab, the template editor, the branding CSS vars and the
+  DB defaults each spelled the statuses out, and they had drifted: `PLANNED`
+  existed in the filter and nowhere else, so the eight cards carrying it matched
+  no filter option and quietly dropped out of every status-scoped view. All six
+  now derive from one list, as do the CSS variables and the dot/badge classes.
+
+### Changed
+- **Every matrix-facing read now says so explicitly.** Making `audience`
+  nullable turned "which code assumes a message has a cell?" into a question the
+  compiler answers: 49 call sites across 11 files. The feed export, XLSX export,
+  dashboards, MC-count badges, the rekey walker, the monitoring importer and
+  `/api/messages` now scope to placed rows in SQL. Two of those were latent bugs
+  rather than type noise — see below.
+
+### Fixed
+- **A rekey could have swept a draft along.** A draft's topic is free text and
+  may happen to spell a real topic key; the rekey walker matched on that string
+  and would have tried to regenerate an identity the draft does not have. It now
+  scopes by audience, which cuts off the topic-side collision. The same trap was
+  live in the per-topic MC counter, where a draft would have inflated a real
+  topic's count.
+- **Report rows could have matched a draft.** Monitoring's family-level fallback
+  keys on (number, variant) — exactly what a draft carries — so an imported
+  report row could have resolved onto work that never ran anywhere. The importer
+  now reads placed rows only.
+- **`mc:` in the matrix filter now means the number you typed.** It matched as a
+  raw substring, so `mc:21` also pulled in MC321, MC210 and MC121 — and the
+  result looked correct, because those cards are real. The number is now
+  anchored: digits may not continue on either side. `mc:21` still matches every
+  variant of MC21, `mc:21a` matches only that variant, and a non-label value
+  (the matrix packs the PMMID into the same field) keeps the old substring
+  behaviour. Same fix applies to the Creative Library, which builds the same
+  `mc<number><variant>` label.
+
+
 ## [6.58.0] — 2026-09-04
 
 ### Added

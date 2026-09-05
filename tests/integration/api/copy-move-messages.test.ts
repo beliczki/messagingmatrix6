@@ -460,7 +460,12 @@ describe("moveMessages", () => {
     expect(result.reason).toBe("target_audience_not_found");
   });
 
-  it.each([["ACTIVE"], ["INACTIVE"], ["ARCHIVED"]])(
+  // ARCHIVED dropped out of this list on 2026-09-05 with the status itself:
+  // archiving is the `archived_at` column, and an archived card keeps whichever
+  // status it had — so an archived ACTIVE row is still locked by ACTIVE, which
+  // is the case that ever mattered. What the lock protects is measurement
+  // continuity, and a row that never measured has none to protect.
+  it.each([["ACTIVE"], ["INACTIVE"]])(
     "rejects move when source status is %s — row untouched",
     async (lockedStatus) => {
       await seedAudience(erste.id, "aud1");

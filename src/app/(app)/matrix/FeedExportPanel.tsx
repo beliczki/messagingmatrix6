@@ -41,9 +41,10 @@ export default function FeedExportPanel({
   const statuses = [...filters.statuses];
   const isSingleProduct = products.length === 1;
   // ACTIVE and INACTIVE are the two "serving" statuses that belong in an AdForm
-  // feed (INACTIVE rows go in with ISACTIVE=FALSE). Draft/pipeline statuses
-  // (INCOMING, CONTENT, PLANNED, DEAD, …) must never be exported, so the gate
+  // feed (INACTIVE rows go in with ISACTIVE=FALSE). Pre-serving and abandoned
+  // statuses (PREVIEW, APPROVED, DEAD) must never be exported, so the gate
   // requires the status filter to be a non-empty subset of the serving set.
+  // DRAFT cannot reach here at all — the export query is placed-rows-only.
   const isServingStatusOnly =
     statuses.length > 0 && statuses.every((s) => SERVING_STATUSES.has(s));
   const ready = isSingleProduct && isServingStatusOnly;

@@ -1,7 +1,7 @@
 import { makeCollectionRoute } from "@/lib/entity-route";
 import {
   createMessage,
-  listMessages,
+  listPlacedMessages,
   MessageError,
   pickWritable,
 } from "@/lib/entities/messages";
@@ -29,7 +29,12 @@ export const { GET, POST } = makeCollectionRoute({
   listKey: "messages",
   itemKey: "message",
   entityType: "messages",
-  list: listMessages,
+  // This endpoint IS the matrix grid's data source, so it ships placed rows
+  // only. Drafts are `messages` rows too, but they have no cell to render into
+  // — the grid would drop them client-side anyway, after paying for them in the
+  // payload and after handing the client a row that breaks its own Message type
+  // (which declares audience as a string).
+  list: listPlacedMessages,
   create: (cid, input, body) =>
     createMessage(cid, input, {
       requestedNumber: readMcNumber(body),

@@ -37,6 +37,7 @@ import {
   channelToAudience,
 } from "./types";
 import { parseSearchQuery, narrowingAxes } from "@/lib/search-query";
+import { isMeasurementLocked } from "@/lib/mc-status";
 
 async function fetchJSON<T>(url: string): Promise<T> {
   const r = await fetch(url, { credentials: "include" });
@@ -472,7 +473,7 @@ export default function MatrixWorkspace() {
       .values(),
   ];
   const deleteLocked = selectedRows
-    .filter((m) => ["ACTIVE", "INACTIVE", "ARCHIVED"].includes(m.status ?? ""))
+    .filter((m) => isMeasurementLocked(m.status))
     .map((m) => ({ label: `MC${m.number}${m.variant}`, status: m.status ?? "" }));
 
   const applyDelete = useCallback(

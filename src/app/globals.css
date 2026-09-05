@@ -12,17 +12,12 @@
   --brand-secondary-4: #9ca3af;
   --font-base: "Inter", system-ui, sans-serif;
 
-  --status-incoming: #9ca3af;
-  --status-naming: #f59e0b;
-  --status-content: #3b82f6;
+  --status-draft: #8b5cf6;
   --status-preview: #a855f7;
   --status-approved: #10b981;
   --status-active: #22c55e;
   --status-inactive: #6b7280;
-  --status-archived: #4b5563;
-  --status-error: #ef4444;
   --status-dead: #000000;
-  --status-memory: #ec4899;
 
   /* Neutral palette — shadcn-style design tokens (bizi pattern). All flip via
      html.dark. Components reference via Tailwind tokens (bg-background,
@@ -148,17 +143,12 @@ html.dark {
     height: 0.5rem;
     border-radius: 9999px;
   }
-  .status-dot--incoming { background-color: var(--status-incoming); }
-  .status-dot--naming { background-color: var(--status-naming); }
-  .status-dot--content { background-color: var(--status-content); }
+  .status-dot--draft { background-color: var(--status-draft); }
   .status-dot--preview { background-color: var(--status-preview); }
   .status-dot--approved { background-color: var(--status-approved); }
   .status-dot--active { background-color: var(--status-active); }
   .status-dot--inactive { background-color: var(--status-inactive); }
-  .status-dot--archived { background-color: var(--status-archived); }
-  .status-dot--error { background-color: var(--status-error); }
   .status-dot--dead { background-color: var(--status-dead); }
-  .status-dot--memory { background-color: var(--status-memory); }
 
   .status-badge {
     display: inline-flex;
@@ -168,16 +158,12 @@ html.dark {
     font-size: 0.75rem;
     font-weight: 500;
   }
-  .status-badge--incoming { background-color: color-mix(in srgb, var(--status-incoming) 18%, white); color: var(--status-incoming); }
-  .status-badge--naming { background-color: color-mix(in srgb, var(--status-naming) 18%, white); color: var(--status-naming); }
-  .status-badge--content { background-color: color-mix(in srgb, var(--status-content) 18%, white); color: var(--status-content); }
+  .status-badge--draft { background-color: color-mix(in srgb, var(--status-draft) 18%, white); color: var(--status-draft); }
   .status-badge--preview { background-color: color-mix(in srgb, var(--status-preview) 18%, white); color: var(--status-preview); }
   .status-badge--approved { background-color: color-mix(in srgb, var(--status-approved) 18%, white); color: var(--status-approved); }
   .status-badge--active { background-color: color-mix(in srgb, var(--status-active) 18%, white); color: var(--status-active); }
   .status-badge--inactive { background-color: color-mix(in srgb, var(--status-inactive) 18%, white); color: var(--status-inactive); }
-  .status-badge--error { background-color: color-mix(in srgb, var(--status-error) 18%, white); color: var(--status-error); }
   .status-badge--dead { background-color: color-mix(in srgb, var(--status-dead) 18%, white); color: var(--status-dead); }
-  .status-badge--memory { background-color: color-mix(in srgb, var(--status-memory) 18%, white); color: var(--status-memory); }
 
   /* Feeds list: the live row's whole Live cell takes the ACTIVE status tint, so
      the one export AdForm is actually serving is findable at a glance in a long

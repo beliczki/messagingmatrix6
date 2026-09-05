@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, messages, monitoring } from "@/db/schema";
 import { buildMessageResolver } from "@/lib/adform-report";
@@ -113,8 +113,15 @@ describe("monitoring table (migration 0017)", () => {
         topic: messages.topic,
       })
       .from(messages)
-      .where(eq(messages.clientId, erste.id));
-    const resolve = buildMessageResolver(msgRows);
+      .where(
+        and(eq(messages.clientId, erste.id), isNotNull(messages.audience)),
+      );
+    const resolve = buildMessageResolver(
+      msgRows.filter(
+        (r): r is typeof r & { audience: string; topic: string } =>
+          r.audience !== null && r.topic !== null,
+      ),
+    );
 
     const exact = resolve(290, "a", "szk_incoming", "szk_kerdoiv_na_hiteltinder");
     expect(exact.matchLevel).toBe("exact");
@@ -129,6 +136,39 @@ describe("monitoring table (migration 0017)", () => {
       matchLevel: "family_known",
     });
     expect(resolve(999, "a", "wid", "szk_q2")).toEqual({
+      messageId: null,
+      matchLevel: null,
+    });
+  });
+
+  // A draft carries a number and a variant, which is exactly what the
+  // family-level fallback keys on — so without the placed-only scope a report
+  // row would resolve onto work that has never run anywhere.
+  it("never resolves a report key onto a DRAFT", async () => {
+    await db.insert(messages).values([
+      { clientId: erste.id, number: 421, variant: "a", status: "DRAFT", audience: null, topic: null },
+    ]);
+    const msgRows = await db
+      .select({
+        id: messages.id,
+        number: messages.number,
+        variant: messages.variant,
+        audience: messages.audience,
+        topic: messages.topic,
+      })
+      .from(messages)
+      .where(
+        and(eq(messages.clientId, erste.id), isNotNull(messages.audience)),
+      );
+    expect(msgRows).toHaveLength(0);
+
+    const resolve = buildMessageResolver(
+      msgRows.filter(
+        (r): r is typeof r & { audience: string; topic: string } =>
+          r.audience !== null && r.topic !== null,
+      ),
+    );
+    expect(resolve(421, "a", "wid", "szk_q2")).toEqual({
       messageId: null,
       matchLevel: null,
     });

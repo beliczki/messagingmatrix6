@@ -193,27 +193,53 @@ export function McpTab() {
 
       <Section title="Draft test creatives">
         <p className="text-sm text-slate-600">
-          The agentic production workflow stages creatives{" "}
-          <strong className="font-semibold">outside the matrix</strong>:{" "}
+          The agentic intake path. A{" "}
+          <strong className="font-semibold">draft</strong> is a real{" "}
+          <code className="font-mono text-xs">messages</code> row with{" "}
+          <strong className="font-semibold">no audience</strong> — that missing
+          cell is what keeps it out of the matrix, and being a message row is
+          what makes it{" "}
+          <strong className="font-semibold">claim its MC number straight away</strong>,
+          so nothing else can take that number while the work is in progress.{" "}
           <code className="font-mono text-xs">generate_test_creative</code>{" "}
           takes a template + content fields + image filenames (upload generated
           images first via{" "}
-          <code className="font-mono text-xs">asset_upload</code>) + a size
-          list, stores a <code className="font-mono text-xs">draft_messages</code>{" "}
-          row and returns a <code className="font-mono text-xs">draft_id</code>{" "}
-          immediately — rendering runs async on the shared server-side
-          Chromium. Poll{" "}
-          <code className="font-mono text-xs">draft_status</code> for percent /
-          elapsed / per-size preview URLs (public, like MC previews, at{" "}
-          <code className="font-mono text-xs">/api/draft-previews/&lt;id&gt;</code>),
-          display with{" "}
-          <code className="font-mono text-xs">show_draft_previews</code>, then
-          either <code className="font-mono text-xs">draft_promote</code> into
-          a matrix cell (standard numbering/PMMID/trafficking) or{" "}
-          <code className="font-mono text-xs">draft_delete</code> (hard delete —
-          drafts have no archive). Drafts also appear on the app&apos;s{" "}
-          <strong className="font-semibold">Drafts</strong> page for review,
-          promotion and deletion.
+          <code className="font-mono text-xs">asset_upload</code>), optionally a{" "}
+          <code className="font-mono text-xs">brief_link</code> and a{" "}
+          <code className="font-mono text-xs">working_topic</code>, and returns
+          the <code className="font-mono text-xs">draft_id</code> plus the
+          claimed <code className="font-mono text-xs">mc_label</code>{" "}
+          immediately — rendering runs async on the shared server-side Chromium.
+          Poll <code className="font-mono text-xs">draft_status</code>: progress
+          is <strong className="font-semibold">derived</strong>, not stored — a
+          size counts as done when its preview was shot at the draft&apos;s
+          current version, so editing a draft makes its previews stale again and
+          the percentage drops back. Previews are ordinary MC previews at{" "}
+          <code className="font-mono text-xs">/api/previews/&lt;id&gt;</code>;
+          display them with{" "}
+          <code className="font-mono text-xs">show_draft_previews</code>. Then{" "}
+          <code className="font-mono text-xs">draft_promote</code> gives the
+          draft its cell — the MC number is{" "}
+          <strong className="font-semibold">kept</strong> and the row is updated
+          rather than replaced, so the number, the brief link and the history
+          all survive; the topic must already exist, because promotion never
+          mints one. <code className="font-mono text-xs">draft_delete</code>{" "}
+          archives it (the number stays retired, as with any archived card).
+        </p>
+        <p className="mt-2 text-sm text-slate-600">
+          <code className="font-mono text-xs">brief_attach</code> records the
+          Google Slides deck a piece of work came in on and can link a draft to
+          it in the same call. The Drive{" "}
+          <strong className="font-semibold">file id</strong> is the brief&apos;s
+          identity, so the editor link and the Drive link of one deck resolve to
+          one brief instead of two;{" "}
+          <code className="font-mono text-xs">list_briefs</code> returns each
+          brief with its <code className="font-mono text-xs">open_drafts</code>{" "}
+          / <code className="font-mono text-xs">promoted</code> counts, which
+          answer &ldquo;what came of this brief?&rdquo; without a status field to
+          keep in sync. Drafts and briefs also appear on the app&apos;s{" "}
+          <strong className="font-semibold">Drafts</strong> page, grouped by
+          brief.
         </p>
       </Section>
 

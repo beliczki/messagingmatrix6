@@ -1,3 +1,4 @@
+import { MC_STATUSES, statusSlug } from "@/lib/mc-status";
 export type Audience = {
   id: number;
   key: string;
@@ -156,36 +157,17 @@ export type Message = {
   archivedAt: string | null;
 };
 
-export const STATUS_OPTIONS = [
-  "INCOMING",
-  "NAMING",
-  "CONTENT",
-  "PREVIEW",
-  "APPROVED",
-  "ACTIVE",
-  "INACTIVE",
-  "ARCHIVED",
-  "ERROR",
-  "DEAD",
-  "MEMORY",
-] as const;
+// The matrix filter and the editor dropdown offer the placeable statuses; the
+// canonical list lives in @/lib/mc-status so this file cannot drift from the
+// Design tab, the DB defaults and the branding vars the way it used to.
+export { MATRIX_STATUSES as STATUS_OPTIONS } from "@/lib/mc-status";
 
 // Values are CSS-var-backed dot-modifier classes (globals.css `.status-dot--*`),
 // so every consumer inherits the `lookAndFeel` status colours the Design tab
 // writes — single source of truth, not hardcoded Tailwind `bg-*` classes.
-export const STATUS_COLOR: Record<string, string> = {
-  INCOMING: "status-dot--incoming",
-  NAMING: "status-dot--naming",
-  CONTENT: "status-dot--content",
-  PREVIEW: "status-dot--preview",
-  APPROVED: "status-dot--approved",
-  ACTIVE: "status-dot--active",
-  INACTIVE: "status-dot--inactive",
-  ARCHIVED: "status-dot--archived",
-  ERROR: "status-dot--error",
-  DEAD: "status-dot--dead",
-  MEMORY: "status-dot--memory",
-};
+export const STATUS_COLOR: Record<string, string> = Object.fromEntries(
+  MC_STATUSES.map((s) => [s, `status-dot--${statusSlug(s)}`]),
+);
 
 // Buying-platform colours. The colour VALUES live once in globals.css as
 // --plat-* custom properties; this list is the single source for which platform

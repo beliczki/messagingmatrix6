@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   archiveMessage,
   getMessage,
+  MessageError,
   pickWritable,
   propagateToSiblings,
   updateMessage,
@@ -40,7 +41,17 @@ export const PATCH = withSession<Params>(async ({ req, claims, params }) => {
   if (expected === null) return missingVersion();
   const input = pickWritable(body);
   const before = await getMessage(claims.cid, id);
-  const result = await updateMessage(claims.cid, id, expected, input);
+  let result: Awaited<ReturnType<typeof updateMessage>>;
+  try {
+    result = await updateMessage(claims.cid, id, expected, input);
+  } catch (e) {
+    // A DRAFT/placement mismatch is the caller's input being wrong, not a
+    // server fault — surface it as a 400 with the reason, like POST does.
+    if (e instanceof MessageError) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
+    throw e;
+  }
   if (!result.ok) {
     if (!result.current) {
       return NextResponse.json({ error: "not_found" }, { status: 404 });

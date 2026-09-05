@@ -85,6 +85,20 @@
       "when": 1788466251631,
       "tag": "0011_demonic_chameleon",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788520206172,
+      "tag": "0012_shiny_iron_fist",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1788526350564,
+      "tag": "0013_wide_otto_octavius",
+      "breakpoints": true
     }
   ]
 }

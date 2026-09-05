@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import { db } from "@/db";
 import { monitoring, messages as messagesTable } from "@/db/schema";
 import { withSession, denyDemo } from "@/lib/scoped";
@@ -62,8 +62,22 @@ export const POST = withSession(async ({ req, claims }) => {
       topic: messagesTable.topic,
     })
     .from(messagesTable)
-    .where(eq(messagesTable.clientId, claims.cid));
-  const resolve = buildMessageResolver(msgRows);
+    // Monitoring must NEVER resolve onto a draft: a draft has not run anywhere,
+    // so a reported row that appears to match one is a mis-match by definition.
+    // Drafts also carry a number and variant, which is exactly what the
+    // family-level fallback keys on — so without this they would be candidates.
+    .where(
+      and(
+        eq(messagesTable.clientId, claims.cid),
+        isNotNull(messagesTable.audience),
+      ),
+    );
+  const resolve = buildMessageResolver(
+    msgRows.filter(
+      (r): r is typeof r & { audience: string; topic: string } =>
+        r.audience !== null && r.topic !== null,
+    ),
+  );
 
   // Product resolution inputs: audience→product (matrix-authoritative) + the
   // keyword→product rules from Settings → Structure → Monitoring.

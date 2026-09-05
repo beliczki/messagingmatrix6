@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { MC_STATUSES } from "@/lib/mc-status";
 import {
   defaultConfigSeed,
   DEFAULT_LOOK_AND_FEEL,
@@ -24,22 +25,14 @@ describe("defaultConfigSeed", () => {
     }
   });
 
-  it("has every status color key the v5 status enum uses", () => {
-    const expected = [
-      "INCOMING",
-      "NAMING",
-      "CONTENT",
-      "PREVIEW",
-      "APPROVED",
-      "ACTIVE",
-      "INACTIVE",
-      "ERROR",
-      "DEAD",
-      "MEMORY",
-    ];
-    for (const k of expected) {
-      expect(DEFAULT_LOOK_AND_FEEL.statusColors).toHaveProperty(k);
-    }
+  // Was "every key the v5 status enum uses" — that enum is gone. The seed now
+  // has to match the canonical list EXACTLY: a missing key leaves a status with
+  // no colour, and a leftover key is a status the app no longer knows, which is
+  // the pair of mistakes the six duplicated lists used to make.
+  it("seeds a colour for every MC status, and only those", () => {
+    expect(Object.keys(DEFAULT_LOOK_AND_FEEL.statusColors).sort()).toEqual(
+      [...MC_STATUSES].sort(),
+    );
   });
 
   it("PMMID pattern reproduces the v5 default exactly", () => {

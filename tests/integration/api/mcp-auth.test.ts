@@ -38,6 +38,7 @@ const READ_TOOLS = [
   "matrix_status",
   "get_mc_reporting",
   "list_drafts",
+  "list_briefs",
   "draft_get",
   "draft_status",
   "show_draft_previews",

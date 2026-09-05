@@ -16,6 +16,7 @@ import {
   topics,
 } from "@/db/schema";
 import { KEYWORD_FIELDS, type KeywordForm } from "@/lib/entities/keywords";
+import { BIRTH_STATUS } from "@/lib/mc-status";
 
 // A db handle that is either the root connection or an open transaction. The
 // dry-run path MUST pass the transaction handle through to every write — in
@@ -372,11 +373,11 @@ async function importMessages(
       versionNo: n(r[idx.versionNo]) ?? 1,
       pmmid: s(r[idx.pmmid]),
       // An empty Status cell used to import as NULL, which is no longer a legal
-      // state for a message. INCOMING rather than the column's ACTIVE default:
-      // a spreadsheet row that never said "live" must not become live by
-      // omission. (Audience/topic status above is a different column and keeps
-      // its nullable semantics.)
-      status: s(r[idx.status]) ?? "INCOMING",
+      // state for a message. The birth status rather than the column's ACTIVE
+      // default: a spreadsheet row that never said "live" must not become live
+      // by omission. (Audience/topic status above is a different column and
+      // keeps its nullable semantics.)
+      status: s(r[idx.status]) ?? BIRTH_STATUS,
       startDate: s(r[idx.start]),
       endDate: s(r[idx.end]),
       template: s(r[idx.template]),

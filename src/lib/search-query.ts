@@ -99,9 +99,28 @@ const FREE_FIELDS: (keyof SearchFields)[] = [
   "free",
 ];
 
+// `mc:` is the one field where a raw substring match answers a different
+// question than the one asked: `mc:21` also hits MC321 and MC210, so the grid
+// fills with cards that have nothing to do with number 21 — and the answer
+// looks right, because those cards are real. A query shaped like a card label
+// is therefore anchored to the WHOLE number (digits may not continue on either
+// side); a variant, when given, must match exactly, and when omitted every
+// variant of that number matches. Anything else the caller packs into the mc
+// field (the matrix appends the pmmid) keeps the substring behaviour.
+const MC_LABEL_QUERY = /^(?:mc)?(\d+)([a-z]*)$/;
+
+function mcMatches(value: string, field: string): boolean {
+  const parsed = MC_LABEL_QUERY.exec(value);
+  if (!parsed) return field.includes(value);
+  const [, number, variant] = parsed;
+  return new RegExp(`\\bmc${number}${variant || "[a-z]*"}\\b`).test(field);
+}
+
 function termMatches(term: Term, fields: SearchFields): boolean {
   if (term.kind === "field") {
-    return fields[term.field].includes(term.value);
+    return term.field === "mc"
+      ? mcMatches(term.value, fields.mc)
+      : fields[term.field].includes(term.value);
   }
   for (const f of FREE_FIELDS) {
     if (fields[f].includes(term.value)) return true;

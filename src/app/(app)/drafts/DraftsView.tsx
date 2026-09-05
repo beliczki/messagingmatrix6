@@ -1,45 +1,33 @@
 "use client";
 
-// Thin v1 list for agent-staged draft test-creatives (MCP
-// generate_test_creative). Tiles show the rendered PNGs; the dialog offers
-// Delete (hard, with previews) and Promote (into a matrix cell). Content
-// editing stays agent-side — regenerate instead of edit.
+// The drafts surface: work that has been taken on and has claimed its MC
+// number, but has not been placed in the matrix yet. A draft is a `messages`
+// row with no audience, so everything here — previews, versioning, editing —
+// runs on the ordinary message machinery; what makes it a draft is the missing
+// cell, and promoting is what fills it in.
+//
+// Grouped by BRIEF, because the question this page answers is "what came of
+// this deck?" — the promote counts on each group header are the cheap version
+// of a close check: both numbers are counted from the work itself, so there is
+// no separate state to drift.
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { FlaskConical, Loader2, Trash2, ArrowUpRight } from "lucide-react";
+import {
+  FileText,
+  FlaskConical,
+  Link2,
+  Loader2,
+  Plus,
+  ArrowUpRight,
+} from "lucide-react";
 import clsx from "clsx";
 import { Masonry } from "../_components/Masonry";
+import RightToolbar from "../_components/RightToolbar";
 import AppDialog from "../_components/AppDialog";
-import { useAlertDialog } from "../_components/AlertDialog";
+import DraftDetailDialog from "./DraftDetailDialog";
+import type { Draft, DraftPreview, BriefRow } from "./types";
 
-type Draft = {
-  id: number;
-  name: string | null;
-  template: string;
-  templateVariantClasses: string | null;
-  headline: string | null;
-  copy1: string | null;
-  copy2: string | null;
-  disclaimer: string | null;
-  cta: string | null;
-  flash: string | null;
-  image1: string | null;
-  image5: string | null;
-  image6: string | null;
-  sizes: string;
-  renderStatus: string;
-  renderError: string | null;
-  promotedMessageId: number | null;
-  version: number;
-  createdAt: string;
-};
-
-type DraftPreview = {
-  id: number;
-  draftId: number;
-  size: string;
-  updatedAt: string;
-};
+const UNBRIEFED = -1;
 
 async function fetchJSON<T>(url: string): Promise<T> {
   const r = await fetch(url, { credentials: "include" });
@@ -47,123 +35,260 @@ async function fetchJSON<T>(url: string): Promise<T> {
   return r.json();
 }
 
-function previewSrc(p: DraftPreview): string {
-  return `/api/draft-previews/${p.id}?v=${encodeURIComponent(p.updatedAt)}`;
+async function postJSON<T>(url: string, body: unknown): Promise<T> {
+  const r = await fetch(url, {
+    method: "POST",
+    credentials: "include",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const json = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(json?.error ?? `${r.status} ${r.statusText}`);
+  return json as T;
 }
 
-function parseSizes(d: Draft): string[] {
-  return JSON.parse(d.sizes) as string[];
+export function mcLabel(d: { number: number; variant: string }): string {
+  return `MC${d.number}${d.variant}`;
 }
 
 export default function DraftsView() {
-  const [showPromoted, setShowPromoted] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [attachOpen, setAttachOpen] = useState(false);
   const qc = useQueryClient();
 
   const draftsQ = useQuery({
-    queryKey: ["drafts", { showPromoted }],
+    queryKey: ["drafts"],
     queryFn: () =>
-      fetchJSON<{ drafts: Draft[]; previews: DraftPreview[] }>(
-        showPromoted ? "/api/drafts?includePromoted=1" : "/api/drafts",
-      ),
-    // Renders land async server-side — keep polling while any draft is open.
-    refetchInterval: (q) =>
-      q.state.data?.drafts.some(
-        (d) => d.renderStatus === "pending" || d.renderStatus === "rendering",
-      )
-        ? 2500
-        : false,
+      fetchJSON<{
+        drafts: Draft[];
+        previews: DraftPreview[];
+        briefs: BriefRow[];
+      }>("/api/drafts"),
   });
 
-  const drafts = draftsQ.data?.drafts ?? [];
-  const previews = draftsQ.data?.previews ?? [];
+  // Memoised rather than `?? []` inline: a fresh empty array on every render
+  // invalidates the grouping memo below on every render too.
+  const data = draftsQ.data;
+  const drafts = useMemo(() => data?.drafts ?? [], [data]);
+  const previews = useMemo(() => data?.previews ?? [], [data]);
+  const briefs = useMemo(() => data?.briefs ?? [], [data]);
+
   const previewsByDraft = useMemo(() => {
     const m = new Map<number, DraftPreview[]>();
     for (const p of previews) {
-      const list = m.get(p.draftId) ?? [];
+      const list = m.get(p.messageId) ?? [];
       list.push(p);
-      m.set(p.draftId, list);
+      m.set(p.messageId, list);
     }
     return m;
   }, [previews]);
 
+  // Brief groups in the briefs' own order (newest first), with the unbriefed
+  // drafts last — they are the ones still missing their reason for existing.
+  const groups = useMemo(() => {
+    const byBrief = new Map<number, Draft[]>();
+    for (const d of drafts) {
+      const key = d.briefId ?? UNBRIEFED;
+      const list = byBrief.get(key) ?? [];
+      list.push(d);
+      byBrief.set(key, list);
+    }
+    const out: Array<{ brief: BriefRow | null; drafts: Draft[] }> = [];
+    for (const b of briefs) {
+      const list = byBrief.get(b.id);
+      // A brief with no open drafts still belongs on the page when something
+      // was promoted out of it — that IS the answer to "what came of it".
+      if (list || b.promoted > 0) out.push({ brief: b, drafts: list ?? [] });
+    }
+    const loose = byBrief.get(UNBRIEFED);
+    if (loose) out.push({ brief: null, drafts: loose });
+    return out;
+  }, [drafts, briefs]);
+
   const detail = drafts.find((d) => d.id === detailId) ?? null;
 
+  function refresh() {
+    qc.invalidateQueries({ queryKey: ["drafts"] });
+  }
+
+  async function newDraft() {
+    await postJSON("/api/drafts", {});
+    refresh();
+  }
+
   return (
-    <div className="drafts-view flex h-full flex-col overflow-hidden">
-      <div className="toolbar drafts-view__toolbar sticky top-0 z-10 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
-        <div className="toolbar__title text-sm font-semibold text-slate-900">
-          Drafts
+    <div className="drafts-view flex h-full overflow-hidden">
+      <div className="drafts-view__main flex min-w-0 flex-1 flex-col overflow-hidden">
+        <div className="toolbar drafts-view__toolbar sticky top-0 z-10 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
+          <div className="toolbar__title text-sm font-semibold text-slate-900">
+            Drafts
+          </div>
+          <div className="toolbar__count ml-auto text-[11px] text-slate-500">
+            {drafts.length} open · {briefs.length} brief
+            {briefs.length === 1 ? "" : "s"}
+          </div>
         </div>
-        <label className="drafts-view__promoted-toggle flex cursor-pointer items-center gap-1.5 text-xs text-slate-600">
-          <input
-            type="checkbox"
-            checked={showPromoted}
-            onChange={(e) => setShowPromoted(e.target.checked)}
-          />
-          Show promoted
-        </label>
-        <div className="toolbar__count ml-auto text-[11px] text-slate-500">
-          {drafts.length} draft{drafts.length === 1 ? "" : "s"}
+
+        <div className="drafts-view__scroll flex-1 overflow-auto p-4">
+          {draftsQ.isLoading ? (
+            <div className="flex h-full items-center justify-center text-sm text-slate-500">
+              <Loader2 className="mr-2 size-4 animate-spin" />
+              Loading…
+            </div>
+          ) : groups.length === 0 ? (
+            <div className="flex h-full items-center justify-center">
+              <div className="empty-state drafts-view__empty max-w-md rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
+                <FlaskConical className="empty-state__icon mx-auto mb-2 size-8 text-slate-400" />
+                <h2 className="empty-state__title text-sm font-semibold text-slate-900">
+                  Nothing in progress
+                </h2>
+                <p className="empty-state__hint mt-1 text-xs text-slate-500">
+                  A draft claims its MC number the moment work is taken on, so
+                  the number stops moving before the card reaches the matrix.
+                  Start one from the toolbar, or attach the brief it came in on.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="drafts-view__groups flex flex-col gap-6">
+              {groups.map((g) => (
+                <BriefGroup
+                  key={g.brief?.id ?? UNBRIEFED}
+                  brief={g.brief}
+                  drafts={g.drafts}
+                  previewsByDraft={previewsByDraft}
+                  onOpen={setDetailId}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      <div className="drafts-view__scroll flex-1 overflow-auto p-4">
-        {draftsQ.isLoading ? (
-          <div className="flex h-full items-center justify-center text-sm text-slate-500">
-            <Loader2 className="mr-2 size-4 animate-spin" />
-            Loading…
-          </div>
-        ) : drafts.length === 0 ? (
-          <div className="flex h-full items-center justify-center">
-            <div className="empty-state drafts-view__empty max-w-md rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-              <FlaskConical className="empty-state__icon mx-auto mb-2 size-8 text-slate-400" />
-              <h2 className="empty-state__title text-sm font-semibold text-slate-900">
-                No drafts yet
-              </h2>
-              <p className="empty-state__hint mt-1 text-xs text-slate-500">
-                Drafts are test creatives staged by an agent via the MCP
-                generate_test_creative tool — they render here without touching
-                the matrix.
+      <RightToolbar storageKey="mm6_drafts_toolbar_open" title="Drafts">
+        {(collapsed) =>
+          collapsed ? (
+            <>
+              <button
+                type="button"
+                onClick={newDraft}
+                title="New draft"
+                className="drafts-panel__collapsed-icon rounded p-1.5 text-slate-500 hover:bg-slate-100"
+              >
+                <Plus className="size-5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setAttachOpen(true)}
+                title="Attach a brief"
+                className="drafts-panel__collapsed-icon rounded p-1.5 text-slate-500 hover:bg-slate-100"
+              >
+                <Link2 className="size-5" />
+              </button>
+            </>
+          ) : (
+            <div className="drafts-panel flex flex-col gap-3">
+              <p className="drafts-panel__hint text-[11px] leading-relaxed text-slate-500">
+                A new draft starts with nothing but its MC number. Content,
+                brief and cell can all arrive later.
               </p>
+              <button
+                type="button"
+                onClick={newDraft}
+                className="toolbar-btn toolbar-btn--primary drafts-panel__new flex items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800"
+              >
+                <Plus className="size-4" />
+                New draft
+              </button>
+              <button
+                type="button"
+                onClick={() => setAttachOpen(true)}
+                className="toolbar-btn drafts-panel__attach flex items-center justify-center gap-1.5 rounded-md border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <Link2 className="size-4" />
+                Attach a brief
+              </button>
             </div>
-          </div>
-        ) : (
-          <Masonry
-            items={drafts}
-            itemKey={(d) => d.id}
-            render={(d) => (
-              <DraftTile
-                draft={d}
-                previews={previewsByDraft.get(d.id) ?? []}
-                onOpen={() => setDetailId(d.id)}
-              />
-            )}
-          />
-        )}
-      </div>
+          )
+        }
+      </RightToolbar>
+
+      {attachOpen ? (
+        <AttachBriefDialog
+          onClose={() => setAttachOpen(false)}
+          onAttached={() => {
+            setAttachOpen(false);
+            refresh();
+          }}
+        />
+      ) : null}
 
       {detail ? (
         <DraftDetailDialog
           draft={detail}
           previews={previewsByDraft.get(detail.id) ?? []}
+          briefs={briefs}
           onClose={() => setDetailId(null)}
-          onChanged={() => {
-            qc.invalidateQueries({ queryKey: ["drafts"] });
-          }}
+          onChanged={refresh}
         />
       ) : null}
     </div>
   );
 }
 
-function statusBadgeClass(status: string): string {
-  return clsx(
-    "status-badge drafts-tile__status rounded-full px-1.5 py-0.5 text-[10px] font-medium",
-    status === "done" && "bg-emerald-100 text-emerald-700",
-    status === "failed" && "bg-red-100 text-red-700",
-    (status === "pending" || status === "rendering") &&
-      "bg-amber-100 text-amber-700",
+function BriefGroup({
+  brief,
+  drafts,
+  previewsByDraft,
+  onOpen,
+}: {
+  brief: BriefRow | null;
+  drafts: Draft[];
+  previewsByDraft: Map<number, DraftPreview[]>;
+  onOpen: (id: number) => void;
+}) {
+  return (
+    <section className="brief-group">
+      <header className="brief-group__header mb-2 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-1.5">
+        <FileText className="brief-group__icon size-3.5 text-slate-400" />
+        {brief ? (
+          <a
+            href={`https://docs.google.com/presentation/d/${brief.slidesFileId}/edit`}
+            target="_blank"
+            rel="noreferrer"
+            className="brief-group__title text-xs font-semibold uppercase tracking-wider text-slate-700 hover:text-slate-900 hover:underline"
+          >
+            {brief.label || "Untitled brief"}
+          </a>
+        ) : (
+          <span className="brief-group__title text-xs font-semibold uppercase tracking-wider text-slate-400">
+            No brief yet
+          </span>
+        )}
+        {brief ? (
+          <span className="brief-group__progress text-[10px] text-slate-500">
+            {brief.openDrafts} open · {brief.promoted} promoted
+          </span>
+        ) : null}
+      </header>
+      {drafts.length === 0 ? (
+        <p className="brief-group__empty text-[11px] text-slate-400">
+          Everything from this brief is in the matrix.
+        </p>
+      ) : (
+        <Masonry
+          items={drafts}
+          itemKey={(d) => d.id}
+          render={(d) => (
+            <DraftTile
+              draft={d}
+              previews={previewsByDraft.get(d.id) ?? []}
+              onOpen={() => onOpen(d.id)}
+            />
+          )}
+        />
+      )}
+    </section>
   );
 }
 
@@ -176,292 +301,143 @@ function DraftTile({
   previews: DraftPreview[];
   onOpen: () => void;
 }) {
-  const first = previews[0];
-  const total = parseSizes(draft).length;
-  const rendering =
-    draft.renderStatus === "pending" || draft.renderStatus === "rendering";
+  // A preview is stale when the row moved on without a re-render; showing the
+  // old picture unmarked would be the one thing worse than showing none.
+  const fresh = previews.find((p) => p.messageVersion === draft.version);
+  const stale = !fresh && previews[0];
+  const shown = fresh ?? stale;
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="drafts-tile group block w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-left shadow-sm transition hover:shadow-md"
+      className="creative-card drafts-tile group block w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-left shadow-sm transition hover:shadow-md"
     >
-      <div className="drafts-tile__media relative flex min-h-24 items-center justify-center bg-slate-50">
-        {first ? (
+      <div className="creative-card__thumb drafts-tile__media relative flex min-h-24 items-center justify-center bg-slate-50">
+        {shown ? (
           <img
-            src={previewSrc(first)}
-            alt={draft.name ?? `Draft ${draft.id}`}
-            className="drafts-tile__img block w-full"
+            src={`/api/previews/${shown.id}?v=${encodeURIComponent(shown.updatedAt)}`}
+            alt={draft.name ?? mcLabel(draft)}
+            className={clsx(
+              "drafts-tile__img block w-full",
+              !fresh && "opacity-50",
+            )}
             loading="lazy"
           />
         ) : (
-          <div className="drafts-tile__placeholder flex items-center gap-2 p-6 text-xs text-slate-400">
-            {rendering ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                Rendering…
-              </>
-            ) : (
-              "No preview"
-            )}
+          <div className="drafts-tile__placeholder p-6 text-center text-[11px] leading-relaxed text-slate-400">
+            No content yet —
+            <br />
+            this draft has only its number.
           </div>
         )}
-        <span className={clsx(statusBadgeClass(draft.renderStatus), "absolute left-1.5 top-1.5")}>
-          {rendering ? `${previews.length}/${total}` : draft.renderStatus}
-        </span>
-        {draft.promotedMessageId != null ? (
-          <span className="status-badge drafts-tile__promoted absolute right-1.5 top-1.5 rounded-full bg-slate-900/80 px-1.5 py-0.5 text-[10px] font-medium text-white">
-            promoted
+        {stale && !fresh ? (
+          <span className="status-badge drafts-tile__stale absolute right-1.5 top-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+            stale preview
           </span>
         ) : null}
       </div>
-      <div className="drafts-tile__meta px-2.5 py-2">
-        <p className="drafts-tile__name truncate text-xs font-medium text-slate-800">
-          {draft.name ?? draft.headline ?? `Draft ${draft.id}`}
-        </p>
-        <p className="drafts-tile__sub truncate text-[10px] text-slate-500">
-          {draft.template} · {parseSizes(draft).join(", ")}
-        </p>
+      <div className="creative-card__meta drafts-tile__meta flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-2 py-1.5">
+        <span className="creative-card__mc text-xs font-semibold text-slate-900">
+          {mcLabel(draft)}
+        </span>
+        <span className="drafts-tile__name truncate text-[11px] text-slate-500">
+          {draft.name || "Untitled"}
+        </span>
+        {draft.topic ? (
+          <span className="tag-chip drafts-tile__topic rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">
+            {draft.topic}
+          </span>
+        ) : null}
       </div>
     </button>
   );
 }
 
-function DraftDetailDialog({
-  draft,
-  previews,
+function AttachBriefDialog({
   onClose,
-  onChanged,
+  onAttached,
 }: {
-  draft: Draft;
-  previews: DraftPreview[];
   onClose: () => void;
-  onChanged: () => void;
+  onAttached: () => void;
 }) {
-  const { confirm, alert } = useAlertDialog();
+  const [link, setLink] = useState("");
+  const [label, setLabel] = useState("");
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const audiencesQ = useQuery({
-    queryKey: ["audiences"],
-    queryFn: () =>
-      fetchJSON<{ audiences: { key: string; name: string }[] }>("/api/audiences"),
-  });
-  const topicsQ = useQuery({
-    queryKey: ["topics"],
-    queryFn: () =>
-      fetchJSON<{ topics: { key: string; name: string }[] }>("/api/topics"),
-  });
-  const [audienceKey, setAudienceKey] = useState("");
-  const [topicKey, setTopicKey] = useState("");
-
-  async function remove() {
-    const ok = await confirm({
-      title: "Delete draft?",
-      message:
-        "The draft and its rendered previews are removed permanently — drafts have no archive.",
-      variant: "danger",
-      confirmLabel: "Delete",
-    });
-    if (!ok) return;
+  async function submit() {
     setBusy(true);
+    setError(null);
     try {
-      const r = await fetch(`/api/drafts/${draft.id}`, {
-        method: "DELETE",
-        credentials: "include",
-        headers: { "If-Match": String(draft.version) },
-      });
-      if (!r.ok) throw new Error(await r.text());
-      onChanged();
-      onClose();
+      await postJSON("/api/briefs", { link, label: label || null });
+      onAttached();
     } catch (e) {
-      await alert({
-        title: "Delete failed",
-        message: (e as Error).message,
-        variant: "danger",
-      });
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
   }
-
-  async function promote() {
-    setBusy(true);
-    try {
-      const r = await fetch(`/api/drafts/${draft.id}/promote`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ audienceKey, topicKey }),
-      });
-      const body = await r.json().catch(() => null);
-      if (!r.ok) throw new Error(body?.error ?? `${r.status}`);
-      onChanged();
-      await alert({
-        title: "Promoted to matrix",
-        message: `MC${body.message.number}${body.message.variant} created at ${audienceKey} × ${topicKey}.`,
-        variant: "success",
-      });
-      onClose();
-    } catch (e) {
-      await alert({
-        title: "Promote failed",
-        message: (e as Error).message,
-        variant: "danger",
-      });
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const fields: Array<[string, string | null]> = [
-    ["Headline", draft.headline],
-    ["Copy 1", draft.copy1],
-    ["Copy 2", draft.copy2],
-    ["Disclaimer", draft.disclaimer],
-    ["CTA", draft.cta],
-    ["Sticker (flash)", draft.flash],
-    ["Variant classes", draft.templateVariantClasses],
-    ["Background", draft.image1],
-    ["Brand image", draft.image5],
-    ["Sticker image", draft.image6],
-  ];
-  const renderErrors: Record<string, string> = draft.renderError
-    ? JSON.parse(draft.renderError)
-    : {};
 
   return (
-    <AppDialog open onClose={onClose} ariaLabel="Draft detail">
-      <div className="draft-detail flex h-full flex-col overflow-hidden">
-        <div className="draft-detail__header flex items-center gap-3 border-b border-slate-200 px-5 py-3 pr-14">
-          <h2 className="text-sm font-semibold text-slate-900">
-            {draft.name ?? `Draft ${draft.id}`}
-          </h2>
-          <span className={statusBadgeClass(draft.renderStatus)}>
-            {draft.renderStatus}
-          </span>
-          <span className="text-[11px] text-slate-500">
-            {draft.template} · {parseSizes(draft).join(", ")}
-          </span>
+    <AppDialog open onClose={onClose} ariaLabel="Attach a brief">
+      <div className="modal__header border-b border-slate-200 px-5 py-4">
+        <h2 className="text-sm font-semibold text-slate-900">Attach a brief</h2>
+        <p className="mt-1 text-xs text-slate-500">
+          Paste the link to the deck the work came in on. The file id is what
+          gets stored, so the editor link and the Drive link are one brief.
+        </p>
+      </div>
+      <div className="modal__body flex-1 overflow-y-auto px-5 py-4">
+        <div className="form-field mb-3">
+          <label className="form-field__label mb-1 block text-[10px] font-medium uppercase tracking-wider text-slate-500">
+            Link
+          </label>
+          <input
+            autoFocus
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            placeholder="https://docs.google.com/presentation/d/…"
+            className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs"
+          />
         </div>
-
-        <div className="draft-detail__body flex flex-1 gap-5 overflow-hidden p-5">
-          <div className="draft-detail__previews flex-1 overflow-auto">
-            {previews.length === 0 ? (
-              <div className="empty-state flex h-full items-center justify-center text-xs text-slate-500">
-                No previews rendered yet.
-              </div>
-            ) : (
-              <div className="flex flex-wrap items-start gap-4">
-                {previews.map((p) => (
-                  <figure key={p.id} className="draft-detail__figure m-0">
-                    <figcaption className="mb-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
-                      {p.size}
-                    </figcaption>
-                    <img
-                      src={previewSrc(p)}
-                      alt={`${draft.name ?? "draft"} ${p.size}`}
-                      className="draft-detail__img block max-w-full rounded-md border border-slate-200"
-                    />
-                  </figure>
-                ))}
-              </div>
-            )}
-            {Object.keys(renderErrors).length > 0 ? (
-              <div className="draft-detail__errors mt-4 rounded-md border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-                {Object.entries(renderErrors).map(([size, err]) => (
-                  <p key={size}>
-                    <span className="font-semibold">{size}:</span> {err}
-                  </p>
-                ))}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="draft-detail__side w-72 shrink-0 overflow-auto border-l border-slate-100 pl-5">
-            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Content
-            </h3>
-            <dl className="draft-detail__fields space-y-1.5">
-              {fields
-                .filter(([, v]) => v)
-                .map(([label, value]) => (
-                  <div key={label} className="form-field">
-                    <dt className="text-[10px] uppercase tracking-wider text-slate-400">
-                      {label}
-                    </dt>
-                    <dd className="text-xs text-slate-800">{value}</dd>
-                  </div>
-                ))}
-            </dl>
-
-            {draft.promotedMessageId == null ? (
-              <div className="draft-detail__promote mt-5 border-t border-slate-100 pt-4">
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Promote to matrix
-                </h3>
-                <div className="form-field mb-2">
-                  <label className="mb-0.5 block text-[10px] uppercase tracking-wider text-slate-400">
-                    Audience
-                  </label>
-                  <select
-                    value={audienceKey}
-                    onChange={(e) => setAudienceKey(e.target.value)}
-                    className="input-box__field w-full rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-slate-500 focus:outline-none"
-                  >
-                    <option value="">Select…</option>
-                    {(audiencesQ.data?.audiences ?? []).map((a) => (
-                      <option key={a.key} value={a.key}>
-                        {a.name} ({a.key})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="form-field mb-3">
-                  <label className="mb-0.5 block text-[10px] uppercase tracking-wider text-slate-400">
-                    Topic
-                  </label>
-                  <select
-                    value={topicKey}
-                    onChange={(e) => setTopicKey(e.target.value)}
-                    className="input-box__field w-full rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-slate-500 focus:outline-none"
-                  >
-                    <option value="">Select…</option>
-                    {(topicsQ.data?.topics ?? []).map((t) => (
-                      <option key={t.key} value={t.key}>
-                        {t.name} ({t.key})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <button
-                  type="button"
-                  disabled={busy || !audienceKey || !topicKey}
-                  onClick={promote}
-                  className="toolbar-btn--primary inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-                >
-                  <ArrowUpRight className="size-3.5" />
-                  Promote
-                </button>
-              </div>
-            ) : (
-              <p className="mt-5 border-t border-slate-100 pt-4 text-xs text-slate-500">
-                Promoted — message #{draft.promotedMessageId}.
-              </p>
-            )}
-
-            <div className="mt-5 border-t border-slate-100 pt-4">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={remove}
-                className="toolbar-btn--danger inline-flex items-center gap-1.5 rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
-              >
-                <Trash2 className="size-3.5" />
-                Delete draft
-              </button>
-            </div>
-          </div>
+        <div className="form-field">
+          <label className="form-field__label mb-1 block text-[10px] font-medium uppercase tracking-wider text-slate-500">
+            Label (optional)
+          </label>
+          <input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="What this brief is about"
+            className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs"
+          />
         </div>
+        {error ? (
+          <p className="form-field__error mt-3 rounded-md bg-rose-50 px-2 py-1.5 text-xs text-rose-700">
+            {error}
+          </p>
+        ) : null}
+      </div>
+      <div className="modal__footer flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
+        <button
+          type="button"
+          onClick={onClose}
+          className="toolbar-btn rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          onClick={submit}
+          disabled={busy || !link.trim()}
+          className="toolbar-btn toolbar-btn--primary flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+        >
+          {busy ? (
+            <Loader2 className="size-3.5 animate-spin" />
+          ) : (
+            <ArrowUpRight className="size-3.5" />
+          )}
+          Attach
+        </button>
       </div>
     </AppDialog>
   );

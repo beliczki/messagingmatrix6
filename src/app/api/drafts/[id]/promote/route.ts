@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
-import { DraftError, promoteDraft } from "@/lib/entities/drafts";
-import { MessageError } from "@/lib/entities/messages";
+import { getMessage, MessageError, promoteDraft } from "@/lib/entities/messages";
 import { denyDemo, withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 
 type Params = { id: string };
 
-// Promote a draft test-creative into the matrix: body { audienceKey, topicKey,
-// mcNumber? (int | "new"), variant? } — same allocation semantics as message
-// creation. Returns the new message + the back-linked draft.
+// Place a draft into a cell: body { audienceKey, topicKey, status?, version? }.
+// The row is updated rather than replaced, so the audit entry is an `update` on
+// the message that already existed — the draft and the card are one MC.
 export const POST = withSession<Params>(async ({ req, claims, params }) => {
   const denial = denyDemo(claims);
   if (denial) return denial;
@@ -20,7 +19,7 @@ export const POST = withSession<Params>(async ({ req, claims, params }) => {
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "bad_body" }, { status: 400 });
   }
-  const { audienceKey, topicKey, mcNumber, variant } = body as Record<
+  const { audienceKey, topicKey, status, version } = body as Record<
     string,
     unknown
   >;
@@ -30,32 +29,26 @@ export const POST = withSession<Params>(async ({ req, claims, params }) => {
       { status: 400 },
     );
   }
+  const before = await getMessage(claims.cid, id);
   try {
-    const result = await promoteDraft(claims.cid, id, {
+    const row = await promoteDraft(claims.cid, id, {
       audienceKey,
       topicKey,
-      requestedNumber:
-        mcNumber === "new"
-          ? "new"
-          : typeof mcNumber === "number"
-            ? mcNumber
-            : undefined,
-      requestedVariant: typeof variant === "string" ? variant : undefined,
+      status: typeof status === "string" ? status : undefined,
+      expectedVersion: typeof version === "number" ? version : undefined,
     });
     await writeAudit({
       clientId: claims.cid,
       userId: claims.sub,
       entityType: "messages",
-      entityId: result.message.id,
-      action: "create",
-      after: result.message,
+      entityId: id,
+      action: "update",
+      before,
+      after: row,
     });
-    return NextResponse.json(
-      { message: result.message, draft: result.draft },
-      { status: 201 },
-    );
+    return NextResponse.json({ message: row });
   } catch (e) {
-    if (e instanceof DraftError || e instanceof MessageError) {
+    if (e instanceof MessageError) {
       return NextResponse.json({ error: e.message }, { status: 400 });
     }
     throw e;

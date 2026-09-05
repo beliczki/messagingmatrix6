@@ -3,38 +3,18 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_LOOK_AND_FEEL } from "@/db/defaults";
+import { MC_STATUSES, statusSlug, type McStatus } from "@/lib/mc-status";
 import { SettingsHeaderActions } from "../SettingsView";
 
 type LookAndFeel = typeof DEFAULT_LOOK_AND_FEEL;
 
-const STATUS_KEYS = [
-  "INCOMING",
-  "NAMING",
-  "CONTENT",
-  "PREVIEW",
-  "APPROVED",
-  "ACTIVE",
-  "INACTIVE",
-  "ARCHIVED",
-  "ERROR",
-  "DEAD",
-  "MEMORY",
-] as const;
-type StatusKey = (typeof STATUS_KEYS)[number];
+// Every status gets a colour, DRAFT included — it shows on the drafts page.
+const STATUS_KEYS = MC_STATUSES;
+type StatusKey = McStatus;
 
-const STATUS_VAR: Record<StatusKey, string> = {
-  INCOMING: "--status-incoming",
-  NAMING: "--status-naming",
-  CONTENT: "--status-content",
-  PREVIEW: "--status-preview",
-  APPROVED: "--status-approved",
-  ACTIVE: "--status-active",
-  INACTIVE: "--status-inactive",
-  ARCHIVED: "--status-archived",
-  ERROR: "--status-error",
-  DEAD: "--status-dead",
-  MEMORY: "--status-memory",
-};
+const STATUS_VAR: Record<StatusKey, string> = Object.fromEntries(
+  MC_STATUSES.map((s) => [s, `--status-${statusSlug(s)}`]),
+) as Record<StatusKey, string>;
 
 function mergeLookAndFeel(raw: unknown): LookAndFeel {
   const v = (raw ?? {}) as Partial<LookAndFeel>;

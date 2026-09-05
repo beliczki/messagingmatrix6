@@ -3,7 +3,7 @@
 // against v6 patterns.ts + feed-patterns.ts so feedStructure / patterns.feed
 // drive the column set 1:1 with the in-app Feed view.
 
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 import xlsx from "node-xlsx";
 
 import { db } from "@/db";
@@ -27,6 +27,7 @@ import {
 } from "@/lib/feed-patterns";
 import { listTextFormatting } from "@/lib/entities/text-formatting";
 import { mcLabelFor } from "@/lib/mc-label";
+import { isPlaced, type PlacedMessage } from "@/lib/entities/messages";
 import { readTemplate } from "@/lib/templates";
 
 const MAX_ROWS_PER_FEED = 500;
@@ -430,10 +431,22 @@ export async function buildFeedRowSet(opts: BuildOptions): Promise<{
   const forcedNewVersion = opts.forceNewVersion === true;
   const liveIds = forcedNewVersion ? [] : readLiveMessageIds(liveExport);
 
-  const allMessages = await db
-    .select()
-    .from(messagesTable)
-    .where(eq(messagesTable.clientId, clientId));
+  // DRAFT rows are `messages` rows with no audience (schema check
+  // `messages_draft_has_no_audience`). A feed row is built from the cell —
+  // product match, audience/topic patterns, PMMID — so a draft has nothing to
+  // build one from. Excluded in SQL, which is the actual boundary; isPlaced
+  // then carries that fact into the types.
+  const allMessages = (
+    await db
+      .select()
+      .from(messagesTable)
+      .where(
+        and(
+          eq(messagesTable.clientId, clientId),
+          isNotNull(messagesTable.audience),
+        ),
+      )
+  ).filter(isPlaced);
 
   // Match the v6 matrix view's product-filter semantics exactly: a message is
   // in the product when BOTH its audience and its topic carry that product.
@@ -473,7 +486,7 @@ export async function buildFeedRowSet(opts: BuildOptions): Promise<{
     }
   }
 
-  const inSet: DbMessage[] = [];
+  const inSet: PlacedMessage[] = [];
   // Rows the baseline already carries are NEVER dropped. `allowed` (the user's
   // matrix filter) used to be applied first, so exporting one section silently
   // deleted every other section's row from the feed - the one thing a feed

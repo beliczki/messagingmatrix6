@@ -32,6 +32,7 @@ import {
   type Topic,
 } from "@/db/schema";
 import { regeneratedIdentity } from "@/lib/message-identity";
+import { isPlaced, type PlacedMessage } from "@/lib/entities/messages";
 import {
   generateAudienceKey,
   getAudience,
@@ -137,16 +138,29 @@ function getRow(clientId: number, dimension: Dimension, id: number) {
 const keyColumn = (dimension: Dimension) =>
   dimension === "topic" ? messages.topic : messages.audience;
 
+// Placed rows only. This is not just a type narrowing: a DRAFT's `topic` is a
+// SUGGESTED NAME, not a reference, and nothing stops it from happening to spell
+// an existing topic key — at which point a rekey of that topic would sweep the
+// draft along and try to regenerate an identity the draft does not have yet.
+// A draft can never match on the audience side (it has none), so this cuts off
+// the topic side too, where the collision is possible.
 async function messagesOnKey(
   clientId: number,
   dimension: Dimension,
   key: string,
-): Promise<Message[]> {
-  return db
+): Promise<PlacedMessage[]> {
+  const rows = await db
     .select()
     .from(messages)
-    .where(and(eq(messages.clientId, clientId), eq(keyColumn(dimension), key)))
+    .where(
+      and(
+        eq(messages.clientId, clientId),
+        eq(keyColumn(dimension), key),
+        isNotNull(messages.audience),
+      ),
+    )
     .orderBy(messages.number, messages.variant);
+  return rows.filter(isPlaced);
 }
 
 // A key already used by ANOTHER row of the same dimension. The auto-key paths

@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   audiences,
@@ -30,6 +30,25 @@ import {
   listChannels,
 } from "@/lib/entities/channels";
 import { readDefaultTemplate } from "@/lib/templates";
+import { BIRTH_STATUS, isMeasurementLocked } from "@/lib/mc-status";
+
+// A row that occupies a cell. DRAFT rows are the only audience-less ones (DB
+// check `messages_draft_has_no_audience`) and a placed row always carries a
+// topic (`messages_placed_has_topic`), so this narrowing is the type-level
+// spelling of "not a draft" — and everything that reads the grid (numbering
+// axes, pmmid/trafficking, feed, export, siblings) needs it, because those are
+// all keyed on the cell a draft does not have.
+export type PlacedMessage = Message & { audience: string; topic: string };
+
+export function isPlaced(m: Message): m is PlacedMessage {
+  return m.audience !== null && m.topic !== null;
+}
+
+// Every query that means "the matrix" must say so, or drafts leak into it. One
+// named predicate rather than a bare isNotNull repeated at each call site: a
+// query that forgets the boundary then reads as a MISSING call, not as normal
+// code that happens to be wrong.
+const PLACED_ONLY = isNotNull(messages.audience);
 
 const WRITABLE_FIELDS = [
   "audience",
@@ -63,6 +82,7 @@ const WRITABLE_FIELDS = [
   "landingUrl",
   "comment",
   "brief",
+  "briefId",
 ] as const;
 type WritableField = (typeof WRITABLE_FIELDS)[number];
 
@@ -180,6 +200,33 @@ export async function listMessages(
     .orderBy(messages.number, messages.variant);
 }
 
+// listMessages minus the drafts — what every matrix-facing consumer (exports,
+// dashboards, feeds) actually means by "the messages", since all of them key on
+// the cell. Kept next to listMessages so the choice is made at the call site,
+// rather than by remembering to add a .filter() somewhere downstream.
+export async function listPlacedMessages(
+  clientId: number,
+  opts: { includeArchived?: boolean } = {},
+): Promise<PlacedMessage[]> {
+  return (await listMessages(clientId, opts)).filter(isPlaced);
+}
+
+// The drafts surface: work taken on but not yet placed. Newest first — a drafts
+// list is a worklist, not a catalogue, so the thing you just took on belongs at
+// the top; the matrix orders by number because there it IS a catalogue.
+export async function listDrafts(
+  clientId: number,
+  opts: { includeArchived?: boolean } = {},
+): Promise<Message[]> {
+  const conds = [eq(messages.clientId, clientId), eq(messages.status, "DRAFT")];
+  if (!opts.includeArchived) conds.push(isNull(messages.archivedAt));
+  return db
+    .select()
+    .from(messages)
+    .where(and(...conds))
+    .orderBy(desc(messages.createdAt), desc(messages.id));
+}
+
 export async function getMessage(
   clientId: number,
   id: number,
@@ -243,7 +290,14 @@ export async function createMessage(
     audienceList.map((a) => [a.key, a.channel ?? null]),
   );
   const targetIsDco = (audienceRow.channel ?? null) === null;
+  // A DRAFT has no audience and therefore no axis — but its NUMBER is claimed,
+  // which is the whole point of claiming one at intake. So a draft counts as
+  // occupying its number on EVERY axis: it must be unavailable to both, or the
+  // number would move under the draft between intake and promotion. Without
+  // this it falls through the lookup below to `null`, is mistaken for a DCO row,
+  // and a nonDCO create is free to take the number the draft is holding.
   const sameAxis = (m: { audience?: string | null }) =>
+    (m.audience ?? null) === null ||
     ((channelByAudience.get(m.audience ?? "") ?? null) === null) === targetIsDco;
 
   const live = await listLiveMessages(clientId);
@@ -282,6 +336,11 @@ export async function createMessage(
       const liveHolder = live.find(
         (m) => isLive(m) && m.number === n && sameAxis(m),
       );
+      if (liveHolder && (liveHolder.audience ?? null) === null) {
+        throw new MessageError(
+          `MC number ${n} is reserved by a draft — open it in Drafts and promote it into this cell, or pick a free number`,
+        );
+      }
       if (liveHolder) {
         throw new MessageError(
           liveHolder.topic === input.topic
@@ -374,11 +433,14 @@ export async function createMessage(
     .values({
       ...input,
       clientId,
-      // New MCs start life in INCOMING unless the caller passes a status —
-      // covers the matrix create dialog, MCP mc_create/mc_create_batch, and
-      // creative/draft promotion. copy/move clone the source status via their
-      // own insert paths, so they are unaffected.
-      status: input.status ?? "INCOMING",
+      // New MCs start life in PREVIEW unless the caller passes a status. By the
+      // time an MC is placed in the matrix it has its template and its content,
+      // so the earlier statuses only ever described a moment that had already
+      // passed — the operator flipped every new card to PREVIEW by hand, which
+      // is why INCOMING carried 4 rows while nothing sat in NAMING at all.
+      // Covers the matrix create dialog and MCP mc_create/mc_create_batch;
+      // copy/move clone the source status through their own insert paths.
+      status: input.status ?? BIRTH_STATUS,
       template,
       number: slot.number,
       variant: slot.variant,
@@ -387,6 +449,166 @@ export async function createMessage(
       versionNo: slot.version,
       ...identity,
     })
+    .returning();
+  return row;
+}
+
+// ---------------------------------------------------------------------------
+// DRAFT lifecycle. A draft is a `messages` row with no audience, so createDraft
+// is the only place one is born and promoteDraft the only place one becomes a
+// matrix card. Both go through the same numbering machinery as createMessage —
+// that reuse is the reason a draft is a message row in the first place.
+// ---------------------------------------------------------------------------
+
+// Take work on now, decide where it goes later: the MC number is claimed at
+// intake and never moves again.
+//
+// The number is allocated GLOBALLY — max over every live row on BOTH axes plus
+// the drafts already holding numbers — not per axis. Per-axis would mean the
+// number has to be re-checked at promotion, when the axis is finally known, and
+// could move then; that is exactly the uncertainty the claim exists to end.
+// Spending a number out of the shared ceiling is the cheap side of that trade.
+// A deliberate DCO/nonDCO twin still goes the explicit way, via createMessage's
+// requestedNumber, which is unchanged.
+export async function createDraft(
+  clientId: number,
+  input: MessageInput = {},
+  opts: { requestedVariant?: string } = {},
+): Promise<Message> {
+  if (input.audience) {
+    throw new MessageError(
+      "a draft has no audience — that is what keeps it out of the matrix; use promote to place it",
+    );
+  }
+  if (input.status && input.status !== "DRAFT") {
+    throw new MessageError(
+      `a draft's status is DRAFT, not '${input.status}' — use promote to move it on`,
+    );
+  }
+  const variant = opts.requestedVariant ?? "a";
+  if (!/^[a-z]$/.test(variant)) {
+    throw new MessageError(
+      `variant '${variant}' is invalid — must be a single lowercase letter a–z`,
+    );
+  }
+
+  const live = await listLiveMessages(clientId);
+  const [row] = await db
+    .insert(messages)
+    .values({
+      ...input,
+      clientId,
+      status: "DRAFT",
+      audience: null,
+      // Free text at this stage: a working title the user can edit. Promotion
+      // is what forces it to resolve to a real topics row.
+      topic: input.topic ?? null,
+      number: nextNewNumber(live),
+      variant,
+      versionNo: 1,
+      // No PMMID until the row has a cell to name (check
+      // `messages_draft_has_no_pmmid`).
+      pmmid: null,
+      template:
+        input.template != null
+          ? input.template
+          : await readDefaultTemplate(clientId),
+    })
+    .returning();
+  return row;
+}
+
+// Place a draft into a cell. The row is UPDATED, not re-created: the draft and
+// the card it becomes are the same MC, and keeping one row is what lets the
+// number, the brief link and the edit history survive the transition.
+//
+// The number is carried over untouched — that is the promise made at intake.
+// Only the variant may shift, and only when the target cell already holds this
+// number, in which case it takes the next free letter in that number's sequence.
+export async function promoteDraft(
+  clientId: number,
+  id: number,
+  opts: {
+    audienceKey: string;
+    topicKey: string;
+    expectedVersion?: number;
+    status?: string;
+  },
+): Promise<Message> {
+  const draft = await getMessage(clientId, id);
+  if (!draft) throw new MessageError(`message ${id} not found`);
+  if (draft.status !== "DRAFT") {
+    throw new MessageError(
+      `message ${id} is not a draft (status '${draft.status}') — it is already in the matrix`,
+    );
+  }
+  if (
+    opts.expectedVersion !== undefined &&
+    draft.version !== opts.expectedVersion
+  ) {
+    throw new MessageError(
+      `draft ${id} changed since you loaded it — reload and promote again`,
+    );
+  }
+
+  const audienceRow = await findAudienceByKey(clientId, opts.audienceKey);
+  if (!audienceRow) {
+    throw new MessageError(`audience '${opts.audienceKey}' not found`);
+  }
+  // The draft's own topic is a suggested NAME and may not name anything; the
+  // promote is where it has to become a real key. Refusing here (rather than
+  // creating the topic) keeps the topics dimension curated — a promote that
+  // silently minted topics would fill it with near-duplicate spellings.
+  const topicRow = await findTopicByKey(clientId, opts.topicKey);
+  if (!topicRow) {
+    throw new MessageError(
+      `topic '${opts.topicKey}' not found — create the topic first, then promote`,
+    );
+  }
+
+  const live = await listLiveMessages(clientId);
+  const liveInCell = live.filter(
+    (m) =>
+      isLive(m) &&
+      m.topic === opts.topicKey &&
+      m.audience === opts.audienceKey,
+  );
+  const variant = liveInCell.some((m) => m.number === draft.number)
+    ? nextVariantForNumber(liveInCell, draft.number)
+    : draft.variant;
+
+  const patterns = await readClientPatterns(clientId);
+  const audienceList = [
+    ...(await listAudiences(clientId)),
+    ...(await listChannels(clientId)).map(channelToAudience),
+  ];
+  const identity = regeneratedIdentity(
+    {
+      audience: opts.audienceKey,
+      topic: opts.topicKey,
+      number: draft.number,
+      variant,
+      versionNo: draft.versionNo,
+      landingUrl: draft.landingUrl,
+    },
+    { audienceRow, topicRow, patterns, audienceList },
+  );
+
+  const [row] = await db
+    .update(messages)
+    .set({
+      audience: opts.audienceKey,
+      topic: opts.topicKey,
+      variant,
+      // Status and audience have to land in the SAME write: the schema check
+      // ties them together, so splitting this into two updates would be
+      // rejected by whichever half went first.
+      status: opts.status ?? "PREVIEW",
+      ...identity,
+      version: sql`${messages.version} + 1`,
+      updatedAt: nowUtc,
+    })
+    .where(and(eq(messages.clientId, clientId), eq(messages.id, id)))
     .returning();
   return row;
 }
@@ -406,25 +628,50 @@ export async function updateMessage(
   // UTM fields + final URL from the post-edit values so e.g. a landing_url edit
   // flows through. PMMID is left as-is — it is the message's stable identity and
   // is only (re)generated on create/copy/move.
+  //
+  // A DRAFT is skipped entirely: every trafficking column is derived from the
+  // cell (audience/topic patterns), and a draft has no cell. Generating them
+  // from a placeholder would mint a measurement key for something that is not
+  // being measured — promotion is where the identity is born.
   const merged = { ...current, ...input };
+  // The schema ties placement and status together (checks
+  // `messages_draft_has_no_audience` / `messages_placed_has_topic`), and a PATCH
+  // can touch either side. Catching the mismatch here turns a raw database error
+  // into an actionable one that names the operation which does this legally.
+  const mergedIsDraft = merged.status === "DRAFT";
+  const mergedIsPlaced = (merged.audience ?? null) !== null;
+  if (mergedIsDraft === mergedIsPlaced) {
+    throw new MessageError(
+      mergedIsDraft
+        ? "a DRAFT cannot sit in a cell — a draft is defined by having no audience"
+        : "a card in the matrix needs an audience — promote sets the status and the cell in one step",
+    );
+  }
+  if (mergedIsPlaced && (merged.topic ?? null) === null) {
+    throw new MessageError(
+      "a card in the matrix needs a topic — a cell is an (audience, topic) pair",
+    );
+  }
   const patterns = await readClientPatterns(clientId);
-  const traffic = traffickingColumns(
-    {
-      number: merged.number,
-      variant: merged.variant,
-      audience: merged.audience,
-      topic: merged.topic,
-      versionNo: merged.versionNo,
-      landingUrl: merged.landingUrl,
-    },
-    {
-      audienceRow: await findAudienceByKey(clientId, merged.audience),
-      topicRow: await findTopicByKey(clientId, merged.topic),
-      patterns,
-      audienceList: await listAudiences(clientId),
-    },
-    current.pmmid,
-  );
+  const traffic = isPlaced(merged)
+    ? traffickingColumns(
+        {
+          number: merged.number,
+          variant: merged.variant,
+          audience: merged.audience,
+          topic: merged.topic,
+          versionNo: merged.versionNo,
+          landingUrl: merged.landingUrl,
+        },
+        {
+          audienceRow: await findAudienceByKey(clientId, merged.audience),
+          topicRow: await findTopicByKey(clientId, merged.topic),
+          patterns,
+          audienceList: await listAudiences(clientId),
+        },
+        current.pmmid,
+      )
+    : {};
   const [updated] = await db
     .update(messages)
     .set({
@@ -465,7 +712,7 @@ const CARD_FIELDS = WRITABLE_FIELDS.filter(
 // resolves to nothing counts as DCO, matching nextMcSlot's `sameAxis`.
 async function sameAxisAs(
   clientId: number,
-  primary: Message,
+  primary: PlacedMessage,
 ): Promise<(m: { audience: string }) => boolean> {
   const audienceList = [
     ...(await listAudiences(clientId)),
@@ -484,10 +731,13 @@ async function sameAxisAs(
 // different audience. Within one axis, (number, variant) never spans more than
 // one topic, so it uniquely identifies the card. Used by the editor's
 // global-edit warning count and by the propagation fan-out below.
+// A DRAFT has no siblings by construction: it sits on no axis and in no cell,
+// so there is nothing for a global edit to fan out to.
 export async function findSiblings(
   clientId: number,
   primary: Message,
-): Promise<Message[]> {
+): Promise<PlacedMessage[]> {
+  if (!isPlaced(primary)) return [];
   const rows = await db
     .select()
     .from(messages)
@@ -497,10 +747,13 @@ export async function findSiblings(
         eq(messages.number, primary.number),
         eq(messages.variant, primary.variant),
         isNull(messages.archivedAt),
+        PLACED_ONLY,
       ),
     );
   const onAxis = await sameAxisAs(clientId, primary);
-  return rows.filter((m) => m.id !== primary.id && onAxis(m));
+  return rows
+    .filter(isPlaced)
+    .filter((m) => m.id !== primary.id && onAxis(m));
 }
 
 // Apply the shared subset of `input` to the rest of the card family. Every
@@ -520,6 +773,8 @@ export async function propagateToSiblings(
   primary: Message,
   input: MessageInput,
 ): Promise<Array<{ before: Message; after: Message }>> {
+  // Nothing to propagate FROM a draft — it has no family (see findSiblings).
+  if (!isPlaced(primary)) return [];
   const cardPayload: Record<string, unknown> = {};
   for (const f of CARD_FIELDS) {
     if (f in input) cardPayload[f] = (input as Record<string, unknown>)[f];
@@ -547,9 +802,12 @@ export async function propagateToSiblings(
           eq(messages.clientId, clientId),
           eq(messages.number, primary.number),
           isNull(messages.archivedAt),
+          PLACED_ONLY,
         ),
       )
-  ).filter((m) => m.id !== primary.id && onAxis(m));
+  )
+    .filter(isPlaced)
+    .filter((m) => m.id !== primary.id && onAxis(m));
 
   const changes: Array<{ before: Message; after: Message }> = [];
   for (const sib of family) {
@@ -561,7 +819,15 @@ export async function propagateToSiblings(
 
     let trafficFields: Record<string, unknown> = {};
     if (sameVariant) {
-      const merged = { ...sib, ...payload } as Message;
+      // audience/topic are restated from the sibling rather than cast: they
+      // cannot be in `payload` (CARD_FIELDS drops both, since placement is
+      // per-copy), and this way the placement's provenance is on the line.
+      const merged: PlacedMessage = {
+        ...sib,
+        ...payload,
+        audience: sib.audience,
+        topic: sib.topic,
+      };
       trafficFields = traffickingColumns(
         {
           number: merged.number,
@@ -637,23 +903,27 @@ export async function restoreMessage(
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
 
-  const audienceRow = await findAudienceByKey(clientId, current.audience);
-  if (audienceRow && audienceRow.archivedAt !== null) {
-    return {
-      ok: false,
-      current,
-      reason: "parent_archived",
-      parent: { type: "audience", key: current.audience },
-    };
-  }
-  const topicRow = await findTopicByKey(clientId, current.topic);
-  if (topicRow && topicRow.archivedAt !== null) {
-    return {
-      ok: false,
-      current,
-      reason: "parent_archived",
-      parent: { type: "topic", key: current.topic },
-    };
+  // A DRAFT has no parents to be archived behind — it points at no cell — so
+  // the guard simply does not apply and restoring it always proceeds.
+  if (isPlaced(current)) {
+    const audienceRow = await findAudienceByKey(clientId, current.audience);
+    if (audienceRow && audienceRow.archivedAt !== null) {
+      return {
+        ok: false,
+        current,
+        reason: "parent_archived",
+        parent: { type: "audience", key: current.audience },
+      };
+    }
+    const topicRow = await findTopicByKey(clientId, current.topic);
+    if (topicRow && topicRow.archivedAt !== null) {
+      return {
+        ok: false,
+        current,
+        reason: "parent_archived",
+        parent: { type: "topic", key: current.topic },
+      };
+    }
   }
 
   const [updated] = await db
@@ -685,11 +955,20 @@ export async function copyMessages(
   opts: CopyOpts = {},
 ): Promise<{ created: Message[] }> {
   // Resolve all sources up front so a bad label fails before any insert.
-  const sources: Message[] = [];
+  // Sources are looked up BY PMMID, and a draft has none (DB check
+  // `messages_draft_has_no_pmmid`), so a draft can never be resolved here — the
+  // guard states that rule at the boundary instead of leaving it implicit, and
+  // gives the caller the actual next step if it ever does arrive.
+  const sources: PlacedMessage[] = [];
   for (const label of sourceMcLabels) {
     const source = await getMessageByPmmid(clientId, label);
     if (!source) {
       throw new MessageError(`message '${label}' not found`);
+    }
+    if (!isPlaced(source)) {
+      throw new MessageError(
+        `'${label}' is a draft — promote it into a cell first; copy duplicates a placed card`,
+      );
     }
     sources.push(source);
   }
@@ -726,7 +1005,7 @@ export async function copyMessages(
   // X a/b/c into one empty cell lays them out as X a/b/c (without it, all
   // three would collide on X a).
   type Plan = {
-    source: Message;
+    source: PlacedMessage;
     targetAud: string;
     number: number;
     variant: string;
@@ -825,21 +1104,17 @@ export type MoveResult =
       status?: string;
     };
 
-// Statuses that lock a row against placement changes and against hard delete.
-// ACTIVE = measurement is running and the PMMID is the live measurement key
-// (utm_content + reporting labels). INACTIVE / ARCHIVED = the row has been
-// measured at some point and its PMMID still anchors historical reporting
-// joins. Pre-ACTIVE statuses (INCOMING/NAMING/CONTENT/PREVIEW/APPROVED) and
-// post-failure / archive-only statuses (ERROR/DEAD/MEMORY) stay movable and
-// purgeable: no measurement attached, PMMID regenerates freely.
-const MEASUREMENT_LOCKED_STATUSES = new Set(["ACTIVE", "INACTIVE", "ARCHIVED"]);
+// Which statuses lock a row against placement changes and hard delete now lives
+// in @/lib/mc-status (isMeasurementLocked) — the matrix grid needs the same
+// answer for its delete dialog, and it used to keep a second copy of the list.
+
 
 // Move messages into a single target audience. Same-topic only. PMMID is
 // regenerated against the new audience (it encodes audience/topic/number/
 // variant/versionNo — moving without regen would make the key lie about the
 // row's content). versionNo (the creative-revision counter) stays frozen — a
 // move is a placement change, not a creative revision. UTM columns are also
-// regenerated. Rows in MEASUREMENT_LOCKED_STATUSES are rejected up front.
+// regenerated. Measurement-locked rows are rejected up front.
 // On (number, variant) collision in the target cell, variant auto-bumps to the
 // next free char so moves always succeed without renumbering existing rows.
 export async function moveMessages(
@@ -864,13 +1139,16 @@ export async function moveMessages(
   // Pre-pass: resolve all sources + validate same-topic + optimistic version.
   type Resolved = {
     item: MoveItem;
-    source: Message;
+    source: PlacedMessage;
     topicRow: Topic | null;
   };
   const resolved: Resolved[] = [];
   for (const m of moves) {
     const source = await getMessageByPmmid(clientId, m.mcLabel);
-    if (!source) {
+    // Unreachable for a draft in practice — a draft has no pmmid to match on
+    // (DB check `messages_draft_has_no_pmmid`) — so an unplaced hit here means
+    // no such placed card exists, which is exactly `not_found`.
+    if (!source || !isPlaced(source)) {
       return { ok: false, reason: "not_found", mcLabel: m.mcLabel };
     }
     if (source.version !== m.expectedVersion) {
@@ -881,7 +1159,7 @@ export async function moveMessages(
         current: source,
       };
     }
-    if (MEASUREMENT_LOCKED_STATUSES.has(source.status ?? "")) {
+    if (isMeasurementLocked(source.status)) {
       return {
         ok: false,
         reason: "row_locked_by_status",
@@ -1066,7 +1344,7 @@ export async function archiveMessages(
 
 // Hard-delete a batch — the row is gone, only the audit entry survives. Two
 // guards, both naming their case to the caller:
-//   * MEASUREMENT_LOCKED_STATUSES → archive is the only way out of a measured
+//   * measurement-locked (isMeasurementLocked) → archive is the only way out of a measured
 //     row (its PMMID still anchors reporting joins).
 //   * creative back-links → creatives.mc_number/mc_variant is a plain column
 //     pair, not an FK. Deleting the last row carrying a (number, variant) would
@@ -1083,7 +1361,7 @@ export async function deleteMessages(
   const rows = resolved.rows;
 
   for (const row of rows) {
-    if (MEASUREMENT_LOCKED_STATUSES.has(row.status ?? "")) {
+    if (isMeasurementLocked(row.status)) {
       return {
         ok: false,
         reason: "row_locked_by_status",

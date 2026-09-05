@@ -42,23 +42,15 @@ type AssetRow = {
 
 const IMAGE_FORMATS = new Set(["jpg", "jpeg", "png", "svg", "gif", "webp"]);
 const VIDEO_FORMATS = new Set(["mp4", "webm", "mov", "m4v"]);
+import { MATRIX_STATUSES } from "@/lib/mc-status";
+
 const ASSET_AUTOCOMPLETE_MIN = 2;
 
 type Tab = "naming" | "template" | "content" | "styles" | "trafficking";
 
-const STATUS_OPTIONS = [
-  "INCOMING",
-  "NAMING",
-  "CONTENT",
-  "PREVIEW",
-  "APPROVED",
-  "ACTIVE",
-  "INACTIVE",
-  "ARCHIVED",
-  "ERROR",
-  "DEAD",
-  "MEMORY",
-];
+// DRAFT is not offered: a card in the editor has a cell, and a DRAFT with a
+// cell is refused by the schema. Drafts are edited on /drafts.
+const STATUS_OPTIONS = MATRIX_STATUSES;
 
 type TemplateInfo = {
   name: string;

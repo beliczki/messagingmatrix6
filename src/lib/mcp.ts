@@ -46,9 +46,12 @@ import {
   archiveMessage,
   copyMessages,
   createMessage,
+  getMessage,
   getMessageByPmmid,
+  listDrafts,
   moveMessages,
   pickWritable as pickMessageWritable,
+  promoteDraft,
   restoreMessage,
   updateMessage,
 } from "@/lib/entities/messages";
@@ -71,17 +74,19 @@ import {
 import { promoteCreative, PromoteError } from "@/lib/entities/promote";
 import {
   DraftError,
-  createDraft,
-  deleteDraft,
-  getDraft,
+  createTestCreative,
+  draftSizes,
   getDraftStatus,
-  listDrafts,
-  promoteDraft,
+  listDraftPreviews,
   startDraftRender,
-  type DraftInput,
-  type DraftMessage,
-  type DraftPreview,
+  type DraftPreviewRow,
+  type TestCreativeInput,
 } from "@/lib/entities/drafts";
+import {
+  attachBriefByLink,
+  BriefError,
+  listBriefsWithProgress,
+} from "@/lib/entities/briefs";
 import {
   listProdlistRows,
   upsertProdlistRows,
@@ -276,15 +281,10 @@ function previewUrl(
   return `${origin}/api/previews/${id}?v=${encodeURIComponent(updatedAt ?? "")}`;
 }
 
-// Draft twin of previewUrl — /api/draft-previews/[id] is the same deliberately
-// public, active-client-scoped PNG route as /api/previews/[id].
-function draftPreviewUrl(
-  origin: string,
-  id: number,
-  updatedAt: string | null,
-): string {
-  return `${origin}/api/draft-previews/${id}?v=${encodeURIComponent(updatedAt ?? "")}`;
-}
+// A draft's previews ARE message previews now (a draft is a message row), so
+// they serve from the same public, active-client-scoped route — there is no
+// separate draft-preview endpoint any more.
+const draftPreviewUrl = previewUrl;
 
 // Guards for the image-content tools: keep a single tool result from ballooning
 // (base64 inflates ~33%). Individual files over the cap, or more than N previews,
@@ -2828,22 +2828,27 @@ function registerPreviewWidget(server: McpServer, ctx: McpContext): void {
   );
 }
 
-// ── Draft test-creatives ──
-// The agentic production workflow: generate_test_creative stages a creative
-// OUTSIDE the matrix (draft_messages), renders each requested size to a PNG
-// asynchronously (shared Playwright queue), and the agent polls draft_status
-// for % / elapsed until the previews are ready. Promotion into the matrix is
-// a separate, explicit step (draft_promote).
+// ── Drafts and briefs ──
+// The agentic intake path. A draft is a `messages` row with NO AUDIENCE, so it
+// is outside the matrix but inside every other message mechanism — most of all
+// numbering: generate_test_creative claims the MC number immediately, and
+// nothing else can take it while the work is in progress. Previews are ordinary
+// message previews, so render progress is DERIVED from which sizes have a
+// fresh row (draft_status) rather than stored in a job table.
+// Promotion (draft_promote) gives the draft its cell and keeps its number.
 
-function draftSummary(d: DraftMessage) {
+function draftSummary(d: Message) {
   return {
     draft_id: d.id,
+    mc_label: `MC${d.number}${d.variant}`,
+    mc_number: d.number,
+    variant: d.variant,
     name: d.name,
     template: d.template,
     template_variant_classes: d.templateVariantClasses,
-    sizes: JSON.parse(d.sizes) as string[],
-    render_status: d.renderStatus,
-    promoted_message_id: d.promotedMessageId,
+    sizes: draftSizes(d),
+    working_topic: d.topic,
+    brief_id: d.briefId,
     version: d.version,
     created_at: d.createdAt,
   };
@@ -2851,28 +2856,28 @@ function draftSummary(d: DraftMessage) {
 
 function registerDraftReadTools(server: McpServer, ctx: McpContext): void {
   const origin = ctx.origin ?? "";
-  const previewList = (previews: DraftPreview[]) =>
-    previews.map((p) => ({
-      size: p.size,
-      url: draftPreviewUrl(origin, p.id, p.updatedAt),
-    }));
+  const previewList = (previews: DraftPreviewRow[], version: number) =>
+    previews
+      .slice()
+      .sort((a, b) => a.size.localeCompare(b.size))
+      .map((p) => ({
+        size: p.size,
+        url: draftPreviewUrl(origin, p.id, p.updatedAt),
+        ...(p.messageVersion === version ? {} : { stale: true }),
+      }));
 
   server.registerTool(
     "list_drafts",
     {
       description:
-        "List draft test-creatives (agent-staged creatives OUTSIDE the matrix, from generate_test_creative). Drafts already promoted into the matrix are hidden by default; include_promoted=true shows them too. Returns lean rows: draft_id, name, template, template_variant_classes, sizes, render_status (pending|rendering|done|failed), promoted_message_id, version, created_at. Newest first, default limit 500 (max 1000).",
+        "List drafts — work that has been taken on and has CLAIMED ITS MC NUMBER, but has no cell in the matrix yet (no audience). Returns lean rows: draft_id, mc_label, mc_number, variant, name, template, sizes, working_topic (a suggested name, not a topics key), brief_id, version, created_at. Newest first, default limit 500 (max 1000). Promoted drafts are not listed — once placed they are ordinary MCs, so use list_mc.",
       inputSchema: {
-        include_promoted: z.boolean().optional(),
         limit: z.number().int().min(1).max(1000).optional(),
       },
     },
-    async ({ include_promoted, limit }) => {
-      const rows = await listDrafts(ctx.clientId, {
-        includePromoted: include_promoted === true,
-        limit,
-      });
-      return jsonResult(rows.map(draftSummary));
+    async ({ limit }) => {
+      const rows = await listDrafts(ctx.clientId);
+      return jsonResult(rows.slice(0, limit ?? 500).map(draftSummary));
     },
   );
 
@@ -2880,21 +2885,22 @@ function registerDraftReadTools(server: McpServer, ctx: McpContext): void {
     "draft_get",
     {
       description:
-        "Get one draft test-creative with every content field (headline, copy1/copy2, disclaimer, cta, flash/sticker text, styles, customCss, image1..6) plus its generated preview URLs. Required: draft_id.",
+        "Get one draft with every content field (headline, copy1/copy2, disclaimer, cta, flash/sticker text, styles, customCss, image1..6), its claimed MC number, its brief link, and its preview URLs. A preview marked stale was shot before the draft's current version. Required: draft_id.",
       inputSchema: { draft_id: z.number().int() },
     },
     async ({ draft_id }) => {
-      const res = await getDraft(ctx.clientId, draft_id);
-      if (!res) return errorResult(`draft ${draft_id} not found`);
-      const { sizes, renderError, ...rest } = res.draft;
+      const draft = await getMessage(ctx.clientId, draft_id);
+      if (!draft || draft.status !== "DRAFT") {
+        return errorResult(`draft ${draft_id} not found`);
+      }
+      const previews =
+        (await listDraftPreviews(ctx.clientId, [draft_id])).get(draft_id) ?? [];
       return jsonResult({
-        ...rest,
-        draft_id: res.draft.id,
-        sizes: JSON.parse(sizes) as string[],
-        render_errors: renderError
-          ? (JSON.parse(renderError) as Record<string, string>)
-          : {},
-        previews: previewList(res.previews),
+        ...draft,
+        draft_id: draft.id,
+        mc_label: `MC${draft.number}${draft.variant}`,
+        sizes: draftSizes(draft),
+        previews: previewList(previews, draft.version),
       });
     },
   );
@@ -2903,27 +2909,47 @@ function registerDraftReadTools(server: McpServer, ctx: McpContext): void {
     "draft_status",
     {
       description:
-        "Poll the render progress of a draft test-creative. Returns { status, total_sizes, done_sizes, percent, elapsed_seconds, errors, previews }. status: pending|rendering|done|failed|stalled. percent = done_sizes/total_sizes; previews fill in per size as each PNG lands. elapsed_seconds includes time queued behind other preview shoots (one shared Chromium on the server), so expect a few seconds per size plus queueing. 'stalled' means the server restarted mid-render — delete the draft and generate again. Polling does NOT count against the write rate limit.",
+        "Poll the render progress of a draft. Returns { status, total_sizes, done_sizes, percent, previews, stale_sizes }. status: pending|rendering|done. Progress is DERIVED — a size counts as done when its preview was shot at the draft's current version — so editing a draft makes its previews stale again and the percentage drops back, which is the same staleness rule the matrix uses. If the count stops climbing, the render died with the server process: call generate_test_creative's render again by editing nothing and re-shooting via preview_generate once the draft is promoted, or recreate the draft. Polling does NOT count against the write rate limit.",
       inputSchema: { draft_id: z.number().int() },
     },
     async ({ draft_id }) => {
       const s = await getDraftStatus(ctx.clientId, draft_id);
       if (!s) return errorResult(`draft ${draft_id} not found`);
+      const draft = await getMessage(ctx.clientId, draft_id);
       return jsonResult({
         draft_id,
         status: s.status,
         total_sizes: s.totalSizes,
         done_sizes: s.doneSizes,
         percent: s.percent,
-        elapsed_seconds: s.elapsedSeconds,
-        errors: s.errors,
-        previews: previewList(s.previews),
-        ...(s.status === "stalled"
-          ? {
-              hint: "the render died with the server process — draft_delete this draft and run generate_test_creative again",
-            }
-          : {}),
+        stale_sizes: s.staleSizes,
+        previews: previewList(s.previews, draft?.version ?? 0),
       });
+    },
+  );
+
+  server.registerTool(
+    "list_briefs",
+    {
+      description:
+        "List briefs — the Google Slides decks work came in on. Each row carries slides_file_id (the Drive FILE ID, which is the brief's identity: the editor link and the Drive link of one deck are one brief), label, and the progress counts open_drafts / promoted. Those two numbers answer 'what came of this brief?' and are counted from the work itself, so they cannot drift.",
+      inputSchema: { include_archived: z.boolean().optional() },
+    },
+    async ({ include_archived }) => {
+      const rows = await listBriefsWithProgress(ctx.clientId, {
+        includeArchived: include_archived === true,
+      });
+      return jsonResult(
+        rows.map((b) => ({
+          brief_id: b.id,
+          slides_file_id: b.slidesFileId,
+          url: `https://docs.google.com/presentation/d/${b.slidesFileId}/edit`,
+          label: b.label,
+          open_drafts: b.openDrafts,
+          promoted: b.promoted,
+          archived_at: b.archivedAt,
+        })),
+      );
     },
   );
 
@@ -2932,7 +2958,7 @@ function registerDraftReadTools(server: McpServer, ctx: McpContext): void {
     {
       title: "Show draft previews",
       description:
-        'Render a draft test-creative\'s generated PNGs as an inline image GALLERY (OpenAI Apps SDK widget) in ChatGPT / MCP Inspector — same visual card as show_mc_previews, fed from a draft. Required: draft_id. Optional: sizes to narrow (default: every size the draft rendered). Returns structuredContent { name, previews:[{label,size,url}] } with absolute, public preview URLs; non-widget clients still get that data + a text summary.',
+        'Render a draft\'s generated PNGs as an inline image GALLERY (OpenAI Apps SDK widget) in ChatGPT / MCP Inspector — same visual card as show_mc_previews, fed from a draft. Required: draft_id. Optional: sizes to narrow (default: every size rendered so far). Returns structuredContent { name, previews:[{label,size,url}] } with absolute, public preview URLs; non-widget clients still get that data + a text summary.',
       inputSchema: {
         draft_id: z.number().int(),
         sizes: z.array(z.string()).optional(),
@@ -2956,13 +2982,17 @@ function registerDraftReadTools(server: McpServer, ctx: McpContext): void {
       },
     },
     async ({ draft_id, sizes }) => {
-      const res = await getDraft(ctx.clientId, draft_id);
-      if (!res) return errorResult(`draft ${draft_id} not found`);
+      const draft = await getMessage(ctx.clientId, draft_id);
+      if (!draft || draft.status !== "DRAFT") {
+        return errorResult(`draft ${draft_id} not found`);
+      }
+      const all =
+        (await listDraftPreviews(ctx.clientId, [draft_id])).get(draft_id) ?? [];
       const wanted =
         sizes && sizes.length > 0
-          ? res.previews.filter((p) => sizes.includes(p.size))
-          : res.previews;
-      const label = res.draft.name ?? `Draft ${res.draft.id}`;
+          ? all.filter((p) => sizes.includes(p.size))
+          : all;
+      const label = draft.name ?? `MC${draft.number}${draft.variant}`;
       const previews = wanted
         .map((p) => ({
           label,
@@ -2992,11 +3022,13 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
     "generate_test_creative",
     {
       description:
-        "Stage a draft test-creative and render it to PNG previews — WITHOUT touching the matrix (no audience/topic/MC number is allocated; the draft lives in its own table). Required: template (an html template from list_templates) and sizes (must be sizes that template defines). Content fields: headline, copy1, copy2, disclaimer, cta, flash (the sticker TEXT), per-field *_style CSS, custom_css, and template_variant_classes (space-separated layout/color/frame tokens from the template's tag options, e.g. 'fullSurfaceImage teal topSticker' — list_templates shows the valid vocabulary). Images are referenced by STORED FILENAME (upload generated images first via asset_upload): background_images (up to 4 → image1..4), brand_image (logo → image5, template default when omitted), sticker_image (→ image6). All inputs are validated up front (template, sizes, tag tokens, image filenames) — a validation error lists every problem at once and creates nothing. Rendering is ASYNC: this returns immediately with draft_id; poll draft_status for % progress and preview URLs (a shared server-side Chromium renders each size, expect a few seconds per size plus queueing). The call is NOT idempotent — before retrying a timeout, check list_drafts to avoid duplicates. One write against the rate limit. Then: show_draft_previews to display, draft_promote to move it into the matrix, draft_delete to discard.",
+        "Take work on: stage a draft creative and render it to PNG previews. The draft is OUTSIDE the matrix (no audience, no cell) but it CLAIMS ITS MC NUMBER immediately, and nothing else can take that number while the work is in progress — that is the point of starting here rather than in the matrix. Required: template (an html template from list_templates). Optional sizes narrows the initial render (default: every size the template defines); they must be sizes that template has. Content fields: headline, copy1, copy2, disclaimer, cta, flash (the sticker TEXT), per-field *_style CSS, custom_css, and template_variant_classes (space-separated layout/color/frame tokens from the template's tag options, e.g. 'fullSurfaceImage teal topSticker' — list_templates shows the valid vocabulary). Images are referenced by STORED FILENAME (upload generated images first via asset_upload): background_images (up to 4 → image1..4), brand_image (logo → image5, template default when omitted), sticker_image (→ image6). Optional brief_link attaches the Google Slides deck this came in on (same deck pasted twice is one brief), and working_topic records a suggested topic NAME that promotion later resolves to a real topic. All inputs are validated up front — a validation error lists every problem at once and creates nothing. Rendering is ASYNC: this returns immediately with draft_id and the claimed mc_label; poll draft_status for progress. The call is NOT idempotent — before retrying a timeout, check list_drafts to avoid claiming a second number. One write against the rate limit. Then: show_draft_previews to display, draft_promote to give it a cell, draft_delete to discard.",
       inputSchema: {
         template: z.string(),
-        sizes: z.array(z.string()).min(1),
+        sizes: z.array(z.string()).optional(),
         name: z.string().optional(),
+        working_topic: z.string().optional(),
+        brief_link: z.string().optional(),
         template_variant_classes: z.string().optional(),
         headline: z.string().optional(),
         copy1: z.string().optional(),
@@ -3020,7 +3052,7 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
       const limited = await requireRate(ctx);
       if (limited) return limited;
       const bg = args.background_images ?? [];
-      const input: DraftInput = {
+      const input: TestCreativeInput = {
         template: args.template,
         sizes: args.sizes,
         name: args.name,
@@ -3046,27 +3078,94 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
         image6: args.sticker_image,
       };
       try {
-        const draft = await createDraft(ctx.clientId, input);
-        // Fire-and-forget: the render queues on the shared shooter mutex and
-        // reports through draft_status; a crash surfaces there as failed/stalled.
-        void startDraftRender(ctx.clientId, draft).catch((e) =>
-          console.error(`[drafts] render of draft ${draft.id} failed:`, e),
+        const { draft, sizes } = await createTestCreative(ctx.clientId, input);
+        // The brief and the working topic are applied after creation so a bad
+        // link fails loudly on its own rather than silently losing the draft.
+        let row = draft;
+        if (args.brief_link || args.working_topic) {
+          const brief = args.brief_link
+            ? await attachBriefByLink(ctx.clientId, args.brief_link)
+            : null;
+          const res = await updateMessage(ctx.clientId, draft.id, draft.version, {
+            ...(brief ? { briefId: brief.id } : {}),
+            ...(args.working_topic ? { topic: args.working_topic } : {}),
+          });
+          if (res.ok) row = res.row;
+        }
+        // Fire-and-forget: progress is read back off the preview rows, so a
+        // render that dies with the process just leaves those sizes missing.
+        void startDraftRender(ctx.clientId, row.id, sizes).catch((e) =>
+          console.error(`[drafts] render of draft ${row.id} failed:`, e),
         );
         await writeAudit({
           clientId: ctx.clientId,
           userId: mcpUserId(ctx),
-          entityType: "draft_messages",
-          entityId: draft.id,
+          entityType: "messages",
+          entityId: row.id,
           action: "create",
-          after: draft,
+          after: row,
         });
         return jsonResult({
-          ...draftSummary(draft),
-          status: "rendering",
-          next: "poll draft_status with this draft_id — previews appear per size",
+          ...draftSummary(row),
+          rendering_sizes: sizes,
+          hint: "poll draft_status until done, then draft_promote to place it",
         });
       } catch (e) {
-        if (e instanceof DraftError) return errorResult(e.message);
+        if (e instanceof DraftError || e instanceof BriefError) {
+          return errorResult(e.message);
+        }
+        throw e;
+      }
+    },
+  );
+
+  server.registerTool(
+    "brief_attach",
+    {
+      description:
+        "Attach a brief — the Google Slides deck a piece of work came in on — and optionally link a draft to it. The Drive FILE ID is what gets stored, so the editor link, the Drive link and a link with a #slide fragment all resolve to ONE brief; pasting a deck that is already known returns the existing brief rather than creating a second one. A folder link is refused. Required: link. Optional: label (shown in the drafts list) and draft_id to link a draft in the same call. One write against the rate limit.",
+      inputSchema: {
+        link: z.string(),
+        label: z.string().optional(),
+        draft_id: z.number().int().optional(),
+      },
+    },
+    async ({ link, label, draft_id }) => {
+      const limited = await requireRate(ctx);
+      if (limited) return limited;
+      try {
+        const brief = await attachBriefByLink(ctx.clientId, link, label ?? null);
+        let linked: number | null = null;
+        if (draft_id !== undefined) {
+          const draft = await getMessage(ctx.clientId, draft_id);
+          if (!draft) return errorResult(`draft ${draft_id} not found`);
+          const res = await updateMessage(
+            ctx.clientId,
+            draft_id,
+            draft.version,
+            { briefId: brief.id },
+          );
+          if (!res.ok) {
+            return errorResult("version_conflict", { current: res.current });
+          }
+          linked = draft_id;
+        }
+        await writeAudit({
+          clientId: ctx.clientId,
+          userId: mcpUserId(ctx),
+          entityType: "briefs",
+          entityId: brief.id,
+          action: "create",
+          after: brief,
+        });
+        return jsonResult({
+          brief_id: brief.id,
+          slides_file_id: brief.slidesFileId,
+          label: brief.label,
+          linked_draft_id: linked,
+        });
+      } catch (e) {
+        if (e instanceof BriefError) return errorResult(e.message);
         throw e;
       }
     },
@@ -3076,7 +3175,7 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
     "draft_delete",
     {
       description:
-        "HARD-delete a draft test-creative: the row and its preview PNGs are removed permanently (drafts are throwaway staging — there is no archive/restore). Required: draft_id. Optional: version for optimistic locking (omitted = current). One write against the rate limit.",
+        "Discard a draft: the row is ARCHIVED, which also releases nothing — the MC number stays retired, exactly as it does for any archived card, so a discarded draft can never have its number silently reused by something else. Required: draft_id. Optional: version for optimistic locking (omitted = current). One write against the rate limit.",
       inputSchema: {
         draft_id: z.number().int(),
         version: z.number().int().optional(),
@@ -3085,12 +3184,14 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
     async ({ draft_id, version }) => {
       const limited = await requireRate(ctx);
       if (limited) return limited;
-      const existing = await getDraft(ctx.clientId, draft_id);
-      if (!existing) return errorResult(`draft ${draft_id} not found`);
-      const res = await deleteDraft(
+      const existing = await getMessage(ctx.clientId, draft_id);
+      if (!existing || existing.status !== "DRAFT") {
+        return errorResult(`draft ${draft_id} not found`);
+      }
+      const res = await archiveMessage(
         ctx.clientId,
         draft_id,
-        version ?? existing.draft.version,
+        version ?? existing.version,
       );
       if (!res.ok) {
         return errorResult("version_conflict", { current: res.current });
@@ -3098,12 +3199,13 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
       await writeAudit({
         clientId: ctx.clientId,
         userId: mcpUserId(ctx),
-        entityType: "draft_messages",
+        entityType: "messages",
         entityId: draft_id,
-        action: "delete",
-        before: res.draft,
+        action: "archive",
+        before: existing,
+        after: res.row,
       });
-      return jsonResult({ ok: true, deleted: draft_id });
+      return jsonResult({ ok: true, archived: draft_id });
     },
   );
 
@@ -3111,46 +3213,38 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
     "draft_promote",
     {
       description:
-        "Promote a draft test-creative into the matrix: creates a REAL message (MC) at (audience_key, topic_key) with the draft's template + content fields, via the standard numbering/pmmid/trafficking pipeline (same semantics as mc_create: optional mc_number to claim a number or 'new' to force a fresh one, optional variant to pin the letter). The draft is back-linked via promoted_message_id and disappears from the default list_drafts view (its previews keep serving). Refuses if already promoted. One write against the rate limit. Returns { message, draft }.",
+        "Give a draft its cell: sets (audience_key, topic_key) and moves it out of DRAFT, generating the PMMID and trafficking columns. The MC NUMBER IS KEPT — that is the promise made when the draft claimed it — and the row is UPDATED rather than replaced, so the number, the brief link and the edit history all survive. The variant only shifts if the target cell already holds this number. The topic must already exist: promotion never creates one, because a promote that minted topics would fill the dimension with near-duplicate spellings. To reach BOTH axes (a static image and a DCO feed row) under one number, promote onto one axis and then mc_copy across to the other. One write against the rate limit. Returns the placed message.",
       inputSchema: {
         draft_id: z.number().int(),
         audience_key: z.string(),
         topic_key: z.string(),
-        mc_number: z
-          .union([z.number().int().positive(), z.literal("new")])
-          .optional(),
-        variant: z
-          .string()
-          .regex(/^[a-z]$/, "single lowercase letter a–z")
-          .optional(),
+        status: z.string().optional(),
+        version: z.number().int().optional(),
       },
     },
-    async ({ draft_id, audience_key, topic_key, mc_number, variant }) => {
+    async ({ draft_id, audience_key, topic_key, status, version }) => {
       const limited = await requireRate(ctx);
       if (limited) return limited;
+      const before = await getMessage(ctx.clientId, draft_id);
       try {
-        const result = await promoteDraft(ctx.clientId, draft_id, {
+        const row = await promoteDraft(ctx.clientId, draft_id, {
           audienceKey: audience_key,
           topicKey: topic_key,
-          requestedNumber: mc_number,
-          requestedVariant: variant,
+          status,
+          expectedVersion: version,
         });
         await writeAudit({
           clientId: ctx.clientId,
           userId: mcpUserId(ctx),
           entityType: "messages",
-          entityId: result.message.id,
-          action: "create",
-          after: result.message,
+          entityId: row.id,
+          action: "update",
+          before,
+          after: row,
         });
-        return jsonResult({
-          message: result.message,
-          draft: draftSummary(result.draft),
-        });
+        return jsonResult({ message: row });
       } catch (e) {
-        if (e instanceof DraftError || e instanceof MessageError) {
-          return errorResult(e.message);
-        }
+        if (e instanceof MessageError) return errorResult(e.message);
         throw e;
       }
     },

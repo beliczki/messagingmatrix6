@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   assets,
@@ -43,9 +43,17 @@ export async function productInventory(
       .from(audiences)
       .where(eq(audiences.clientId, clientId)),
     db
+      // The dashboard reports on the matrix, and a DRAFT is not in it yet: no
+      // audience means no product, so nothing to count it under.
       .select({ audience: messages.audience, topic: messages.topic })
       .from(messages)
-      .where(and(eq(messages.clientId, clientId), isNull(messages.archivedAt))),
+      .where(
+        and(
+          eq(messages.clientId, clientId),
+          isNull(messages.archivedAt),
+          isNotNull(messages.audience),
+        ),
+      ),
     db
       .select({ product: creatives.product, n: count() })
       .from(creatives)
@@ -65,6 +73,9 @@ export async function productInventory(
   };
   for (const a of audienceRows) if (a.channel == null) bump(a.product, 0, 0);
   for (const m of messageRows) {
+    // The query already excludes drafts; this restates it for the type system,
+    // which types the columns from the schema rather than from the predicate.
+    if (m.audience === null || m.topic === null) continue;
     const a = audienceById.get(m.audience);
     if (!a) continue;
     if (a.channel == null) bump(a.product, 0);

@@ -6,6 +6,7 @@ import {
   primaryKey,
   index,
   uniqueIndex,
+  check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
@@ -263,6 +264,38 @@ export const topics = pgTable(
   ],
 );
 
+// The reason a DRAFT exists: the Google Slides deck a piece of work came in on.
+// Deliberately NOT a work-item entity — no state, owner, due date or revision
+// seal. Several drafts share one brief, so it needs an identity, and identity is
+// the FILE ID, never the URL: the same deck arrives as `?usp=sharing`, with a
+// `/u/0/` prefix and with a `#slide=` fragment, and three spellings of one deck
+// would read as three briefs. (Same reasoning as creatives.drive_folder_id.)
+export const briefs = pgTable(
+  "briefs",
+  {
+    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
+    clientId: integer("client_id")
+      .notNull()
+      .references(() => clients.id, { onDelete: "cascade" }),
+    // Google Drive file ID of the Slides deck, extracted from whatever URL the
+    // user pasted. One row per deck per client.
+    slidesFileId: text("slides_file_id").notNull(),
+    // Human label for the drafts list. Typed or pasted by the user — the keyed
+    // Drive API cannot read a file's title without OAuth, so this is not fetched.
+    label: text("label"),
+    createdAt: text("created_at")
+      .notNull()
+      .default(nowUtc),
+    updatedAt: text("updated_at")
+      .notNull()
+      .default(nowUtc),
+    archivedAt: text("archived_at"),
+  },
+  (t) => [
+    uniqueIndex("briefs_client_slides_file_unique").on(t.clientId, t.slidesFileId),
+  ],
+);
+
 // §3.3
 export const messages = pgTable(
   "messages",
@@ -273,8 +306,20 @@ export const messages = pgTable(
       .references(() => clients.id, { onDelete: "cascade" }),
     number: integer("number").notNull(),
     variant: text("variant").notNull(),
-    audience: text("audience").notNull(),
-    topic: text("topic").notNull(),
+    // NULL on a DRAFT row and only there — see the status comment below. Every
+    // other row is placed in a cell, and the pair below is what a cell IS, so a
+    // placed row without them would be unreachable from the grid.
+    audience: text("audience"),
+    // NULL while a DRAFT has not been given one. On a DRAFT this is a SUGGESTED
+    // NAME and need not resolve to a `topics` row; promotion is what forces it
+    // to a real key (createMessage rejects an unknown topic). Nothing joins on
+    // it strictly, so a dangling draft value is inert rather than broken.
+    topic: text("topic"),
+    // The Slides deck this work came in on. Nullable everywhere: a draft may
+    // predate its brief, and matrix rows created before this column keep NULL.
+    briefId: integer("brief_id").references(() => briefs.id, {
+      onDelete: "set null",
+    }),
     versionNo: integer("version_no").notNull().default(1),
     pmmid: text("pmmid"),
     // "No status" is not a legal state for an MC: a status-less row is invisible
@@ -282,7 +327,17 @@ export const messages = pgTable(
     // FOR), so it silently drops out of every status-scoped view. NOT NULL keeps
     // it that way; the default covers inserts that omit the column entirely —
     // ACTIVE because the rows that reach us without one are delivered creatives.
-    // Hand-created MCs are unaffected: createMessage passes INCOMING explicitly.
+    // Hand-created MCs are unaffected: createMessage passes INCOMING explicitly
+    // (slice 5 of the DRAFT epic replaces that birth status with PREVIEW).
+    //
+    // DRAFT is the pre-matrix state: work that has been taken on and has claimed
+    // its MC number, but has not been placed in a cell yet. It is not a separate
+    // table — a draft is a `messages` row so that number allocation, variants,
+    // versioning and previews all work unchanged (isLive counts every unarchived
+    // row regardless of status, so a draft's number is reserved from T0). What
+    // keeps it out of the matrix is the ABSENCE OF AN AUDIENCE, enforced by the
+    // check constraint below rather than by discipline: two independent
+    // discriminators for one concept drift apart.
     status: text("status").notNull().default("ACTIVE"),
     startDate: text("start_date"),
     endDate: text("end_date"),
@@ -341,6 +396,32 @@ export const messages = pgTable(
     index("messages_client_status_idx").on(t.clientId, t.status),
     index("messages_client_number_idx").on(t.clientId, t.number),
     index("messages_client_pmmid_idx").on(t.clientId, t.pmmid),
+    index("messages_client_brief_idx").on(t.clientId, t.briefId),
+    // DRAFT ⟺ no audience, in both directions. The forward half stops a draft
+    // from hiding inside a real cell; the reverse half stops a placed row from
+    // losing its column and silently vanishing from the grid.
+    check(
+      "messages_draft_has_no_audience",
+      sql`(${t.status} = 'DRAFT') = (${t.audience} IS NULL)`,
+    ),
+    // A cell IS an (audience, topic) pair, so a placed row needs both. Only a
+    // draft may go without — and it may go without either one, since at T0 all
+    // it has is its number. Together with the check above this makes "has an
+    // audience" a sound narrowing to "has a topic too", which is what lets the
+    // matrix code treat a placed row as fully keyed.
+    check(
+      "messages_placed_has_topic",
+      sql`${t.audience} IS NULL OR ${t.topic} IS NOT NULL`,
+    ),
+    // A draft has no PMMID: the measurement key encodes audience/topic/number/
+    // variant, so minting one before placement would name a cell that does not
+    // exist. Enforcing it here is what makes getMessageByPmmid provably
+    // draft-free — and that lookup is how copy and move resolve their sources,
+    // the two operations where picking up the wrong row is most expensive.
+    check(
+      "messages_draft_has_no_pmmid",
+      sql`${t.status} != 'DRAFT' OR ${t.pmmid} IS NULL`,
+    ),
   ],
 );
 
@@ -382,96 +463,11 @@ export const messagePreviews = pgTable(
   ],
 );
 
-// Agent-produced test creatives (MCP `generate_test_creative`). Staging only —
-// NOT part of the matrix: no audience/topic/number/variant/pmmid. Same copy /
-// style / media field names as `messages` so renderTemplate binds directly.
-// Hard-deleted (no archived_at): throwaway staging, previews are purged with
-// the row. Promotion into the matrix goes through createMessage and stamps
-// promoted_message_id as a double-promote guard.
-export const draftMessages = pgTable(
-  "draft_messages",
-  {
-    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
-    clientId: integer("client_id")
-      .notNull()
-      .references(() => clients.id, { onDelete: "cascade" }),
-    name: text("name"),
-    template: text("template").notNull(),
-    templateVariantClasses: text("template_variant_classes"),
-    headline: text("headline"),
-    copy1: text("copy1"),
-    copy2: text("copy2"),
-    disclaimer: text("disclaimer"),
-    cta: text("cta"),
-    flash: text("flash"),
-    headlineStyle: text("headline_style"),
-    copy1Style: text("copy1_style"),
-    copy2Style: text("copy2_style"),
-    disclaimerStyle: text("disclaimer_style"),
-    ctaStyle: text("cta_style"),
-    flashStyle: text("flash_style"),
-    customCss: text("custom_css"),
-    image1: text("image1"),
-    image2: text("image2"),
-    image3: text("image3"),
-    image4: text("image4"),
-    image5: text("image5"),
-    image6: text("image6"),
-    // JSON array string of requested "WIDTHxHEIGHT" sizes, e.g. '["300x250"]'
-    // (precedent: config.value stores JSON-as-text).
-    sizes: text("sizes").notNull(),
-    // pending | rendering | done | failed — done-count is NOT stored, it is
-    // derived from draft_previews rows ("stalled" is likewise computed).
-    renderStatus: text("render_status").notNull().default("pending"),
-    renderStartedAt: text("render_started_at"),
-    // JSON map {size: error message} for per-size render failures.
-    renderError: text("render_error"),
-    promotedMessageId: integer("promoted_message_id").references(
-      () => messages.id,
-      { onDelete: "set null" },
-    ),
-    version: integer("version").notNull().default(1),
-    createdAt: text("created_at")
-      .notNull()
-      .default(nowUtc),
-    updatedAt: text("updated_at")
-      .notNull()
-      .default(nowUtc),
-  },
-  (t) => [index("draft_messages_client_idx").on(t.clientId)],
-);
-
-// PNG screenshots of draft creatives — one per requested size. Regenerable
-// derivative like message_previews (bytes under previews/ in the object
-// store), but simpler: drafts are immutable in v1, so no version/staleness.
-export const draftPreviews = pgTable(
-  "draft_previews",
-  {
-    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
-    clientId: integer("client_id")
-      .notNull()
-      .references(() => clients.id, { onDelete: "cascade" }),
-    draftId: integer("draft_id")
-      .notNull()
-      .references(() => draftMessages.id, { onDelete: "cascade" }),
-    size: text("size").notNull(),
-    storageKey: text("storage_key").notNull(),
-    createdAt: text("created_at")
-      .notNull()
-      .default(nowUtc),
-    updatedAt: text("updated_at")
-      .notNull()
-      .default(nowUtc),
-  },
-  (t) => [
-    uniqueIndex("draft_previews_draft_size_unique").on(
-      t.clientId,
-      t.draftId,
-      t.size,
-    ),
-    index("draft_previews_client_draft_idx").on(t.clientId, t.draftId),
-  ],
-);
+// The draft_messages / draft_previews tables were RETIRED on 2026-09-04: a
+// draft is now a `messages` row with no audience, so it reuses the message
+// numbering, versioning and preview machinery instead of shadowing it. Both
+// tables were empty on every client, so nothing was migrated. See
+// tasks/todo.md "DRAFT-modell + státusz-takarítás epic".
 
 // §3.4
 export const assets = pgTable(
@@ -978,6 +974,8 @@ export type NewMcpToken = typeof mcpTokens.$inferInsert;
 export type Audience = typeof audiences.$inferSelect;
 export type Topic = typeof topics.$inferSelect;
 export type Message = typeof messages.$inferSelect;
+export type Brief = typeof briefs.$inferSelect;
+export type NewBrief = typeof briefs.$inferInsert;
 export type Asset = typeof assets.$inferSelect;
 export type Creative = typeof creatives.$inferSelect;
 export type TextFormatting = typeof textFormatting.$inferSelect;

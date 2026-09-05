@@ -1,4 +1,4 @@
-import { and, count, eq, inArray, isNull, max, sql } from "drizzle-orm";
+import { and, count, eq, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { audiences, config, messages, nowUtc, type Audience } from "@/db/schema";
 import { evaluatePattern } from "@/lib/patterns";
@@ -80,10 +80,14 @@ async function mcCountsByAudience(
   const rows = await db
     .select({ key: messages.audience, n: count() })
     .from(messages)
-    .where(eq(messages.clientId, clientId))
+    // A DRAFT has no audience, so it belongs to no column and must not be
+    // counted into one.
+    .where(and(eq(messages.clientId, clientId), isNotNull(messages.audience)))
     .groupBy(messages.audience);
   const m = new Map<string, number>();
-  for (const r of rows) m.set(r.key, r.n);
+  // The WHERE above already excludes the null key; the guard is how that fact
+  // reaches the type system, which types the column from the schema.
+  for (const r of rows) if (r.key !== null) m.set(r.key, r.n);
   return m;
 }
 

@@ -54,7 +54,16 @@ async function fetchTreeStructure(): Promise<string> {
 // How many children ONE parent shows before its overflow folds into its own
 // "Other". Per parent, not per column: a node you can see must be a node you can
 // follow (see the note at the top of buildSankey.ts).
-const TOP_N_PER_PARENT = 10;
+//
+// The cap is small because per-parent folding multiplies down the levels: the
+// live Erste filter alone holds 90 audiences over 446 distinct audience/topic
+// pairs, so at 10 the leaf column ran past 150 rows and the fitted diagram was a
+// grey smear. Eight keeps the opening view legible; the chevrons open the rest.
+const TOP_N_PER_PARENT = 8;
+// A tall graph must not be crushed to fit. Below ~0.35 the pills stop being
+// readable at all, so the initial fit stops there and the user pans instead —
+// the minimap in the toolbar shows what is off-screen.
+const FIT_VIEW_OPTIONS = { minZoom: 0.35, maxZoom: 1 } as const;
 const EXPANDED_STORAGE_KEY = "mm6_sankey_expanded_v1";
 // Width declared to xyflow per node: the bar plus the label pill. It is what
 // fitView measures, so labels stay inside the fitted viewport. Only the bar and
@@ -520,6 +529,7 @@ export default function SankeyView({
           nodeTypes={nodeTypes}
           edgeTypes={edgeTypes}
           fitView
+          fitViewOptions={FIT_VIEW_OPTIONS}
           nodesDraggable={false}
           nodesConnectable={false}
           elementsSelectable={false}

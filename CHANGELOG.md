@@ -23,6 +23,12 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
   - The root column is never folded: it is the entry point, and there is no
     parent above it whose pill could serve as the handle.
 
+  - The cap is **8 per parent**, deliberately small: per-parent folding
+    multiplies down the levels, and the live Erste filter alone holds 90
+    audiences over 446 distinct audience/topic pairs. The initial fit also stops
+    zooming out at 0.35 — below that the pills are unreadable, so a tall diagram
+    opens legible and pans rather than being crushed to fit.
+
 ### Added
 - **Drill into a fold.** A parent whose children overflow carries the tree's
   chevron; clicking it — or clicking its `Other`, which is a shortcut for the

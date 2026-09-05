@@ -300,6 +300,8 @@ nincs v5 canvas-renderer portolás, nincs napi/animált bontás.
 - **6.60.1 — a címkék egymásra csúsztak a sűrű oszlopokban.** A node magassága arányos az értékével, tehát ahol egy `Other` viszi a flow 90%-át, a maradék húsz sub-pixel csík: az egyetlen garantált elválasztás a node-ok közti `nodePadding`, ami 10px-en nem ért túl egy 18px-es címke-pillen. 22px lett, és a canvas magassága a legmagasabb oszlophoz igazodik.
 - **6.60.2 — a tooltip rossz sarokban nyílt.** Az utolsó `mousemove`-ból pozicionált, de a `mouseover` ugyanarra a pozícióra **előbb** tüzel, tehát a minta mindig egy mozdulattal késett — az első hovernél pedig egyáltalán nem volt minta, és a tooltip a canvas origójába esett. A hover-esemény most viszi a saját koordinátáit, a canvas szélénél beszorítva.
 
+**Utókövetés — 6.61.0 (2026-09-05, user):** a „pipás preview gomb" a **toolbar feed-paneljéből** hiányzott — a checkbox az export-dialógusba került, a diff mellé. Az a két kérdés nem ugyanaz: a dialógusbeli azt mondja meg, *mit küld ez az export*, a panelbeli azt, *mi van most a feedben*. Mindkettő megmarad; a panelben egy „Preview feed rows" checkbox ül **közvetlenül az Export gomb fölött**, és `AppDialog`-ban nyitja a `FeedView`-t a jelenlegi szűrésre (onnan semmi nem exportál). Commit `18fa9bb`, build 39.0s, box `6.61.0`, health `/` 307 · `/login` 200 · `/matrix` 307. Élőben ellenőrizve: VAL / 221 sor.
+
 **Amit szándékosan NEM csináltunk:** nincs `sankeyStructure` config (a `treeStructure` hajtja mindkét nézetet), nincs cost-dimenzió a matrix-sankey-ben (az a monitoring oldalra való — `tasks/cost-sankey-szakertes.md`), nincs v5 canvas-renderer portolás.
 
 ---

@@ -85,7 +85,7 @@ Kontextus: a `~/Grafia/OS/grafia-os-dokumentacio.md` munkamodell MM6-os leképez
 
 **Slice 1–5 állapota (2026-09-05): KÓD-KOMPLETT, box-deploy hátravan.** `tsc` + `eslint` tiszta; **257 unit + 542 integrációs teszt zöld** (62 fájl). A UI és az MCP ugyanazon a modellen áll.
 
-⏳ **Deploy-sorrend (egy passzban a boxon):** `0012` + `0013` migráció → kód → `pm2 restart` → **utána** `npm run status:cleanup` (dry-run), ellenőrzés, majd `-- --apply`. A cleanup script migrálatlan DB-n szándékosan az első lekérdezésen elszáll, nem a munka felénél.
+✅ **DEPLOYOLVA 6.59.0 (2026-09-05)** — lásd a checkpointot a fájl alján.
 
 #### Slice 5 — státusz-takarítás (12 → 6)
 - [x] **D5.1** ✅ **Nem hat listát írtam át, hanem egyet csináltam belőlük.** Új `src/lib/mc-status.ts` a kanonikus lánccal; a `matrix/types.ts`, `MessageEditor`, `DesignTab`, `TemplateEditor`, `branding.ts` és `db/defaults.ts` mind **ebből származtat** (a CSS-változókat és a dot-osztályokat is a lista generálja, nem kézzel írt sorok). Ez nem szépészet: pontosan a hat párhuzamos lista szülte a `PLANNED`-bugot — bekerült a szűrőbe, de sehol máshova, és mivel ismeretlen státusz semmilyen szűrőopcióra nem illeszkedik, az a 8 kártya minden státusz-scope-olt nézetből kiesett. A `globals.css` státusz-változói és `.status-dot--*` / `.status-badge--*` osztályai a hatra szűkítve, `DRAFT` felvéve.
@@ -1715,3 +1715,14 @@ A user jelezte: **kész a Drive-integráció a leadási/preview-share ágon, mos
 **⚠️ Megjegyzés a session-hez:** ez a szelet a **6.57.0**-ra ült rá — a 6.53–6.57 más sessionökben készült (share phone layout, Drive ikonok, creative-library fixek), a teszt-szám időközben 706 → 752-re nőtt. A saját változtatásom konfliktus nélkül alkalmazható volt.
 
 **Verzió:** `6.57.0` → **`6.58.0`** (minor). Séma-migráció nincs. **Deploy még nem történt.**
+
+### 2026-09-05 — DRAFT-modell + státusz-takarítás DEPLOYOLVA (6.58.0 + 6.59.0)
+- **Commit `5b1f3b6`**, box `ac3928e` → `5b1f3b6`. A **`6.58.0` sosem volt kint** (lokálban maradt), így két kiadás ment egyszerre.
+- **Destruktív migráció kockázat-ellenőrzése ELŐBB** (az archívum „közös DB + eltolt deploy" szabálya miatt, a `0013` két táblát dob): a v5 appok (`mm-server-*`) **SQLite-ot** használnak (`/var/www/messagingmatrix/db/messaging-matrix.db`), **egyetlen v6 deploy** van (`/var/www/mm6-erste`), és a két dobandó tábla **üres volt**. Vagyis az egyetlen fogyasztót ugyanabban a passzban frissítettük — a szabály nem sérült.
+- **Migráció `0012` + `0013` lefutott.** Ellenőrizve utána: `messages` **2753**, `creatives` **3167**, `monitoring` **15 646** — mind azonos a migráció előtti értékkel. `briefs` tábla létrejött, `draft_messages`/`draft_previews` eltűnt, mindhárom CHECK constraint áll (`messages_draft_has_no_audience`, `messages_placed_has_topic`, `messages_draft_has_no_pmmid`), `audience`/`topic`/`brief_id` nullable.
+- `npm run build` ok, `pm2 restart mm6-erste --update-env` → **Ready 1621ms**, box `package.json` **6.59.0**. Health: `/` 307 · `/login` 200 · `/matrix` 307 · `/drafts` 307 · `/creative-library` 307 · `/shares` 307 · `/feeds` 307 · `/monitoring` 307 · `/api/drafts` 401 · `/api/briefs` 401 · `/mcp` 401 · publikus `erste.messagingmatrix.ai/login` **200**. Az `error.log`-ban csak a régi AWS SDK node>=22 figyelmeztetés.
+- ⚠️ **`tsx` nem olvassa a box `.env`-jét** (a Next igen) — a `status:cleanup` első futása `ECONNREFUSED`-dal elszállt. Megoldás: `set -a && . ./.env && set +a &&` a parancs elé. Ugyanez érvényes minden `tsx`-es scriptre a boxon (`gen:previews`, `import-*`, …).
+- **`status:cleanup` dry-run → apply.** A dry-run pontosan a felmért tervet adta, és a safety-net **0 sort** fogott (minden sor tisztán besorolódott). Törölve **12** (8× üres `MC21a`, `MC315 f/g/h/i` mint az ACTIVE `c/d/e` duplikátumai — a script megnevezte a konkrét ikret), DRAFT-ba **4** (`MC6a`, `MC78 a/b/c`, audience + pmmid + 6 UTM + final URL nullázva, a tartalom és a munkacím-topic megtartva). Retired státuszon maradt: **0**.
+- **Az apply előtt mind a 16 sor JSON-mentése készült** (`~/legacy-rows-backup-20260905.json`, 28 kB) — a törlés így visszafordítható.
+- Végállapot: `ACTIVE` 1768 · `INACTIVE` 959 · `DEAD` 6 · `DRAFT` 4 · `PREVIEW` 4 (2741 = 2753 − 12).
+- **Nyitva maradt (nem blokkoló):** a `feed-export.ts` 654. sorában nyers NUL bájt a forrásban → a `grep` némán 0 találatot ad az egész fájlra; egy `\u0000` escape javítja, azonos futásidejű értékkel.

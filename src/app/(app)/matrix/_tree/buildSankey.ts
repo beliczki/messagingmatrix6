@@ -63,9 +63,14 @@ export type SankeyGraph = {
 /** Column geometry — the sankey's own constants, not the tree's. */
 export const SANKEY_COLUMN_GAP = 260;
 export const SANKEY_NODE_WIDTH = 14;
-export const SANKEY_NODE_PADDING = 10;
-/** Vertical room reserved per node so a tall column still reads. */
-const MIN_ROW_HEIGHT = 22;
+// The gap between two stacked nodes is the ONLY separation the layout
+// guarantees: a node's own height is proportional to its value, so in a column
+// where one Other node holds 90% of the flow the other twenty are sub-pixel
+// slivers. The padding therefore has to clear a label pill (~18px) on its own,
+// or the labels sit on top of each other.
+export const SANKEY_NODE_PADDING = 22;
+/** Vertical room reserved per node: one padding gap plus room for the bar. */
+const MIN_ROW_HEIGHT = 34;
 const MIN_CANVAS_HEIGHT = 420;
 
 export function otherNodeId(level: number): string {

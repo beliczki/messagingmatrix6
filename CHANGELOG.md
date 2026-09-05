@@ -5,6 +5,16 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.60.1] — 2026-09-05
+
+### Fixed
+- **Sankey labels sat on top of each other in dense columns.** A node's height
+  is proportional to its value, so in a column where one `Other` node holds 90%
+  of the flow the remaining twenty are sub-pixel slivers — the gap between
+  stacked nodes is the only separation the layout guarantees, and at 10px it did
+  not clear an 18px label pill. The gap is now 22px, and the canvas grows with
+  the tallest column to make room for it.
+
 ## [6.60.0] — 2026-09-05
 
 ### Added

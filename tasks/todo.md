@@ -302,6 +302,8 @@ nincs v5 canvas-renderer portolás, nincs napi/animált bontás.
 
 **Utókövetés — 6.61.0 (2026-09-05, user):** a „pipás preview gomb" a **toolbar feed-paneljéből** hiányzott — a checkbox az export-dialógusba került, a diff mellé. Az a két kérdés nem ugyanaz: a dialógusbeli azt mondja meg, *mit küld ez az export*, a panelbeli azt, *mi van most a feedben*. Mindkettő megmarad; a panelben egy „Preview feed rows" checkbox ül **közvetlenül az Export gomb fölött**, és `AppDialog`-ban nyitja a `FeedView`-t a jelenlegi szűrésre (onnan semmi nem exportál). Commit `18fa9bb`, build 39.0s, box `6.61.0`, health `/` 307 · `/login` 200 · `/matrix` 307. Élőben ellenőrizve: VAL / 221 sor.
 
+**6.61.1 (ugyanaz a session, user):** „azért nem jó az export dialógusba, mert nincs sor-previewnak még egy dialógus-layer, ne is legyen, jobb a previewt kint tartani." → a `feed-export-dialog__rows` blokk **törölve**; a tábla a dialóguson belül szűkítette az export saját setupját, és a dialógus a *döntésre* való (mi megy ki), nem sorböngészésre. A preview kizárólag a panel `Preview feed rows` checkboxán él. A `FeedExportDialog` `audiences`/`topics` propjai is visszakerültek (csak a beágyazott tábla miatt voltak ott). Commit `1e6bd5b`, build 40.0s, box `6.61.1`, health `/` 307 · `/login` 200 · `/matrix` 307 · `/feeds` 307. Élőben ellenőrizve: a dialógus a „Diff details"-szel zárul.
+
 **Amit szándékosan NEM csináltunk:** nincs `sankeyStructure` config (a `treeStructure` hajtja mindkét nézetet), nincs cost-dimenzió a matrix-sankey-ben (az a monitoring oldalra való — `tasks/cost-sankey-szakertes.md`), nincs v5 canvas-renderer portolás.
 
 ---

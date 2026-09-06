@@ -2083,3 +2083,5 @@ kollégák MCP-behívása előtt bizonyítható legyen: draft → brief → prom
 **A `mc:`/`t:` mezőket kisbetűsíteni kell** a predikátum előtt — a `parseSearchQuery` lowercase-eli a lekérdezést, és az `mcMatches` `\bmc401\b` regexe soha nem talált volna rá a `MC401a`-ra. A Creative Library ugyanezt csinálja (`CreativeLibrary.tsx:551`); a hiba az lett volna, hogy a `mc:401` némán nulla találatot ad.
 
 **Nyitva:** a `briefs` tábla 3-as sora árva (semmi nem mutat rá) — a 6.67.1-es leválasztás nullázza a draft `brief_id`-jét, de a sort nem takarítja. Nem tünet, csak szemét; ha zavaró, egy takarítás eldönthető külön.
+
+**DEPLOYOLVA 6.69.0 (2026-09-06):** commit `4170942`, box `f6620d2`→`4170942`, build 36.7s, `pm2 restart mm6-erste --update-env` → Ready 1275ms. Séma-migráció nincs (csak kliens-oldal). Health: `/` 307 · `/login` 200 · `/drafts` 307 · `/matrix` 307 · `/api/drafts` 401 · `/mcp` 401; publikus `/login` 200. ⚠️ **Vizuálisan nincs ellenőrizve** — a tab-sorrend, a Brief-fül intake-blokkja és az új drafts-toolbar képernyőn még nem volt látva.

@@ -327,6 +327,19 @@ export const messages = pgTable(
     // `briefs`. NULL = no anchor, and the preview then opens the deck at its
     // first slide rather than guessing.
     briefSlideId: text("brief_slide_id"),
+    // The product a DRAFT belongs to — and ONLY a draft, which is why the
+    // column says so in its name rather than in a comment somebody has to find.
+    //
+    // A placed card's product is DERIVED from its cell: `audiences.product` on
+    // the DCO axis, the topic key prefix on the Agentic one (see
+    // dashboard-products.ts, where that rule is marked correctness-critical). A
+    // draft has neither — no audience, and a topic that is free text — so for
+    // that one state the product has nowhere to be derived from and has to be
+    // stored. Promotion gives the row a cell and the derivation takes over;
+    // this value is then dead, never read, never reconciled. Naming it
+    // `product` would invite exactly the second source of truth that would
+    // then drift from the matrix and the dashboard.
+    draftProduct: text("draft_product"),
     versionNo: integer("version_no").notNull().default(1),
     pmmid: text("pmmid"),
     // "No status" is not a legal state for an MC: a status-less row is invisible

@@ -1,0 +1,1 @@
+ALTER TABLE "messages" ADD COLUMN "draft_product" text;

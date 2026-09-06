@@ -25,11 +25,16 @@ type Target = (typeof TARGETS)[number]["key"];
 
 export default function PromoteTab({
   draft,
+  productValue,
+  onProductChange,
   audiences,
   topics,
   onDone,
 }: {
   draft: DraftMessage;
+  /** `draftProduct` from the live edit state, so typing shows immediately. */
+  productValue: string | null;
+  onProductChange: (product: string | null) => void;
   audiences: Audience[];
   topics: Topic[];
   onDone: () => void;
@@ -51,6 +56,15 @@ export default function PromoteTab({
     () => audiences.filter((a) => a.channel != null),
     [audiences],
   );
+  // The product vocabulary is whatever the dimensions already use — read off
+  // audiences and topics rather than kept as a second hardcoded list that
+  // would drift from them.
+  const productOptions = useMemo(() => {
+    const s = new Set<string>();
+    for (const a of audiences) if (a.product) s.add(a.product);
+    for (const t of topics) if (t.product) s.add(t.product);
+    return [...s].sort();
+  }, [audiences, topics]);
 
   const needsDco = target === "dco" || target === "both";
   const needsChannel = target === "agentic" || target === "both";
@@ -106,6 +120,24 @@ export default function PromoteTab({
         {draft.variant} is already reserved — nothing else can take the number.
         Promoting gives it a cell and keeps the number.
       </p>
+
+      <Field
+        label="Product"
+        hint="Groups the draft on the drafts page. Once it has a cell the product comes from the cell instead, so this is only needed while it is a draft."
+      >
+        <select
+          value={productValue ?? ""}
+          onChange={(e) => onProductChange(e.target.value || null)}
+          className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
+        >
+          <option value="">— not set yet —</option>
+          {productOptions.map((p) => (
+            <option key={p} value={p}>
+              {p}
+            </option>
+          ))}
+        </select>
+      </Field>
 
       <Field label="Target">
         <div className="tab-bar tab-bar--segmented inline-flex rounded-md border border-slate-300 p-0.5">

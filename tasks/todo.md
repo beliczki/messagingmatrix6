@@ -1951,3 +1951,23 @@ A `MatrixGrid.tsx` invariáns-kommentje („Agentic MC csak kreatív-feltöltés
 - **Brief label:** a label mező eltűnt, de a `briefs.label` oszlop maradt, és a drafts oldal **csoportfejléce erre esik vissza** (`b.label || "Brief {id}"`). Új brief így „Brief 7"-ként jelenik meg a mai „SZÁMLAVÁLASZTÓ" helyett. A természetes megoldás a deck nevének lekérése a **meglévő** `GOOGLE_DRIVE_API_KEY`-jel (`files.get?fields=id,name` — a `drive.ts` `getDriveFolder`-e pontosan ez a hívás, csak mappára elnevezve), mert a brief-deckek ugyanúgy „anyone with the link" megosztásúak, mint a delivery mappák. **Nem csináltam meg — nem volt kérve.**
 - **Slide preview megosztás-függő:** az iframe csak akkor renderel, ha a deck link-megosztott. Böngészős ellenőrzés az MC400-on még nem történt meg.
 - `scripts/gen-collisions-doc.ts` és a `docs/mc-collisions.*` **szándékosan** megtartja a nonDCO szókincset az adatkulcsaiban és a magyar prózájában: az egy 2026-08-i elemzés befagyasztott jegyzőkönyve, nem élő szókincs. A script saját magyarázó kommentjei viszont követik az új nevet.
+
+### 2026-09-06 (folytatás) — draftok termék szerint, nem brief szerint — 6.67.0
+
+**User:** „a draftot sem briefenként kéne kategorizálni hanem termékenként, tehát már a draftnak is kell legyen Termék/Product tagje, és lehet az oldalon olyan hogy no product set yet."
+
+**A tény, ami a formát eldöntötte:** a `messages` táblán **nincs** `product` oszlop. A termék ma *származtatott* — DCO-nál `audiences.product`, Agentic-nél a topic kulcs prefixe (`dashboard-products.ts`, „correctness-critical, must not drift" megjelöléssel). A draftnak viszont se audience-e, se valódi topicja nincs — pont ez teszi drafttá. Tehát erre az egy állapotra tárolni kell.
+
+**Eldöntve (AskUserQuestion):**
+1. **Draft-mező, promotáláskor elengedve.** A promote nem validál és nem töröl — a cella átveszi a kérdést, a tárolt érték elveszti a tekintélyét.
+2. **A brief-csoportosítás eltűnik**, a brief a Brief tabon marad.
+
+**Az oszlop neve `draft_product`, nem `product`** — szándékosan. Egy `messages.product` nevű oszlopot a következő olvasó a kártya termékének fogja olvasni, és pontosan az a második igazság keletkezne, ami elcsúszna a mátrixtól és a dashboardtól. A név maga mondja meg a hatókört, nem egy komment, amit meg kell találni.
+
+- [x] `messages.draft_product` (nullable text) + `0015_silent_zzzax.sql` (additív)
+- [x] `WRITABLE_FIELDS` += `draftProduct`; `EditableFields` + kliens `Message` típus
+- [x] Product select a **Promote tab tetején** — az opciók az `audiences`/`topics` meglévő termékeiből jönnek, nem külön hardkódolt listából
+- [x] `BriefGroup` → `ProductGroup` (`product-group` blokk); ábécé szerint, a termék nélküliek **utolsóként**; toolbar számláló „N open · M products"
+- [x] Két új teszt: a promote **érintetlenül átviszi** a draft termékét (nem validál, nem töröl), és a termék nélküli draft is promotálható
+
+**Nyitva:** a `briefs.label` mező továbbra sincs kitöltve sehonnan (a Brief tabon nincs label input), de mostantól **nem számít** — a csoportfejléc a termék, nem a brief. A brief-választó legördülő viszont még mindig `Brief {id}`-ként listáz. A Drive-névlekérés (`GOOGLE_DRIVE_API_KEY`, `files.get?fields=id,name`) továbbra is a természetes megoldás, ha zavaró lesz.

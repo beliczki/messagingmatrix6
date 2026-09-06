@@ -136,6 +136,7 @@ type EditableFields = Pick<
   | "brief"
   | "briefId"
   | "briefSlideId"
+  | "draftProduct"
 >;
 
 const EDITABLE_KEYS: Array<keyof EditableFields> = [
@@ -169,6 +170,7 @@ const EDITABLE_KEYS: Array<keyof EditableFields> = [
   "brief",
   "briefId",
   "briefSlideId",
+  "draftProduct",
 ];
 
 // The tabs receive the real state setter so field updates can use the
@@ -791,6 +793,12 @@ export default function MessageEditor({
               {tab === "promote" && message.audience === null ? (
                 <PromoteTab
                   draft={message}
+                  productValue={draft.draftProduct}
+                  onProductChange={(product) =>
+                    setDraft((prev) =>
+                      prev ? { ...prev, draftProduct: product } : prev,
+                    )
+                  }
                   audiences={audiences}
                   topics={topics}
                   onDone={() => {

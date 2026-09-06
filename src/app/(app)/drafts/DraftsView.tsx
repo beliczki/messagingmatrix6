@@ -13,9 +13,9 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  FileText,
   FlaskConical,
   Loader2,
+  Package,
   Plus,
 } from "lucide-react";
 import clsx from "clsx";
@@ -30,7 +30,9 @@ import {
 } from "../matrix/types";
 import type { Draft, DraftPreview, BriefRow } from "./types";
 
-const UNBRIEFED = -1;
+// Map key for the drafts that have no product yet. A sentinel rather than a
+// nullable key so the group can be sorted to the end deliberately.
+const NO_PRODUCT = "\u0000none";
 
 async function fetchJSON<T>(url: string): Promise<T> {
   const r = await fetch(url, { credentials: "include" });
@@ -103,7 +105,6 @@ export default function DraftsView() {
   const data = draftsQ.data;
   const drafts = useMemo(() => data?.drafts ?? [], [data]);
   const previews = useMemo(() => data?.previews ?? [], [data]);
-  const briefs = useMemo(() => data?.briefs ?? [], [data]);
 
   const previewsByDraft = useMemo(() => {
     const m = new Map<number, DraftPreview[]>();
@@ -115,27 +116,30 @@ export default function DraftsView() {
     return m;
   }, [previews]);
 
-  // Brief groups in the briefs' own order (newest first), with the unbriefed
-  // drafts last — they are the ones still missing their reason for existing.
+  // Product groups, alphabetical, with the product-less drafts LAST — they are
+  // the ones still missing the first thing you would sort them by. Grouping is
+  // by product rather than by brief because that is how the rest of the app
+  // partitions work (matrix filter, creative library, dashboard); the brief is
+  // still attached to each card and lives on its Brief tab, it just no longer
+  // decides the page's shape.
   const groups = useMemo(() => {
-    const byBrief = new Map<number, Draft[]>();
+    const byProduct = new Map<string, Draft[]>();
     for (const d of drafts) {
-      const key = d.briefId ?? UNBRIEFED;
-      const list = byBrief.get(key) ?? [];
+      const key = d.draftProduct ?? NO_PRODUCT;
+      const list = byProduct.get(key) ?? [];
       list.push(d);
-      byBrief.set(key, list);
+      byProduct.set(key, list);
     }
-    const out: Array<{ brief: BriefRow | null; drafts: Draft[] }> = [];
-    for (const b of briefs) {
-      const list = byBrief.get(b.id);
-      // A brief with no open drafts still belongs on the page when something
-      // was promoted out of it — that IS the answer to "what came of it".
-      if (list || b.promoted > 0) out.push({ brief: b, drafts: list ?? [] });
-    }
-    const loose = byBrief.get(UNBRIEFED);
-    if (loose) out.push({ brief: null, drafts: loose });
+    const named = [...byProduct.keys()]
+      .filter((k) => k !== NO_PRODUCT)
+      .sort((a, b) => a.localeCompare(b));
+    const out: Array<{ product: string | null; drafts: Draft[] }> = named.map(
+      (p) => ({ product: p, drafts: byProduct.get(p)! }),
+    );
+    const loose = byProduct.get(NO_PRODUCT);
+    if (loose) out.push({ product: null, drafts: loose });
     return out;
-  }, [drafts, briefs]);
+  }, [drafts]);
 
   const detail = drafts.find((d) => d.id === detailId) ?? null;
 
@@ -156,8 +160,8 @@ export default function DraftsView() {
             Drafts
           </div>
           <div className="toolbar__count ml-auto text-[11px] text-slate-500">
-            {drafts.length} open · {briefs.length} brief
-            {briefs.length === 1 ? "" : "s"}
+            {drafts.length} open · {groups.length} product
+            {groups.length === 1 ? "" : "s"}
           </div>
         </div>
 
@@ -177,16 +181,17 @@ export default function DraftsView() {
                 <p className="empty-state__hint mt-1 text-xs text-slate-500">
                   A draft claims its MC number the moment work is taken on, so
                   the number stops moving before the card reaches the matrix.
-                  Start one from the toolbar, or attach the brief it came in on.
+                  Start one from the toolbar — its product, brief and cell can
+                  all arrive later.
                 </p>
               </div>
             </div>
           ) : (
             <div className="drafts-view__groups flex flex-col gap-6">
               {groups.map((g) => (
-                <BriefGroup
-                  key={g.brief?.id ?? UNBRIEFED}
-                  brief={g.brief}
+                <ProductGroup
+                  key={g.product ?? NO_PRODUCT}
+                  product={g.product}
                   drafts={g.drafts}
                   previewsByDraft={previewsByDraft}
                   onOpen={setDetailId}
@@ -245,46 +250,34 @@ export default function DraftsView() {
   );
 }
 
-function BriefGroup({
-  brief,
+function ProductGroup({
+  product,
   drafts,
   previewsByDraft,
   onOpen,
 }: {
-  brief: BriefRow | null;
+  product: string | null;
   drafts: Draft[];
   previewsByDraft: Map<number, DraftPreview[]>;
   onOpen: (id: number) => void;
 }) {
   return (
-    <section className="brief-group">
-      <header className="brief-group__header mb-2 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-1.5">
-        <FileText className="brief-group__icon size-3.5 text-slate-400" />
-        {brief ? (
-          <a
-            href={`https://docs.google.com/presentation/d/${brief.slidesFileId}/edit`}
-            target="_blank"
-            rel="noreferrer"
-            className="brief-group__title text-xs font-semibold uppercase tracking-wider text-slate-700 hover:text-slate-900 hover:underline"
-          >
-            {brief.label || "Untitled brief"}
-          </a>
-        ) : (
-          <span className="brief-group__title text-xs font-semibold uppercase tracking-wider text-slate-400">
-            No brief yet
-          </span>
-        )}
-        {brief ? (
-          <span className="brief-group__progress text-[10px] text-slate-500">
-            {brief.openDrafts} open · {brief.promoted} promoted
-          </span>
-        ) : null}
+    <section className="product-group">
+      <header className="product-group__header mb-2 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-1.5">
+        <Package className="product-group__icon size-3.5 text-slate-400" />
+        <span
+          className={clsx(
+            "product-group__title text-xs font-semibold uppercase tracking-wider",
+            product ? "text-slate-700" : "text-slate-400",
+          )}
+        >
+          {product ?? "No product set yet"}
+        </span>
+        <span className="product-group__count text-[10px] text-slate-500">
+          {drafts.length}
+        </span>
       </header>
-      {drafts.length === 0 ? (
-        <p className="brief-group__empty text-[11px] text-slate-400">
-          Everything from this brief is in the matrix.
-        </p>
-      ) : (
+      {drafts.length === 0 ? null : (
         <Masonry
           items={drafts}
           itemKey={(d) => d.id}

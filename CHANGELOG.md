@@ -5,6 +5,26 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.67.0] — 2026-09-06
+
+### Changed
+- **Drafts are grouped by product, not by brief.** Product is how the rest of
+  the app partitions work — the matrix filter, the creative library, the
+  dashboard — and the brief was answering a different question. Drafts with no
+  product yet gather in a "No product set yet" group at the end. The brief is
+  still attached to each card and lives on its Brief tab; it just no longer
+  decides the page's shape.
+
+### Added
+- **A draft carries its own product** (`messages.draft_product`, set on the
+  Promote tab). A placed card's product is derived from its cell —
+  `audiences.product` on the DCO axis, the topic key prefix on the Agentic one
+  — but a draft has neither, so for that one state it has to be stored.
+  Promotion hands the question back to the cell and the stored value stops
+  being read. The column is named `draft_product` rather than `product`
+  precisely so it cannot be mistaken for a second source of truth about a
+  placed card's product.
+
 ## [6.66.0] — 2026-09-06
 
 ### Added

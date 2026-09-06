@@ -164,6 +164,36 @@ describe("POST /api/drafts/[id]/promote — target", () => {
     expect(row).toMatchObject({ status: "DRAFT", audience: null });
   });
 
+  // The draft's product is a DRAFT field. Once the row has a cell the product
+  // is derived from it, so the stored value stops being read — it is not
+  // cleared (the audit trail keeps what the draft said), it simply has no
+  // further authority. This test pins that the promote does not start
+  // reconciling the two.
+  it("carries the draft product through untouched — the cell decides from here", async () => {
+    const d = await createDraft(erste.id, { draftProduct: "SZK" });
+    expect(d.draftProduct).toBe("SZK");
+    const { status, body } = await promote(d.id, {
+      audienceKey: "SZK_visitors",
+      topicKey: "SZK_brand",
+    });
+    expect(status).toBe(200);
+    // Placed: the product now comes from the audience, and the promote neither
+    // validated the draft value against it nor wiped it.
+    expect(body.message.audience).toBe("SZK_visitors");
+    expect(body.message.draftProduct).toBe("SZK");
+  });
+
+  it("promotes a draft whose product was never set", async () => {
+    const d = await createDraft(erste.id, {});
+    expect(d.draftProduct).toBeNull();
+    const { status, body } = await promote(d.id, {
+      audienceKey: "SZK_visitors",
+      topicKey: "SZK_brand",
+    });
+    expect(status).toBe(200);
+    expect(body.message.draftProduct).toBeNull();
+  });
+
   it("still refuses a topic that does not exist — promoting never mints one", async () => {
     const d = await createDraft(erste.id, {});
     const { status, body } = await promote(d.id, {

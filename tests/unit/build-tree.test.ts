@@ -101,6 +101,7 @@ function msg(overrides: Partial<Message>): Message {
     brief: null,
     briefId: null,
     briefSlideId: null,
+    draftProduct: null,
     ...overrides,
   };
 }

@@ -84,6 +84,7 @@ const WRITABLE_FIELDS = [
   "brief",
   "briefId",
   "briefSlideId",
+  "draftProduct",
 ] as const;
 type WritableField = (typeof WRITABLE_FIELDS)[number];
 

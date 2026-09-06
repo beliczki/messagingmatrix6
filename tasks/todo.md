@@ -2160,3 +2160,5 @@ workflow közepén fog kiderülni.
 - [x] A todo **korábbi checkpointjaiban** meghagytam a régi nevet (D4.1/D4.2/D4.T, Slice 3, 717.) — azok azt rögzítik, ami akkor igaz volt; a történet nem íródik át
 
 ⚠️ **Ez töri az agent-szerződést:** a `~/ERSTE Addressable AI Agent` skill (és bármely más kliens), ha hívja a `draft_delete`-et, `tool not found`-ot fog kapni. A paraméterek és a válasz változatlanok, csak a név más.
+
+**DEPLOYOLVA 6.71.0 (2026-09-06):** commit `c4d82e5`, box `342bb19`→`c4d82e5`, build 35.7s, `pm2 restart mm6-erste --update-env` → Ready 1249ms. Séma-migráció nincs. Health: `/login` 200 · `/mcp` 401 · `/drafts` 307. A Settings › MCP tool-listája magától felveszi az új nevet (a `/api/mcp/tools` a `mcp.ts`-ből generál).

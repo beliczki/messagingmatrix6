@@ -87,7 +87,7 @@ export function MatrixIframePreview({
   templateMeta?: TemplatePreviewMeta;
   quietConsole?: boolean;
 }) {
-  // nonDCO static-image MC: no template, a creative image in image1. Show the
+  // Agentic static-image MC: no template, a creative image in image1. Show the
   // image directly instead of iframe-rendering (which would POST /api/render
   // against a missing template dir and 404). Requires image1 so a half-set-up
   // DCO MC (null template, no image) still falls through to the placeholder.
@@ -122,7 +122,7 @@ export function MatrixIframePreview({
   );
 }
 
-// Static creative image (nonDCO): renders message.image1 via the same
+// Static creative image (Agentic): renders message.image1 via the same
 // /api/drive/proxy route + thumb-checker shell the editor's FileThumb uses, so
 // a template-less image MC lines up visually with the html-iframe cells.
 function StaticImagePreview({

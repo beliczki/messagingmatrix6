@@ -8,10 +8,11 @@ import type { Channel } from "@/db/schema";
 
 type ChannelsResponse = { channels: Channel[] };
 
-// Settings › Channels — the authoritative nonDCO channel list (the columns of
-// the nonDCO matrix). Channels used to be `audiences.channel != null` rows;
-// they now live in their own table. nonDCO MCs are minted only via creative
-// upload, so this list just governs which channels exist + their labels.
+// Settings › Channels — the authoritative Agentic channel list (the columns of
+// the Agentic matrix). Channels used to be `audiences.channel != null` rows;
+// they now live in their own table. An Agentic MC is minted by a creative
+// upload or by promoting a draft onto a channel — never here — so this list
+// just governs which channels exist + their labels.
 export function ChannelsTab() {
   const qc = useQueryClient();
   const [showArchived, setShowArchived] = useState(false);
@@ -95,8 +96,9 @@ export function ChannelsTab() {
         <div>
           <h2 className="text-sm font-semibold text-slate-900">Channels</h2>
           <p className="mt-0.5 text-xs text-slate-500">
-            The nonDCO matrix columns. nonDCO MCs are created automatically when
-            correctly-named creatives are uploaded to the Creative Library.
+            The Agentic matrix columns. An Agentic MC arrives either from a
+            correctly-named Creative Library upload, or by promoting a draft
+            onto one of these channels.
           </p>
         </div>
         <label className="flex items-center gap-1.5 text-xs text-slate-600">

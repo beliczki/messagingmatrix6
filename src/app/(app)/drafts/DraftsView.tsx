@@ -15,16 +15,19 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   FileText,
   FlaskConical,
-  Link2,
   Loader2,
   Plus,
-  ArrowUpRight,
 } from "lucide-react";
 import clsx from "clsx";
 import { Masonry } from "../_components/Masonry";
 import RightToolbar from "../_components/RightToolbar";
-import AppDialog from "../_components/AppDialog";
-import DraftDetailDialog from "./DraftDetailDialog";
+import MessageEditor from "../matrix/MessageEditor";
+import {
+  channelToAudience,
+  type Audience,
+  type Channel,
+  type Topic,
+} from "../matrix/types";
 import type { Draft, DraftPreview, BriefRow } from "./types";
 
 const UNBRIEFED = -1;
@@ -53,8 +56,37 @@ export function mcLabel(d: { number: number; variant: string }): string {
 
 export default function DraftsView() {
   const [detailId, setDetailId] = useState<number | null>(null);
-  const [attachOpen, setAttachOpen] = useState(false);
   const qc = useQueryClient();
+
+  // The Promote tab offers both axes, so it needs both halves of the audience
+  // list. Channels are merged in as Audience-shaped rows (channel = code) the
+  // same way MatrixGrid does it — one list, partitioned on `channel`.
+  const audiencesQ = useQuery({
+    queryKey: ["audiences"],
+    queryFn: () =>
+      fetchJSON<{ audiences: Audience[] }>("/api/audiences").then(
+        (d) => d.audiences,
+      ),
+  });
+  const channelsQ = useQuery({
+    queryKey: ["channels"],
+    queryFn: () =>
+      fetchJSON<{ channels: Channel[] }>("/api/channels").then(
+        (d) => d.channels,
+      ),
+  });
+  const topicsQ = useQuery({
+    queryKey: ["topics"],
+    queryFn: () =>
+      fetchJSON<{ topics: Topic[] }>("/api/topics").then((d) => d.topics),
+  });
+  const audiences = useMemo(
+    () => [
+      ...(audiencesQ.data ?? []),
+      ...(channelsQ.data ?? []).map(channelToAudience),
+    ],
+    [audiencesQ.data, channelsQ.data],
+  );
 
   const draftsQ = useQuery({
     queryKey: ["drafts"],
@@ -177,20 +209,13 @@ export default function DraftsView() {
               >
                 <Plus className="size-5" />
               </button>
-              <button
-                type="button"
-                onClick={() => setAttachOpen(true)}
-                title="Attach a brief"
-                className="drafts-panel__collapsed-icon rounded p-1.5 text-slate-500 hover:bg-slate-100"
-              >
-                <Link2 className="size-5" />
-              </button>
             </>
           ) : (
             <div className="drafts-panel flex flex-col gap-3">
               <p className="drafts-panel__hint text-[11px] leading-relaxed text-slate-500">
                 A new draft starts with nothing but its MC number. Content,
-                brief and cell can all arrive later.
+                brief and cell all arrive later — open the draft and paste the
+                deck link on its Brief tab.
               </p>
               <button
                 type="button"
@@ -200,38 +225,22 @@ export default function DraftsView() {
                 <Plus className="size-4" />
                 New draft
               </button>
-              <button
-                type="button"
-                onClick={() => setAttachOpen(true)}
-                className="toolbar-btn drafts-panel__attach flex items-center justify-center gap-1.5 rounded-md border border-slate-300 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-50"
-              >
-                <Link2 className="size-4" />
-                Attach a brief
-              </button>
             </div>
           )
         }
       </RightToolbar>
 
-      {attachOpen ? (
-        <AttachBriefDialog
-          onClose={() => setAttachOpen(false)}
-          onAttached={() => {
-            setAttachOpen(false);
-            refresh();
-          }}
-        />
-      ) : null}
-
-      {detail ? (
-        <DraftDetailDialog
-          draft={detail}
-          previews={previewsByDraft.get(detail.id) ?? []}
-          briefs={briefs}
-          onClose={() => setDetailId(null)}
-          onChanged={refresh}
-        />
-      ) : null}
+      <MessageEditor
+        open={detail !== null}
+        message={detail}
+        audiences={audiences}
+        topics={topicsQ.data ?? []}
+        visibleMessages={drafts}
+        siblingCount={0}
+        onClose={() => setDetailId(null)}
+        onJump={setDetailId}
+        onPromoted={refresh}
+      />
     </div>
   );
 }
@@ -350,95 +359,5 @@ function DraftTile({
         ) : null}
       </div>
     </button>
-  );
-}
-
-function AttachBriefDialog({
-  onClose,
-  onAttached,
-}: {
-  onClose: () => void;
-  onAttached: () => void;
-}) {
-  const [link, setLink] = useState("");
-  const [label, setLabel] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  async function submit() {
-    setBusy(true);
-    setError(null);
-    try {
-      await postJSON("/api/briefs", { link, label: label || null });
-      onAttached();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <AppDialog open onClose={onClose} ariaLabel="Attach a brief">
-      <div className="modal__header border-b border-slate-200 px-5 py-4">
-        <h2 className="text-sm font-semibold text-slate-900">Attach a brief</h2>
-        <p className="mt-1 text-xs text-slate-500">
-          Paste the link to the deck the work came in on. The file id is what
-          gets stored, so the editor link and the Drive link are one brief.
-        </p>
-      </div>
-      <div className="modal__body flex-1 overflow-y-auto px-5 py-4">
-        <div className="form-field mb-3">
-          <label className="form-field__label mb-1 block text-[10px] font-medium uppercase tracking-wider text-slate-500">
-            Link
-          </label>
-          <input
-            autoFocus
-            value={link}
-            onChange={(e) => setLink(e.target.value)}
-            placeholder="https://docs.google.com/presentation/d/…"
-            className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs"
-          />
-        </div>
-        <div className="form-field">
-          <label className="form-field__label mb-1 block text-[10px] font-medium uppercase tracking-wider text-slate-500">
-            Label (optional)
-          </label>
-          <input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="What this brief is about"
-            className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs"
-          />
-        </div>
-        {error ? (
-          <p className="form-field__error mt-3 rounded-md bg-rose-50 px-2 py-1.5 text-xs text-rose-700">
-            {error}
-          </p>
-        ) : null}
-      </div>
-      <div className="modal__footer flex justify-end gap-2 border-t border-slate-200 px-5 py-3">
-        <button
-          type="button"
-          onClick={onClose}
-          className="toolbar-btn rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={submit}
-          disabled={busy || !link.trim()}
-          className="toolbar-btn toolbar-btn--primary flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-        >
-          {busy ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <ArrowUpRight className="size-3.5" />
-          )}
-          Attach
-        </button>
-      </div>
-    </AppDialog>
   );
 }

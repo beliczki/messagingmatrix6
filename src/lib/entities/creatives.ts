@@ -63,7 +63,7 @@ export async function listCreatives(
 }
 
 // All live creatives back-linked to one matrix cell (mcNumber + mcVariant).
-// Powers the nonDCO static-MC preview's size switcher: same creative name,
+// Powers the Agentic static-MC preview's size switcher: same creative name,
 // many sizes — each a separate creatives row sharing the (mcNumber, mcVariant).
 export async function listCreativesByMc(
   clientId: number,

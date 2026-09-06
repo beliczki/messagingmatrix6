@@ -45,3 +45,50 @@ export function parseSlidesFileId(
 export function slidesUrl(id: string | null | undefined): string | null {
   return id ? `https://docs.google.com/presentation/d/${id}/edit` : null;
 }
+
+// The SLIDE within a brief deck, kept separate from the file id above on
+// purpose: `parseSlidesFileId` deliberately throws the fragment away, because a
+// brief is ONE deck however it was linked, and folding the slide into its
+// identity would split one brief into one-per-slide. The anchor is per CARD
+// (messages.brief_slide_id) — several cards are briefed on different slides of
+// the same deck.
+//
+// A Slides deep link carries the page as `#slide=id.<objectId>`; the object id
+// is what both the editor URL and the embed URL want back, so it is stored raw
+// rather than re-wrapped in the `id.` prefix.
+const SLIDE_ANCHOR_RE = /[#&?]slide=(?:id\.)?([A-Za-z0-9_-]+)/;
+
+/**
+ * Brief link -> the page object id it points at, or null when the link names
+ * no slide (the plain deck URL). Null is not an error: it means "the deck",
+ * and the preview then opens at the first slide instead of guessing one.
+ */
+export function parseSlideAnchor(
+  input: string | null | undefined,
+): string | null {
+  const s = (input ?? "").trim();
+  if (!s) return null;
+  const m = s.match(SLIDE_ANCHOR_RE);
+  return m ? m[1]! : null;
+}
+
+/**
+ * The embed URL for one slide of a deck. Google serves `/embed` to anyone the
+ * deck is shared with — the same "anyone with the link" shape the delivery
+ * folders rely on — so a deck shared more narrowly renders a permission notice
+ * inside the frame rather than the slide. That is the honest failure: it is
+ * visible, and it names the fix.
+ */
+export function slidesEmbedUrl(
+  fileId: string | null | undefined,
+  slideId?: string | null,
+): string | null {
+  if (!fileId) return null;
+  const params = new URLSearchParams({
+    start: "false",
+    loop: "false",
+    delayms: "60000",
+  });
+  if (slideId) params.set("slide", `id.${slideId}`);
+  return `https://docs.google.com/presentation/d/${fileId}/embed?${params.toString()}`;
+}

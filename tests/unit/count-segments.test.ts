@@ -2,12 +2,12 @@ import { describe, it, expect } from "vitest";
 import { trimEmptyCountSegments } from "@/lib/count-segments";
 
 describe("trimEmptyCountSegments", () => {
-  // Erste has no channel audiences, so the nonDCO column read 0 down the whole
+  // Erste has no channel audiences, so the Agentic column read 0 down the whole
   // menu — the user's first question about it was "what is that middle zero?".
   it("drops a segment that is zero for every option", () => {
     const r = trimEmptyCountSegments(
       { SZK: [1197, 0, 639], VAL: [245, 0, 273] },
-      ["DCO", "nonDCO", "creatives"],
+      ["DCO", "Agentic", "creatives"],
     );
     expect(r.labels).toEqual(["DCO", "creatives"]);
     expect(r.counts).toEqual({ SZK: [1197, 639], VAL: [245, 273] });

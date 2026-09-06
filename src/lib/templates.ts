@@ -263,7 +263,7 @@ async function readVisibleTemplatesConfig(
 
 // The per-client default template applied to new DCO MCs (config key
 // "defaultTemplate", a plain template-name string). Marked on the Templates
-// page. Null when unset — new DCO MCs then fall back to no template. nonDCO
+// page. Null when unset — new DCO MCs then fall back to no template. Agentic
 // MCs (channel-audience placement) never receive this; they are image-based.
 export async function readDefaultTemplate(
   clientId: number,

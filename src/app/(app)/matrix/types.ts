@@ -17,8 +17,8 @@ export type Audience = {
   campaignId: string | null;
   lineitemName: string | null;
   lineitemId: string | null;
-  /** nonDCO scoping: NULL = DCO audience; a prodlist channel
-   *  (DISP|SOC|PRG|GSN|GNW|YT) = a nonDCO channel-audience. */
+  /** Agentic scoping: NULL = DCO audience; a prodlist channel
+   *  (DISP|SOC|PRG|GSN|GNW|YT) = an Agentic channel-audience. */
   channel: string | null;
   version: number;
   updatedAt: string;
@@ -33,8 +33,8 @@ export type Audience = {
   keyStale?: boolean;
 };
 
-// nonDCO channel (own table). Presented to the grid as an Audience with
-// channel = code (non-null ⇒ nonDCO axis) so the existing DCO/nonDCO column
+// Agentic channel (own table). Presented to the grid as an Audience with
+// channel = code (non-null ⇒ Agentic axis) so the existing DCO/Agentic column
 // logic treats channels exactly as the old channel-audience rows did.
 export type Channel = {
   id: number;
@@ -155,6 +155,39 @@ export type Message = {
   utmCd26: string | null;
   finalTraffickedUrl: string | null;
   archivedAt: string | null;
+  // Brief tab: the free-text note, the Slides deck the work came in on, and
+  // the slide within that deck (a Google page object id — see slides-link.ts).
+  brief: string | null;
+  briefId: number | null;
+  briefSlideId: string | null;
+};
+
+// The same row before it has a cell. The schema made `audience`/`topic`
+// nullable for exactly this state (a DRAFT is a messages row whose ABSENCE of
+// an audience is what keeps it out of the matrix), and the editor is shared
+// between the two — so the difference is a type, not a second component.
+// `topic` survives as a nullable WORKING TITLE; promotion is what resolves it
+// to a real key.
+export type DraftMessage = Omit<Message, "audience" | "topic"> & {
+  audience: null;
+  topic: string | null;
+};
+
+/** What the shared editor accepts: a placed card, or a draft. */
+export type EditableMessage = Message | DraftMessage;
+
+// A brief as /api/briefs returns it: the deck's identity is the Drive FILE ID,
+// not the URL someone pasted (three spellings of one deck would otherwise read
+// as three briefs). `openDrafts`/`promoted` are counted from the work itself,
+// which is why they need no state column to keep in sync.
+export type Brief = {
+  id: number;
+  slidesFileId: string;
+  label: string | null;
+  openDrafts: number;
+  promoted: number;
+  archivedAt: string | null;
+  createdAt: string;
 };
 
 // The matrix filter and the editor dropdown offer the placeable statuses; the

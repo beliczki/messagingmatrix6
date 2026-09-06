@@ -88,9 +88,9 @@ describe("messages — numbering on create", () => {
     expect(explicit.status).toBe("ACTIVE");
   });
 
-  it("DCO MC inherits the client's default template; nonDCO stays image-based", async () => {
+  it("DCO MC inherits the client's default template; Agentic stays image-based", async () => {
     await seedAudienceAndTopic(erste.id, "aud1", "top1"); // DCO audience
-    // A nonDCO channel-audience + its topic.
+    // An Agentic channel-audience + its topic.
     await db.insert(audiences).values({
       clientId: erste.id,
       key: "ch_disp",
@@ -234,7 +234,7 @@ describe("messages — numbering on create", () => {
     ).rejects.toThrow(/already in use/);
   });
 
-  it("requestedNumber may reuse a DCO number for a nonDCO channel audience (cross-axis pairing)", async () => {
+  it("requestedNumber may reuse a DCO number for an Agentic channel audience (cross-axis pairing)", async () => {
     await seedAudienceAndTopic(erste.id, "aud1", "top1");
     await createMessage(erste.id, { topic: "top1", audience: "aud1" }); // DCO MC1
     await db.insert(audiences).values({
@@ -251,7 +251,7 @@ describe("messages — numbering on create", () => {
       orderIndex: 1,
       product: "Loans",
     });
-    // The DCO MC1 lives in top1; a nonDCO audience is a separate number space,
+    // The DCO MC1 lives in top1; an Agentic audience is a separate number space,
     // so it may claim MC1 in its own topic — the static pair of the DCO card.
     const nd = await createMessage(
       erste.id,
@@ -262,7 +262,7 @@ describe("messages — numbering on create", () => {
     expect(nd.audience).toBe("ch_disp");
   });
 
-  it("within the nonDCO axis a number still cannot span topics", async () => {
+  it("within the Agentic axis a number still cannot span topics", async () => {
     await db.insert(audiences).values([
       { clientId: erste.id, key: "ch_disp", name: "Display", orderIndex: 0, channel: "DISP" },
       { clientId: erste.id, key: "ch_soc", name: "Social", orderIndex: 1, channel: "SOC" },
@@ -277,7 +277,7 @@ describe("messages — numbering on create", () => {
     ).rejects.toThrow(/already in use/);
   });
 
-  it("auto-assign is axis-scoped — a tall nonDCO space does not push a new DCO MC up", async () => {
+  it("auto-assign is axis-scoped — a tall Agentic space does not push a new DCO MC up", async () => {
     await seedAudienceAndTopic(erste.id, "aud1", "top1");
     await db.insert(audiences).values({
       clientId: erste.id,
@@ -293,7 +293,7 @@ describe("messages — numbering on create", () => {
       orderIndex: 1,
       product: "Loans",
     });
-    // The static library climbed to MC800 on the nonDCO axis…
+    // The static library climbed to MC800 on the Agentic axis…
     await createMessage(
       erste.id,
       { topic: "nd_top", audience: "ch_disp" },
@@ -302,7 +302,7 @@ describe("messages — numbering on create", () => {
     // …a brand-new DCO MC must still start at 1, not 801.
     const dco = await createMessage(erste.id, { topic: "top1", audience: "aud1" });
     expect(dco.number).toBe(1);
-    // And the next nonDCO one continues its own space at 801.
+    // And the next Agentic one continues its own space at 801.
     await seedAudienceAndTopic(erste.id, "aud2", "nd_top2");
     await db
       .update(audiences)
@@ -499,9 +499,9 @@ describe("messages — numbering on create", () => {
 });
 
 describe("messages — global-edit fan-out is axis-scoped", () => {
-  // Numbering lets a DCO card share its number with a static nonDCO twin, so
+  // Numbering lets a DCO card share its number with a static Agentic twin, so
   // (number, variant) names TWO cards. The fan-out must stay on one axis —
-  // otherwise a global edit on the DCO MC1a overwrites the nonDCO MC1a's
+  // otherwise a global edit on the DCO MC1a overwrites the Agentic MC1a's
   // creative-derived content (and vice versa).
   async function seedTwins() {
     await seedAudienceAndTopic(erste.id, "aud1", "top1");
@@ -553,14 +553,14 @@ describe("messages — global-edit fan-out is axis-scoped", () => {
     return { dco, dcoCopy, nondco };
   }
 
-  it("findSiblings skips the nonDCO namesake of a DCO card", async () => {
+  it("findSiblings skips the Agentic namesake of a DCO card", async () => {
     const { findSiblings } = await import("@/lib/entities/messages");
     const { dco, dcoCopy } = await seedTwins();
     const sibs = await findSiblings(erste.id, dco);
     expect(sibs.map((s) => s.id)).toEqual([dcoCopy.id]);
   });
 
-  it("a DCO global edit does not reach the nonDCO twin", async () => {
+  it("a DCO global edit does not reach the Agentic twin", async () => {
     const { propagateToSiblings } = await import("@/lib/entities/messages");
     const { dco, dcoCopy, nondco } = await seedTwins();
     await propagateToSiblings(erste.id, dco, { headline: "DCO edited" });
@@ -572,7 +572,7 @@ describe("messages — global-edit fan-out is axis-scoped", () => {
     );
   });
 
-  it("a nonDCO global edit does not reach the DCO namesake", async () => {
+  it("an Agentic global edit does not reach the DCO namesake", async () => {
     const { propagateToSiblings } = await import("@/lib/entities/messages");
     const { dco, dcoCopy, nondco } = await seedTwins();
     await propagateToSiblings(erste.id, nondco, { headline: "static edited" });

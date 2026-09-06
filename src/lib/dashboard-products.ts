@@ -18,16 +18,16 @@ export type ProductInventory = {
   options: string[];
 };
 
-export const PRODUCT_COUNT_LABELS = ["DCO", "nonDCO", "creatives"];
+export const PRODUCT_COUNT_LABELS = ["DCO", "Agentic", "creatives"];
 
 /**
- * Product inventory for the filter menu: how many DCO cells, nonDCO cells and
+ * Product inventory for the filter menu: how many DCO cells, Agentic cells and
  * delivered creatives each product has.
  *
  * Whole library, not the window — a product picker is read to decide where to
- * look, so the numbers must not collapse to zero on a quiet day. DCO/nonDCO is
+ * look, so the numbers must not collapse to zero on a quiet day. DCO/Agentic is
  * the audience partition the matrix axis uses (channel == null vs not), and a
- * nonDCO cell takes its product from the topic key prefix, since those channel
+ * Agentic cell takes its product from the topic key prefix, since those channel
  * audiences are shared across products.
  */
 export async function productInventory(
@@ -98,10 +98,10 @@ export async function productInventory(
  * A matrix cell's product, as SQL.
  *
  * Two sources, because a cell's column is one of two things. A DCO cell sits on
- * an audience and takes the audience's product. A nonDCO cell sits on a channel
+ * an audience and takes the audience's product. An Agentic cell sits on a channel
  * (`ch_disp`, `ch_soc`, …) — its own table since the 2026-08-17 split — and a
  * channel carries no product, so only the topic key prefix names one. 688 Erste
- * cells are nonDCO, and a rule that branched on the audience alone would lose
+ * cells are Agentic, and a rule that branched on the audience alone would lose
  * every one of them.
  *
  * The caller must have `messages` in scope LEFT JOINed to `audiences` on

@@ -98,6 +98,9 @@ function msg(overrides: Partial<Message>): Message {
     utmCd26: null,
     finalTraffickedUrl: null,
     archivedAt: null,
+    brief: null,
+    briefId: null,
+    briefSlideId: null,
     ...overrides,
   };
 }

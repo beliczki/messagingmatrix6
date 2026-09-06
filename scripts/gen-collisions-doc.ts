@@ -1,5 +1,5 @@
 // Build docs/mc-collisions.html — every MC number used on BOTH numbering axes
-// (a DCO campaign card AND a nonDCO static creative), with the DCO banner
+// (a DCO campaign card AND an Agentic static creative), with the DCO banner
 // rendered through the app's own template pipeline, the static creative beside
 // it, and a written reading of what kind of collision it is.
 //
@@ -217,7 +217,7 @@ async function collectData(): Promise<Item[]> {
       .sort((a, b) => a.variant.localeCompare(b.variant) || a.topic.localeCompare(b.topic));
   };
 
-  // Files, for resolving the nonDCO creative image bytes.
+  // Files, for resolving the Agentic creative image bytes.
   const files = await db
     .select()
     .from(uploadedFiles)
@@ -231,7 +231,7 @@ async function collectData(): Promise<Item[]> {
     const e = byNumber.get(number)!;
     const dco = group(e.DCO);
     const non = group(e.nonDCO);
-    // Prefer a DCO variant that also exists on the nonDCO side, so the two
+    // Prefer a DCO variant that also exists on the Agentic side, so the two
     // columns show the same creative slot rather than two unrelated variants.
     const shared = dco.find((d) => non.some((n) => n.variant === d.variant));
     const dcoRep = shared ?? dco[0];
@@ -241,7 +241,7 @@ async function collectData(): Promise<Item[]> {
       shots.push({ key: `dco-${number}`, row: dcoRep.rep });
     }
 
-    // nonDCO creative bytes: prefer a square, else the first file we can find.
+    // Agentic creative bytes: prefer a square, else the first file we can find.
     const candidates = non
       .flatMap((g) => e.nonDCO.filter((r) => r.variant === g.variant && r.topic === g.topic))
       .map((r) => r.image1 || r.name || "")

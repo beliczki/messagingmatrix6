@@ -86,11 +86,11 @@ describe("activityDigest product filter", () => {
     expect(await digest(["VAL"])).toEqual({});
   });
 
-  it("resolves a nonDCO channel cell from its topic prefix", async () => {
-    // nonDCO cells store a channel key (`ch_disp`, `ch_soc`) in
+  it("resolves an Agentic channel cell from its topic prefix", async () => {
+    // Agentic cells store a channel key (`ch_disp`, `ch_soc`) in
     // `messages.audience`. Channels are their own table and carry no product,
     // so the topic key prefix is the only thing that names one. 688 Erste
-    // cells are nonDCO.
+    // cells are Agentic.
     const [m] = await db
       .insert(messages)
       .values({

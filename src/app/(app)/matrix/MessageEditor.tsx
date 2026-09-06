@@ -20,14 +20,25 @@ import {
   History,
   Globe,
   Users,
+  BookOpen,
+  ArrowUpRight,
 } from "lucide-react";
 import clsx from "clsx";
-import { type Audience, type Message, type Topic, STATUS_COLOR } from "./types";
+import {
+  type Audience,
+  type EditableMessage,
+  type Message,
+  type Topic,
+  STATUS_COLOR,
+} from "./types";
 import PreviewPane, { type PreviewBg } from "../_components/PreviewPane";
 import { templateMetaFor } from "../_components/MatrixIframeTile";
 import ModalBackdrop from "../_components/ModalBackdrop";
 import EntityHistoryDrawer from "../_components/EntityHistoryDrawer";
 import { useTextFormattingRules } from "./useTextFormattingRules";
+import Field from "./EditorField";
+import BriefTab from "./BriefTab";
+import PromoteTab from "./PromoteTab";
 
 type AssetRow = {
   id: number;
@@ -46,7 +57,18 @@ import { MATRIX_STATUSES } from "@/lib/mc-status";
 
 const ASSET_AUTOCOMPLETE_MIN = 2;
 
-type Tab = "naming" | "template" | "content" | "styles" | "trafficking";
+// Two tab sets, one editor. A placed card is named and trafficked; a draft is
+// neither yet — it is promoted instead. Everything between (template, content,
+// styles, brief) is identical, which is the reason these are the same
+// component rather than two that drift.
+type Tab =
+  | "naming"
+  | "promote"
+  | "template"
+  | "content"
+  | "styles"
+  | "trafficking"
+  | "brief";
 
 // DRAFT is not offered: a card in the editor has a cell, and a DRAFT with a
 // cell is refused by the schema. Drafts are edited on /drafts.
@@ -67,15 +89,17 @@ type TemplateInfo = {
 
 type Props = {
   open: boolean;
-  message: Message | null;
+  message: EditableMessage | null;
   audiences: Audience[];
   topics: Topic[];
   /** Filtered, ordered set the user is currently navigating. */
-  visibleMessages: Message[];
+  visibleMessages: EditableMessage[];
   /** Count of other (non-archived) audience copies of the open card. */
   siblingCount: number;
   onClose: () => void;
   onJump: (id: number) => void;
+  /** Drafts only: promoting leaves the drafts list, so the page can refresh. */
+  onPromoted?: () => void;
 };
 
 type EditableFields = Pick<
@@ -107,6 +131,11 @@ type EditableFields = Pick<
   | "templateVariantClasses"
   | "startDate"
   | "endDate"
+  // Brief tab. `brief` is the free-text note, `briefId` the deck the work came
+  // in on, `briefSlideId` the slide within it.
+  | "brief"
+  | "briefId"
+  | "briefSlideId"
 >;
 
 const EDITABLE_KEYS: Array<keyof EditableFields> = [
@@ -137,6 +166,9 @@ const EDITABLE_KEYS: Array<keyof EditableFields> = [
   "templateVariantClasses",
   "startDate",
   "endDate",
+  "brief",
+  "briefId",
+  "briefSlideId",
 ];
 
 // The tabs receive the real state setter so field updates can use the
@@ -145,7 +177,7 @@ const EDITABLE_KEYS: Array<keyof EditableFields> = [
 // keystroke.
 type SetDraft = React.Dispatch<React.SetStateAction<EditableFields | null>>;
 
-function toEditable(m: Message): EditableFields {
+function toEditable(m: EditableMessage): EditableFields {
   return Object.fromEntries(
     EDITABLE_KEYS.map((k) => [k, m[k] ?? null]),
   ) as EditableFields;
@@ -155,7 +187,9 @@ function diffPayload(
   before: EditableFields,
   after: EditableFields,
 ): Partial<EditableFields> {
-  const out: Record<string, string | null> = {};
+  // `briefId` is a number; every other editable field is text. The value type
+  // has to admit both or the brief relation cannot be saved.
+  const out: Record<string, string | number | null> = {};
   for (const k of EDITABLE_KEYS) {
     if ((before[k] ?? null) !== (after[k] ?? null)) {
       out[k] = after[k] ?? null;
@@ -173,7 +207,7 @@ type SaveState =
   // is an explicit reload to `serverRow`. We never rebase silently — doing so
   // would let the stale draft re-save with the fresh version and clobber the
   // other editor's work.
-  | { kind: "conflict"; serverRow: Message };
+  | { kind: "conflict"; serverRow: EditableMessage };
 
 export default function MessageEditor({
   open,
@@ -184,11 +218,12 @@ export default function MessageEditor({
   siblingCount,
   onClose,
   onJump,
+  onPromoted,
 }: Props) {
   const [tab, setTab] = useState<Tab>("naming");
   const [draft, setDraft] = useState<EditableFields | null>(null);
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
-  const [committedSnapshot, setCommittedSnapshot] = useState<Message | null>(
+  const [committedSnapshot, setCommittedSnapshot] = useState<EditableMessage | null>(
     null,
   );
   const [autoSave, setAutoSave] = useState<boolean>(true);
@@ -217,10 +252,12 @@ export default function MessageEditor({
   const draggingRef = useRef<boolean>(false);
   const wide = isLandscape(previewSize);
 
-  // Reset the tab to "naming" only when the editor *opens* fresh — keep the
-  // current tab while navigating prev/next between MCs.
+  // Reset the tab only when the editor *opens* fresh — keep the current tab
+  // while navigating prev/next between MCs. A draft has no Naming tab, so it
+  // lands on the one question it exists to answer: where does this go?
   useEffect(() => {
-    if (open) setTab("naming");
+    if (open) setTab(isDraft ? "promote" : "naming");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // The row the editor is CURRENTLY on. A save resolves asynchronously — with
@@ -260,6 +297,19 @@ export default function MessageEditor({
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  // A draft is the row without a cell. `audience === null` is the schema's own
+  // discriminator — the `messages_draft_has_no_audience` check ties it to
+  // status='DRAFT', so the two cannot disagree — and it is the one TypeScript
+  // narrows on, which is what proves the Naming and Trafficking tabs never
+  // receive a draft rather than leaving it to discipline.
+  const isDraft = message !== null && message.audience === null;
+  // The committed row when it HAS a cell. Trafficking reads the server row
+  // (not the local draft) and only exists for a placed card.
+  const placedRow = (() => {
+    const row = committedSnapshot ?? message;
+    return row !== null && row.audience !== null ? row : null;
+  })();
+
   const aud = useMemo(
     () => audiences.find((a) => a.key === message?.audience),
     [audiences, message?.audience],
@@ -275,7 +325,7 @@ export default function MessageEditor({
   // representative the arrows jump to.
   const uniqueMcs = useMemo(() => {
     const seen = new Set<string>();
-    const out: Message[] = [];
+    const out: EditableMessage[] = [];
     for (const m of visibleMessages) {
       const key = `${m.number} ${m.variant}`;
       if (seen.has(key)) continue;
@@ -703,9 +753,15 @@ export default function MessageEditor({
             }}
           >
             <nav className="tab-bar flex h-10 shrink-0 items-stretch border-b border-slate-100 bg-slate-50 px-2">
-              <TabBtn active={tab === "naming"} onClick={() => setTab("naming")} icon={<Tag className="size-3.5" />}>
-                Naming
-              </TabBtn>
+              {isDraft ? (
+                <TabBtn active={tab === "promote"} onClick={() => setTab("promote")} icon={<ArrowUpRight className="size-3.5" />}>
+                  Promote
+                </TabBtn>
+              ) : (
+                <TabBtn active={tab === "naming"} onClick={() => setTab("naming")} icon={<Tag className="size-3.5" />}>
+                  Naming
+                </TabBtn>
+              )}
               <TabBtn active={tab === "template"} onClick={() => setTab("template")} icon={<FileCode className="size-3.5" />}>
                 Template
               </TabBtn>
@@ -715,14 +771,33 @@ export default function MessageEditor({
               <TabBtn active={tab === "styles"} onClick={() => setTab("styles")} icon={<PencilRuler className="size-3.5" />}>
                 Styles
               </TabBtn>
-              <TabBtn active={tab === "trafficking"} onClick={() => setTab("trafficking")} icon={<Rocket className="size-3.5" />}>
-                Trafficking
+              {/* Trafficking is derived from the CELL (audience/topic patterns),
+                  so a draft has nothing to generate it from — updateMessage
+                  skips drafts for the same reason. */}
+              {isDraft ? null : (
+                <TabBtn active={tab === "trafficking"} onClick={() => setTab("trafficking")} icon={<Rocket className="size-3.5" />}>
+                  Trafficking
+                </TabBtn>
+              )}
+              <TabBtn active={tab === "brief"} onClick={() => setTab("brief")} icon={<BookOpen className="size-3.5" />}>
+                Brief
               </TabBtn>
             </nav>
 
             <div className="message-editor__tab-content flex-1 overflow-y-auto px-5 pb-80 pt-4">
-              {tab === "naming" ? (
+              {tab === "naming" && message.audience !== null ? (
                 <NamingTab message={message} aud={aud} top={top} draft={draft} setDraft={setDraft} />
+              ) : null}
+              {tab === "promote" && message.audience === null ? (
+                <PromoteTab
+                  draft={message}
+                  audiences={audiences}
+                  topics={topics}
+                  onDone={() => {
+                    onPromoted?.();
+                    onClose();
+                  }}
+                />
               ) : null}
               {tab === "content" ? (
                 <ContentTab
@@ -737,11 +812,19 @@ export default function MessageEditor({
                 />
               ) : null}
               {tab === "styles" ? <StylesTab draft={draft} setDraft={setDraft} /> : null}
-              {tab === "trafficking" ? (
+              {tab === "trafficking" && placedRow !== null ? (
                 <TraffickingTab
-                  message={committedSnapshot ?? message}
+                  message={placedRow}
                   draft={draft}
                   setDraft={setDraft}
+                />
+              ) : null}
+              {tab === "brief" ? (
+                <BriefTab
+                  draft={draft}
+                  onChange={(patch) =>
+                    setDraft((prev) => (prev ? { ...prev, ...patch } : prev))
+                  }
                 />
               ) : null}
               {tab === "template" ? (
@@ -808,8 +891,8 @@ function isLandscape(size: string | null): boolean {
 }
 
 class VersionMismatchError extends Error {
-  current: Message;
-  constructor(current: Message) {
+  current: EditableMessage;
+  constructor(current: EditableMessage) {
     super("version_mismatch");
     this.current = current;
   }
@@ -876,24 +959,6 @@ function TabBtn({
       {icon}
       {children}
     </button>
-  );
-}
-
-function Field({
-  label,
-  children,
-  hint,
-}: {
-  label: string;
-  children: React.ReactNode;
-  hint?: string;
-}) {
-  return (
-    <label className="form-field mb-3 block">
-      <div className="form-field__label mb-1 text-xs font-medium text-slate-700">{label}</div>
-      {children}
-      {hint ? <div className="form-field__hint mt-1 text-[10px] text-slate-400">{hint}</div> : null}
-    </label>
   );
 }
 
@@ -1956,12 +2021,12 @@ function MessagePreview({
   templateInfo,
   onSizeChange,
 }: {
-  message: Message;
+  message: EditableMessage;
   draft: EditableFields;
   templateInfo?: TemplateInfo;
   onSizeChange?: (s: string) => void;
 }) {
-  // nonDCO static-image MC: no template, image1 = a creative file. The size
+  // Agentic static-image MC: no template, image1 = a creative file. The size
   // dropdown then lists the REAL sizes of this creative — same MC number+variant,
   // one creatives row per stored size — and switching size shows that file.
   const draftImage1 = draft.image1 ?? message.image1 ?? null;
@@ -2118,7 +2183,7 @@ function MessagePreview({
         .filter((c) => c && c !== "animated")
         .join(" ");
     }
-    // nonDCO static-image MC: no template but a creative image. Skip the render
+    // Agentic static-image MC: no template but a creative image. Skip the render
     // fetch (it would 404 on a missing template dir) — PreviewPane shows the
     // image directly via the staticImage prop below.
     const resolvedTemplate = draft.template ?? message.template ?? null;

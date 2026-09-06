@@ -14,7 +14,7 @@ export default function ProductFilter({
   query,
 }: {
   options: string[];
-  /** [DCO cells, nonDCO cells, creatives] per product, whole library. */
+  /** [DCO cells, Agentic cells, creatives] per product, whole library. */
   counts: Record<string, number[]>;
   /** Names for those segments, in the same order. */
   labels: string[];

@@ -143,6 +143,14 @@ type Creative = {
   archivedAt: string | null;
 };
 
+// The two worlds the library holds, in the matrix's own vocabulary. This is a
+// PRESENTATION of the `kind` discriminator below, not a second one: DCO items
+// are template renders, Agentic items are delivered files, and nothing else
+// exists here — so the mapping is total and cannot drift.
+const AXIS_DCO = "DCO";
+const AXIS_AGENTIC = "Agentic";
+const AXIS_OPTIONS = [AXIS_DCO, AXIS_AGENTIC];
+
 // Library items mix two sources: real uploaded creatives (kind: "uploaded")
 // and synthesized per-MC×size virtual creatives rendered live via /api/render
 // (kind: "matrix"). Matrix items carry the underlying Message + size +
@@ -162,6 +170,10 @@ type LibraryItem =
       liveSize: string;
       liveTemplateName: string;
     });
+
+function axisOf(item: LibraryItem): string {
+  return item.kind === "matrix" ? AXIS_DCO : AXIS_AGENTIC;
+}
 
 type UploadedFile = {
   id: string;
@@ -196,8 +208,16 @@ export default function CreativeLibrary() {
     new Set(),
     SET_CODEC,
   );
-  const [types, setTypes] = usePersistent<Set<string>>(
-    "mm6_creative_library_filter_types",
+  // The library's two worlds, named the way the matrix names them. `kind` is
+  // already that split ("matrix" = a template rendered live for one size,
+  // "uploaded" = a delivered file), so this filter only exposes it.
+  //
+  // A NEW storage key on purpose: the pill used to filter FILE TYPE
+  // (html/image/video) under `..._filter_types`. Reusing that key would load a
+  // saved {"image"} against DCO/Agentic options, match nothing, and open the
+  // library empty — a saved preference turning into an apparent outage.
+  const [axes, setAxes] = usePersistent<Set<string>>(
+    "mm6_creative_library_filter_axis",
     new Set(),
     SET_CODEC,
   );
@@ -458,7 +478,7 @@ export default function CreativeLibrary() {
     for (const c of items) if (c.product) s.add(c.product);
     return [...s].sort();
   }, [items]);
-  // [DCO, uploaded] per product: matrix cells rendered from a template versus
+  // [DCO, Agentic] per product: matrix cells rendered from a template versus
   // delivered files. Counted over the whole set — the product filter is this
   // pill's own, and counting after it would leave every unselected option at 0.
   const productCounts = useMemo(() => {
@@ -469,7 +489,7 @@ export default function CreativeLibrary() {
       cur[c.kind === "matrix" ? 0 : 1] += 1;
       out[c.product] = cur;
     }
-    return trimEmptyCountSegments(out, ["DCO", "uploaded"]);
+    return trimEmptyCountSegments(out, [AXIS_DCO, AXIS_AGENTIC]);
   }, [items]);
   const typeOptions = useMemo(() => {
     const s = new Set<string>();
@@ -503,7 +523,7 @@ export default function CreativeLibrary() {
       if (products.size > 0 && (!c.product || !products.has(c.product))) {
         return false;
       }
-      if (types.size > 0 && (!c.type || !types.has(c.type))) {
+      if (axes.size > 0 && !axes.has(axisOf(c))) {
         return false;
       }
       if (sizes.size > 0 && (!c.fileDimensions || !sizes.has(c.fileDimensions))) {
@@ -537,13 +557,13 @@ export default function CreativeLibrary() {
         free: free.toLowerCase(),
       });
     });
-  }, [items, products, types, sizes, predicate, audienceMap, topicMap]);
+  }, [items, products, axes, sizes, predicate, audienceMap, topicMap]);
 
   const sorted = useMemo(() => sortListRows(filtered, sort), [filtered, sort]);
 
   useEffect(() => {
     setVisibleCount(200);
-  }, [products, types, sizes, debouncedSearch, view, sort]);
+  }, [products, axes, sizes, debouncedSearch, view, sort]);
 
   useEffect(() => {
     const sentinel = sentinelRef.current;
@@ -603,9 +623,8 @@ export default function CreativeLibrary() {
           productCountLabels={productCounts.labels}
           products={products}
           setProducts={setProducts}
-          typeOptions={typeOptions}
-          types={types}
-          setTypes={setTypes}
+          axes={axes}
+          setAxes={setAxes}
           sizeOptions={sizeOptions}
           sizes={sizes}
           setSizes={setSizes}
@@ -866,9 +885,8 @@ function Toolbar({
   productCountLabels,
   products,
   setProducts,
-  typeOptions,
-  types,
-  setTypes,
+  axes,
+  setAxes,
   sizeOptions,
   sizes,
   setSizes,
@@ -884,9 +902,8 @@ function Toolbar({
   productCountLabels: string[];
   products: Set<string>;
   setProducts: (s: Set<string>) => void;
-  typeOptions: string[];
-  types: Set<string>;
-  setTypes: (s: Set<string>) => void;
+  axes: Set<string>;
+  setAxes: (s: Set<string>) => void;
   sizeOptions: string[];
   sizes: Set<string>;
   setSizes: (s: Set<string>) => void;
@@ -894,14 +911,21 @@ function Toolbar({
   visible: number;
   previewStatus: PreviewStatus | undefined;
 }) {
-  const activeFilters = products.size + types.size + sizes.size + (search ? 1 : 0);
+  const activeFilters = products.size + axes.size + sizes.size + (search ? 1 : 0);
   return (
     <div className="toolbar creative-library__toolbar sticky top-0 z-10 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
       <div className="flex items-baseline gap-2">
         <div className="toolbar__title text-sm font-semibold text-slate-900">Creative Library</div>
       </div>
 
-      <div className="input-box input-box--with-icon relative ml-2">
+      <MultiPill
+        label="Type"
+        values={axes}
+        options={AXIS_OPTIONS}
+        onChange={setAxes}
+      />
+
+      <div className="input-box input-box--with-icon relative">
         <FilterIcon className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
         <input
           type="search"
@@ -922,14 +946,13 @@ function Toolbar({
         quickSelect={ALL_NONE_QUICK_SELECT}
         onChange={setProducts}
       />
-      <MultiPill label="Type" values={types} options={typeOptions} onChange={setTypes} />
       <MultiPill label="Size" values={sizes} options={sizeOptions} quickSelect={SIZE_QUICK_SELECT} onChange={setSizes} />
 
       {activeFilters > 0 ? (
         <button
           onClick={() => {
             setProducts(new Set());
-            setTypes(new Set());
+            setAxes(new Set());
             setSizes(new Set());
             setSearch("");
           }}

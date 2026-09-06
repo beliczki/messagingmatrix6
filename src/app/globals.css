@@ -604,7 +604,7 @@ html.dark {
    <th> (tailwind hoists @layer components above utilities, which would lose).
    Bottom-border WIDTH encodes the strategy (pro 3px / rem 5px), COLOR the
    buying platform (dv360 dark green / adform teal). Applied only when both
-   fields are set — channel (nonDCO) audiences carry neither and keep the
+   fields are set — channel (Agentic) audiences carry neither and keep the
    plain 1px border. */
 .matrix-grid__header--strat-pro { border-bottom-width: 3px; }
 .matrix-grid__header--strat-rem { border-bottom-width: 5px; }

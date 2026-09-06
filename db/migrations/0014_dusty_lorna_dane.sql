@@ -1,0 +1,1 @@
+ALTER TABLE "messages" ADD COLUMN "brief_slide_id" text;

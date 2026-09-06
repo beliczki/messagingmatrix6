@@ -49,7 +49,7 @@ type Props = {
    *  kind="html" keeps the current iframe behavior. */
   templateMeta?: TemplatePreviewMeta;
   templateName?: string;
-  /** nonDCO static-image MC: a creative filename (image1) with no template.
+  /** Agentic static-image MC: a creative filename (image1) with no template.
    *  When set, the viewport shows the image via /api/drive/proxy instead of the
    *  size-driven HTML iframe (which has no template/size to render). */
   staticImage?: string | null;
@@ -154,7 +154,7 @@ export default function PreviewPane({
     <div className="preview-pane flex h-full flex-col">
       <div className="preview-pane__toolbar flex h-10 shrink-0 items-center justify-between border-b border-border bg-surface px-3">
         <div className="flex items-center gap-2">
-          {/* Static-image MCs (nonDCO creatives) list the creative's REAL sizes
+          {/* Static-image MCs (Agentic creatives) list the creative's REAL sizes
               (same MC number+variant, one row per stored size); switching shows
               that size's file. No template/animation, so the skip-animation +
               image-preview toggles are hidden — the viewport is a plain
@@ -261,7 +261,7 @@ export default function PreviewPane({
       >
         {showStatic ? (
           <div className="preview-pane__static-wrap relative flex size-full items-center justify-center overflow-hidden">
-            {/* A nonDCO creative is whatever file was delivered, and plenty of
+            {/* An Agentic creative is whatever file was delivered, and plenty of
                 them are .mp4 — an <img> would render the alt text on the
                 checkerboard. Same treatment the asset previews use. */}
             {staticKind === "video" ? (

@@ -1850,3 +1850,104 @@ A user jelezte: **kész a Drive-integráció a leadási/preview-share ágon, mos
 - Végállapot: `ACTIVE` 1768 · `INACTIVE` 959 · `DEAD` 6 · `DRAFT` 4 · `PREVIEW` 4 (2741 = 2753 − 12).
 - ✅ **Lezárva 6.59.1-ben (ugyanaznap):** a `feed-export.ts` `rowKey`-jében a diff-kulcs NUL elválasztója **nyers bájtként** volt beírva escape helyett. Ettől a fájl binárisnak minősül, a `grep` pedig bináris fájlra **némán nulla találatot** ad, hiba nélkül — a lezárt feed-invariánsok fájljában ez a legrosszabb hibamód, mert nem töröttnek látszik, hanem üresnek. Escape-re átírva: a előállított string azonos, a fájl újra kereshető (`grep -c allMessages`: boxon is **0 → 5**). Feed-tesztek 26/26, teljes sor 257 + 542 zöld. Kommentben rögzítve, hogy soha ne kerüljön vissza nyers bájtra.
 - ⚠️ **Mellékhatás, amit érdemes tudni:** a nyers vezérlőkarakter **a saját eszközláncomat is blokkolta** — két parancsom elszállt „command contains control characters" hibával, mert a `\u0000` a JSON-paraméterben valódi NUL-lá dekódolódik. Ha ilyet kell írni, fájlon keresztül menjen.
+
+---
+
+## 2026-09-06 — Draft editor = MC editor + Brief tab + Agentic átnevezés (TERV, jóváhagyásra vár)
+
+**User kérése:** „a draft editornak úgy kéne kinézzen mint az MC editor, tabok jobb oldalt Naming helyett Promote to matrix, aztán Template, aztán Draft content, Draft styles, trafficking ide biztos nem kell; viszont az MC editorben is meg itt is kell egy Brief tab, ahol a belinkelt Google Docs slide-nak jó lenne ha lenne egy previewja — nem a fő/cover slide, hanem a konkrét belinkelt slide." + „a Promote to matrix tabon kéne legyen az is, hogy DCO-ba vagy nonDCO-ba vagy mindkettőbe promotáljuk; illetve a nonDCO-t nevezzük át Agentic-re, futtassunk okos refactort."
+
+**Eldöntve (AskUserQuestion, 2026-09-06):**
+1. **A draft editor NEM külön komponens** — a `MessageEditor` nyílik meg a `/drafts` oldalon is, más tab-készlettel. A `DraftDetailDialog` törlődik.
+2. **Slide preview = Google Slides iframe embed** (`/embed?slide=id.gXXX`), nem szerveroldali PNG. Nulla backend, nincs új env. Feltétele, hogy a deck „anyone with the link" megosztású legyen — ugyanaz a feltétel, mint az I4 delivery-mappáknál.
+3. **A slide-horgony per MC/draft**, új `messages.brief_slide_id` oszlop. Üres horgony ⇒ a deck elejét mutatjuk.
+4. **Az átnevezés a UI-ra és az azonosítókra megy, a TÁROLT TOKEN marad `"nondco"`.**
+5. **Agentic promotálásnál csak létező topic választható** — a „a promote sosem hoz létre topicot" szabály nem lazul.
+6. **A Brief az utolsó tab** mindkét editorban.
+
+**Ami ezzel ütközik és tudatosan felülíródik:** a `MatrixGrid.tsx:529` kommentje kimondja, hogy *„nonDCO MCs are born only from correctly-named creative uploads, never hand-added"*. A draft→Agentic promote ezt megszegi. A kommentet át kell írni (a promote a második törvényes születési út), nem csendben megkerülni.
+
+**Ami NEM ez:** az **FR-B Documents** (MC-nként több Slides doksi, státusszal, saját tábla) továbbra is külön marad. Itt egy MC-nek **egy** briefje van (a meglévő `briefId` FK), és azon belül **egy** slide-horgonya. A `brief_slide_id` nem az FR-B store csírája.
+
+### A. Brief tab (mindkét editorban)
+- [ ] **A1** `messages.brief_slide_id` text nullable + drizzle migráció `0014_*`
+- [ ] **A2** `slides-link.ts`: `parseSlideAnchor(link)` (a `#slide=id.gXXX` → `gXXX`) + `slidesEmbedUrl(fileId, slideId)`. A meglévő `parseSlidesFileId` NEM változik — a file id és a horgony két külön dolog
+- [ ] **A3** `WRITABLE_FIELDS` += `briefSlideId`; a `MessageEditor` `EditableFields`/`EDITABLE_KEYS` += `briefId`, `briefSlideId`, `brief`
+- [ ] **A4** Új `src/app/(app)/matrix/BriefTab.tsx` (a MessageEditor 2200 sora ne nőjön tovább): brief-választó a `/api/briefs` listából + „attach by link" (POST `/api/briefs`, idempotens file id-re), slide deep-link mező → parse → horgony, iframe preview a konkrét slide-ra, és a szabad szöveges `messages.brief` jegyzet
+- [ ] **A5** Brief tab felvétele a tab-barba, utolsóként, mindkét módban
+
+### B. Draft editor = MessageEditor
+- [ ] **B1** Mód-diszkriminátor: `message.status === "DRAFT"` a committed snapshotból — **nem** új `mode` prop. (Két független diszkriminátor egy fogalomra szétcsúszik; a séma is a status/audience párost köti össze.)
+- [ ] **B2** Tab-készlet módfüggő; draftnál az induló tab a Promote
+- [ ] **B3** Új `PromoteTab`: a mai `DraftDetailDialog` promote-blokkja + working topic name + Archive. Ide jön a **DCO / Agentic / mindkettő** célválasztó (lásd C)
+- [ ] **B4** `DraftsView` a `MessageEditor`-t nyitja (`visibleMessages` = a draft lista → prev/next működik a draftok közt); a `Draft` kliens-típus helyett `Message` (a `/api/drafts` már ma is teljes sorokat ad); `DraftDetailDialog.tsx` törlés
+- [ ] **B5** Ellenőrizni, hogy a `MessagePreview` és a Template tab elviseli az audience nélküli sort
+
+### C. Promote: DCO / Agentic / mindkettő
+- [ ] **C1** A promote body kap egy célt: `{ target: "dco" | "agentic" | "both", audienceKey, topicKey, agenticChannelKey, agenticTopicKey }`. A `findAudienceByKey` már ma is beleés a `channels`-be, tehát az Agentic audience feloldása kész
+- [ ] **C2** „Mindkettő" = **két sor**: a draft lesz a DCO cella (`promoteDraft`), az Agentic iker pedig `createMessage({ requestedNumber: draft.number })` a channel-audience-re — pontosan az az „explicit twin" út, amit a `createDraft` kommentje leír. Ez azért konzisztens, mert a draft száma eleve **mindkét tengelyen** foglalt
+- [ ] **C3** A `MatrixGrid.tsx:529` invariáns-komment átírása: a promote a második törvényes születési út egy Agentic MC-nek
+- [ ] **C4** Ha az Agentic topic nem létezik, a promote elutasít és megmondja, hogy előbb topicot kell létrehozni (a mai szabály változatlan)
+
+### D. nonDCO → Agentic átnevezés (okos refactor)
+272 előfordulás / 44 fájl. **Nem search-and-replace** — fájlonként, egyesével, közben `npm run build`.
+- [ ] **D1** A `MatrixAxis` értéke **marad** `"dco" | "nondco"`, komment magyarázza: ez a `mm6_matrix_state_v1` localStorage-ba mentett wire token, a `MatrixGrid.tsx:248` ismeretlen értéket némán `"dco"`-ra ejt — átnevezve minden felhasználó mentett mátrix-nézete csendben visszaállna
+- [ ] **D2** Látható címkék: `MatrixToolbar` (`nonDCO` → `Agentic`), `ProductFilter`, `CreativeLibrary` és `MatrixGrid` count-pill szegmensek (`["DCO","nonDCO"]` → `["DCO","Agentic"]`), `ChannelsTab` prózája
+- [ ] **D3** Azonosítók: `isNonDco` → `isAgentic`, `nonDcoTopics` → `agenticTopics` — hívási helyenként olvasva, nem globálisan
+- [ ] **D4** Kommentek/prózák a `src/`-ben (a `messages.ts`, `schema.ts`, `channels.ts`, `numbering.ts` stb. magyarázó blokkjai)
+- [ ] **D5** Tesztek + scriptek szókincse; `docs/mc-collisions.html`+`.md` **újragenerálva** a `gen-collisions-doc.ts`-ből, nem kézzel írva
+- [ ] **D6** `tasks/component-inventory.md` frissítés, ha új blokknév keletkezett (`brief-tab`, `promote-tab`, `slide-preview`)
+
+### E. Ellenőrzés
+- [ ] **E1** Unit teszt: `parseSlideAnchor` (deep link, fragment nélkül, csak `?usp=sharing`, bare id)
+- [ ] **E2** Integrációs teszt: `0014` migráció + draft→Agentic és draft→mindkettő promote (a twin ugyanazt a számot kapja)
+- [ ] **E3** `npm run build` + a teljes suite
+- [ ] **E4** Böngészős ellenőrzés a felhasználó MC400 draftján
+
+**Verzió-javaslat a végén:** `6.65.0` → **`6.66.0`** (minor — új oszlop + migráció, új tab, új promote-célok, felhasználó által látható átnevezés).
+
+### ELHALASZTVA (külön szelet, a fenti terv UTÁN) — Agentic kreatív-feltöltési folyamat
+
+**User felvetése (2026-09-06):** „nem-e ki kéne kommentelni a creative libraryba feltöltést (historikusan helyes volt a léte), de ha a munkafolyamatot jól akarjuk managelni, akkor Agentic creative-ot létrehozott drafthoz lehessen feltölteni, és az rögtön ellenőrzi a MC és terméknév helyességét; és ha új verziót akar feltölteni az ember, akkor az Agentic matrix MC megnyitása után lehessen n+1 verziót feltölteni."
+
+**Értékelés (feltárt tények):**
+1. A Creative Library feltöltés **ma nem hoz létre MC-t** — csak `creatives` sort (`CreativeLibrary.tsx:326`). Az `mcNumber`/`mcVariant` a fájlnév-parserből jön, és a batch-ablakban **szabad szöveges mező** (`CREATIVE_UPLOAD_COLUMNS`). Semmi nem ellenőrzi a szám létezését, a termék egyezését, a foglaltságot. **Ez a valódi hiba.**
+2. A `promoteCreative()` egyetlen hívója a `src/lib/mcp.ts:2246` — **csak MCP-ből érhető el, a UI-ból sehonnan**. A mai Agentic sorokat a `scripts/rebuild-creatives.ts` építette közvetlen INSERT-tel (terméknként hard-delete + újraépítés).
+3. A verziózás **már kész és fájlnév-vezérelt**: `group-creative-versions.ts`, `familyKey + deklarált méret` szerint; a `creatives.version` NEM használható (optimistic-concurrency számláló), egyedül a `_nN` token mérvadó.
+
+**Verdikt:** a diagnózis jó, a „kikommentelni a library feltöltést" rész téves — az az egyetlen működő UI-s bemeneti út (3167 kreatív, tömeges beérkezés). És ha a draftra töltünk fel, **nincs mit ellenőrizni**: a draft tudja a saját MC-számát és termékét. A validáció band-aid lenne egy mezőn, aminek ebben a folyamatban nem kéne léteznie — a fájlnevet a rendszer generálja, nem a user gépeli és mi bíráljuk el.
+
+**Helyes felosztás — a kettő nem konkurens, hanem két munkafolyamat:**
+- [ ] A Creative Library feltöltés **marad** = a TÖMEGES út (ügynökség lead 200 fájlt 30 MC-re)
+- [ ] A draft/MC editor kap „kreatív feltöltése ide" utat = a MENEDZSELT, darabonkénti út. **Nincs MC# mező, nincs termék mező, nincs validáció** — a fájlnév a cellából származik
+- [ ] n+1 verzió az Agentic MC-ből: `max(_nN) + 1` a meglévő verzió-családból (a `by-mc` végpont és a `groupCreativeVersions` már megvan)
+- [ ] ⚠️ **A lyuk, amit meg KELL csinálni:** az Agentic cella a `message.image1`-et rendereli — egy rögzített fájlnevet (`MatrixIframeTile.tsx:93`). Egy új `_n4` feltöltés bekerül a könyvtárba, de **a mátrixban nem jelenik meg**, amíg az `image1` át nem mutat rá. Enélkül a funkció néma hibaként viselkedik: „feltöltöttem, mégsem változott semmi"
+
+---
+
+## 2026-09-06 — Draft editor = MC editor + Brief tab + Agentic átnevezés — SZÁLLÍTVA
+
+A fenti terv A–E szeletei lementek, plusz két menet közben érkezett kérés.
+
+### Amit a terv tartalmazott
+- **A1–A2** `messages.brief_slide_id` (nullable text) + `0014_dusty_lorna_dane.sql` (egyetlen additív ALTER). `slides-link.ts`: új `parseSlideAnchor()` + `slidesEmbedUrl()`. A meglévő `parseSlidesFileId` **változatlan** — a deck a brief identitása, a slide a kártyáé, és egyik parser sem nyelheti el a másikat (külön teszt védi).
+- **A3–A5** `WRITABLE_FIELDS` += `briefSlideId`; a `MessageEditor` `EditableFields`-e += `brief`/`briefId`/`briefSlideId`. Új `BriefTab.tsx` + `EditorField.tsx` (a `Field` kiemelve a `MessageEditor`-ból, hogy két fájl ne duplikálja a label-tipográfiát). Brief tab **utolsóként** mindkét módban.
+- **B1–B5** A `/drafts` a **`MessageEditor`-t nyitja**; a `DraftDetailDialog` **törölve**. A mód-diszkriminátor **`audience === null`**, nem `status === "DRAFT"` — ez a séma saját diszkriminátora (a `messages_draft_has_no_audience` check köti a kettőt össze), **és ez az, amire a TypeScript szűkíteni tud**: a fordító bizonyítja, hogy a Naming és a Trafficking tab sosem kap draftot. Új `DraftMessage`/`EditableMessage` típus a `matrix/types.ts`-ben; a `drafts/types.ts` már csak alias.
+- **C1–C4** A promote route kap egy `target`-et (`dco` | `agentic` | `both`). Kimaradt `target` = a régi viselkedés (MCP és minden korábbi hívó érintetlen). **A „both" nem `createMessage(requestedNumber)`, hanem promote + `copyMessages`** — a `draft-lifecycle.test.ts:208` („the user's *image AND DCO feed row* case") ezt már 2026 augusztusa óta így oldja meg, és a copy azért helyes, mert *klónozza a mezőket*: a két tengely egy kártya marad, nem két véletlenül azonos számú. A tervbe írt `createMessage` út rossz eszköz volt.
+- **D1–D6** nonDCO → **Agentic**, fájlonként. A `MatrixAxis` értéke **marad `"nondco"`** (a `mm6_matrix_state_v1` localStorage tokenje; a `MatrixGrid.tsx:248` ismeretlen értéket némán `"dco"`-ra ejt → átnevezve minden mentett nézet visszaállna). `isNonDco`→`isAgentic`, `nonDcoTopics`→`agenticTopics`, count-pill címkék, `PRODUCT_COUNT_LABELS`, MCP tool-leírások, `matrix-nondco-info`→`matrix-agentic-info` (inventory frissítve).
+- **E1–E2** `slides-link.test.ts` 7 → **14 teszt**; új `tests/integration/api/drafts-promote-targets.test.ts` (**5 teszt**): default target, agentic, both (ikerpár egy szám alatt), „both channel nélkül elutasít és a draftot NEM helyezi el félig", és „nem létező topicot továbbra sem mint".
+
+### Menet közben érkezett, szintén kész
+- **Creative Library Type szűrő** → a filter box **elé** került, és a fájltípus (html/image/video) helyett **DCO / Agentic** két pipa. Ez a meglévő `kind` diszkriminátor megjelenítése (`"matrix"` = sablonrender, `"uploaded"` = leszállított fájl), nem új fogalom. **Új localStorage kulcs** (`mm6_creative_library_filter_axis`): a régi `..._filter_types` újrahasznosítása egy mentett `{"image"}`-et DCO/Agentic opciókra illesztett volna → nulla találat, üres könyvtár, „üzemzavarnak látszó" mentett preferencia. A `typeOptions` memo megmarad — a batch feltöltő Type datalistjét táplálja.
+- **„Attach a brief" gomb + dialógus törölve** a drafts oldalról; az attach a draft editor Brief tabján történik, egy link beillesztésével. **Label mező sincs** többé.
+
+### Amit tudatosan felülírtunk
+A `MatrixGrid.tsx` invariáns-kommentje („Agentic MC csak kreatív-feltöltésből születhet") át lett írva: **két törvényes születési útja van** — a helyesen elnevezett kreatív-feltöltés, és a draft promotálása egy csatornára. A `ChannelsTab` prózája és a rács info-boxa is ezt mondja most.
+
+### Ellenőrzés
+`npx tsc --noEmit` tiszta, `npm run build` sikeres, ESLint 0 error a 6 érintett fájlon.
+
+### ⚠️ Nyitva maradt
+- **Brief label:** a label mező eltűnt, de a `briefs.label` oszlop maradt, és a drafts oldal **csoportfejléce erre esik vissza** (`b.label || "Brief {id}"`). Új brief így „Brief 7"-ként jelenik meg a mai „SZÁMLAVÁLASZTÓ" helyett. A természetes megoldás a deck nevének lekérése a **meglévő** `GOOGLE_DRIVE_API_KEY`-jel (`files.get?fields=id,name` — a `drive.ts` `getDriveFolder`-e pontosan ez a hívás, csak mappára elnevezve), mert a brief-deckek ugyanúgy „anyone with the link" megosztásúak, mint a delivery mappák. **Nem csináltam meg — nem volt kérve.**
+- **Slide preview megosztás-függő:** az iframe csak akkor renderel, ha a deck link-megosztott. Böngészős ellenőrzés az MC400-on még nem történt meg.
+- `scripts/gen-collisions-doc.ts` és a `docs/mc-collisions.*` **szándékosan** megtartja a nonDCO szókincset az adatkulcsaiban és a magyar prózájában: az egy 2026-08-i elemzés befagyasztott jegyzőkönyve, nem élő szókincs. A script saját magyarázó kommentjei viszont követik az új nevet.

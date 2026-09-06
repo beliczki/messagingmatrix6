@@ -1,7 +1,7 @@
 /**
- * A multi-segment filter count (e.g. DCO · nonDCO · creatives per product) may
+ * A multi-segment filter count (e.g. DCO · Agentic · creatives per product) may
  * carry a segment that is zero for every option — Erste has no channel
- * audiences, so its nonDCO column reads 0 down the whole menu and only invites
+ * audiences, so its Agentic column reads 0 down the whole menu and only invites
  * the question "what is that middle zero?". Segments like that are dropped,
  * and reappear on their own once the data exists.
  *

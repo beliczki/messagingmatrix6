@@ -43,10 +43,10 @@ async function message(clientId: number, audienceKey: string, topic: string, n: 
 }
 
 describe("dashboard product inventory", () => {
-  // DCO/nonDCO is the audience partition the matrix axis switch uses; a nonDCO
+  // DCO/Agentic is the audience partition the matrix axis switch uses; an Agentic
   // cell's product comes from the topic key prefix, because those channel
   // audiences are shared across products and carry none of their own.
-  it("splits cells by the audience partition and reads nonDCO product from the topic", async () => {
+  it("splits cells by the audience partition and reads Agentic product from the topic", async () => {
     await audience(erste.id, "szk_aud", "SZK", null);
     await audience(erste.id, "ch_disp", null, "display");
     await message(erste.id, "szk_aud", "SZK_topic", 1);
@@ -60,7 +60,7 @@ describe("dashboard product inventory", () => {
 
     const inv = await productInventory(erste.id);
     expect(inv.options).toEqual(["SZK", "VAL"]);
-    expect(inv.labels).toEqual(["DCO", "nonDCO", "creatives"]);
+    expect(inv.labels).toEqual(["DCO", "Agentic", "creatives"]);
     expect(inv.counts.SZK).toEqual([2, 0, 1]);
     expect(inv.counts.VAL).toEqual([0, 1, 2]);
   });
@@ -87,7 +87,7 @@ describe("dashboard product inventory", () => {
         archivedAt: "2026-09-01 07:00:00",
       },
     ]);
-    // No channel audience here, so the nonDCO segment drops out entirely —
+    // No channel audience here, so the Agentic segment drops out entirely —
     // a column of zeros down the whole menu only invites questions.
     const inv = await productInventory(erste.id);
     expect(inv.labels).toEqual(["DCO", "creatives"]);

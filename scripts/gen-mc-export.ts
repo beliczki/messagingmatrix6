@@ -67,7 +67,7 @@ type Card = {
 };
 
 // Every non-archived DCO message in a serving status. DCO is the axis test from
-// entities/messages.ts `sameAxisAs`: a card is nonDCO exactly when its audience
+// entities/messages.ts `sameAxisAs`: a card is Agentic exactly when its audience
 // key resolves to a CHANNEL row (ch_*). Audiences and topics are left-joined for
 // the product only — a key that resolves to neither still counts as DCO, so an
 // inner join would silently drop it.

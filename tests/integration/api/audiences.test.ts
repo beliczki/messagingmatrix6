@@ -130,7 +130,7 @@ describe("audiences entity", () => {
   });
 });
 
-describe("audiences channel column (nonDCO scoping — migration 0005)", () => {
+describe("audiences channel column (Agentic scoping — migration 0005)", () => {
   it("create persists channel; default is null (DCO)", async () => {
     const dco = await createAudience(erste.id, { name: "DCO aud" });
     expect(dco.channel).toBeNull();
@@ -213,7 +213,7 @@ describe("audiences audit logging", () => {
   it("reorderAudiences permutes only within the sent subset's own slots", async () => {
     // A(0) B(1) C(2) D(3); send [C, A] — the {A,C} group occupies slots {0,2},
     // so C→0 and A→2 while B and D never move. This is what keeps a reordered
-    // DCO subset from interleaving with hidden nonDCO audiences.
+    // DCO subset from interleaving with hidden Agentic audiences.
     const a = await createAudience(erste.id, { name: "A" });
     const b = await createAudience(erste.id, { name: "B" });
     const c = await createAudience(erste.id, { name: "C" });

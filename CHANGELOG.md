@@ -5,6 +5,47 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.66.0] — 2026-09-06
+
+### Added
+- **The drafts page opens the matrix editor.** A draft was already the same
+  `messages` row as a card, but it had its own cramped dialog while cards got
+  the full editor. Now there is one editor with two tab sets: a draft shows
+  `Promote | Template | Content | Styles | Brief`, a placed card shows
+  `Naming | Template | Content | Styles | Trafficking | Brief`. Which one you
+  get is decided by `audience === null` — the schema's own discriminator, tied
+  to `status='DRAFT'` by a check constraint, and the one TypeScript can narrow
+  on, so the compiler proves the Naming and Trafficking tabs never receive a
+  draft. Preview pane, autosave, conflict handling, revision history and
+  prev/next stepping all come along for free.
+- **Brief tab, on drafts and on cards.** Attach the Slides deck the work came
+  in on and preview the exact slide it was briefed on — not the deck's cover.
+  Pasting a slide deep link sets both the deck and the slide in one go. The
+  deck stays one brief however it was linked (identity is the Drive file id),
+  while the slide anchor is per card in the new `messages.brief_slide_id`,
+  because several cards are briefed on different pages of one deck.
+- **Promote a draft to DCO, Agentic, or both.** "Both" is promote **plus copy**,
+  not two promotes: a draft is one row and can become only one card, so the
+  second axis is a clone that keeps the number, the topic and the content —
+  one card in two worlds rather than two that happen to share a number.
+
+### Changed
+- **nonDCO is now called Agentic** throughout the UI, the identifiers and the
+  MCP tool descriptions. The stored axis token stays `"nondco"`: it is
+  persisted in `mm6_matrix_state_v1` and an unrecognised value falls back to
+  DCO, so renaming it would have silently reset every saved matrix view.
+- **The Creative Library's Type filter moved ahead of the filter box and now
+  filters DCO vs Agentic** instead of file type. It exposes the `kind` split
+  the library already had (`matrix` = template render, `uploaded` = delivered
+  file). It uses a new storage key — reusing the old one would have matched a
+  saved `{"image"}` against the new options and opened the library empty.
+- **Attaching a brief happens in the draft, not from the toolbar.** The
+  separate "Attach a brief" button and dialog are gone, and so is the label
+  field: paste the link on the Brief tab and you are done.
+- **An Agentic MC now has two documented births**, not one: a correctly-named
+  Creative Library upload, or promoting a draft onto a channel. The invariant
+  comment, the Channels settings copy and the grid's info box all say so.
+
 ## [6.65.0] — 2026-09-06
 
 ### Fixed

@@ -30,7 +30,7 @@ import { useLongPress } from "@/app/_components/useLongPress";
 // platform (dv360 dark green / adform teal). The edge follows the layout — the
 // bottom when audiences are columns, the right when they are rows (transposed),
 // so the strip always sits against the cells. Both fields must be set — channel
-// (nonDCO) audiences carry neither and stay plain.
+// (Agentic) audiences carry neither and stay plain.
 function audienceEdgeClasses(
   a: Audience,
   edge: "bottom" | "right" = "bottom",
@@ -256,7 +256,7 @@ export default function GridView({
     ) : null;
 
   // Audience headers always carry a real orderIndex; topic headers only in DCO
-  // (nonDCO topic rows are synthesized client-side, no id to persist).
+  // (Agentic topic rows are synthesized client-side, no id to persist).
   const rowReorderable = rowKind === "audience" ? true : topicReorderable;
   const colReorderable = colKind === "audience" ? true : topicReorderable;
 

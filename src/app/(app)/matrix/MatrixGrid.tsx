@@ -245,6 +245,8 @@ export default function MatrixWorkspace() {
     if (typeof p.hideInactive === "boolean") setHideInactive(p.hideInactive);
     if (p.filters) {
       setFilters({
+        // Unknown values fall back to DCO — which is also why the token is
+        // never renamed: a saved view must not silently reset.
         axis: p.filters.axis === "nondco" ? "nondco" : "dco",
         products: new Set(p.filters.products ?? []),
         statuses: new Set(p.filters.statuses ?? []),
@@ -433,7 +435,7 @@ export default function MatrixWorkspace() {
   });
 
   // Channels are merged into `audiences` as Audience-shaped rows (channel =
-  // code ⇒ nonDCO axis), so the whole DCO/nonDCO column logic below is
+  // code ⇒ Agentic axis), so the whole DCO/Agentic column logic below is
   // unchanged — it still partitions a single audience list on channel != null.
   const audiences = useMemo(
     () => [
@@ -526,16 +528,20 @@ export default function MatrixWorkspace() {
     [selectedRows, deleteMutation],
   );
 
-  // nonDCO MCs are born only from correctly-named creative uploads, never
-  // hand-added in the grid — so edit mode is disabled on the nonDCO axis. The
-  // toggle + EditModePanel are swapped for an info box below, and editApi.editMode
-  // is forced off here so any add/duplicate affordance already open in GridView
-  // vanishes the moment the axis switches to nonDCO.
-  const isNonDco = filters.axis === "nondco";
+  // An Agentic MC is never hand-added IN THE GRID — so edit mode is disabled on
+  // the Agentic axis. The toggle + EditModePanel are swapped for an info box
+  // below, and editApi.editMode is forced off here so any add/duplicate
+  // affordance already open in GridView vanishes the moment the axis switches.
+  //
+  // It has two legitimate births, both of them elsewhere: a correctly-named
+  // creative upload, and promoting a DRAFT onto a channel (Promote tab, target
+  // "agentic" or "both"). Both go through a place that knows the MC number and
+  // the cell; the grid is the one surface that would be guessing.
+  const isAgentic = filters.axis === "nondco";
 
   const editApi: EditApi = useMemo(
     () => ({
-      editMode: editMode && !isNonDco,
+      editMode: editMode && !isAgentic,
       setEditMode,
       selection,
       toggleSelect,
@@ -564,7 +570,7 @@ export default function MatrixWorkspace() {
     }),
     [
       editMode,
-      isNonDco,
+      isAgentic,
       selection,
       pendingAction,
       toggleSelect,
@@ -754,7 +760,7 @@ export default function MatrixWorkspace() {
     return [...nums].sort((a, b) => a - b);
   }, [createCell, messages]);
 
-  // nonDCO topic rows are synthesized ON THE FLY from the creative-backed
+  // Agentic topic rows are synthesized ON THE FLY from the creative-backed
   // messages — their topic (= the creative-name keyword) is deliberately NOT
   // stored in the DCO `topics` table, which stays reserved for curated DCO
   // topics. Product comes from the topic key's `<PRODUCT>_` prefix; the display
@@ -763,7 +769,7 @@ export default function MatrixWorkspace() {
     () => new Set(audiences.filter((a) => a.channel != null).map((a) => a.key)),
     [audiences],
   );
-  const nonDcoTopics = useMemo(() => {
+  const agenticTopics = useMemo(() => {
     const seen = new Map<string, Topic>();
     for (const m of messages) {
       if (!channelAudienceKeys.has(m.audience) || seen.has(m.topic)) continue;
@@ -784,9 +790,9 @@ export default function MatrixWorkspace() {
     const s = new Set<string>();
     for (const a of audiences) if (a.product) s.add(a.product);
     for (const t of topics) if (t.product) s.add(t.product);
-    for (const t of nonDcoTopics) if (t.product) s.add(t.product);
+    for (const t of agenticTopics) if (t.product) s.add(t.product);
     return [...s].sort();
-  }, [audiences, topics, nonDcoTopics]);
+  }, [audiences, topics, agenticTopics]);
 
   // Always offer the full canonical status set so every status is filterable
   // even when no message currently carries it. Any non-canonical status that
@@ -805,11 +811,11 @@ export default function MatrixWorkspace() {
   );
 
   // MC inventory per product for the Product filter menu: how many DCO cells
-  // and how many nonDCO ones the product has. Measured over the whole message
+  // and how many Agentic ones the product has. Measured over the whole message
   // set, not the current result — a product picker is read to decide where to
-  // look, so the numbers must not move as the other filters narrow. DCO/nonDCO
+  // look, so the numbers must not move as the other filters narrow. DCO/Agentic
   // is the audience partition (channel == null vs not), the same one the axis
-  // switch uses; nonDCO product comes from the topic key prefix, since those
+  // switch uses; Agentic product comes from the topic key prefix, since those
   // channel audiences are product-agnostic.
   const productCounts = useMemo(() => {
     const out: Record<string, number[]> = {};
@@ -829,12 +835,12 @@ export default function MatrixWorkspace() {
         bump(i > 0 ? m.topic.slice(0, i) : null, 1);
       }
     }
-    return trimEmptyCountSegments(out, ["DCO", "nonDCO"]);
+    return trimEmptyCountSegments(out, ["DCO", "Agentic"]);
   }, [messages, audienceById]);
 
   const topicById = useMemo(
-    () => new Map([...topics, ...nonDcoTopics].map((t) => [t.key, t])),
-    [topics, nonDcoTopics],
+    () => new Map([...topics, ...agenticTopics].map((t) => [t.key, t])),
+    [topics, agenticTopics],
   );
 
   const filtered = useMemo(() => {
@@ -843,7 +849,7 @@ export default function MatrixWorkspace() {
     const predicate = parseSearchQuery(filters.search);
     const axes = narrowingAxes(filters.search);
 
-    // DCO/nonDCO partition on the AUDIENCE axis: nonDCO shows only the prodlist
+    // DCO/Agentic partition on the AUDIENCE axis: Agentic shows only the prodlist
     // channel-audiences (channel != null), DCO shows only the template-driven
     // ones (channel == null). Messages are pruned by the visible audience keys
     // below, so this single partition carries the whole view. (Topic-axis
@@ -852,7 +858,7 @@ export default function MatrixWorkspace() {
       filters.axis === "nondco" ? a.channel != null : a.channel == null,
     );
 
-    // nonDCO columns are the shared, product-agnostic prodlist channels
+    // Agentic columns are the shared, product-agnostic prodlist channels
     // (ch_disp … ch_yt, product == null), so a product filter must NOT prune
     // them — it only narrows the topic (row) axis there. In DCO every audience
     // carries a product, so the product filter prunes columns as usual.
@@ -860,8 +866,8 @@ export default function MatrixWorkspace() {
       ps.size === 0 || filters.axis === "nondco"
         ? axisAuds
         : axisAuds.filter((a) => a.product && ps.has(a.product));
-    // nonDCO rows come from the synthesized creative topics; DCO from the table.
-    const axisTops = filters.axis === "nondco" ? nonDcoTopics : topics;
+    // Agentic rows come from the synthesized creative topics; DCO from the table.
+    const axisTops = filters.axis === "nondco" ? agenticTopics : topics;
     let tops =
       ps.size === 0
         ? axisTops
@@ -911,7 +917,7 @@ export default function MatrixWorkspace() {
       if (axes.topic) tops = tops.filter((t) => usedTopKeys.has(t.key));
     }
     return { auds, tops, msgs, statusCounts, axisAudienceCount: axisAuds.length };
-  }, [audiences, topics, nonDcoTopics, messages, filters, hideInactive, audienceById, topicById]);
+  }, [audiences, topics, agenticTopics, messages, filters, hideInactive, audienceById, topicById]);
 
   // Feed export must never see archived rows — the client message list acts
   // as the allowed set gating carry-forward rows server-side, so toggling
@@ -929,7 +935,7 @@ export default function MatrixWorkspace() {
   // Other audience copies of the open card — drives the editor's global-edit
   // warning, so it must count exactly what propagateToSiblings will write.
   // (number, variant) identifies a card only WITHIN an axis: numbering lets a
-  // DCO card share its number with a static nonDCO twin, and those are
+  // DCO card share its number with a static Agentic twin, and those are
   // different cards the fan-out leaves alone.
   const openSiblingCount = useMemo(() => {
     if (!openMessage) return 0;
@@ -1119,7 +1125,7 @@ export default function MatrixWorkspace() {
                   onChange={setDensity}
                 />
               ) : null}
-              {view === "grid" && !isNonDco ? (
+              {view === "grid" && !isAgentic ? (
                 <button
                   type="button"
                   onClick={() => editApi.setEditMode(!editApi.editMode)}
@@ -1157,16 +1163,15 @@ export default function MatrixWorkspace() {
                 setDensity={setDensity}
               />
               {view === "grid" ? (
-                isNonDco ? (
-                  <div className="matrix-nondco-info empty-state rounded-md border border-slate-200 bg-white p-3">
-                    <div className="matrix-nondco-info__title text-[10px] font-medium uppercase tracking-wider text-slate-500">
-                      nonDCO
+                isAgentic ? (
+                  <div className="matrix-agentic-info empty-state rounded-md border border-slate-200 bg-white p-3">
+                    <div className="matrix-agentic-info__title text-[10px] font-medium uppercase tracking-wider text-slate-500">
+                      Agentic
                     </div>
-                    <div className="matrix-nondco-info__hint mt-1 text-[10px] leading-snug text-slate-500">
-                      nonDCO MCs are created automatically when you upload
-                      correctly-named creatives to the Creative Library. Upload
-                      correctly-named creatives to the Creative Library to see
-                      them here.
+                    <div className="matrix-agentic-info__hint mt-1 text-[10px] leading-snug text-slate-500">
+                      Agentic MCs aren&apos;t added here. They arrive two ways:
+                      upload correctly-named creatives to the Creative Library,
+                      or promote a draft onto a channel from its Promote tab.
                     </div>
                   </div>
                 ) : (

@@ -99,7 +99,7 @@ export type PromoteResult = {
   audience: Audience;
 };
 
-// Promote an uploaded creative into a nonDCO MC: a template-less messages row
+// Promote an uploaded creative into an Agentic MC: a template-less messages row
 // (image1 = the creative file) on the channel-audience, at an auto-topic, with
 // the creative back-linked via mcNumber/mcVariant. The creatives row stays the
 // file record; the message is its matrix mirror.

@@ -5,7 +5,7 @@ import { writeAudit } from "@/lib/audit";
 
 // Drag-drop reorder of topic rows/columns from the matrix edit mode. See
 // audiences/reorder — same contract and guard. Only DCO topics carry a real
-// orderIndex; nonDCO rows are synthesized client-side and are never sent here.
+// orderIndex; Agentic rows are synthesized client-side and are never sent here.
 export const POST = withSession(async ({ req, claims }) => {
   const denial = denyDemo(claims);
   if (denial) return denial;

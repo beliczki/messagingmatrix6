@@ -35,7 +35,7 @@ type Props = {
   // itself and every unselected one would read 0.
   //
   // An array renders as several numbers separated by dots — one option, more
-  // than one thing worth counting (e.g. DCO / nonDCO / creatives per product).
+  // than one thing worth counting (e.g. DCO / Agentic / creatives per product).
   // Name the parts in `countLabels` so the tooltip can say which is which.
   optionCounts?: Record<string, number | number[]>;
   /** Names for the segments of an array-valued count, in the same order. */

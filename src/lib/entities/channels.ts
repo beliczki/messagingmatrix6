@@ -8,7 +8,7 @@ import {
   type Channel,
 } from "@/db/schema";
 
-// nonDCO channels are first-class, separate from audiences. A nonDCO message
+// Agentic channels are first-class, separate from audiences. An Agentic message
 // still stores the channel KEY in messages.audience (e.g. "ch_disp") — the
 // key namespace is shared — so channel placements resolve through the same
 // audience-key code paths (numbering, pmmid, trafficking, matrix columns) by
@@ -57,7 +57,7 @@ export async function findChannelByCode(
 // Present a channel as an Audience so the shared audience-key code paths
 // (createMessage numbering/pmmid/trafficking, matrix column derivation) treat
 // it exactly as the old channel-audience rows did: channel = the prodlist code
-// (non-null ⇒ nonDCO axis), every targeting/trafficking column null (channel
+// (non-null ⇒ Agentic axis), every targeting/trafficking column null (channel
 // audiences never carried them). id/clientId/timestamps come from the channel;
 // nothing downstream keys off them.
 export function channelToAudience(c: Channel): Audience {
@@ -152,7 +152,7 @@ export async function restoreChannel(
 
 // Move the legacy `audiences.channel != null` rows into the channels table,
 // then hard-delete them from audiences so the audiences list is DCO-only. The
-// channel KEY strings are preserved, so the 826 nonDCO messages (which store
+// channel KEY strings are preserved, so the 826 Agentic messages (which store
 // audience = "ch_disp" etc.) keep resolving — now via the channels table.
 // Idempotent: a channel already present (matched on key) is left untouched, and
 // a second run finds no channel-audiences to move. Returns {seeded, deleted}.

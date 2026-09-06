@@ -137,7 +137,7 @@ async function main() {
     }
     if (m.status === "INCOMING" && !isEmpty(m)) {
       // A referenced row still becomes a draft — the creatives keep their
-      // (number, variant) link, and the nonDCO twin that actually shipped is a
+      // (number, variant) link, and the Agentic twin that actually shipped is a
       // different row on a different axis. Called out because the creative↔cell
       // match will now also see this draft (see D1.4a in tasks/todo.md).
       const note = referenced

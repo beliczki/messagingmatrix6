@@ -8,14 +8,14 @@
 // checks, same "regenerate identity, never rewrite shipped history" rule, same
 // per-row audit trail.
 //
-// AXIS-SCOPED. Numbering is per axis (DCO = audience with no channel, nonDCO =
+// AXIS-SCOPED. Numbering is per axis (DCO = audience with no channel, Agentic =
 // channel audience), so one MC number can name two different cards: a DCO
 // campaign card and a static creative. Only the DCO side moves here, so the
-// nonDCO card keeps its number and its `creatives` rows (linked by
+// Agentic card keeps its number and its `creatives` rows (linked by
 // mc_number+mc_variant, which carries no axis) stay correct.
 //
-// A target number free on the DCO axis but taken on the nonDCO axis is NOT
-// refused — that is a legal cross-axis twin. Check the nonDCO side yourself
+// A target number free on the DCO axis but taken on the Agentic axis is NOT
+// refused — that is a legal cross-axis twin. Check the Agentic side yourself
 // when the point of the move is to stop sharing a number with an unrelated
 // campaign; docs/mc-collisions.html is the map.
 //

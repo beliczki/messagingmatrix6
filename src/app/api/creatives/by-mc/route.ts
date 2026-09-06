@@ -4,7 +4,7 @@ import { withSession } from "@/lib/scoped";
 
 // Sibling creatives for a matrix cell: GET /api/creatives/by-mc?number=282&variant=a
 // Returns the distinct sizes of the same-named creative (one row per stored
-// file), so the nonDCO static-MC preview can offer a size switcher. Scoped to
+// file), so the Agentic static-MC preview can offer a size switcher. Scoped to
 // the session's client.
 export const GET = withSession(async ({ req, claims }) => {
   const sp = new URL(req.url).searchParams;

@@ -516,7 +516,7 @@ export async function restoreAudience(
 // reorderTopics for the "permute within occupied slots" rationale: the matrix
 // only sends the currently visible axis subset, so we permute the group within
 // its own orderIndex slots and leave every other audience untouched — this is
-// what keeps the DCO (channel==null) and nonDCO (channel!=null) sets from
+// what keeps the DCO (channel==null) and Agentic (channel!=null) sets from
 // interleaving when one axis is reordered.
 export async function reorderAudiences(
   clientId: number,

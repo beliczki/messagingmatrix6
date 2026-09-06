@@ -473,7 +473,7 @@ export async function restoreTopic(
 // touch the positions of the rows the client did not send. We permute the
 // group *within the orderIndex slots it already occupies*: collect the group's
 // current slots, sort them, and reassign in the new order. Rows outside the
-// group keep their orderIndex untouched, so DCO and nonDCO sets never interleave.
+// group keep their orderIndex untouched, so DCO and Agentic sets never interleave.
 export async function reorderTopics(
   clientId: number,
   ids: number[],

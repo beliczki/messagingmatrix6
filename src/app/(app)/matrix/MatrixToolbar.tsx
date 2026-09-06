@@ -6,7 +6,10 @@ import MultiPill, { ALL_NONE_QUICK_SELECT } from "../_components/MultiPill";
 
 const AXES: Array<{ key: MatrixAxis; label: string }> = [
   { key: "dco", label: "DCO" },
-  { key: "nondco", label: "nonDCO" },
+  // The stored token stays "nondco": it is persisted in the matrix state
+  // (mm6_matrix_state_v1) and an unknown value falls back to "dco", so renaming
+  // it would silently reset every saved view. Only the vocabulary is Agentic.
+  { key: "nondco", label: "Agentic" },
 ];
 
 type Props = {
@@ -43,7 +46,7 @@ export default function MatrixToolbar(p: Props) {
       <div
         className="matrix-axis-toggle ml-2 inline-flex overflow-hidden rounded-md border border-slate-300 text-xs font-medium"
         role="group"
-        aria-label="DCO / nonDCO view"
+        aria-label="DCO / Agentic view"
       >
         {AXES.map((ax) => (
           <button

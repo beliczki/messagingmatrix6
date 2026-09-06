@@ -39,7 +39,7 @@ beforeEach(async () => {
   await db.insert(messages).values([
     { clientId: erste.id, number: 1, variant: "a", audience: "SZK_x", topic: "SZK_one" },
     { clientId: erste.id, number: 2, variant: "a", audience: "HK_x", topic: "HK_two" },
-    // nonDCO: sits on a channel, so only the topic prefix names its product
+    // Agentic: sits on a channel, so only the topic prefix names its product
     { clientId: erste.id, number: 3, variant: "a", audience: "ch_disp", topic: "SZK_one" },
   ]);
   await db.insert(assets).values([
@@ -75,7 +75,7 @@ describe("libraryCounts", () => {
     expect(await libraryCounts(erste.id, ["SZK"])).toEqual({
       audiences: 1,
       topics: 1,
-      // the DCO cell and the nonDCO channel cell, both on an SZK topic
+      // the DCO cell and the Agentic channel cell, both on an SZK topic
       mcs: 2,
       messageCells: 2,
       assets: 1,

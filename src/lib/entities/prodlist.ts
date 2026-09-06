@@ -58,7 +58,7 @@ export async function getProdlistRow(
   return rows[0] ?? null;
 }
 
-// Distinct non-null channels for this client — the source of the nonDCO
+// Distinct non-null channels for this client — the source of the Agentic
 // channel-audience set (Slice 1 seed reads this).
 export async function listDistinctChannels(
   clientId: number,

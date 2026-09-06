@@ -28,7 +28,7 @@ beforeEach(async () => {
     .insert(clients)
     .values({ key: "erste", name: "Erste" })
     .returning();
-  // Legacy channel-audiences (channel != null) + a nonDCO topic.
+  // Legacy channel-audiences (channel != null) + an Agentic topic.
   await db.insert(audiences).values(
     CH.map((c, i) => ({
       clientId: erste.id,
@@ -52,8 +52,8 @@ afterEach(async () => {
 });
 
 describe("channels migration — channel-audiences → channels table", () => {
-  it("seeds channels, deletes the channel-audiences, and keeps nonDCO messages", async () => {
-    // Two nonDCO MCs created the real way (audience = channel key) while the
+  it("seeds channels, deletes the channel-audiences, and keeps Agentic messages", async () => {
+    // Two Agentic MCs created the real way (audience = channel key) while the
     // channel-audiences still exist.
     const a = await createMessage(erste.id, {
       audience: "ch_disp",
@@ -83,14 +83,14 @@ describe("channels migration — channel-audiences → channels table", () => {
       .where(and(eq(audiences.clientId, erste.id), isNotNull(audiences.channel)));
     expect(leftover).toHaveLength(0);
 
-    // The nonDCO messages survive untouched, still keyed by the channel string.
+    // The Agentic messages survive untouched, still keyed by the channel string.
     const msgs = await listMessages(erste.id);
     const survivors = msgs.filter((m) => m.audience === "ch_disp" || m.audience === "ch_soc");
     expect(survivors.map((m) => m.id).sort()).toEqual([a.id, b.id].sort());
     expect(survivors.every((m) => m.image1 && m.template == null)).toBe(true);
   });
 
-  it("after migration, createMessage resolves a channel key and numbers it on the nonDCO axis", async () => {
+  it("after migration, createMessage resolves a channel key and numbers it on the Agentic axis", async () => {
     // A DCO MC first (real audience), so DCO#1 exists.
     await db.insert(audiences).values({
       clientId: erste.id,
@@ -108,15 +108,15 @@ describe("channels migration — channel-audiences → channels table", () => {
     await migrateChannelsFromAudiences(erste.id);
 
     // Channel key no longer an audience — createMessage must fall back to the
-    // channels table and place it on the nonDCO axis.
+    // channels table and place it on the Agentic axis.
     const nondco = await createMessage(erste.id, {
       audience: "ch_disp",
       topic: "Loans_rate",
       image1: "z.jpg",
     });
     expect(nondco.template).toBeNull();
-    // nonDCO numbering is an independent space — it may reuse #1 (axis-scoped),
-    // which is exactly the DCO/nonDCO twin case, not a collision.
+    // Agentic numbering is an independent space — it may reuse #1 (axis-scoped),
+    // which is exactly the DCO/Agentic twin case, not a collision.
     expect(nondco.audience).toBe("ch_disp");
     expect(nondco.number).toBe(1);
   });
@@ -142,11 +142,11 @@ describe("channels migration — channel-audiences → channels table", () => {
     expect((await listChannels(erste.id, { includeArchived: true })).length).toBe(2);
   });
 
-  it("channelToAudience presents a channel on the nonDCO axis (channel = code)", async () => {
+  it("channelToAudience presents a channel on the Agentic axis (channel = code)", async () => {
     await migrateChannelsFromAudiences(erste.id);
     const [disp] = (await listChannels(erste.id)).filter((c) => c.key === "ch_disp");
     const aud = channelToAudience(disp);
-    expect(aud.channel).toBe("DISP"); // non-null ⇒ nonDCO
+    expect(aud.channel).toBe("DISP"); // non-null ⇒ Agentic
     expect(aud.key).toBe("ch_disp");
     expect(aud.product).toBeNull();
   });

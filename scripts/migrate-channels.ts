@@ -1,6 +1,6 @@
 // One-time data migration (ships with schema migration 0007): move the legacy
 // `audiences.channel != null` rows into the new `channels` table, then delete
-// them from audiences so the audiences list is DCO-only. nonDCO messages keep
+// them from audiences so the audiences list is DCO-only. Agentic messages keep
 // their `audience = "ch_disp"` key and resolve through the channels table.
 // Also ensures the 6 canonical channels exist (fresh clients). Idempotent.
 //

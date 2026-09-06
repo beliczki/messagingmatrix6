@@ -178,9 +178,9 @@ export const audiences = pgTable(
     campaignId: text("campaign_id"),
     lineitemName: text("lineitem_name"),
     lineitemId: text("lineitem_id"),
-    // nonDCO scoping. NULL = DCO audience (template-driven matrix). A prodlist
-    // channel value (DISP|SOC|PRG|GSN|GNW|YT) = a nonDCO channel-audience.
-    // The DCO/nonDCO matrix views partition on IS NULL vs IS NOT NULL.
+    // Agentic scoping. NULL = DCO audience (template-driven matrix). A prodlist
+    // channel value (DISP|SOC|PRG|GSN|GNW|YT) = an Agentic channel-audience.
+    // The DCO/Agentic matrix views partition on IS NULL vs IS NOT NULL.
     channel: text("channel"),
     version: integer("version").notNull().default(1),
     createdAt: text("created_at")
@@ -199,12 +199,12 @@ export const audiences = pgTable(
   ],
 );
 
-// nonDCO channels — first-class, separate from audiences (2026-08-17). Each row
-// is a column of the nonDCO matrix. `key` (e.g. "ch_disp") is what nonDCO
+// Agentic channels — first-class, separate from audiences (2026-08-17). Each row
+// is a column of the Agentic matrix. `key` (e.g. "ch_disp") is what Agentic
 // messages store in `messages.audience`; `code` (e.g. "DISP") is the prodlist
 // channel value; `label` is the display name. Channels used to live as
 // `audiences.channel != null` rows — they were migrated out so the audiences
-// list stays DCO-only. nonDCO MCs are minted only via creative promotion.
+// list stays DCO-only. Agentic MCs are minted only via creative promotion.
 export const channels = pgTable(
   "channels",
   {
@@ -320,6 +320,13 @@ export const messages = pgTable(
     briefId: integer("brief_id").references(() => briefs.id, {
       onDelete: "set null",
     }),
+    // Which SLIDE of that deck this card was briefed on — the Google page
+    // object id (`g123abc_0_1`) out of a `#slide=id.g...` deep link, not the
+    // fragment as pasted. The brief is the deck (one row, shared by many
+    // cards); the slide is per card, which is why it lives here and not on
+    // `briefs`. NULL = no anchor, and the preview then opens the deck at its
+    // first slide rather than guessing.
+    briefSlideId: text("brief_slide_id"),
     versionNo: integer("version_no").notNull().default(1),
     pmmid: text("pmmid"),
     // "No status" is not a legal state for an MC: a status-less row is invisible
@@ -916,7 +923,7 @@ export type Keyword = typeof keywords.$inferSelect;
 export type NewKeyword = typeof keywords.$inferInsert;
 
 // Prodlist ingest (FR-A, deliverable-grain). One row per prodlist deliverable
-// (a production unit × required asset). Source of the nonDCO channel set
+// (a production unit × required asset). Source of the Agentic channel set
 // (DISP/SOC/PRG/GSN/GNW/YT) and the creative→channel classification target.
 // `deliverableId` is the stable source hash, unique per client → idempotent
 // upsert. `mcNumber`/`mcVariant` are the soft-link to the promoted message,

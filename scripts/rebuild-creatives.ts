@@ -1,24 +1,24 @@
 // Rebuild the Creative Library for ONE product from the local ground-truth
-// folder, then fill the nonDCO matrix with template-less MC mirrors + previews.
+// folder, then fill the Agentic matrix with template-less MC mirrors + previews.
 //
 // Ground truth: ~/ERSTE Addressable AI Agent/creatives/ERSTE_<PROD>_MC<N>_<var>_<TOPIC>_n<ver>_<WxH>.<ext>
 //
 // Per-product pipeline (scoped to one product; IDEMPOTENT — safe to re-run):
-//   0. hard-delete the product's existing nonDCO messages (image1 ERSTE_<PROD>_%
+//   0. hard-delete the product's existing Agentic messages (image1 ERSTE_<PROD>_%
 //      on a channel audience) so a re-run doesn't duplicate them.
 //   1. hard-delete the product's `creatives` rows + `uploaded_files`
 //      (ERSTE_<PROD>_%). MinIO bytes are LEFT intact (safety net; the caller has
 //      dumped both tables to a restorable CSV).
 //   2. hard-delete the product's Adobe PSD DCO MCs (template='Adobe PSD',
-//      audience.product = PROD) — these static creatives move to nonDCO.
+//      audience.product = PROD) — these static creatives move to Agentic.
 //   3. reimport every image/video file: uploadFile (bytes → MinIO + uploaded_files)
 //      + createCreative (parsed metadata).
-//   4. generate nonDCO MCs by DIRECT INSERT (pmmid + trafficking via the real
+//   4. generate Agentic MCs by DIRECT INSERT (pmmid + trafficking via the real
 //      generators). One message per (mcNumber|MC0-family, variant, channel):
 //      template=null + image1=representative file, on the channel-audience, at a
 //      per-NUMBER topic (= the number's variant-'a' keyword). MC number/variant
 //      come from the filename; MC0 → a fresh number above the global max.
-//      Direct insert (not createMessage) so a nonDCO number can PAIR a DCO
+//      Direct insert (not createMessage) so an Agentic number can PAIR a DCO
 //      number in a different topic (cross-axis reuse), and so a number can carry
 //      different variants across channel cells — neither of which createMessage's
 //      DCO-oriented guards allow.
@@ -180,13 +180,13 @@ function scanAll(): Rec[] {
 // client-wide facts, so the plan is computed over ALL products and is a pure
 // function of the folder + CSV — a re-run reproduces it exactly. The old
 // `max(number)+1` auto-assign did not: it re-drew every MC0 card's number from
-// above the global max on each rebuild, which is how the nonDCO axis climbed
+// above the global max on each rebuild, which is how the Agentic axis climbed
 // past 800.
 //
 // Conflict rule: a filename claim beats a suggested claim. The CSV's generator
 // handed 324–332 to MC0 families while those numbers were already written into
 // another product's filenames; the losing groups are re-allocated above the top
-// of the nonDCO space. Two products colliding on filename numbers is left as it
+// of the Agentic space. Two products colliding on filename numbers is left as it
 // is — that is the pre-existing state, not something this plan introduces.
 function resolveNumbers(
   all: Rec[],
@@ -270,7 +270,7 @@ function pickRep(recs: Rec[]): Rec {
   )[0]!;
 }
 
-// One nonDCO MC identity = one card (number + variant), in ≥1 channel. Every
+// One Agentic MC identity = one card (number + variant), in ≥1 channel. Every
 // record carries a resolved number by the time this runs (resolveNumbers aborts
 // otherwise), so a card is always keyed by the number.
 type Group = {
@@ -378,7 +378,7 @@ async function main() {
   // ---- COMMIT ----
   const uid = `rebuild:${product}`;
 
-  // 0. idempotent: drop this product's existing nonDCO messages
+  // 0. idempotent: drop this product's existing Agentic messages
   const delOld = await db
     .delete(messages)
     .where(
@@ -452,7 +452,7 @@ async function main() {
   }
   console.log(`Imported ${recs.length} creatives`);
 
-  // 4. direct-insert nonDCO messages
+  // 4. direct-insert Agentic messages
   const [cfg] = await db
     .select()
     .from(configTable)
@@ -478,7 +478,7 @@ async function main() {
     name: string,
   ) {
     const audienceRow = audByKey.get(audienceKey)!;
-    // nonDCO topics are NOT stored in the topics table (they are synthesized in
+    // Agentic topics are NOT stored in the topics table (they are synthesized in
     // the matrix from the message's topic string), so topicRow is usually null —
     // buildTrafficking tolerates that (topic product just won't feed patterns).
     const topicRow = topByKey.get(topicKey) ?? null;
@@ -526,7 +526,7 @@ async function main() {
   let cells = 0;
   for (const g of groups) {
     // topic = "<PRODUCT>_<keyword>" carried on the message only — no topics-table
-    // row is created; the matrix synthesizes nonDCO rows from these strings.
+    // row is created; the matrix synthesizes Agentic rows from these strings.
     const topicKey = `${product}_${g.topicRaw}`.slice(0, 200);
     const number = g.number;
     for (const [ch, recsInCh] of g.byChannel) {

@@ -73,8 +73,8 @@ export function nextMcSlot(
 // Next free MC number: MAX(live numbers in the passed set) + 1. Numbers identify
 // a card across audience copies, so allocation is never per cell. The caller
 // decides the scope of `messages`: createMessage passes ONE axis (DCO or
-// nonDCO), because the two are independent number spaces — a new DCO MC must
-// not jump to 400+ just because the static nonDCO library climbed that high.
+// Agentic), because the two are independent number spaces — a new DCO MC must
+// not jump to 400+ just because the static Agentic library climbed that high.
 export function nextNewNumber(messages: ExistingMessage[]): number {
   let max = 0;
   for (const m of messages.filter(isLive)) {

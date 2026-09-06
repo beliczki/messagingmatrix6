@@ -62,7 +62,7 @@ export function activityDigest(
  * uncorrelated, so Postgres hashes it once rather than per audit row.
  *
  * The messages branch resolves its product with the shared `messageProduct`
- * expression — the DCO/nonDCO rule is correctness-critical and must not drift
+ * expression — the DCO/Agentic rule is correctness-critical and must not drift
  * between here and the library counts.
  */
 function productScoped(clientId: number, products: string[]) {

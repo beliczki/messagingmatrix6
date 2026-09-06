@@ -83,6 +83,7 @@ const WRITABLE_FIELDS = [
   "comment",
   "brief",
   "briefId",
+  "briefSlideId",
 ] as const;
 type WritableField = (typeof WRITABLE_FIELDS)[number];
 
@@ -135,11 +136,11 @@ async function listLiveMessages(
     .where(eq(messages.clientId, clientId));
 }
 
-// Resolve a placement key to an Audience. nonDCO messages store a CHANNEL key
+// Resolve a placement key to an Audience. Agentic messages store a CHANNEL key
 // (e.g. "ch_disp") here — channels live in their own table now, so when the key
 // isn't a real audience we fall back to the channel, presented in Audience
 // shape (channelToAudience). This keeps numbering/pmmid/trafficking working for
-// nonDCO rows exactly as when channels were audience rows.
+// Agentic rows exactly as when channels were audience rows.
 async function findAudienceByKey(
   clientId: number,
   key: string,
@@ -274,13 +275,13 @@ export async function createMessage(
     throw new MessageError(`topic '${input.topic}' not found`);
   }
 
-  // Numbering is AXIS-SCOPED. DCO (audience.channel == null) and nonDCO
+  // Numbering is AXIS-SCOPED. DCO (audience.channel == null) and Agentic
   // (channel set) are independent number spaces, so one MC number may pair a
-  // DCO card with its static nonDCO twin in a different topic. The "a number
+  // DCO card with its static Agentic twin in a different topic. The "a number
   // never spans topics" rule below is therefore enforced only within the
   // target audience's own axis. (audienceList is also needed by the
   // pmmid/trafficking patterns further down.) Channels are merged in as
-  // Audience-shaped rows (channel = code ⇒ nonDCO) so nonDCO placements land on
+  // Audience-shaped rows (channel = code ⇒ Agentic) so Agentic placements land on
   // the correct axis and resolve their {{audiences[key]...}} pattern lookups.
   const audienceList = [
     ...(await listAudiences(clientId)),
@@ -295,14 +296,14 @@ export async function createMessage(
   // occupying its number on EVERY axis: it must be unavailable to both, or the
   // number would move under the draft between intake and promotion. Without
   // this it falls through the lookup below to `null`, is mistaken for a DCO row,
-  // and a nonDCO create is free to take the number the draft is holding.
+  // and an Agentic create is free to take the number the draft is holding.
   const sameAxis = (m: { audience?: string | null }) =>
     (m.audience ?? null) === null ||
     ((channelByAudience.get(m.audience ?? "") ?? null) === null) === targetIsDco;
 
   const live = await listLiveMessages(clientId);
   // Allocation is axis-scoped too: a new DCO MC must not inherit a number from
-  // the (much taller) nonDCO space and vice versa, so the auto-assign sees only
+  // the (much taller) Agentic space and vice versa, so the auto-assign sees only
   // the target axis. In-cell lookups are unaffected — the target audience is on
   // the target axis by definition.
   const liveOnAxis = live.filter(sameAxis);
@@ -332,7 +333,7 @@ export async function createMessage(
       // fields, so audience copies can't silently diverge), and a number
       // never spans topics WITHIN an axis (findSiblings is axis-scoped for
       // exactly this reason — see sameAxisAs). Cross-axis
-      // reuse is allowed — a DCO number may be claimed for its nonDCO twin.
+      // reuse is allowed — a DCO number may be claimed for its Agentic twin.
       const liveHolder = live.find(
         (m) => isLive(m) && m.number === n && sameAxis(m),
       );
@@ -420,7 +421,7 @@ export async function createMessage(
   );
 
   // New DCO MCs inherit the client's default template when the caller passes
-  // none; nonDCO (channel) placements stay image-based (template null).
+  // none; Agentic (channel) placements stay image-based (template null).
   const template =
     input.template != null
       ? input.template
@@ -468,7 +469,7 @@ export async function createMessage(
 // number has to be re-checked at promotion, when the axis is finally known, and
 // could move then; that is exactly the uncertainty the claim exists to end.
 // Spending a number out of the shared ceiling is the cheap side of that trade.
-// A deliberate DCO/nonDCO twin still goes the explicit way, via createMessage's
+// A deliberate DCO/Agentic twin still goes the explicit way, via createMessage's
 // requestedNumber, which is unchanged.
 export async function createDraft(
   clientId: number,
@@ -704,11 +705,11 @@ const CARD_FIELDS = WRITABLE_FIELDS.filter(
 ) as WritableField[];
 
 // Axis membership test for the card family below. Numbering is axis-scoped
-// (see nextMcSlot): a DCO number may be claimed for its static nonDCO twin, so
+// (see nextMcSlot): a DCO number may be claimed for its static Agentic twin, so
 // (number, variant) alone can name TWO different cards — the DCO one and its
-// nonDCO namesake in another topic. The family is therefore (number, variant)
-// WITHIN one axis. Channels are merged in as Audience-shaped rows so a nonDCO
-// row's `ch_*` audience key resolves to a channel (⇒ nonDCO); a key that
+// Agentic namesake in another topic. The family is therefore (number, variant)
+// WITHIN one axis. Channels are merged in as Audience-shaped rows so an Agentic
+// row's `ch_*` audience key resolves to a channel (⇒ Agentic); a key that
 // resolves to nothing counts as DCO, matching nextMcSlot's `sameAxis`.
 async function sameAxisAs(
   clientId: number,
@@ -759,7 +760,7 @@ export async function findSiblings(
 // Apply the shared subset of `input` to the rest of the card family. Every
 // shared field (creative, status, flight dates) goes to the audience copies of
 // the same (number, variant) ON THE SAME AXIS — a DCO card and its static
-// nonDCO namesake share a number but are different cards, so a global edit on
+// Agentic namesake share a number but are different cards, so a global edit on
 // one must never reach the other. Other variants of the number are untouched.
 // Each row is force-updated (last-write-wins) and version-bumped so any editor
 // open on it will see a conflict on its next save. audience/topic are dropped

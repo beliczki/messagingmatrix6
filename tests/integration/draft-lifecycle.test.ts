@@ -22,7 +22,7 @@ beforeEach(async () => {
     .insert(clients)
     .values({ key: "erste", name: "Erste" })
     .returning();
-  // Two DCO audiences (channel NULL) and one nonDCO channel, so both number
+  // Two DCO audiences (channel NULL) and one Agentic channel, so both number
   // axes exist in the fixture.
   await db.insert(audiences).values([
     { clientId: erste.id, key: "SZK_visitors", name: "Visitors", product: "SZK", orderIndex: 1 },
@@ -75,8 +75,8 @@ describe("createDraft", () => {
 
 describe("draft number reservation", () => {
   it("allocates above BOTH axes, not just one", async () => {
-    // A tall nonDCO number and a short DCO one: a per-axis draft allocation
-    // would hand out 2 here and collide with the nonDCO card on promotion.
+    // A tall Agentic number and a short DCO one: a per-axis draft allocation
+    // would hand out 2 here and collide with the Agentic card on promotion.
     await createMessage(
       erste.id,
       { audience: "ch_disp", topic: "SZK_brand" },
@@ -101,7 +101,7 @@ describe("draft number reservation", () => {
     expect(mc.number).toBeGreaterThan(d.number);
   });
 
-  it("holds its number against a new nonDCO card — the axis it is not on", async () => {
+  it("holds its number against a new Agentic card — the axis it is not on", async () => {
     const d = await createDraft(erste.id);
     const mc = await createMessage(
       erste.id,

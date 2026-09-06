@@ -64,14 +64,17 @@ import { shootPreviews } from "@/lib/preview-shooter";
 import { createAsset } from "@/lib/entities/assets";
 import {
   archiveCreative,
-  createCreative,
   getCreative,
   pickWritable as pickCreativeWritable,
   restoreCreative,
   updateCreative,
   listCreatives,
 } from "@/lib/entities/creatives";
-import { promoteCreative, PromoteError } from "@/lib/entities/promote";
+import {
+  createCreativeWithMirror,
+  promoteCreative,
+  PromoteError,
+} from "@/lib/entities/promote";
 import {
   DraftError,
   createTestCreative,
@@ -2066,7 +2069,9 @@ function registerCreativeWriteTools(server: McpServer, ctx: McpContext): void {
 
       const rules = await clientParsingRules(ctx.clientId);
       const parsed = parseFilename(args.filename, rules);
-      const creative = await createCreative(ctx.clientId, {
+      // Same write path as the Creative Library upload: a creative that
+      // carries an MC number gets its Agentic cell in the same breath.
+      const creative = await createCreativeWithMirror(ctx.clientId, {
         fileId: file.id,
         fileName: file.filename,
         fileFormat: ext.replace(/^\./, "") || null,
@@ -2213,7 +2218,7 @@ function registerCreativeWriteTools(server: McpServer, ctx: McpContext): void {
     "creative_promote",
     {
       description:
-        "Promote (\"matrixize\") an uploaded creative into an Agentic MC: creates a template-less message row (image1 = the creative file) on the channel-audience, at an auto-derived topic, then back-links the creative via mc_number/mc_variant. This gives the static creative a first-class MC identity addressable everywhere (incl. list_mc/mc_get). Identify the creative by EXACTLY ONE of creative_id or file_name. The channel-audience is chosen by: explicit `channel` (DISP|SOC|PRG|GSN|GNW|YT) if given, else a prodlist deliverable match on the creative's familyKey. The topic is auto-derived from the filename unless `topic_override` (an existing topic key) is passed. Refuses if the creative is already matrixed. One write against the rate limit. Returns { message, topic, audience }.",
+        "Promote (\"matrixize\") an uploaded creative into an Agentic MC: creates a template-less message row (image1 = the creative file) on the channel-audience, then back-links the creative via mc_number/mc_variant. This gives the static creative a first-class MC identity addressable everywhere (incl. list_mc/mc_get). Identify the creative by EXACTLY ONE of creative_id or file_name. TWO PATHS, decided by whether the creative already carries an mc_number: (a) NUMBERED (the filename named it, e.g. …_MC324_b_…) — the MC is created AT that number and variant, in the topic that number already occupies on the Agentic axis (or `<PRODUCT>_<keywords>` if the matrix has never seen it); the channel comes from the declared size (1080x1080|1200x628 → SOC, else DISP) unless `channel` overrides it, and `topic_override` does not apply. Uploading such a creative already does this, so this path is for rows that predate the mirror. (b) UNNUMBERED — a fresh number is allocated, the channel comes from explicit `channel` (DISP|SOC|PRG|GSN|GNW|YT) or a prodlist deliverable match on the creative's familyKey, and the topic is auto-derived from the filename unless `topic_override` (an existing topic key) is passed. Refuses if the MC already exists in the matrix. One write against the rate limit. Returns { message, topic, audience }.",
       inputSchema: {
         creative_id: z.number().int().optional(),
         file_name: z.string().optional(),

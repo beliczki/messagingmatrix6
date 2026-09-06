@@ -107,7 +107,9 @@ type ClientPatterns = {
   trafficking?: TraffickingPatterns;
 };
 
-async function readClientPatterns(clientId: number): Promise<ClientPatterns> {
+export async function readClientPatterns(
+  clientId: number,
+): Promise<ClientPatterns> {
   const [row] = await db
     .select()
     .from(config)

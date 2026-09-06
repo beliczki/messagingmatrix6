@@ -1988,3 +1988,33 @@ A `MatrixGrid.tsx` invariáns-kommentje („Agentic MC csak kreatív-feltöltés
 - [x] A `["briefs"]` query megmarad, de **csak lookupra** (az embednek kell a deck file id-je), nem renderel vezérlőt
 
 **Tanulság a következő szelethez:** amikor egy csoportosítási/rendezési döntés megváltozik, végig kell nézni, mely vezérlők léteztek KIZÁRÓLAG azért a döntésért. Ez a hiba nem a rossz tervezés volt, hanem hogy nem tértem vissza.
+
+### 2026-09-06 — a feltöltött creative nem kerül be az Agentic mátrixba (TERV)
+
+**Tünet (user):** „mult héten feltöltöttem a creative libraryba mc324 b és c variáns sorozatot de nem látom az agentic mátrixba pedig sztem jol voltak elnevezve".
+
+**Diagnózis (DB-ből igazolva):** a fájlnevek hibátlanok, a parse jó (`creatives.mc_number=324`, `mc_variant=b/c`, 11+11 fájl). Az Agentic mátrix viszont a `messages` táblát rajzolja, és a Creative Library feltöltés **csak `creatives` sort ír** (`CreativeLibrary.tsx:348` → `POST /api/creatives` → `createCreative`). MC-t sosem hozott létre. Az MC324a azért van bent, mert azt még a `scripts/rebuild-creatives.ts` batch generálta (2026-08-17). A `MatrixToolbar` szövege („upload correctly-named creatives to the Creative Library") **a mai kódra nem igaz**.
+
+**Második blokkoló:** a `promoteCreative` (`promote.ts:113`) „már mátrixolt"-nak minősít mindent, aminek van `mcNumber` ÉS `mcVariant` mezője — a feltöltéskor viszont épp a fájlnévből *beírjuk* mindkettőt. Így az egyetlen élő creative→MC út is elutasítja őket. A guard a **back-link mezőt** nézi a **message létezése** helyett.
+
+**Érintettek (nem csak a 324):** 6 orphan MC, 66 fájl — `324b`, `324c` (2026-09-03), `338a` (08-06), `333a`, `335a`, `337a` (07-29). Mindegyiknek van már azonos számú testvér-message-e, tehát a topic mindegyiknél örökölhető.
+
+#### 1. lépés — a 6 orphan behúzása
+- [x] `ensureAgenticMc(clientId, creative)` a `promote.ts`-be: (szám, variáns, méretből jövő csatorna) hármasra keres/létrehoz egy template-nélküli message-t. Csatorna a rebuild user-lockolt szabálya szerint (`1080x1080`/`1200x628` → SOC, egyébként DISP). Topic: az azonos számú **létező testvér** topicja, ha van; különben `${product}_${keywords}`. Identity a `regeneratedIdentity`-vel (nem a script kézi pmmid+trafficking másolatával). Státusz `ACTIVE` — leszállított fájl, nem megírandó kártya.
+- [x] **Nem frissít meglévő message-t** (nincs image1-felülírás) — csak hiányzót pótol, hogy kurált mezőt soha ne írjon felül.
+- [x] `scripts/backfill-orphan-mcs.ts` — dry-run alapból, `--commit`-tal ír. Csoportonként a reprezentáns fájl = max verzió, majd max terület (a batch `pickRep`-je).
+- [x] Dry-run megmutatva → user zöld lámpa → commit → DB-ellenőrzés.
+
+#### 2. lépés — a tartós javítás
+- [x] A feltöltés maga ejtse a tükör-MC-t: `createCreativeWithMirror` a `POST /api/creatives` route-ban és az MCP `creative_create`-ben (a `createCreative` marad tiszta insert).
+- [x] `promoteCreative` guard: a „már mátrixolt" a **message létezésén** múljon, ne a `mcNumber`/`mcVariant` mezőn. Ha a creative-nek van fájlnévből jövő száma → `ensureAgenticMc` (a szám marad), ha nincs → a mai auto-assign ág.
+- [x] `MatrixToolbar` Agentic-szövege igazzá válik — marad, ahogy van.
+- [x] Tesztek: feltöltés → message születik; második fájl ugyanabba a cellába nem duplikál; a méret-alapú csatornaszétosztás; a promote guard már nem utasít el message nélküli creative-et.
+
+**Review (2026-09-06, szállítva):**
+
+- **A dry-run 7 MC-t talált, nem 6-ot.** Az `MC334a` azért hiányzott az első listámból, mert a „van-e message ezzel a számmal" lekérdezésem **nem tengelyre szűrt**: a 334-es a DCO oldalon foglalt (SZK, HTML, 35 kártya), és ez elnyelte a MARKET `premium_utazas` statikus sorozatot. A scriptbeli ellenőrzés csatorna-audience-re szűkít, ezért találta meg. User döntése: mind a 14 cella megy (lockolt cross-axis szabály — a DCO és az Agentic külön számtér).
+- **A 672-ből 658 cella már létezett** — vagyis az `ensureAgenticMc` csatorna- és csoportosítási szabálya bitre reprodukálja, amit a batch import kiírt. Ez volt a legerősebb ellenőrzés arra, hogy a szabály tényleg ugyanaz: ha elcsúszott volna, több száz „hiányzó" cellát jelentett volna.
+- **Élesben:** 14 sor, PMMID + trafficking generálva, `ACTIVE`, `template=null`. Az MC324 a/b/c most egy cellában ül (`SZA_DiakszamlaQ3_csakfoto`). Fájl nem mozdult, MinIO-t nem érintettük.
+- **Nyitva hagyva (nem ennek a szeletnek a dolga):** a `333/335/337` topic-sztringje félrevezető (`MARKET_MCx_d_genZbefektetes_2026Q1` a `tengeri_hajozas` sorozat felett) — a batch `topicByNumber`-e annak idején rossz variáns-'a' rekordot fogott meg. A backfill **örökölte** ezt, mert egy szám nem ívelhet át topicokon a tengelyen belül: az `a` oda kell, ahol a `b` már ül. Egy topic-átnevezés mindkettőt egyszerre vinné a helyes sorba.
+- **Deploy kell:** a 14 cella már látszik élesben (közös DB), de a **feltöltési hook csak deploy után** él a boxon.

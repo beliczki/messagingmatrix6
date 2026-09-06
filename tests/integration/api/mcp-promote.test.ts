@@ -139,6 +139,36 @@ describe("creative_promote via MCP", () => {
     expect(second.text).toContain("already matrixed");
   });
 
+  it("matrixizes a filename-numbered creative at the number it names", async () => {
+    // mc_number/mc_variant come from the filename at upload — they say what the
+    // file IS, not that a card exists for it. Promote used to read them as
+    // proof of one and refuse.
+    await seedChannelAudience(erste.id, "DISP", 0);
+    const cr = await seedCreative(erste.id, {
+      fileName: "ERSTE_SZA_MC324_b_DiakszamlaQ3_n2_970x250.png",
+      product: "SZA",
+      mcNumber: 324,
+      mcVariant: "b",
+    });
+
+    const res = await callTool(erste.id, "creative_promote", {
+      creative_id: cr.id,
+      channel: "DISP",
+    });
+    expect(res.isError).toBe(false);
+    expect(res.json.message.number).toBe(324);
+    expect(res.json.message.variant).toBe("b");
+    expect(res.json.message.template).toBeNull();
+
+    // Now there IS a card, so a second call is refused — for the right reason.
+    const again = await callTool(erste.id, "creative_promote", {
+      creative_id: cr.id,
+      channel: "DISP",
+    });
+    expect(again.isError).toBe(true);
+    expect(again.text).toContain("already matrixed");
+  });
+
   it("resolves the channel from a prodlist deliverable match on familyKey", async () => {
     await seedChannelAudience(erste.id, "PRG", 0);
     const familyKey = "ERSTE_SZA_MC289_a_diakszamla_2026Q1";

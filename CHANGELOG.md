@@ -5,6 +5,26 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.68.0] — 2026-09-06
+
+### Fixed
+- **A correctly-named creative now reaches the Agentic matrix.** Uploading to
+  the Creative Library wrote a `creatives` row and nothing else, so every MC
+  named by a filename after the last batch import stayed invisible in the
+  matrix — the Agentic grid draws `messages`. The upload now creates the cell
+  the filename names, on the channel its declared size implies, in the topic
+  that number already occupies. 14 delivered cells across MC324b/c, 333a, 334a,
+  335a, 337a and 338a were backfilled.
+- **Promote stopped calling a creative "already matrixed" for being named.**
+  The guard read `mc_number` + `mc_variant`, which the Creative Library fills
+  from the filename at upload — so it refused the very files that had no matrix
+  card. It now asks the matrix. A creative that names its own MC is promoted at
+  that number instead of being allocated a new one.
+
+### Added
+- `scripts/backfill-orphan-mcs.ts` — dry-runs inside a rolled-back transaction,
+  writes with `--commit`.
+
 ## [6.67.1] — 2026-09-06
 
 ### Changed

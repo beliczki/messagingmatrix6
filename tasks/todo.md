@@ -350,7 +350,7 @@ A `messages` tabla egy sora **kirakas (placement)**, nem uzenet: egy 24 audience
 A workflow-agent ma vagy `read` (semmit nem tud létrehozni), vagy `full` (a teljes mátrixot írhatja). A munkamódszer viszont pont a közepét kívánja: az agent **lásson mindent** (mátrix, kreatívok, riport, sablonok — hogy tudjon dönteni), de **csak a draft-térbe írhasson**, ahol a hibája nem ér el élő kártyát.
 
 - [ ] `mcp_tokens.scope` harmadik értéke: `read | draft | full` (a check/validáció a `mcp-tokens` route-ban és a Settings › MCP fülön).
-- [ ] A `buildMcpServer` regisztrációs feltétele: `draft` = minden read tool + **a draft-írók** (`generate_test_creative`, `draft_delete`, `brief_attach`, és a draftra korlátozott `mc_update`?) — a `draft_promote` **NEM**, mert az cellát ad, azaz kilép a draft-térből. ⚠️ OPEN Q: a promote tényleg kimarad-e, vagy a scope „draft + promote" legyen.
+- [ ] A `buildMcpServer` regisztrációs feltétele: `draft` = minden read tool + **a draft-írók** (`generate_test_creative`, `draft_archive`, `brief_attach`, és a draftra korlátozott `mc_update`?) — a `draft_promote` **NEM**, mert az cellát ad, azaz kilép a draft-térből. ⚠️ OPEN Q: a promote tényleg kimarad-e, vagy a scope „draft + promote" legyen.
 - [ ] A ma `full`-höz kötött, draftra is ható tool-oknál a scope nem elég: a **sor** is draft kell legyen (`status='DRAFT'` ⟺ `audience IS NULL`) — a guard az entity-ben, nem a tool-listában, különben egy új tool kifelejtődik.
 - [ ] Tesztek: `draft`-scope-os token nem tud `mc_create`-et / `draft_promote`-ot / dimenzió-írást; ugyanaz a token minden read toolt lát; a `full` és a `read` viselkedése változatlan (regresszió).
 - [ ] `McpTab.tsx` prózája — a tool-lista magától szinkronizál a `mcp.ts`-ből, a **szöveges** szekciók kézzel írtak (l. `feedback_mcp_settings_page_sync`).
@@ -2148,3 +2148,15 @@ workflow közepén fog kiderülni.
 **DEPLOYOLVA 6.70.0 (2026-09-06):** commit `342bb19`, box `c60c1d6`→`342bb19`. **Séma-migráció VAN**, egy passzban: `export $(grep '^DATABASE_URL=' .env | xargs) && npm run db:migrate` (0016+0017) → build 43s → `pm2 restart mm6-erste --update-env` → Ready 1275ms. **Mentés a migráció előtt** (`scratchpad/briefs-backup-20260906.sql` + `messages-briefid-backup-20260906.csv`): 4 brief-sor, 9 hivatkozás. Ellenőrizve élesben: `to_regclass('briefs')` = NULL, mind a **9 hivatkozás átjött** a `brief_slides_file_id`-be a helyes deck-ID-vel. Health: `/` 307 · `/login` 200 · `/drafts` 307 · `/matrix` 307 · `/api/drafts` 401 · **`/api/briefs` 404** (a route eltűnt, ahogy kell) · `/mcp` 401.
 
 **Böngészőben ellenőrizve:** a drafts fal 9 kártyája élőben renderel (MC400a a saját headline/copy/CTA-jával — pont az, ami eddig „No content yet"-et írt); a sablonnal még nem rendelkezők üres bannert mutatnak, nem hazug szöveget; a Promote fülön ott az `Archive | Delete` páros. A `</>` ikon a render előtti pillanat placeholdere, nem hiba.
+
+### 2026-09-06 — `draft_delete` → `draft_archive` — 6.71.0
+
+**User:** „akkor hívjuk úgy az mcp funkciot draft_delete helyett draft_archive ne legyen féreveztő" — igen: a tool sosem törölt, archivál, és a szám nyugdíjazva marad. A név az ellenkezőjét ígérte, ráadásul pont annál a hívásnál, amelyikhez az agent akkor nyúl, amikor el akar dobni valamit.
+
+- [x] `mcp.ts`: a regisztrált név `draft_archive`; a leírás kimondja, hogy **semmi nem töröl MCP-n**, és hogy a UI Delete gombjának (elrontott draft, a szám visszajár) **szándékosan nincs MCP-párja** — egy sorokat hard-deletelni képes agent más kockázat, mint egy polcra tevő
+- [x] A `generate_test_creative` záró mondata is átírva (`draft_archive to shelve it`)
+- [x] `McpTab.tsx` prózája — a tool-lista magától szinkronizál, ez a bekezdés kézzel írt (l. `feedback_mcp_settings_page_sync`)
+- [x] `mcp-drafts.test.ts` + `mcp-auth.test.ts` (mindkét scope-lista); `docs/MM6_PURPOSE_STATE_CAPABILITIES.md` + `docs/MM6_MCP_E2E_TEST.md`
+- [x] A todo **korábbi checkpointjaiban** meghagytam a régi nevet (D4.1/D4.2/D4.T, Slice 3, 717.) — azok azt rögzítik, ami akkor igaz volt; a történet nem íródik át
+
+⚠️ **Ez töri az agent-szerződést:** a `~/ERSTE Addressable AI Agent` skill (és bármely más kliens), ha hívja a `draft_delete`-et, `tool not found`-ot fog kapni. A paraméterek és a válasz változatlanok, csak a név más.

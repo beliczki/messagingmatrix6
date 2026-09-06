@@ -178,7 +178,7 @@ describe("buildMcpServer scope gating", () => {
       "creative_upload",
       "mc_create_batch",
       "generate_test_creative",
-      "draft_delete",
+      "draft_archive",
       "draft_promote",
     ]) {
       expect(names).not.toContain(writeTool);
@@ -194,7 +194,7 @@ describe("buildMcpServer scope gating", () => {
       "asset_upload",
       "preview_generate",
       "generate_test_creative",
-      "draft_delete",
+      "draft_archive",
       "draft_promote",
     ]) {
       expect(names).toContain(t);

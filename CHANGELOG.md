@@ -5,6 +5,17 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.71.0] — 2026-09-06
+
+### Changed
+- **MCP `draft_delete` is now `draft_archive`.** It never deleted anything: it
+  archives the row and the MC number stays retired, exactly as for any archived
+  card. The name promised the opposite, and a tool an agent reaches for to
+  "discard" a mistake should say what it actually does. Nothing over MCP
+  hard-deletes a row — the drafts editor's Delete button does, and gives the
+  number back, but that stays a person's call. Agents calling `draft_delete`
+  must be updated; the arguments and the response are unchanged.
+
 ## [6.70.0] — 2026-09-06
 
 ### Removed

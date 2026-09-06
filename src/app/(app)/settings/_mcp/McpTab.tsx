@@ -223,8 +223,11 @@ export function McpTab() {
           <strong className="font-semibold">kept</strong> and the row is updated
           rather than replaced, so the number, the brief link and the history
           all survive; the topic must already exist, because promotion never
-          mints one. <code className="font-mono text-xs">draft_delete</code>{" "}
-          archives it (the number stays retired, as with any archived card).
+          mints one. <code className="font-mono text-xs">draft_archive</code>{" "}
+          shelves it — the number stays retired, as with any archived card. It
+          is deliberately not called <em>delete</em>: nothing over MCP deletes a
+          row. The Delete button in the drafts editor does, and gives the number
+          back, but that is a person&apos;s call on a draft made by mistake.
         </p>
         <p className="mt-2 text-sm text-slate-600">
           <code className="font-mono text-xs">brief_attach</code> records which

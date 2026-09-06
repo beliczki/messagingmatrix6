@@ -329,12 +329,12 @@ describe("brief_attach / list_briefs", () => {
   });
 });
 
-describe("draft_delete", () => {
+describe("draft_archive", () => {
   it("archives the draft and keeps its number retired", async () => {
     const draft = await callTool(erste.id, "generate_test_creative", {
       template: "html",
     });
-    const res = await callTool(erste.id, "draft_delete", {
+    const res = await callTool(erste.id, "draft_archive", {
       draft_id: draft.json.draft_id,
     });
     expect(res.isError).toBe(false);

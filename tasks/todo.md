@@ -1971,3 +1971,20 @@ A `MatrixGrid.tsx` invariáns-kommentje („Agentic MC csak kreatív-feltöltés
 - [x] Két új teszt: a promote **érintetlenül átviszi** a draft termékét (nem validál, nem töröl), és a termék nélküli draft is promotálható
 
 **Nyitva:** a `briefs.label` mező továbbra sincs kitöltve sehonnan (a Brief tabon nincs label input), de mostantól **nem számít** — a csoportfejléc a termék, nem a brief. A brief-választó legördülő viszont még mindig `Brief {id}`-ként listáz. A Drive-névlekérés (`GOOGLE_DRIVE_API_KEY`, `files.get?fields=id,name`) továbbra is a természetes megoldás, ha zavaró lesz.
+
+### 2026-09-06 — a Brief tab egy mezőre húzva — 6.67.1
+
+**User:** „ennek a lehullónak mi értelme? szerintem nekünk tök elég az hogy egy slide-ot be lehet linkelni, deck link sem kell, miért tetted oda, védd meg magad mielőtt vakon szótfogadsz."
+
+**Az élesben ellenőrizve (user képernyőképe):** a slide **preview működik** — a 3. slide-ot rendereli („Számlakonstrukciók MC401"). Ez volt a nyitva maradt E4 pont; a deck elég szélesen van megosztva az iframe-hez.
+
+**A legördülő védhetetlen volt.** Egyetlen dolga az volt, hogy megmondja, melyik CSOPORTBA kerül a draft — amikor a drafts oldal briefenként csoportosított. A csoportosítás egy szelettel korábban átment termékre, és **nem nyitottam ki újra a Brief tabot**. Egy vezérlő, ami túlélte a saját indoklását. A UI-ban a `briefId` egyetlen olvasója maga a `BriefTab` volt. Ráadásul a label mező kivétele után „Brief 2"-t kínált — értelmezhetetlen opciók egy következmény nélküli döntéshez.
+
+**Amit megvédtem, és megmaradt: a brief-SOR, csak kérdés nélkül.** A slide link *tartalmazza* a deck id-jét (`parseSlidesFileId` + `parseSlideAnchor`, tesztelve, hogy egyik sem nyeli el a másikat), tehát „egy mező" és „a deck azonosítva van" nem alternatívák — az egyik következik a másikból, nulla UI-költséggel. Amit a sor eldobása elvinne: az MCP `list_briefs` `open_drafts`/`promoted` válasza a „mi lett ebből a deckből?" kérdésre; a „hat kártya egy deckből" mint TÉNY, nem URL-string-egyezés (pont ez a `parseSlidesFileId` létezésének oka); és egy destruktív migráció olyasmiért, amire az FR-B még mutat.
+
+- [x] `BriefTab` → egy `Brief slide` mező + preview + Note. Legördülő, attach-doboz, Attach gomb törölve
+- [x] A mező a **tárolt állapotot mutatja** (kanonikus link a file id + horgony párból), és blur/Enter-re alkalmaz — az attach írás, egy beillesztés akkor kész, amikor a fókusz elmegy
+- [x] Üres mező = leválasztás (`briefId` + `briefSlideId` null)
+- [x] A `["briefs"]` query megmarad, de **csak lookupra** (az embednek kell a deck file id-je), nem renderel vezérlőt
+
+**Tanulság a következő szelethez:** amikor egy csoportosítási/rendezési döntés megváltozik, végig kell nézni, mely vezérlők léteztek KIZÁRÓLAG azért a döntésért. Ez a hiba nem a rossz tervezés volt, hanem hogy nem tértem vissza.

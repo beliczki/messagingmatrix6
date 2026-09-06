@@ -5,6 +5,20 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.67.1] — 2026-09-06
+
+### Changed
+- **The Brief tab is one field: paste the slide link.** The deck picker, the
+  "attach a deck by link" box and its Attach button are gone. A Slides link
+  already carries both facts — the deck and the page — so the deck is resolved
+  behind the paste instead of being asked about. The picker's only job had been
+  choosing which group a draft landed in, and grouping moved to product in
+  6.67.0; it outlived its reason and, with the label field also gone, had been
+  offering unreadable "Brief 2" options for a choice with no consequence.
+  Briefs are still stored as rows keyed on the Drive file id, so "these cards
+  came from one deck" stays a fact rather than a string match, and MCP's
+  `list_briefs` keeps answering what came of each deck.
+
 ## [6.67.0] — 2026-09-06
 
 ### Changed

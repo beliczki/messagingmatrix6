@@ -1,22 +1,28 @@
 "use client";
 
-// The brief behind a card: which Slides deck the work came in on, WHICH SLIDE
-// of it, and a free-text note. Shared by the matrix editor and the drafts
-// editor — they are the same component, so a card keeps its brief when a draft
-// is promoted rather than the link living on only one of the two surfaces.
+// The brief behind a card: WHICH SLIDE it was briefed on, and a free-text note.
+// Shared by the matrix editor and the drafts editor, so a card keeps its brief
+// when a draft is promoted rather than the link living on only one surface.
 //
-// The deck and the slide are stored in two different places on purpose. A
-// brief is one row per deck per client (`briefs.slides_file_id`, idempotent by
-// Drive file id) because several cards share one deck; the SLIDE is per card
-// (`messages.brief_slide_id`) because they were each briefed on a different
-// page of it. Folding the slide into the brief's identity would split one deck
-// into one brief per slide and break the grouping the drafts page is built on.
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link2, Loader2, ExternalLink } from "lucide-react";
+// ONE field, because a Slides link carries both facts. `parseSlidesFileId`
+// takes the deck, `parseSlideAnchor` takes the page — one paste, and the deck
+// is identified without ever asking about it. That matters because the deck is
+// stored as a `briefs` ROW (idempotent on the Drive file id), which is what
+// makes "these six cards came from one deck" a fact rather than a string match
+// across three spellings of one URL. It is also what MCP's list_briefs counts
+// open_drafts/promoted from. None of that needs a control on this screen: the
+// user picks a slide, the deck follows.
+import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Loader2, ExternalLink } from "lucide-react";
 import Field from "./EditorField";
 import type { Brief } from "./types";
-import { parseSlideAnchor, slidesEmbedUrl, slidesUrl } from "@/lib/slides-link";
+import {
+  parseSlideAnchor,
+  parseSlidesFileId,
+  slidesEmbedUrl,
+  slidesUrl,
+} from "@/lib/slides-link";
 
 // Exactly the fields this tab writes. Declared here rather than imported from
 // the editor's EditableFields so the two files don't have to import each other.
@@ -32,6 +38,13 @@ async function fetchJSON<T>(url: string): Promise<T> {
   return r.json();
 }
 
+/** The canonical link for what is stored, so the field shows the saved state. */
+function linkFor(fileId: string | null, slideId: string | null): string {
+  const base = slidesUrl(fileId);
+  if (!base) return "";
+  return slideId ? `${base}#slide=id.${slideId}` : base;
+}
+
 export default function BriefTab({
   draft,
   onChange,
@@ -39,142 +52,98 @@ export default function BriefTab({
   draft: BriefFields;
   onChange: (patch: Partial<BriefFields>) => void;
 }) {
-  const [link, setLink] = useState("");
-  const [slideLink, setSlideLink] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const qc = useQueryClient();
 
+  // Read-only lookup: the embed needs the deck's file id, and the row holds
+  // only the brief's id. No control is rendered from this.
   const briefsQ = useQuery({
     queryKey: ["briefs"],
     queryFn: () =>
       fetchJSON<{ briefs: Brief[] }>("/api/briefs").then((d) => d.briefs),
   });
-  const briefs = briefsQ.data ?? [];
-  const current = briefs.find((b) => b.id === draft.briefId) ?? null;
+  const current =
+    (briefsQ.data ?? []).find((b) => b.id === draft.briefId) ?? null;
 
-  // Attaching is an upsert keyed on the Drive file id, so pasting a deck that
-  // is already attached selects the existing brief instead of duplicating it.
-  const attach = useMutation({
-    mutationFn: async () => {
+  // The field is seeded from what is stored and then owned by the user until
+  // the card changes underneath it (prev/next navigation).
+  const stored = linkFor(current?.slidesFileId ?? null, draft.briefSlideId);
+  const [link, setLink] = useState(stored);
+  useEffect(() => {
+    setLink(stored);
+    setError(null);
+  }, [stored]);
+
+  // Applied on blur rather than per keystroke: attaching is a write, and a
+  // paste is finished when focus leaves.
+  async function apply() {
+    const value = link.trim();
+    if (value === stored) return;
+    if (!value) {
+      onChange({ briefId: null, briefSlideId: null });
+      setError(null);
+      return;
+    }
+    if (!parseSlidesFileId(value)) {
+      setError(
+        /\/folders\//.test(value)
+          ? "that is a Drive FOLDER link — paste the link to the slide itself"
+          : "no Google Slides link in there — open the slide in Slides and copy the URL from the address bar",
+      );
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      // Idempotent on the file id: the same deck pasted again — or pasted as a
+      // Drive link where someone pasted the editor link — lands on one row.
       const r = await fetch("/api/briefs", {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ link }),
+        body: JSON.stringify({ link: value }),
       });
       const json = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(json?.error ?? `${r.status} ${r.statusText}`);
-      return json.brief as Brief;
-    },
-    onSuccess: (brief) => {
-      setError(null);
-      // A deep link pasted into the attach box names a slide as well as a
-      // deck; taking both saves the second paste.
-      const anchor = parseSlideAnchor(link);
       onChange({
-        briefId: brief.id,
-        ...(anchor ? { briefSlideId: anchor } : {}),
+        briefId: (json.brief as Brief).id,
+        briefSlideId: parseSlideAnchor(value),
       });
-      setLink("");
       qc.invalidateQueries({ queryKey: ["briefs"] });
-    },
-    onError: (e: unknown) =>
-      setError(e instanceof Error ? e.message : String(e)),
-  });
-
-  function applySlideLink(value: string) {
-    setSlideLink(value);
-    if (!value.trim()) {
-      onChange({ briefSlideId: null });
-      setError(null);
-      return;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
     }
-    const anchor = parseSlideAnchor(value);
-    if (!anchor) {
-      setError(
-        "no slide in that link — open the slide in Slides and copy the URL from the address bar (it ends in #slide=id.g…)",
-      );
-      return;
-    }
-    setError(null);
-    onChange({ briefSlideId: anchor });
   }
 
   const embed = slidesEmbedUrl(current?.slidesFileId, draft.briefSlideId);
-  const openUrl = slidesUrl(current?.slidesFileId);
+  const openUrl = linkFor(current?.slidesFileId ?? null, draft.briefSlideId);
 
   return (
     <div className="message-editor-tab message-editor-tab--brief">
       <Field
-        label="Brief deck"
-        hint="One row per deck. Several cards share one brief, which is what groups them on the drafts page."
+        label="Brief slide"
+        hint="Open the slide this card was briefed on and paste its URL — the one ending in #slide=id.g…. A plain deck link works too; the preview then opens at the first slide."
       >
-        <select
-          value={draft.briefId ?? ""}
-          onChange={(e) =>
-            onChange({ briefId: e.target.value ? Number(e.target.value) : null })
-          }
-          className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
-        >
-          <option value="">— none —</option>
-          {briefs.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.label || `Brief ${b.id}`}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <div className="brief-tab__attach mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
-        <div className="brief-tab__attach-label mb-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
-          Attach a deck by link
+        <div className="brief-tab__link-row relative">
+          <input
+            type="url"
+            value={link}
+            onChange={(e) => setLink(e.target.value)}
+            onBlur={apply}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+            }}
+            placeholder="https://docs.google.com/presentation/d/…#slide=id.g123abc_0_1"
+            className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 pr-7 text-xs focus:border-slate-500 focus:outline-none"
+          />
+          {busy ? (
+            <Loader2 className="brief-tab__spinner absolute right-2 top-1/2 size-3.5 -translate-y-1/2 animate-spin text-slate-400" />
+          ) : null}
         </div>
-        <p className="brief-tab__attach-hint mb-2 text-[10px] leading-relaxed text-slate-400">
-          Paste the deck link, or the link to the exact slide — a slide link
-          sets both the deck and the slide below in one go. The stored identity
-          is the Drive file id, so the editor link and the Drive link are one
-          brief rather than two.
-        </p>
-        <input
-          type="url"
-          value={link}
-          onChange={(e) => setLink(e.target.value)}
-          placeholder="https://docs.google.com/presentation/d/…"
-          className="input-box mb-2 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
-        />
-        <button
-          type="button"
-          onClick={() => attach.mutate()}
-          disabled={!link.trim() || attach.isPending}
-          className="toolbar-btn toolbar-btn--primary flex items-center gap-1.5 rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:opacity-40"
-        >
-          {attach.isPending ? (
-            <Loader2 className="size-3.5 animate-spin" />
-          ) : (
-            <Link2 className="size-3.5" />
-          )}
-          Attach
-        </button>
-      </div>
-
-      <Field
-        label="Slide"
-        hint="Paste the link to the SLIDE this card was briefed on — open it in Slides and copy the URL; it ends in #slide=id.g…. Empty means the deck opens at its first slide."
-      >
-        <input
-          type="url"
-          value={slideLink}
-          onChange={(e) => applySlideLink(e.target.value)}
-          placeholder="https://docs.google.com/presentation/d/…#slide=id.g123abc_0_1"
-          className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
-        />
       </Field>
-
-      {draft.briefSlideId ? (
-        <p className="brief-tab__anchor -mt-1 mb-3 font-mono text-[10px] text-slate-500">
-          slide {draft.briefSlideId}
-        </p>
-      ) : null}
 
       {error ? (
         <p className="form-field__error mb-3 rounded-md bg-rose-50 px-2 py-1.5 text-xs text-rose-700">
@@ -186,17 +155,15 @@ export default function BriefTab({
         <div className="brief-tab__preview mb-4">
           <div className="brief-tab__preview-label mb-1 flex items-center justify-between text-[10px] font-medium uppercase tracking-wider text-slate-500">
             <span>Preview</span>
-            {openUrl ? (
-              <a
-                href={openUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 normal-case tracking-normal text-slate-500 hover:text-slate-900"
-              >
-                <ExternalLink className="size-3" />
-                Open in Slides
-              </a>
-            ) : null}
+            <a
+              href={openUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 normal-case tracking-normal text-slate-500 hover:text-slate-900"
+            >
+              <ExternalLink className="size-3" />
+              Open in Slides
+            </a>
           </div>
           <iframe
             key={embed}
@@ -212,13 +179,13 @@ export default function BriefTab({
         </div>
       ) : (
         <div className="empty-state mb-4 rounded-lg border border-dashed border-slate-300 p-6 text-center text-xs text-slate-400">
-          Attach a deck to preview the briefed slide here.
+          Paste a slide link to preview it here.
         </div>
       )}
 
       <Field
         label="Note"
-        hint="Free text. What the deck asked for, in your own words."
+        hint="Free text. What the brief asked for, in your own words."
       >
         <textarea
           value={draft.brief ?? ""}

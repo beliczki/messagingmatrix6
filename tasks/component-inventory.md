@@ -830,6 +830,13 @@ A régi `draft_messages`-alapú változat blokk-nevei nagyrészt megmaradnak, de
 - `drafts-panel` — a side-toolbar tartalma a `right-toolbar` render-prop mintájával: `__hint`, `__new` (`toolbar-btn--primary`), `__attach` (`toolbar-btn`), `__collapsed-icon` (összecsukott ikonsor).
 - `draft-detail` — `AppDialog` tartalma: `__previews` / `__preview` / `__preview-grid` (méretenként PNG, elavultnál „· stale" felirat), `__form` (globális `form-field` + `input-box`), `__promote` (szürke dobozban audience+topic select + `toolbar-btn--primary`). Archiválás `toolbar-btn--danger`.
 
+**Drafts oldal — szűrés csoportosítás helyett (2026-09-06):**
+- `drafts-view__toolbar` — most a **mátrix toolbar nyelvét** beszéli: `input-box input-box--with-icon` szabadszöveges szűrő (ugyanaz a `parseSearchQuery` nyelv), `MultiPill` „Product" (`ALL_NONE_QUICK_SELECT`), `toolbar-btn` Clear, jobbra `toolbar__count` (`N/M open`, `tabular-nums`).
+- Megszűnt: `product-group` (és előtte `brief-group`) — a lap egyetlen `Masonry` fal, nincs `drafts-view__groups`.
+- `drafts-tile__product` — a termék `tag-chip`-je a kártyán (sötét `bg-slate-800 text-white`; termék nélkül szaggatott keret + halvány szöveg, „no product"). Ez váltja ki a csoportfejlécet.
+- Megszűnt: `drafts-tile__topic` — a draft munkacíme nem tény, a Promote fül Topic-hintjében él tovább.
+- `brief-tab__reserved-note` — a Brief fül draft-only intake-blokkjának bevezető sora („MC400a is already reserved…"), a Promote fülről ideköltözve. Vele jött a Draft name + Product `form-field` is; placed kártyán az egész blokk hiányzik (`intake` prop nélkül).
+
 **Inactive header jelölés a mátrixban (2026-08-14):**
 - `matrix-grid__col-header-label--inactive` / `matrix-grid__row-header-label--inactive` — INACTIVE státuszú audience/topic fejléc-szövege halványszürke (dense függőleges labelre is). Csak a szöveg halványul, a cella/fejléc háttere változatlan.
 - `text-text-disabled` — új globális text-token (`--text-disabled`: light `#cccccc` / dark `#4d4d4d`), a tertiary-nél egy fokkal halványabb, inaktív/de-emphasized tartalomra. Első használó: az inactive mátrix-fejlécek.

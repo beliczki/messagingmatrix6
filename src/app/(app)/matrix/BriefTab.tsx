@@ -12,6 +12,11 @@
 // across three spellings of one URL. It is also what MCP's list_briefs counts
 // open_drafts/promoted from. None of that needs a control on this screen: the
 // user picks a slide, the deck follows.
+//
+// On a DRAFT this tab is also the intake: what the card IS, before anyone has
+// decided where it goes. The reserved-number line and the product live here
+// (passed in as `intake`, which a placed card simply does not have) because
+// they answer the same question the slide does. Promote is left with WHERE.
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, ExternalLink } from "lucide-react";
@@ -45,11 +50,31 @@ function linkFor(fileId: string | null, slideId: string | null): string {
   return slideId ? `${base}#slide=id.${slideId}` : base;
 }
 
+/** The draft-only half of this tab. A placed card passes nothing. */
+export type BriefIntake = {
+  /** "MC400a" — the number the draft is already holding. */
+  mcLabel: string;
+  /**
+   * `name` from the live edit state. A placed card edits this on its Naming
+   * tab; a draft has no Naming tab, so without this the label the drafts page
+   * shows on every card was the one field nothing could change.
+   */
+  nameValue: string | null;
+  onNameChange: (name: string | null) => void;
+  /** `draftProduct` from the live edit state, so a pick shows immediately. */
+  productValue: string | null;
+  /** The product vocabulary the dimensions already use. */
+  productOptions: string[];
+  onProductChange: (product: string | null) => void;
+};
+
 export default function BriefTab({
   draft,
+  intake,
   onChange,
 }: {
   draft: BriefFields;
+  intake?: BriefIntake;
   onChange: (patch: Partial<BriefFields>) => void;
 }) {
   const [error, setError] = useState<string | null>(null);
@@ -123,6 +148,45 @@ export default function BriefTab({
 
   return (
     <div className="message-editor-tab message-editor-tab--brief">
+      {intake ? (
+        <>
+          <p className="brief-tab__reserved-note mb-3 text-xs text-slate-500">
+            {intake.mcLabel} is already reserved — nothing else can take the
+            number. Promoting gives it a cell and keeps the number.
+          </p>
+
+          <Field
+            label="Draft name"
+            hint="Short label shown on the card in the drafts list and, once promoted, in the matrix and feed views."
+          >
+            <input
+              type="text"
+              value={intake.nameValue ?? ""}
+              onChange={(e) => intake.onNameChange(e.target.value || null)}
+              className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
+            />
+          </Field>
+
+          <Field
+            label="Product"
+            hint="Tags the draft on the drafts page and drives its Product filter. Once it has a cell the product comes from the cell instead, so this is only needed while it is a draft."
+          >
+            <select
+              value={intake.productValue ?? ""}
+              onChange={(e) => intake.onProductChange(e.target.value || null)}
+              className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
+            >
+              <option value="">— not set yet —</option>
+              {intake.productOptions.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </>
+      ) : null}
+
       <Field
         label="Brief slide"
         hint="Open the slide this card was briefed on and paste its URL — the one ending in #slide=id.g…. A plain deck link works too; the preview then opens at the first slide."

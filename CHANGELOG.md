@@ -5,6 +5,29 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.69.0] — 2026-09-06
+
+### Changed
+- **The draft editor reads left to right as the work runs.** Brief is the first
+  tab and Promote the last, and a draft now opens on Brief. The reserved-number
+  line and the Product picker moved off Promote onto Brief, which leaves each
+  tab one question: Brief is what the card IS, Promote is where it goes. The
+  matrix card's tab order is untouched — it opens on Naming and keeps Brief at
+  the back.
+- **A draft's name is editable.** It sits on the Brief tab, next to the product.
+  A draft has no Naming tab, so the label every drafts card shows was the one
+  field nothing could change.
+- **The drafts page filters instead of grouping.** One flat wall of cards with
+  the product as a tag on each, plus the matrix's own toolbar: the same
+  free-text query language (`mc:`, `t:`, OR, quotes) and a Product pill with
+  per-product counts, including "(no product)" for the drafts still missing one.
+  Product grouping (6.67.0) is gone with it.
+
+### Removed
+- The topic chip on a draft card. It showed the draft's working title, which
+  promoting never uses — a leftover reading as a fact. It survives as the hint
+  under the Promote tab's Topic picker, where it is true.
+
 ## [6.68.0] — 2026-09-06
 
 ### Fixed

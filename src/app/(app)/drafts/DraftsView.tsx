@@ -6,20 +6,27 @@
 // runs on the ordinary message machinery; what makes it a draft is the missing
 // cell, and promoting is what fills it in.
 //
-// Grouped by BRIEF, because the question this page answers is "what came of
-// this deck?" — the promote counts on each group header are the cheap version
-// of a close check: both numbers are counted from the work itself, so there is
-// no separate state to drift.
+// ONE flat wall of cards, filtered — not grouped. Every draft carries its
+// product as a tag, so the page no longer has to be cut into sections to say
+// which is which: reading it off a card is one glance, narrowing to a product
+// is one click. Grouping forced a shape on the page even when nobody was
+// asking the question it answered.
+//
+// The toolbar is the matrix's on purpose: the same `parseSearchQuery` language
+// (mc:, t:, free text, OR, quotes) and the same Product MultiPill, so one
+// filter habit works on both pages.
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Filter as FilterIcon,
   FlaskConical,
   Loader2,
-  Package,
   Plus,
+  X,
 } from "lucide-react";
 import clsx from "clsx";
 import { Masonry } from "../_components/Masonry";
+import MultiPill, { ALL_NONE_QUICK_SELECT } from "../_components/MultiPill";
 import RightToolbar from "../_components/RightToolbar";
 import MessageEditor from "../matrix/MessageEditor";
 import {
@@ -28,11 +35,13 @@ import {
   type Channel,
   type Topic,
 } from "../matrix/types";
+import { emptySearchFields, parseSearchQuery } from "@/lib/search-query";
 import type { Draft, DraftPreview, BriefRow } from "./types";
 
-// Map key for the drafts that have no product yet. A sentinel rather than a
-// nullable key so the group can be sorted to the end deliberately.
-const NO_PRODUCT = "\u0000none";
+// Filter option for the drafts that have no product yet. They were a group of
+// their own before; staying able to isolate them is why this is an option
+// rather than simply "matched by no product".
+const NO_PRODUCT = "(no product)";
 
 async function fetchJSON<T>(url: string): Promise<T> {
   const r = await fetch(url, { credentials: "include" });
@@ -58,6 +67,8 @@ export function mcLabel(d: { number: number; variant: string }): string {
 
 export default function DraftsView() {
   const [detailId, setDetailId] = useState<number | null>(null);
+  const [search, setSearch] = useState("");
+  const [products, setProducts] = useState<Set<string>>(new Set());
   const qc = useQueryClient();
 
   // The Promote tab offers both axes, so it needs both halves of the audience
@@ -116,30 +127,51 @@ export default function DraftsView() {
     return m;
   }, [previews]);
 
-  // Product groups, alphabetical, with the product-less drafts LAST — they are
-  // the ones still missing the first thing you would sort them by. Grouping is
-  // by product rather than by brief because that is how the rest of the app
-  // partitions work (matrix filter, creative library, dashboard); the brief is
-  // still attached to each card and lives on its Brief tab, it just no longer
-  // decides the page's shape.
-  const groups = useMemo(() => {
-    const byProduct = new Map<string, Draft[]>();
+  // The product vocabulary is whatever the drafts actually carry, alphabetical,
+  // with "(no product)" last — it is the one option that is not a product.
+  const productOptions = useMemo(() => {
+    const named = new Set<string>();
+    let loose = false;
     for (const d of drafts) {
-      const key = d.draftProduct ?? NO_PRODUCT;
-      const list = byProduct.get(key) ?? [];
-      list.push(d);
-      byProduct.set(key, list);
+      if (d.draftProduct) named.add(d.draftProduct);
+      else loose = true;
     }
-    const named = [...byProduct.keys()]
-      .filter((k) => k !== NO_PRODUCT)
-      .sort((a, b) => a.localeCompare(b));
-    const out: Array<{ product: string | null; drafts: Draft[] }> = named.map(
-      (p) => ({ product: p, drafts: byProduct.get(p)! }),
-    );
-    const loose = byProduct.get(NO_PRODUCT);
-    if (loose) out.push({ product: null, drafts: loose });
+    const out = [...named].sort((a, b) => a.localeCompare(b));
+    if (loose) out.push(NO_PRODUCT);
     return out;
   }, [drafts]);
+
+  const productCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const d of drafts) {
+      const key = d.draftProduct ?? NO_PRODUCT;
+      m[key] = (m[key] ?? 0) + 1;
+    }
+    return m;
+  }, [drafts]);
+
+  // An empty product set means "no product filter", exactly as on the matrix —
+  // the pill narrows, it never starts by hiding everything.
+  const visible = useMemo(() => {
+    const match = parseSearchQuery(search);
+    return drafts.filter((d) => {
+      if (products.size > 0 && !products.has(d.draftProduct ?? NO_PRODUCT)) {
+        return false;
+      }
+      // A draft has no cell, so the audience/strategy/platform axes of the
+      // query language have nothing to match — topic and mc do, and free text
+      // sees everything the card shows. Lowercase throughout: the parser
+      // lowercases the query, so a field that is not lowered never matches.
+      return match({
+        ...emptySearchFields(),
+        topic: (d.topic ?? "").toLowerCase(),
+        mc: mcLabel(d).toLowerCase(),
+        free: [mcLabel(d), d.name ?? "", d.topic ?? "", d.draftProduct ?? ""]
+          .join(" ")
+          .toLowerCase(),
+      });
+    });
+  }, [drafts, products, search]);
 
   const detail = drafts.find((d) => d.id === detailId) ?? null;
 
@@ -159,9 +191,44 @@ export default function DraftsView() {
           <div className="toolbar__title text-sm font-semibold text-slate-900">
             Drafts
           </div>
-          <div className="toolbar__count ml-auto text-[11px] text-slate-500">
-            {drafts.length} open · {groups.length} product
-            {groups.length === 1 ? "" : "s"}
+
+          <div className="input-box input-box--with-icon relative ml-2">
+            <FilterIcon className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              placeholder="Filter… t: mc: OR …"
+              title='Free text searches the MC label, name, product and working title. Prefixes: t: (working title), mc: (MC#). AND implicit, OR explicit. Quote "two words" for phrases.'
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="input-box__field w-72 rounded-md border border-slate-300 py-1 pl-7 pr-2 text-xs focus:border-slate-500 focus:outline-none"
+            />
+          </div>
+
+          <MultiPill
+            label="Product"
+            values={products}
+            options={productOptions}
+            optionCounts={productCounts}
+            quickSelect={ALL_NONE_QUICK_SELECT}
+            onChange={setProducts}
+          />
+
+          {products.size > 0 || search ? (
+            <button
+              type="button"
+              onClick={() => {
+                setProducts(new Set());
+                setSearch("");
+              }}
+              className="toolbar-btn flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
+            >
+              <X className="size-3" />
+              Clear
+            </button>
+          ) : null}
+
+          <div className="toolbar__count ml-auto text-[11px] tabular-nums text-slate-500">
+            {visible.length}/{drafts.length} open
           </div>
         </div>
 
@@ -171,7 +238,7 @@ export default function DraftsView() {
               <Loader2 className="mr-2 size-4 animate-spin" />
               Loading…
             </div>
-          ) : groups.length === 0 ? (
+          ) : drafts.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <div className="empty-state drafts-view__empty max-w-md rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
                 <FlaskConical className="empty-state__icon mx-auto mb-2 size-8 text-slate-400" />
@@ -186,18 +253,31 @@ export default function DraftsView() {
                 </p>
               </div>
             </div>
-          ) : (
-            <div className="drafts-view__groups flex flex-col gap-6">
-              {groups.map((g) => (
-                <ProductGroup
-                  key={g.product ?? NO_PRODUCT}
-                  product={g.product}
-                  drafts={g.drafts}
-                  previewsByDraft={previewsByDraft}
-                  onOpen={setDetailId}
-                />
-              ))}
+          ) : visible.length === 0 ? (
+            <div className="flex h-full items-center justify-center">
+              <div className="empty-state drafts-view__empty max-w-md rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
+                <FlaskConical className="empty-state__icon mx-auto mb-2 size-8 text-slate-400" />
+                <h2 className="empty-state__title text-sm font-semibold text-slate-900">
+                  No draft matches the filter
+                </h2>
+                <p className="empty-state__hint mt-1 text-xs text-slate-500">
+                  {drafts.length} open{" "}
+                  {drafts.length === 1 ? "draft is" : "drafts are"} hidden by it.
+                </p>
+              </div>
             </div>
+          ) : (
+            <Masonry
+              items={visible}
+              itemKey={(d) => d.id}
+              render={(d) => (
+                <DraftTile
+                  draft={d}
+                  previews={previewsByDraft.get(d.id) ?? []}
+                  onOpen={() => setDetailId(d.id)}
+                />
+              )}
+            />
           )}
         </div>
       </div>
@@ -247,50 +327,6 @@ export default function DraftsView() {
         onPromoted={refresh}
       />
     </div>
-  );
-}
-
-function ProductGroup({
-  product,
-  drafts,
-  previewsByDraft,
-  onOpen,
-}: {
-  product: string | null;
-  drafts: Draft[];
-  previewsByDraft: Map<number, DraftPreview[]>;
-  onOpen: (id: number) => void;
-}) {
-  return (
-    <section className="product-group">
-      <header className="product-group__header mb-2 flex flex-wrap items-center gap-2 border-b border-slate-200 pb-1.5">
-        <Package className="product-group__icon size-3.5 text-slate-400" />
-        <span
-          className={clsx(
-            "product-group__title text-xs font-semibold uppercase tracking-wider",
-            product ? "text-slate-700" : "text-slate-400",
-          )}
-        >
-          {product ?? "No product set yet"}
-        </span>
-        <span className="product-group__count text-[10px] text-slate-500">
-          {drafts.length}
-        </span>
-      </header>
-      {drafts.length === 0 ? null : (
-        <Masonry
-          items={drafts}
-          itemKey={(d) => d.id}
-          render={(d) => (
-            <DraftTile
-              draft={d}
-              previews={previewsByDraft.get(d.id) ?? []}
-              onOpen={() => onOpen(d.id)}
-            />
-          )}
-        />
-      )}
-    </section>
   );
 }
 
@@ -345,11 +381,21 @@ function DraftTile({
         <span className="drafts-tile__name truncate text-[11px] text-slate-500">
           {draft.name || "Untitled"}
         </span>
-        {draft.topic ? (
-          <span className="tag-chip drafts-tile__topic rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">
-            {draft.topic}
-          </span>
-        ) : null}
+        {/* The product travels on the card instead of in a group header. It is
+            the ONE tag here: the topic chip that used to sit beside it showed
+            the draft's working title, which promoting never uses — a leftover
+            reading as a fact. It survives where it is true, as the hint under
+            the Promote tab's Topic picker. */}
+        <span
+          className={clsx(
+            "tag-chip drafts-tile__product rounded px-1.5 py-0.5 text-[10px]",
+            draft.draftProduct
+              ? "bg-slate-800 text-white"
+              : "border border-dashed border-slate-300 text-slate-400",
+          )}
+        >
+          {draft.draftProduct ?? "no product"}
+        </span>
       </div>
     </button>
   );

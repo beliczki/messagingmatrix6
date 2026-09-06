@@ -255,10 +255,12 @@ export default function MessageEditor({
   const wide = isLandscape(previewSize);
 
   // Reset the tab only when the editor *opens* fresh — keep the current tab
-  // while navigating prev/next between MCs. A draft has no Naming tab, so it
-  // lands on the one question it exists to answer: where does this go?
+  // while navigating prev/next between MCs. Each set opens on its own first
+  // tab: a placed card on what it is called, a draft on what it is FOR. The
+  // draft's one question — where does this go? — is Promote, and that is the
+  // end of the work, so it sits at the end of the bar.
   useEffect(() => {
-    if (open) setTab(isDraft ? "promote" : "naming");
+    if (open) setTab(isDraft ? "brief" : "naming");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -320,6 +322,16 @@ export default function MessageEditor({
     () => topics.find((t) => t.key === message?.topic),
     [topics, message?.topic],
   );
+  // The product vocabulary is whatever the dimensions already use — read off
+  // audiences and topics rather than kept as a second hardcoded list that
+  // would drift from them. Only a draft names its own product (Brief tab); a
+  // placed card takes it from its cell.
+  const productOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of audiences) if (a.product) set.add(a.product);
+    for (const t of topics) if (t.product) set.add(t.product);
+    return [...set].sort();
+  }, [audiences, topics]);
 
   // The stepper walks UNIQUE messaging cards, not every per-audience copy of
   // the same card. We dedupe the visible list by (number, variant) — which
@@ -755,9 +767,13 @@ export default function MessageEditor({
             }}
           >
             <nav className="tab-bar flex h-10 shrink-0 items-stretch border-b border-slate-100 bg-slate-50 px-2">
+              {/* A draft reads left to right as the work runs: what it is
+                  for (Brief), what it says (Template/Content/Styles), where it
+                  goes (Promote). A placed card is already placed, so it opens
+                  on its identity and keeps Brief at the back. */}
               {isDraft ? (
-                <TabBtn active={tab === "promote"} onClick={() => setTab("promote")} icon={<ArrowUpRight className="size-3.5" />}>
-                  Promote
+                <TabBtn active={tab === "brief"} onClick={() => setTab("brief")} icon={<BookOpen className="size-3.5" />}>
+                  Brief
                 </TabBtn>
               ) : (
                 <TabBtn active={tab === "naming"} onClick={() => setTab("naming")} icon={<Tag className="size-3.5" />}>
@@ -776,14 +792,20 @@ export default function MessageEditor({
               {/* Trafficking is derived from the CELL (audience/topic patterns),
                   so a draft has nothing to generate it from — updateMessage
                   skips drafts for the same reason. */}
-              {isDraft ? null : (
-                <TabBtn active={tab === "trafficking"} onClick={() => setTab("trafficking")} icon={<Rocket className="size-3.5" />}>
-                  Trafficking
+              {isDraft ? (
+                <TabBtn active={tab === "promote"} onClick={() => setTab("promote")} icon={<ArrowUpRight className="size-3.5" />}>
+                  Promote
                 </TabBtn>
+              ) : (
+                <>
+                  <TabBtn active={tab === "trafficking"} onClick={() => setTab("trafficking")} icon={<Rocket className="size-3.5" />}>
+                    Trafficking
+                  </TabBtn>
+                  <TabBtn active={tab === "brief"} onClick={() => setTab("brief")} icon={<BookOpen className="size-3.5" />}>
+                    Brief
+                  </TabBtn>
+                </>
               )}
-              <TabBtn active={tab === "brief"} onClick={() => setTab("brief")} icon={<BookOpen className="size-3.5" />}>
-                Brief
-              </TabBtn>
             </nav>
 
             <div className="message-editor__tab-content flex-1 overflow-y-auto px-5 pb-80 pt-4">
@@ -793,12 +815,6 @@ export default function MessageEditor({
               {tab === "promote" && message.audience === null ? (
                 <PromoteTab
                   draft={message}
-                  productValue={draft.draftProduct}
-                  onProductChange={(product) =>
-                    setDraft((prev) =>
-                      prev ? { ...prev, draftProduct: product } : prev,
-                    )
-                  }
                   audiences={audiences}
                   topics={topics}
                   onDone={() => {
@@ -830,6 +846,24 @@ export default function MessageEditor({
               {tab === "brief" ? (
                 <BriefTab
                   draft={draft}
+                  intake={
+                    isDraft
+                      ? {
+                          mcLabel,
+                          nameValue: draft.name,
+                          onNameChange: (name) =>
+                            setDraft((prev) =>
+                              prev ? { ...prev, name } : prev,
+                            ),
+                          productValue: draft.draftProduct,
+                          productOptions,
+                          onProductChange: (product) =>
+                            setDraft((prev) =>
+                              prev ? { ...prev, draftProduct: product } : prev,
+                            ),
+                        }
+                      : undefined
+                  }
                   onChange={(patch) =>
                     setDraft((prev) => (prev ? { ...prev, ...patch } : prev))
                   }

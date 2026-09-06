@@ -26,6 +26,10 @@ import {
 } from "lucide-react";
 import clsx from "clsx";
 import { Masonry } from "../_components/Masonry";
+import {
+  MatrixIframePreview,
+  templateMetaFor,
+} from "../_components/MatrixIframeTile";
 import MultiPill, { ALL_NONE_QUICK_SELECT } from "../_components/MultiPill";
 import RightToolbar from "../_components/RightToolbar";
 import MessageEditor from "../matrix/MessageEditor";
@@ -33,10 +37,11 @@ import {
   channelToAudience,
   type Audience,
   type Channel,
+  type Message,
   type Topic,
 } from "../matrix/types";
 import { emptySearchFields, parseSearchQuery } from "@/lib/search-query";
-import type { Draft, DraftPreview, BriefRow } from "./types";
+import type { Draft } from "./types";
 
 // Filter option for the drafts that have no product yet. They were a group of
 // their own before; staying able to isolate them is why this is an option
@@ -104,31 +109,40 @@ export default function DraftsView() {
     [audiencesQ.data, channelsQ.data],
   );
 
+  // Same key and same ENVELOPE shape as the matrix and the creative library —
+  // see the query-key note above. The tiles need each template's default size
+  // to render at.
+  const templatesQ = useQuery({
+    queryKey: ["templates", "folders"],
+    queryFn: () =>
+      fetchJSON<{
+        templates: {
+          name: string;
+          sizes: string[];
+          defaultSize: string | null;
+          kind?: string;
+          previewFile?: string | null;
+          externalUrl?: string | null;
+        }[];
+      }>("/api/templates/folders"),
+  });
+
   const draftsQ = useQuery({
     queryKey: ["drafts"],
     queryFn: () =>
-      fetchJSON<{
-        drafts: Draft[];
-        previews: DraftPreview[];
-        briefs: BriefRow[];
-      }>("/api/drafts"),
+      fetchJSON<{ drafts: Draft[] }>("/api/drafts"),
   });
 
   // Memoised rather than `?? []` inline: a fresh empty array on every render
-  // invalidates the grouping memo below on every render too.
+  // invalidates every memo below on every render too.
   const data = draftsQ.data;
   const drafts = useMemo(() => data?.drafts ?? [], [data]);
-  const previews = useMemo(() => data?.previews ?? [], [data]);
 
-  const previewsByDraft = useMemo(() => {
-    const m = new Map<number, DraftPreview[]>();
-    for (const p of previews) {
-      const list = m.get(p.messageId) ?? [];
-      list.push(p);
-      m.set(p.messageId, list);
-    }
-    return m;
-  }, [previews]);
+  const templatesByName = useMemo(
+    () =>
+      new Map((templatesQ.data?.templates ?? []).map((t) => [t.name, t])),
+    [templatesQ.data],
+  );
 
   // The product vocabulary is whatever the drafts actually carry, alphabetical,
   // with "(no product)" last — it is the one option that is not a product.
@@ -276,7 +290,7 @@ export default function DraftsView() {
               render={(d) => (
                 <DraftTile
                   draft={d}
-                  previews={previewsByDraft.get(d.id) ?? []}
+                  template={d.template ? templatesByName.get(d.template) : undefined}
                   onOpen={() => setDetailId(d.id)}
                 />
               )}
@@ -335,18 +349,30 @@ export default function DraftsView() {
 
 function DraftTile({
   draft,
-  previews,
+  template,
   onOpen,
 }: {
   draft: Draft;
-  previews: DraftPreview[];
+  template?: {
+    name: string;
+    sizes: string[];
+    defaultSize: string | null;
+    kind?: string;
+    previewFile?: string | null;
+    externalUrl?: string | null;
+  };
   onOpen: () => void;
 }) {
-  // A preview is stale when the row moved on without a re-render; showing the
-  // old picture unmarked would be the one thing worse than showing none.
-  const fresh = previews.find((p) => p.messageVersion === draft.version);
-  const stale = !fresh && previews[0];
-  const shown = fresh ?? stale;
+  // Render the card, the way the matrix renders a cell — same component, same
+  // /api/render call, always current.
+  //
+  // This used to show a PNG shot by the MCP draft pipeline, and the fallback
+  // when no such shot existed read "No content yet — this draft has only its
+  // number". That sentence described the absence of a PREVIEW and claimed the
+  // absence of CONTENT: every draft written by hand in the editor said it,
+  // headline, copy and all. A card with a template can always be rendered, so
+  // there is nothing to shoot ahead of time and nothing to go stale.
+  const size = template?.defaultSize ?? template?.sizes[0] ?? "300x250";
   return (
     <button
       type="button"
@@ -354,28 +380,25 @@ function DraftTile({
       className="creative-card drafts-tile group block w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-left shadow-sm transition hover:shadow-md"
     >
       <div className="creative-card__thumb drafts-tile__media relative flex min-h-24 items-center justify-center bg-slate-50">
-        {shown ? (
-          <img
-            src={`/api/previews/${shown.id}?v=${encodeURIComponent(shown.updatedAt)}`}
-            alt={draft.name ?? mcLabel(draft)}
-            className={clsx(
-              "drafts-tile__img block w-full",
-              !fresh && "opacity-50",
-            )}
-            loading="lazy"
+        {draft.template ? (
+          <MatrixIframePreview
+            message={draft as unknown as Message}
+            templateName={draft.template}
+            size={size}
+            mode="fill-width"
+            templateMeta={templateMetaFor(template)}
+            quietConsole
           />
         ) : (
-          <div className="drafts-tile__placeholder p-6 text-center text-[11px] leading-relaxed text-slate-400">
-            No content yet —
+          /* Same footprint a 300x250 render takes at this column width, so a
+             template-less card holds its place in the masonry instead of
+             collapsing to its text and pulling the wall out of line. */
+          <div className="drafts-tile__placeholder flex aspect-[300/250] w-full items-center justify-center p-6 text-center text-[11px] leading-relaxed text-slate-400">
+            No template yet —
             <br />
-            this draft has only its number.
+            pick one on the draft&apos;s Template tab.
           </div>
         )}
-        {stale && !fresh ? (
-          <span className="status-badge drafts-tile__stale absolute right-1.5 top-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
-            stale preview
-          </span>
-        ) : null}
       </div>
       <div className="creative-card__meta drafts-tile__meta flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-2 py-1.5">
         <span className="creative-card__mc text-xs font-semibold text-slate-900">

@@ -108,7 +108,7 @@ describe("generate_test_creative", () => {
     });
     expect(res.isError).toBe(false);
     const [row] = await db.select().from(messages);
-    expect(row!.briefId).not.toBeNull();
+    expect(row!.briefSlidesFileId).toBe(DECK);
     expect(row!.topic).toBe("társasház (munkacím)");
   });
 
@@ -245,29 +245,65 @@ describe("draft_promote", () => {
 });
 
 describe("brief_attach / list_briefs", () => {
-  it("is idempotent across link spellings and can link a draft", async () => {
+  it("stores the file id and the slide anchor on the card", async () => {
     const draft = await callTool(erste.id, "generate_test_creative", {
       template: "html",
     });
-    const first = await callTool(erste.id, "brief_attach", {
+    const res = await callTool(erste.id, "brief_attach", {
       link: `https://docs.google.com/presentation/d/${DECK}/edit#slide=id.g1`,
-      label: "Q4 deck",
       draft_id: draft.json.draft_id,
     });
-    expect(first.json.linked_draft_id).toBe(draft.json.draft_id);
-
-    const second = await callTool(erste.id, "brief_attach", {
-      link: `https://drive.google.com/file/d/${DECK}/view`,
+    expect(res.json).toMatchObject({
+      message_id: draft.json.draft_id,
+      slides_file_id: DECK,
+      slide_id: "g1",
     });
-    expect(second.json.brief_id).toBe(first.json.brief_id);
+  });
+
+  it("reads one deck out of two spellings of its link", async () => {
+    // What the briefs table's unique index used to guarantee. The file id is
+    // canonical before it is stored, so two cards land on one deck without a
+    // row to dedupe against.
+    const a = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+    });
+    const b = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+    });
+    await callTool(erste.id, "brief_attach", {
+      link: `https://docs.google.com/presentation/d/${DECK}/edit#slide=id.g1`,
+      draft_id: a.json.draft_id,
+    });
+    await callTool(erste.id, "brief_attach", {
+      link: `https://drive.google.com/file/d/${DECK}/view`,
+      draft_id: b.json.draft_id,
+    });
 
     const briefs = await callTool(erste.id, "list_briefs", {});
     expect(briefs.json).toHaveLength(1);
     expect(briefs.json[0]).toMatchObject({
       slides_file_id: DECK,
-      open_drafts: 1,
+      open_drafts: 2,
       promoted: 0,
     });
+  });
+
+  it("detaches on an empty link, and the deck stops being listed", async () => {
+    const draft = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+    });
+    await callTool(erste.id, "brief_attach", {
+      link: `https://docs.google.com/presentation/d/${DECK}/edit`,
+      draft_id: draft.json.draft_id,
+    });
+    expect((await callTool(erste.id, "list_briefs", {})).json).toHaveLength(1);
+
+    const cleared = await callTool(erste.id, "brief_attach", {
+      link: "",
+      draft_id: draft.json.draft_id,
+    });
+    expect(cleared.json.slides_file_id).toBeNull();
+    expect((await callTool(erste.id, "list_briefs", {})).json).toHaveLength(0);
   });
 
   it("moves a brief's count from open to promoted", async () => {

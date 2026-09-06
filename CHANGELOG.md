@@ -5,6 +5,38 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.70.0] — 2026-09-06
+
+### Removed
+- **The `briefs` table.** A brief's identity is the Google Drive FILE ID, and
+  `slides-link.ts` already normalises every spelling of a link to it — so the
+  row was a surrogate key for a value that had one. "These six cards came from
+  one deck" is now `GROUP BY messages.brief_slides_file_id`, not a join. What
+  the table did add: an orphan row every time a link was cleared, 300 lines of
+  entity and route code, and a `["briefs"]` fetch in the editor whose only job
+  was to turn an id back into the string it was parsed from. Its one possible
+  payload — a human label for the deck — was never written by anything.
+  Migration `0016` + `0017` (backfill, then drop). `/api/briefs` is gone; MCP
+  keeps `list_briefs` (now grouped from the cards) and `brief_attach` (now a
+  field write, so `draft_id` is required).
+
+### Added
+- **Delete a draft, and get its number back.** `DELETE /api/drafts/[id]` hard-
+  deletes a DRAFT row; the Promote tab offers it beside Archive, behind a
+  second click that names the number. Archive is right for work that happened —
+  it keeps the number retired. A draft created by mistake never happened, and
+  archiving one burns an MC number to record that nothing did.
+
+### Fixed
+- **A draft card no longer claims to be empty when it isn't.** The tile showed
+  a PNG shot by the MCP draft pipeline and, when there was none, said "No
+  content yet — this draft has only its number" — which every hand-written
+  draft said, headline, copy and all, because it described the absence of a
+  PREVIEW. Tiles now render live through the same component the matrix grid
+  uses, so a card with a template always shows itself and nothing can go stale.
+  A template-less card gets a 300x250-shaped placeholder so the wall stays in
+  line.
+
 ## [6.69.1] — 2026-09-06
 
 ### Fixed

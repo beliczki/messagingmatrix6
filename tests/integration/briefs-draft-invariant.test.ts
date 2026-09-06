@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { clients, briefs, messages } from "@/db/schema";
+import { clients, messages } from "@/db/schema";
 import { createTestDb, type TestDb } from "../helpers/test-db";
 
 let h: TestDb;
@@ -62,73 +62,59 @@ function placedRow(over: Partial<typeof messages.$inferInsert> = {}) {
   };
 }
 
-describe("briefs table (migration 0012)", () => {
-  it("stores a Slides FILE ID and fills the timestamp defaults", async () => {
-    const [row] = await db
-      .insert(briefs)
-      .values({ clientId: erste.id, slidesFileId: SLIDES_ID, label: "Q4 brief" })
-      .returning();
-    expect(row).toMatchObject({
-      slidesFileId: SLIDES_ID,
-      label: "Q4 brief",
-      archivedAt: null,
-    });
-    expect(row!.createdAt).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
-  });
-
-  it("is unique per (client, file id) — one deck is one brief", async () => {
-    await db
-      .insert(briefs)
-      .values({ clientId: erste.id, slidesFileId: SLIDES_ID })
-      .returning();
-    expect(
-      await violatedConstraint(
-        db.insert(briefs).values({ clientId: erste.id, slidesFileId: SLIDES_ID }),
-      ),
-    ).toBe("briefs_client_slides_file_unique");
-  });
-
-  it("scopes the uniqueness to the client", async () => {
-    await db.insert(briefs).values({ clientId: erste.id, slidesFileId: SLIDES_ID });
-    const [other] = await db
-      .insert(briefs)
-      .values({ clientId: telekom.id, slidesFileId: SLIDES_ID })
-      .returning();
-    expect(other!.clientId).toBe(telekom.id);
-  });
-
-  it("cascades away with its client", async () => {
-    await db.insert(briefs).values({ clientId: erste.id, slidesFileId: SLIDES_ID });
-    await db.delete(clients).where(eq(clients.id, erste.id));
-    expect(await db.select().from(briefs)).toHaveLength(0);
-  });
-});
-
-describe("messages.brief_id (migration 0012)", () => {
-  it("links a draft to its brief and survives the brief's deletion as NULL", async () => {
-    const [brief] = await db
-      .insert(briefs)
-      .values({ clientId: erste.id, slidesFileId: SLIDES_ID })
-      .returning();
+describe("messages.brief_slides_file_id (migration 0017)", () => {
+  it("stores the deck's Drive FILE ID on the card", async () => {
     const [row] = await db
       .insert(messages)
-      .values(draftRow({ briefId: brief!.id }))
+      .values(draftRow({ briefSlidesFileId: SLIDES_ID }))
       .returning();
-    expect(row!.briefId).toBe(brief!.id);
+    expect(row!.briefSlidesFileId).toBe(SLIDES_ID);
+  });
 
-    // A brief is a pointer, not an owner: losing it must not delete the work.
-    await db.delete(briefs).where(eq(briefs.id, brief!.id));
-    const [after] = await db
+  it("lets many cards share one deck — that IS the shared-brief fact", async () => {
+    // What the `briefs` table and its FK used to express. A canonical file id
+    // needs no surrogate row: two cards share a deck when the string matches.
+    await db.insert(messages).values(draftRow({ briefSlidesFileId: SLIDES_ID }));
+    const [second] = await db
+      .insert(messages)
+      .values(
+        draftRow({ number: 702, briefSlidesFileId: SLIDES_ID }),
+      )
+      .returning();
+    expect(second!.briefSlidesFileId).toBe(SLIDES_ID);
+
+    const rows = await db
       .select()
       .from(messages)
-      .where(eq(messages.id, row!.id));
-    expect(after).toBeDefined();
-    expect(after!.briefId).toBeNull();
+      .where(eq(messages.briefSlidesFileId, SLIDES_ID));
+    expect(rows).toHaveLength(2);
+  });
+
+  it("detaches one card without touching the other", async () => {
+    const [a] = await db
+      .insert(messages)
+      .values(draftRow({ briefSlidesFileId: SLIDES_ID }))
+      .returning();
+    await db
+      .insert(messages)
+      .values(draftRow({ number: 702, briefSlidesFileId: SLIDES_ID }));
+
+    await db
+      .update(messages)
+      .set({ briefSlidesFileId: null })
+      .where(eq(messages.id, a!.id));
+
+    const rows = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.briefSlidesFileId, SLIDES_ID));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.number).toBe(702);
   });
 
   it("defaults to NULL — matrix rows predate the column", async () => {
     const [row] = await db.insert(messages).values(placedRow()).returning();
-    expect(row!.briefId).toBeNull();
+    expect(row!.briefSlidesFileId).toBeNull();
   });
 });
 

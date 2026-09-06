@@ -346,6 +346,18 @@ A `messages` tabla egy sora **kirakas (placement)**, nem uzenet: egy 24 audience
 
 ## 🟡 NEXT — green-light után, alacsony blokk
 
+### MCP token-scope #3: `draft` — mindent olvas, csak draftot ír (USER KÉRÉS, 2026-09-06)
+A workflow-agent ma vagy `read` (semmit nem tud létrehozni), vagy `full` (a teljes mátrixot írhatja). A munkamódszer viszont pont a közepét kívánja: az agent **lásson mindent** (mátrix, kreatívok, riport, sablonok — hogy tudjon dönteni), de **csak a draft-térbe írhasson**, ahol a hibája nem ér el élő kártyát.
+
+- [ ] `mcp_tokens.scope` harmadik értéke: `read | draft | full` (a check/validáció a `mcp-tokens` route-ban és a Settings › MCP fülön).
+- [ ] A `buildMcpServer` regisztrációs feltétele: `draft` = minden read tool + **a draft-írók** (`generate_test_creative`, `draft_delete`, `brief_attach`, és a draftra korlátozott `mc_update`?) — a `draft_promote` **NEM**, mert az cellát ad, azaz kilép a draft-térből. ⚠️ OPEN Q: a promote tényleg kimarad-e, vagy a scope „draft + promote" legyen.
+- [ ] A ma `full`-höz kötött, draftra is ható tool-oknál a scope nem elég: a **sor** is draft kell legyen (`status='DRAFT'` ⟺ `audience IS NULL`) — a guard az entity-ben, nem a tool-listában, különben egy új tool kifelejtődik.
+- [ ] Tesztek: `draft`-scope-os token nem tud `mc_create`-et / `draft_promote`-ot / dimenzió-írást; ugyanaz a token minden read toolt lát; a `full` és a `read` viselkedése változatlan (regresszió).
+- [ ] `McpTab.tsx` prózája — a tool-lista magától szinkronizál a `mcp.ts`-ből, a **szöveges** szekciók kézzel írtak (l. `feedback_mcp_settings_page_sync`).
+
+Miért ez a helyes gránulátum: a draft már ma is egy `messages` sor `audience IS NULL`-lal, tehát a „mit írhat" kérdésre **létező invariáns** válaszol — nem kell új jogosultsági fogalom, csak a meglévőt kell a token-scope-hoz kötni.
+
+
 ### M1 — Matrix "Color by" (Strategy | Platform | Both)
 Cél: audience-oszlopok színezése strategy/platform szerint, legenddel.
 - [ ] **M1.1** `Color by: None|Strategy|Platform|Both` dropdown a `MatrixToolbar`-ba; persist `mm6_matrix_color_by`.
@@ -2114,3 +2126,21 @@ workflow közepén fog kiderülni.
 - [x] Az őr a TELJES kulcstömbre néz, nem az első elemére (`["feed-exports","all"]` ≠ `[…, product]`), és az `invalidateQueries`-t nem számolja alak-deklarációnak
 
 **Ez a memóriámban rögzített hibaosztály 5. előfordulása** (`project_query_key_shape_contract.md`: „two useQuery on one key with different shapes = order-dependent crash a reload hides; found 4× in prod"). A négy korábbi javítás után is visszajött, mert a szabály a figyelmen múlt — most a teszten múlik.
+
+### 2026-09-06 — a brief nem tábla, hanem oszlop + draft-törlés + élő draft-kártyák — 6.70.0
+
+**User:** „de nekünk nem kell brief tábla, a brief link az a draft egy mezeje nem?" — **igaza volt.** A brief identitása a Drive file ID, amit a `parseSlidesFileId` minden URL-alakból ugyanarra a stringre normalizál; egy kanonikus érték mellé az integer id csak surrogate kulcs. A „hat kártya egy deckből" ettől `GROUP BY`, nem join.
+
+**A 6.67.1-es védésem nem állt meg.** Három érve volt a sor megtartására: (1) a `list_briefs` open/promoted számlálói — ezt egy GROUP BY ugyanúgy adja; (2) „tény, nem string-egyezés" — a tény attól tény, hogy a file ID normalizált, nem attól, hogy van hozzá sor; (3) a migráció destruktív — ez költség, nem haszon. Amit a tábla ténylegesen hozzátett: árva sor minden leválasztáskor, 300 sor entity+route, és egy `["briefs"]` fetch a szerkesztőben, aminek egyetlen dolga volt visszafejteni egy id-ből azt a stringet, amiből parse-oltuk.
+
+- [x] `messages.brief_slides_file_id` (`0016` add column, `0017` backfill → FK/oszlop/tábla drop). A `0017` generált sorrendje **hibás volt** (a `DROP TABLE … CASCADE` már elviszi az FK-t, amit a következő utasítás még egyszer eldobna) — kézzel újraírva, a backfill-lel az élén
+- [x] `entities/briefs.ts` 167 → 78 sor: `listBriefDecks` (GROUP BY) + `briefFileIdFromLink`. `/api/briefs` + `/api/briefs/[id]` törölve
+- [x] `BriefTab`: nincs több `["briefs"]` query és POST — a beillesztés két mező írása, amit a szerkesztő autosave-je ment
+- [x] MCP: `list_briefs` a kártyákból csoportosít; `brief_attach` mezőt ír, ezért **`draft_id` kötelező** (deck kártya nélkül nem létezik), és a slide-horgonyt is eltárolja; `generate_test_creative` `brief_link`-je ugyanígy
+- [x] Tesztek átírva a `briefs-entity` / `briefs-draft-invariant` / `mcp-drafts` fájlokban — a tábla-invariánsok helyére az **oszlop** invariánsai (több kártya oszthat egy decket; az egyik leválasztása nem nyúl a másikhoz)
+
+**Draft törlés (user: „kéne tudja törölni elrontott draftot"):** `deleteDraft` + `DELETE /api/drafts/[id]`, a Promote fülön az Archive mellett, második kattintásra megerősítve. **A különbség a szám:** az archiválás nyugdíjazza a számot (ez helyes annak, ami megtörtént), a törlés visszaadja. Ez az egyetlen hely az appban, ahol hard delete van a UI-ból — és azért szabad, mert egy draftnak nincs cellája: nincs PMMID (a séma tiltja), nincs feed-sor, nincs riport rákötve.
+
+**A draft-kártya nem hazudik többet (user: „ezt mondja 400-ra hogy nincs contetnt pedig van"):** a csempe az MCP-pipeline lőtte PNG-jét mutatta, és ahol nem volt, azt írta: „No content yet — this draft has only its number". Ez a *preview* hiányát mondta ki *content*-hiánynak — minden kézzel írt draft ezt írta ki, headline-nal, copyval együtt. Mostantól a mátrix `MatrixIframePreview`-jával renderel élőben (sablon default méretén), tehát nincs mit lőni előre és nincs mi elavuljon; a `/api/drafts` `previews` payloadja és a stale-badge elment vele. Sablon nélküli kártya `aspect-[300/250]` placeholdert kap, hogy a masonry sorban maradjon.
+
+**Nyitva:** az MCP `draft_delete` továbbra is **archivál**, nem töröl (a neve ezt nem mondja meg) — nem nyúltam hozzá, mert a kérés a UI-ra szólt. Ha az agentnek is kell a szám-visszaadás, az egy sor.

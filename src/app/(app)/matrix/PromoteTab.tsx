@@ -15,7 +15,7 @@
 // the Brief tab's half of the draft, and it is read first: Brief opens the
 // draft, Promote closes it.
 import { useMemo, useState } from "react";
-import { Archive, ArrowUpRight, Loader2 } from "lucide-react";
+import { Archive, ArrowUpRight, Loader2, Trash2 } from "lucide-react";
 import clsx from "clsx";
 import Field from "./EditorField";
 import type { Audience, DraftMessage, Topic } from "./types";
@@ -43,6 +43,7 @@ export default function PromoteTab({
   const [channelKey, setChannelKey] = useState("");
   const [topicKey, setTopicKey] = useState("");
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // The same partition the matrix uses for its axis switch: a channel-audience
@@ -96,6 +97,19 @@ export default function PromoteTab({
   const archive = () =>
     run(() =>
       fetch(`/api/messages/${draft.id}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "if-match": String(draft.version) },
+      }),
+    );
+
+  // Two ends, and the difference is the MC number. Archive shelves the work
+  // and KEEPS the number retired — right for a draft that was real. Delete is
+  // for one created by mistake: the row goes and the number comes back, which
+  // is the only reason this is offered here and nowhere else in the app.
+  const destroy = () =>
+    run(() =>
+      fetch(`/api/drafts/${draft.id}`, {
         method: "DELETE",
         credentials: "include",
         headers: { "if-match": String(draft.version) },
@@ -194,15 +208,36 @@ export default function PromoteTab({
       ) : null}
 
       <div className="promote-tab__actions flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={archive}
-          disabled={busy}
-          className="toolbar-btn toolbar-btn--danger flex items-center gap-1.5 rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
-        >
-          <Archive className="size-3.5" />
-          Archive
-        </button>
+        <div className="promote-tab__discard flex items-center gap-2">
+          <button
+            type="button"
+            onClick={archive}
+            disabled={busy}
+            className="toolbar-btn flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          >
+            <Archive className="size-3.5" />
+            Archive
+          </button>
+          {/* Two clicks, not a modal: the second click is the confirmation, and
+              it says what will actually happen to the number. */}
+          <button
+            type="button"
+            onClick={() => (confirming ? destroy() : setConfirming(true))}
+            onBlur={() => setConfirming(false)}
+            disabled={busy}
+            title={
+              confirming
+                ? undefined
+                : `Delete MC${draft.number}${draft.variant} for good — the number becomes free again`
+            }
+            className="toolbar-btn toolbar-btn--danger flex items-center gap-1.5 rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+          >
+            <Trash2 className="size-3.5" />
+            {confirming
+              ? `Delete MC${draft.number}${draft.variant}, free the number?`
+              : "Delete"}
+          </button>
+        </div>
         <button
           type="button"
           onClick={promote}

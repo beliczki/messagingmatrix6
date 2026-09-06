@@ -103,7 +103,7 @@ function msg(overrides: Partial<Message>): Message {
     finalTraffickedUrl: null,
     archivedAt: null,
     brief: null,
-    briefId: null,
+    briefSlidesFileId: null,
     briefSlideId: null,
     draftProduct: null,
     ...overrides,

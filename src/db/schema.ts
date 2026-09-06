@@ -264,38 +264,6 @@ export const topics = pgTable(
   ],
 );
 
-// The reason a DRAFT exists: the Google Slides deck a piece of work came in on.
-// Deliberately NOT a work-item entity — no state, owner, due date or revision
-// seal. Several drafts share one brief, so it needs an identity, and identity is
-// the FILE ID, never the URL: the same deck arrives as `?usp=sharing`, with a
-// `/u/0/` prefix and with a `#slide=` fragment, and three spellings of one deck
-// would read as three briefs. (Same reasoning as creatives.drive_folder_id.)
-export const briefs = pgTable(
-  "briefs",
-  {
-    id: integer("id").primaryKey().generatedByDefaultAsIdentity(),
-    clientId: integer("client_id")
-      .notNull()
-      .references(() => clients.id, { onDelete: "cascade" }),
-    // Google Drive file ID of the Slides deck, extracted from whatever URL the
-    // user pasted. One row per deck per client.
-    slidesFileId: text("slides_file_id").notNull(),
-    // Human label for the drafts list. Typed or pasted by the user — the keyed
-    // Drive API cannot read a file's title without OAuth, so this is not fetched.
-    label: text("label"),
-    createdAt: text("created_at")
-      .notNull()
-      .default(nowUtc),
-    updatedAt: text("updated_at")
-      .notNull()
-      .default(nowUtc),
-    archivedAt: text("archived_at"),
-  },
-  (t) => [
-    uniqueIndex("briefs_client_slides_file_unique").on(t.clientId, t.slidesFileId),
-  ],
-);
-
 // §3.3
 export const messages = pgTable(
   "messages",
@@ -315,17 +283,22 @@ export const messages = pgTable(
     // to a real key (createMessage rejects an unknown topic). Nothing joins on
     // it strictly, so a dangling draft value is inert rather than broken.
     topic: text("topic"),
-    // The Slides deck this work came in on. Nullable everywhere: a draft may
-    // predate its brief, and matrix rows created before this column keep NULL.
-    briefId: integer("brief_id").references(() => briefs.id, {
-      onDelete: "set null",
-    }),
+    // The Slides deck this work came in on: the Google Drive FILE ID, pulled
+    // out of whatever URL was pasted (`?usp=sharing`, a `/u/0/` prefix, a
+    // `#slide=` fragment — see slides-link.ts). Nullable everywhere: a draft
+    // may predate its brief, and rows created before this column keep NULL.
+    //
+    // This was a `briefs` table and a foreign key until 6.70.0. The file id is
+    // already canonical, so the row added a surrogate identity to a value that
+    // had one — "these six cards came from one deck" is `GROUP BY` on this
+    // column, not a join. What the table did add was an orphan row every time
+    // a link was cleared, and the only payload it could ever have carried (a
+    // human label for the deck) was never written by anything.
+    briefSlidesFileId: text("brief_slides_file_id"),
     // Which SLIDE of that deck this card was briefed on — the Google page
     // object id (`g123abc_0_1`) out of a `#slide=id.g...` deep link, not the
-    // fragment as pasted. The brief is the deck (one row, shared by many
-    // cards); the slide is per card, which is why it lives here and not on
-    // `briefs`. NULL = no anchor, and the preview then opens the deck at its
-    // first slide rather than guessing.
+    // fragment as pasted. NULL = no anchor, and the preview then opens the
+    // deck at its first slide rather than guessing.
     briefSlideId: text("brief_slide_id"),
     // The product a DRAFT belongs to — and ONLY a draft, which is why the
     // column says so in its name rather than in a comment somebody has to find.
@@ -416,7 +389,7 @@ export const messages = pgTable(
     index("messages_client_status_idx").on(t.clientId, t.status),
     index("messages_client_number_idx").on(t.clientId, t.number),
     index("messages_client_pmmid_idx").on(t.clientId, t.pmmid),
-    index("messages_client_brief_idx").on(t.clientId, t.briefId),
+    index("messages_client_brief_idx").on(t.clientId, t.briefSlidesFileId),
     // DRAFT ⟺ no audience, in both directions. The forward half stops a draft
     // from hiding inside a real cell; the reverse half stops a placed row from
     // losing its column and silently vanishing from the grid.
@@ -994,8 +967,6 @@ export type NewMcpToken = typeof mcpTokens.$inferInsert;
 export type Audience = typeof audiences.$inferSelect;
 export type Topic = typeof topics.$inferSelect;
 export type Message = typeof messages.$inferSelect;
-export type Brief = typeof briefs.$inferSelect;
-export type NewBrief = typeof briefs.$inferInsert;
 export type Asset = typeof assets.$inferSelect;
 export type Creative = typeof creatives.$inferSelect;
 export type TextFormatting = typeof textFormatting.$inferSelect;

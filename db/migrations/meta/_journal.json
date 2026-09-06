@@ -113,6 +113,20 @@
       "when": 1788694578145,
       "tag": "0015_silent_zzzax",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1788703586022,
+      "tag": "0016_fluffy_sunspot",
+      "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1788703591925,
+      "tag": "0017_late_dust",
+      "breakpoints": true
     }
   ]
 }

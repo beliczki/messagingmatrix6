@@ -82,7 +82,7 @@ const WRITABLE_FIELDS = [
   "landingUrl",
   "comment",
   "brief",
-  "briefId",
+  "briefSlidesFileId",
   "briefSlideId",
   "draftProduct",
 ] as const;
@@ -615,6 +615,42 @@ export async function promoteDraft(
     .where(and(eq(messages.clientId, clientId), eq(messages.id, id)))
     .returning();
   return row;
+}
+
+// Throw a draft away for good — the row is gone, and with it the claim on its
+// MC number, which the next draft is then free to take.
+//
+// This is the one place a card is HARD-deleted from the UI, and it is safe
+// here for the reason that makes a draft a draft: it has no cell, so nothing
+// is trafficked against it, no PMMID was ever minted (the schema forbids one
+// on a draft), no feed row cites it and no report can be joined to it.
+// Archiving is the right end for a card that lived; a draft created by mistake
+// never did, and archiving one only burns its number for nothing.
+//
+// Deliberately NOT routed through deleteMessages: that one addresses rows by
+// PMMID, which a draft cannot have.
+export async function deleteDraft(
+  clientId: number,
+  id: number,
+  expectedVersion: number,
+): Promise<
+  | { ok: true; row: Message }
+  | { ok: false; reason: "not_found" | "not_a_draft" | "version_conflict"; current: Message | null }
+> {
+  const row = await getMessage(clientId, id);
+  if (!row) return { ok: false, reason: "not_found", current: null };
+  if (row.status !== "DRAFT" || row.audience !== null) {
+    return { ok: false, reason: "not_a_draft", current: row };
+  }
+  if (row.version !== expectedVersion) {
+    return { ok: false, reason: "version_conflict", current: row };
+  }
+  // message_previews cascade with the row (ON DELETE CASCADE), so the shot
+  // PNGs' rows go too; the bytes in the object store are left, as everywhere.
+  await db
+    .delete(messages)
+    .where(and(eq(messages.clientId, clientId), eq(messages.id, id)));
+  return { ok: true, row };
 }
 
 export async function updateMessage(

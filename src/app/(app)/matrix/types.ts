@@ -158,7 +158,7 @@ export type Message = {
   // Brief tab: the free-text note, the Slides deck the work came in on, and
   // the slide within that deck (a Google page object id — see slides-link.ts).
   brief: string | null;
-  briefId: number | null;
+  briefSlidesFileId: string | null;
   briefSlideId: string | null;
   /** Draft-only. A placed card's product comes from its cell — see schema.ts. */
   draftProduct: string | null;
@@ -177,20 +177,6 @@ export type DraftMessage = Omit<Message, "audience" | "topic"> & {
 
 /** What the shared editor accepts: a placed card, or a draft. */
 export type EditableMessage = Message | DraftMessage;
-
-// A brief as /api/briefs returns it: the deck's identity is the Drive FILE ID,
-// not the URL someone pasted (three spellings of one deck would otherwise read
-// as three briefs). `openDrafts`/`promoted` are counted from the work itself,
-// which is why they need no state column to keep in sync.
-export type Brief = {
-  id: number;
-  slidesFileId: string;
-  label: string | null;
-  openDrafts: number;
-  promoted: number;
-  archivedAt: string | null;
-  createdAt: string;
-};
 
 // The matrix filter and the editor dropdown offer the placeable statuses; the
 // canonical list lives in @/lib/mc-status so this file cannot drift from the

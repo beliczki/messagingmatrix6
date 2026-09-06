@@ -86,10 +86,11 @@ import {
   type TestCreativeInput,
 } from "@/lib/entities/drafts";
 import {
-  attachBriefByLink,
+  briefFileIdFromLink,
   BriefError,
-  listBriefsWithProgress,
+  listBriefDecks,
 } from "@/lib/entities/briefs";
+import { parseSlideAnchor } from "@/lib/slides-link";
 import {
   listProdlistRows,
   upsertProdlistRows,
@@ -2853,7 +2854,7 @@ function draftSummary(d: Message) {
     template_variant_classes: d.templateVariantClasses,
     sizes: draftSizes(d),
     working_topic: d.topic,
-    brief_id: d.briefId,
+    brief_slides_file_id: d.briefSlidesFileId,
     version: d.version,
     created_at: d.createdAt,
   };
@@ -2875,7 +2876,7 @@ function registerDraftReadTools(server: McpServer, ctx: McpContext): void {
     "list_drafts",
     {
       description:
-        "List drafts — work that has been taken on and has CLAIMED ITS MC NUMBER, but has no cell in the matrix yet (no audience). Returns lean rows: draft_id, mc_label, mc_number, variant, name, template, sizes, working_topic (a suggested name, not a topics key), brief_id, version, created_at. Newest first, default limit 500 (max 1000). Promoted drafts are not listed — once placed they are ordinary MCs, so use list_mc.",
+        "List drafts — work that has been taken on and has CLAIMED ITS MC NUMBER, but has no cell in the matrix yet (no audience). Returns lean rows: draft_id, mc_label, mc_number, variant, name, template, sizes, working_topic (a suggested name, not a topics key), brief_slides_file_id, version, created_at. Newest first, default limit 500 (max 1000). Promoted drafts are not listed — once placed they are ordinary MCs, so use list_mc.",
       inputSchema: {
         limit: z.number().int().min(1).max(1000).optional(),
       },
@@ -2937,22 +2938,17 @@ function registerDraftReadTools(server: McpServer, ctx: McpContext): void {
     "list_briefs",
     {
       description:
-        "List briefs — the Google Slides decks work came in on. Each row carries slides_file_id (the Drive FILE ID, which is the brief's identity: the editor link and the Drive link of one deck are one brief), label, and the progress counts open_drafts / promoted. Those two numbers answer 'what came of this brief?' and are counted from the work itself, so they cannot drift.",
-      inputSchema: { include_archived: z.boolean().optional() },
+        "List briefs — the Google Slides decks work came in on, derived from the cards themselves. A brief is not a stored entity: it is the Drive FILE ID on each card (slides_file_id), which is the deck's identity because the editor link, the Drive link and a link with a #slide fragment all normalise to it. Each row carries slides_file_id, its editor url, and the progress counts open_drafts / promoted, which answer 'what came of this brief?' and are counted from the work itself, so they cannot drift. A deck no card points at is not listed — there is nothing left to list.",
+      inputSchema: {},
     },
-    async ({ include_archived }) => {
-      const rows = await listBriefsWithProgress(ctx.clientId, {
-        includeArchived: include_archived === true,
-      });
+    async () => {
+      const rows = await listBriefDecks(ctx.clientId);
       return jsonResult(
         rows.map((b) => ({
-          brief_id: b.id,
           slides_file_id: b.slidesFileId,
           url: `https://docs.google.com/presentation/d/${b.slidesFileId}/edit`,
-          label: b.label,
           open_drafts: b.openDrafts,
           promoted: b.promoted,
-          archived_at: b.archivedAt,
         })),
       );
     },
@@ -3027,7 +3023,7 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
     "generate_test_creative",
     {
       description:
-        "Take work on: stage a draft creative and render it to PNG previews. The draft is OUTSIDE the matrix (no audience, no cell) but it CLAIMS ITS MC NUMBER immediately, and nothing else can take that number while the work is in progress — that is the point of starting here rather than in the matrix. Required: template (an html template from list_templates). Optional sizes narrows the initial render (default: every size the template defines); they must be sizes that template has. Content fields: headline, copy1, copy2, disclaimer, cta, flash (the sticker TEXT), per-field *_style CSS, custom_css, and template_variant_classes (space-separated layout/color/frame tokens from the template's tag options, e.g. 'fullSurfaceImage teal topSticker' — list_templates shows the valid vocabulary). Images are referenced by STORED FILENAME (upload generated images first via asset_upload): background_images (up to 4 → image1..4), brand_image (logo → image5, template default when omitted), sticker_image (→ image6). Optional brief_link attaches the Google Slides deck this came in on (same deck pasted twice is one brief), and working_topic records a suggested topic NAME that promotion later resolves to a real topic. All inputs are validated up front — a validation error lists every problem at once and creates nothing. Rendering is ASYNC: this returns immediately with draft_id and the claimed mc_label; poll draft_status for progress. The call is NOT idempotent — before retrying a timeout, check list_drafts to avoid claiming a second number. One write against the rate limit. Then: show_draft_previews to display, draft_promote to give it a cell, draft_delete to discard.",
+        "Take work on: stage a draft creative and render it to PNG previews. The draft is OUTSIDE the matrix (no audience, no cell) but it CLAIMS ITS MC NUMBER immediately, and nothing else can take that number while the work is in progress — that is the point of starting here rather than in the matrix. Required: template (an html template from list_templates). Optional sizes narrows the initial render (default: every size the template defines); they must be sizes that template has. Content fields: headline, copy1, copy2, disclaimer, cta, flash (the sticker TEXT), per-field *_style CSS, custom_css, and template_variant_classes (space-separated layout/color/frame tokens from the template's tag options, e.g. 'fullSurfaceImage teal topSticker' — list_templates shows the valid vocabulary). Images are referenced by STORED FILENAME (upload generated images first via asset_upload): background_images (up to 4 → image1..4), brand_image (logo → image5, template default when omitted), sticker_image (→ image6). Optional brief_link records the Google Slides deck (and slide) this came in on — the Drive file id is what gets stored, so three spellings of one link are one deck, and working_topic records a suggested topic NAME that promotion later resolves to a real topic. All inputs are validated up front — a validation error lists every problem at once and creates nothing. Rendering is ASYNC: this returns immediately with draft_id and the claimed mc_label; poll draft_status for progress. The call is NOT idempotent — before retrying a timeout, check list_drafts to avoid claiming a second number. One write against the rate limit. Then: show_draft_previews to display, draft_promote to give it a cell, draft_delete to discard.",
       inputSchema: {
         template: z.string(),
         sizes: z.array(z.string()).optional(),
@@ -3088,11 +3084,16 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
         // link fails loudly on its own rather than silently losing the draft.
         let row = draft;
         if (args.brief_link || args.working_topic) {
-          const brief = args.brief_link
-            ? await attachBriefByLink(ctx.clientId, args.brief_link)
+          const fileId = args.brief_link
+            ? briefFileIdFromLink(args.brief_link)
             : null;
           const res = await updateMessage(ctx.clientId, draft.id, draft.version, {
-            ...(brief ? { briefId: brief.id } : {}),
+            ...(fileId
+              ? {
+                  briefSlidesFileId: fileId,
+                  briefSlideId: parseSlideAnchor(args.brief_link!),
+                }
+              : {}),
             ...(args.working_topic ? { topic: args.working_topic } : {}),
           });
           if (res.ok) row = res.row;
@@ -3128,46 +3129,40 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
     "brief_attach",
     {
       description:
-        "Attach a brief — the Google Slides deck a piece of work came in on — and optionally link a draft to it. The Drive FILE ID is what gets stored, so the editor link, the Drive link and a link with a #slide fragment all resolve to ONE brief; pasting a deck that is already known returns the existing brief rather than creating a second one. A folder link is refused. Required: link. Optional: label (shown in the drafts list) and draft_id to link a draft in the same call. One write against the rate limit.",
+        "Record which Google Slides deck — and which SLIDE of it — a card was briefed on. Both are stored ON the card: the Drive FILE ID parsed out of the link (so the editor link, the Drive link and a link with a #slide fragment are one deck, not three) and the page object id from a `#slide=id.g…` anchor when the link carries one. A brief is not a separate entity, so there is nothing to attach to but a card: draft_id (or any message id) is REQUIRED. A folder link is refused. Pass an empty link to detach. One write against the rate limit.",
       inputSchema: {
         link: z.string(),
-        label: z.string().optional(),
-        draft_id: z.number().int().optional(),
+        draft_id: z.number().int(),
       },
     },
-    async ({ link, label, draft_id }) => {
+    async ({ link, draft_id }) => {
       const limited = await requireRate(ctx);
       if (limited) return limited;
       try {
-        const brief = await attachBriefByLink(ctx.clientId, link, label ?? null);
-        let linked: number | null = null;
-        if (draft_id !== undefined) {
-          const draft = await getMessage(ctx.clientId, draft_id);
-          if (!draft) return errorResult(`draft ${draft_id} not found`);
-          const res = await updateMessage(
-            ctx.clientId,
-            draft_id,
-            draft.version,
-            { briefId: brief.id },
-          );
-          if (!res.ok) {
-            return errorResult("version_conflict", { current: res.current });
-          }
-          linked = draft_id;
+        const trimmed = link.trim();
+        const fileId = trimmed ? briefFileIdFromLink(trimmed) : null;
+        const draft = await getMessage(ctx.clientId, draft_id);
+        if (!draft) return errorResult(`message ${draft_id} not found`);
+        const res = await updateMessage(ctx.clientId, draft_id, draft.version, {
+          briefSlidesFileId: fileId,
+          briefSlideId: trimmed ? parseSlideAnchor(trimmed) : null,
+        });
+        if (!res.ok) {
+          return errorResult("version_conflict", { current: res.current });
         }
         await writeAudit({
           clientId: ctx.clientId,
           userId: mcpUserId(ctx),
-          entityType: "briefs",
-          entityId: brief.id,
-          action: "create",
-          after: brief,
+          entityType: "messages",
+          entityId: draft_id,
+          action: "update",
+          before: draft,
+          after: res.row,
         });
         return jsonResult({
-          brief_id: brief.id,
-          slides_file_id: brief.slidesFileId,
-          label: brief.label,
-          linked_draft_id: linked,
+          message_id: draft_id,
+          slides_file_id: res.row.briefSlidesFileId,
+          slide_id: res.row.briefSlideId,
         });
       } catch (e) {
         if (e instanceof BriefError) return errorResult(e.message);

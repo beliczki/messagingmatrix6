@@ -131,10 +131,10 @@ type EditableFields = Pick<
   | "templateVariantClasses"
   | "startDate"
   | "endDate"
-  // Brief tab. `brief` is the free-text note, `briefId` the deck the work came
-  // in on, `briefSlideId` the slide within it.
+  // Brief tab. `brief` is the free-text note, `briefSlidesFileId` the Drive
+  // file id of the deck the work came in on, `briefSlideId` the slide in it.
   | "brief"
-  | "briefId"
+  | "briefSlidesFileId"
   | "briefSlideId"
   | "draftProduct"
 >;
@@ -168,7 +168,7 @@ const EDITABLE_KEYS: Array<keyof EditableFields> = [
   "startDate",
   "endDate",
   "brief",
-  "briefId",
+  "briefSlidesFileId",
   "briefSlideId",
   "draftProduct",
 ];
@@ -189,8 +189,6 @@ function diffPayload(
   before: EditableFields,
   after: EditableFields,
 ): Partial<EditableFields> {
-  // `briefId` is a number; every other editable field is text. The value type
-  // has to admit both or the brief relation cannot be saved.
   const out: Record<string, string | number | null> = {};
   for (const k of EDITABLE_KEYS) {
     if ((before[k] ?? null) !== (after[k] ?? null)) {

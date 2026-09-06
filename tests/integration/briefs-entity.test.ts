@@ -1,15 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { clients, audiences, topics, messages, briefs } from "@/db/schema";
+import { clients, audiences, topics } from "@/db/schema";
 import {
-  attachBriefByLink,
-  archiveBrief,
+  briefFileIdFromLink,
   BriefError,
-  listBriefs,
-  listBriefsWithProgress,
+  listBriefDecks,
 } from "@/lib/entities/briefs";
-import { createDraft, promoteDraft } from "@/lib/entities/messages";
+import {
+  createDraft,
+  promoteDraft,
+  updateMessage,
+} from "@/lib/entities/messages";
 import { createTestDb, type TestDb } from "../helpers/test-db";
 
 let h: TestDb;
@@ -44,125 +45,104 @@ afterEach(async () => {
   await h.cleanup();
 });
 
-describe("attachBriefByLink", () => {
-  it("stores the file id, not the link that was pasted", async () => {
-    const b = await attachBriefByLink(
-      erste.id,
-      `https://docs.google.com/presentation/d/${DECK}/edit#slide=id.g1`,
-      "Q4 always-on",
-    );
-    expect(b.slidesFileId).toBe(DECK);
-    expect(b.label).toBe("Q4 always-on");
+async function draftOnDeck(fileId: string | null) {
+  const draft = await createDraft(erste.id, {});
+  if (fileId === null) return draft;
+  const res = await updateMessage(erste.id, draft.id, draft.version, {
+    briefSlidesFileId: fileId,
   });
+  if (!res.ok) throw new Error("unexpected version conflict");
+  return res.row;
+}
 
-  it("is idempotent — the editor link and the Drive link are ONE brief", async () => {
-    const a = await attachBriefByLink(
-      erste.id,
-      `https://docs.google.com/presentation/d/${DECK}/edit`,
-    );
-    const b = await attachBriefByLink(
-      erste.id,
-      `https://drive.google.com/file/d/${DECK}/view?usp=sharing`,
-    );
-    expect(b.id).toBe(a.id);
-    expect(await listBriefs(erste.id)).toHaveLength(1);
-  });
-
-  it("updates the label when re-attached with a new one", async () => {
-    const a = await attachBriefByLink(erste.id, DECK, "First guess");
-    const b = await attachBriefByLink(erste.id, DECK, "What it really is");
-    expect(b.id).toBe(a.id);
-    expect(b.label).toBe("What it really is");
-  });
-
-  it("brings an archived brief back — pasting it again means it is in use", async () => {
-    const a = await attachBriefByLink(erste.id, DECK);
-    await archiveBrief(erste.id, a.id);
-    expect(await listBriefs(erste.id)).toHaveLength(0);
-    const again = await attachBriefByLink(erste.id, DECK);
-    expect(again.id).toBe(a.id);
-    expect(again.archivedAt).toBeNull();
-    expect(await listBriefs(erste.id)).toHaveLength(1);
-  });
-
-  it("refuses a folder link and says what to paste instead", async () => {
-    await expect(
-      attachBriefByLink(
-        erste.id,
-        "https://drive.google.com/drive/folders/1idXHYJYnXRNEW6jmhZ7RW8XCzT269xbe",
+describe("briefFileIdFromLink", () => {
+  it("takes the file id, not the link that was pasted", () => {
+    expect(
+      briefFileIdFromLink(
+        `https://docs.google.com/presentation/d/${DECK}/edit#slide=id.g1`,
       ),
-    ).rejects.toThrow(/FOLDER link/);
+    ).toBe(DECK);
   });
 
-  it("refuses something that is not a link to a file", async () => {
-    await expect(attachBriefByLink(erste.id, "no idea")).rejects.toThrow(
+  it("reads one deck out of every spelling of its link", () => {
+    // This is what makes the column enough on its own: the value is canonical
+    // BEFORE it is stored, so equality on it is the shared-deck fact. A row
+    // with a surrogate id was buying an identity this string already had.
+    const spellings = [
+      `https://docs.google.com/presentation/d/${DECK}/edit`,
+      `https://docs.google.com/presentation/d/${DECK}/edit?usp=sharing`,
+      `https://docs.google.com/presentation/u/0/d/${DECK}/edit#slide=id.g7f_0_1`,
+      `https://drive.google.com/file/d/${DECK}/view`,
+    ];
+    expect(new Set(spellings.map(briefFileIdFromLink))).toEqual(new Set([DECK]));
+  });
+
+  it("refuses a folder link by name", () => {
+    expect(() =>
+      briefFileIdFromLink("https://drive.google.com/drive/folders/1FliAbc"),
+    ).toThrow(BriefError);
+    expect(() =>
+      briefFileIdFromLink("https://drive.google.com/drive/folders/1FliAbc"),
+    ).toThrow(/FOLDER link/);
+  });
+
+  it("refuses a link with no file id in it", () => {
+    expect(() => briefFileIdFromLink("https://example.com/deck")).toThrow(
       BriefError,
     );
   });
 });
 
-describe("listBriefsWithProgress", () => {
-  it("counts open drafts and promoted cards — the close check without a state machine", async () => {
-    const brief = await attachBriefByLink(erste.id, DECK, "Deck");
-    const d1 = await createDraft(erste.id, { briefId: brief.id });
-    await createDraft(erste.id, { briefId: brief.id });
-    await createDraft(erste.id, { briefId: brief.id });
+describe("listBriefDecks", () => {
+  it("groups the cards by deck and counts open vs promoted", async () => {
+    const open1 = await draftOnDeck(DECK);
+    await draftOnDeck(DECK);
+    await draftOnDeck(OTHER);
 
-    let [row] = await listBriefsWithProgress(erste.id);
-    expect(row).toMatchObject({ openDrafts: 3, promoted: 0 });
-
-    await promoteDraft(erste.id, d1.id, {
+    // One of the DECK drafts gets a cell — it stops being open and starts
+    // counting as promoted, with no state anywhere to update.
+    await promoteDraft(erste.id, open1.id, {
       audienceKey: "SZK_visitors",
       topicKey: "SZK_brand",
+      expectedVersion: open1.version,
     });
 
-    [row] = await listBriefsWithProgress(erste.id);
-    expect(row).toMatchObject({ openDrafts: 2, promoted: 1 });
+    const decks = await listBriefDecks(erste.id);
+    expect(decks).toHaveLength(2);
+    expect(decks.find((d) => d.slidesFileId === DECK)).toMatchObject({
+      openDrafts: 1,
+      promoted: 1,
+    });
+    expect(decks.find((d) => d.slidesFileId === OTHER)).toMatchObject({
+      openDrafts: 1,
+      promoted: 0,
+    });
   });
 
-  it("keeps each brief's counts to itself", async () => {
-    const a = await attachBriefByLink(erste.id, DECK, "A");
-    const b = await attachBriefByLink(erste.id, OTHER, "B");
-    await createDraft(erste.id, { briefId: a.id });
-    await createDraft(erste.id, { briefId: b.id });
-    await createDraft(erste.id, { briefId: b.id });
-    const rows = await listBriefsWithProgress(erste.id);
-    const byLabel = new Map(rows.map((r) => [r.label, r]));
-    expect(byLabel.get("A")).toMatchObject({ openDrafts: 1 });
-    expect(byLabel.get("B")).toMatchObject({ openDrafts: 2 });
+  it("does not list a deck no card points at any more", async () => {
+    const draft = await draftOnDeck(DECK);
+    expect(await listBriefDecks(erste.id)).toHaveLength(1);
+
+    // Clearing the link is the whole of detaching. There is no row left behind
+    // for nothing to point at — which is the orphan the table used to leave.
+    const cleared = await updateMessage(erste.id, draft.id, draft.version, {
+      briefSlidesFileId: null,
+    });
+    expect(cleared.ok).toBe(true);
+    expect(await listBriefDecks(erste.id)).toHaveLength(0);
   });
 
-  it("ignores drafts that have no brief", async () => {
-    const brief = await attachBriefByLink(erste.id, DECK, "Deck");
-    await createDraft(erste.id, { briefId: brief.id });
-    await createDraft(erste.id); // loose work, no deck behind it
-    const [row] = await listBriefsWithProgress(erste.id);
-    expect(row).toMatchObject({ openDrafts: 1 });
-  });
-});
-
-describe("a brief is a pointer, not an owner", () => {
-  it("archiving it leaves the drafts alone", async () => {
-    const brief = await attachBriefByLink(erste.id, DECK);
-    const d = await createDraft(erste.id, { briefId: brief.id });
-    await archiveBrief(erste.id, brief.id);
-    const [row] = await db
-      .select()
-      .from(messages)
-      .where(eq(messages.id, d.id));
-    expect(row!.briefId).toBe(brief.id);
-    expect(row!.status).toBe("DRAFT");
+  it("ignores cards with no brief at all", async () => {
+    await draftOnDeck(null);
+    expect(await listBriefDecks(erste.id)).toHaveLength(0);
   });
 
-  it("deleting it cuts the link but keeps the work", async () => {
-    const brief = await attachBriefByLink(erste.id, DECK);
-    const d = await createDraft(erste.id, { briefId: brief.id });
-    await db.delete(briefs).where(eq(briefs.id, brief.id));
-    const [row] = await db
-      .select()
-      .from(messages)
-      .where(eq(messages.id, d.id));
-    expect(row).toBeDefined();
-    expect(row!.briefId).toBeNull();
+  it("is scoped to the client", async () => {
+    const [telekom] = await db
+      .insert(clients)
+      .values({ key: "telekom", name: "Telekom" })
+      .returning();
+    await draftOnDeck(DECK);
+    expect(await listBriefDecks(telekom!.id)).toHaveLength(0);
   });
 });

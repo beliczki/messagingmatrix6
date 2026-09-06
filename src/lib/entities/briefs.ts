@@ -1,95 +1,73 @@
-import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { briefs, messages, nowUtc, type Brief } from "@/db/schema";
+import { messages } from "@/db/schema";
 import { parseSlidesFileId } from "@/lib/slides-link";
 
-// The Google Slides deck a piece of work came in on. Deliberately NOT a
-// work-item entity: no state, owner, due date or revision seal — those belong
-// to the Grafia OS closure contract, which this layer does not implement. What
-// a brief needs is an IDENTITY, because several drafts point at one, and that
-// identity is the Drive file id rather than the URL (see slides-link.ts).
+// The Google Slides deck a piece of work came in on. NOT an entity — a column.
 //
-// Attaching is an upsert, not an insert: pasting the same deck twice — or
-// pasting the editor link where someone else pasted the Drive link — has to
-// land on the one row, or the drafts that share a brief stop being grouped.
+// A brief needs an identity because several cards point at one, and that
+// identity is the Drive FILE ID: the same deck arrives as `?usp=sharing`, with
+// a `/u/0/` prefix and with a `#slide=` fragment, and slides-link.ts reduces
+// all three to one string. Once the value is canonical, equality on it IS the
+// fact that two cards share a deck — a `briefs` row added a surrogate key for
+// a value that already had one, and with it an orphan row every time a link
+// was cleared. The only payload such a row could carry is a human label for
+// the deck, and nothing ever wrote one; if that is ever wanted, the honest
+// source is the Drive API's file title, which needs no table either.
 
 export class BriefError extends Error {}
 
-export type BriefWithProgress = Brief & {
-  /** Drafts still waiting to be placed in the matrix. */
+/** One deck, with what became of the work that came in on it. */
+export type BriefDeck = {
+  slidesFileId: string;
+  /** Cards still waiting for a cell. */
   openDrafts: number;
-  /** Cards that started life as a draft under this brief and were promoted. */
+  /** Cards that started as a draft under this deck and were promoted. */
   promoted: number;
 };
 
-export async function listBriefs(
-  clientId: number,
-  opts: { includeArchived?: boolean } = {},
-): Promise<Brief[]> {
-  const conds = [eq(briefs.clientId, clientId)];
-  if (!opts.includeArchived) conds.push(isNull(briefs.archivedAt));
-  return db
-    .select()
-    .from(briefs)
-    .where(and(...conds))
-    .orderBy(desc(briefs.createdAt), asc(briefs.id));
-}
-
-// Briefs with their promote progress — the cheap version of a Close Check: it
-// answers "what came of this brief?" without a state machine to keep in sync,
-// because both numbers are counted from the work itself.
-export async function listBriefsWithProgress(
-  clientId: number,
-  opts: { includeArchived?: boolean } = {},
-): Promise<BriefWithProgress[]> {
-  const rows = await listBriefs(clientId, opts);
-  if (rows.length === 0) return [];
-  const counts = await db
+// The cheap version of a Close Check: it answers "what came of this brief?"
+// without a state machine to keep in sync, because both numbers are counted
+// from the work itself. A GROUP BY now, where it used to be a join.
+export async function listBriefDecks(clientId: number): Promise<BriefDeck[]> {
+  const rows = await db
     .select({
-      briefId: messages.briefId,
+      slidesFileId: messages.briefSlidesFileId,
       status: messages.status,
       n: sql<number>`count(*)::int`,
     })
     .from(messages)
-    .where(and(eq(messages.clientId, clientId), isNull(messages.archivedAt)))
-    .groupBy(messages.briefId, messages.status);
+    .where(
+      and(
+        eq(messages.clientId, clientId),
+        isNull(messages.archivedAt),
+        isNotNull(messages.briefSlidesFileId),
+      ),
+    )
+    .groupBy(messages.briefSlidesFileId, messages.status);
 
-  const open = new Map<number, number>();
-  const promoted = new Map<number, number>();
-  for (const c of counts) {
-    if (c.briefId === null) continue;
-    const target = c.status === "DRAFT" ? open : promoted;
-    target.set(c.briefId, (target.get(c.briefId) ?? 0) + c.n);
+  const byDeck = new Map<string, BriefDeck>();
+  for (const r of rows) {
+    const fileId = r.slidesFileId!;
+    const deck = byDeck.get(fileId) ?? {
+      slidesFileId: fileId,
+      openDrafts: 0,
+      promoted: 0,
+    };
+    if (r.status === "DRAFT") deck.openDrafts += r.n;
+    else deck.promoted += r.n;
+    byDeck.set(fileId, deck);
   }
-  return rows.map((b) => ({
-    ...b,
-    openDrafts: open.get(b.id) ?? 0,
-    promoted: promoted.get(b.id) ?? 0,
-  }));
-}
-
-export async function getBrief(
-  clientId: number,
-  id: number,
-): Promise<Brief | null> {
-  const [row] = await db
-    .select()
-    .from(briefs)
-    .where(and(eq(briefs.clientId, clientId), eq(briefs.id, id)))
-    .limit(1);
-  return row ?? null;
+  return [...byDeck.values()].sort((a, b) =>
+    a.slidesFileId.localeCompare(b.slidesFileId),
+  );
 }
 
 /**
- * Resolve a pasted link to a brief, creating the row the first time that deck
- * is seen. Idempotent by file id, which is what makes "same deck, different
- * link" one brief instead of two.
+ * The file id a pasted link names, or a BriefError explaining what was pasted
+ * instead. The one place a link becomes a stored value.
  */
-export async function attachBriefByLink(
-  clientId: number,
-  link: string,
-  label?: string | null,
-): Promise<Brief> {
+export function briefFileIdFromLink(link: string): string {
   const fileId = parseSlidesFileId(link);
   if (!fileId) {
     throw new BriefError(
@@ -98,70 +76,5 @@ export async function attachBriefByLink(
         : "could not find a Google Slides/Docs file id in that link",
     );
   }
-  const [existing] = await db
-    .select()
-    .from(briefs)
-    .where(and(eq(briefs.clientId, clientId), eq(briefs.slidesFileId, fileId)))
-    .limit(1);
-  if (existing) {
-    // Re-attaching an archived brief brings it back — the deck is evidently in
-    // use again, and a second row for the same file id is not possible anyway.
-    const needsLabel = label != null && label !== existing.label;
-    if (!needsLabel && existing.archivedAt === null) return existing;
-    const [updated] = await db
-      .update(briefs)
-      .set({
-        ...(needsLabel ? { label } : {}),
-        archivedAt: null,
-        updatedAt: nowUtc,
-      })
-      .where(and(eq(briefs.clientId, clientId), eq(briefs.id, existing.id)))
-      .returning();
-    return updated!;
-  }
-  const [row] = await db
-    .insert(briefs)
-    .values({ clientId, slidesFileId: fileId, label: label ?? null })
-    .returning();
-  return row!;
-}
-
-export async function updateBrief(
-  clientId: number,
-  id: number,
-  input: { label?: string | null },
-): Promise<Brief | null> {
-  const [row] = await db
-    .update(briefs)
-    .set({ label: input.label ?? null, updatedAt: nowUtc })
-    .where(and(eq(briefs.clientId, clientId), eq(briefs.id, id)))
-    .returning();
-  return row ?? null;
-}
-
-// Archive, never hard-delete: the messages.brief_id FK is ON DELETE SET NULL,
-// so a real delete would silently cut every draft loose from the reason it
-// exists. Archiving keeps the trail and is reversible.
-export async function archiveBrief(
-  clientId: number,
-  id: number,
-): Promise<Brief | null> {
-  const [row] = await db
-    .update(briefs)
-    .set({ archivedAt: nowUtc, updatedAt: nowUtc })
-    .where(and(eq(briefs.clientId, clientId), eq(briefs.id, id)))
-    .returning();
-  return row ?? null;
-}
-
-export async function restoreBrief(
-  clientId: number,
-  id: number,
-): Promise<Brief | null> {
-  const [row] = await db
-    .update(briefs)
-    .set({ archivedAt: null, updatedAt: nowUtc })
-    .where(and(eq(briefs.clientId, clientId), eq(briefs.id, id)))
-    .returning();
-  return row ?? null;
+  return fileId;
 }

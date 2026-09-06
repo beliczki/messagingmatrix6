@@ -227,19 +227,23 @@ export function McpTab() {
           archives it (the number stays retired, as with any archived card).
         </p>
         <p className="mt-2 text-sm text-slate-600">
-          <code className="font-mono text-xs">brief_attach</code> records the
-          Google Slides deck a piece of work came in on and can link a draft to
-          it in the same call. The Drive{" "}
-          <strong className="font-semibold">file id</strong> is the brief&apos;s
-          identity, so the editor link and the Drive link of one deck resolve to
-          one brief instead of two;{" "}
-          <code className="font-mono text-xs">list_briefs</code> returns each
-          brief with its <code className="font-mono text-xs">open_drafts</code>{" "}
-          / <code className="font-mono text-xs">promoted</code> counts, which
-          answer &ldquo;what came of this brief?&rdquo; without a status field to
-          keep in sync. Drafts and briefs also appear on the app&apos;s{" "}
-          <strong className="font-semibold">Drafts</strong> page, grouped by
-          brief.
+          <code className="font-mono text-xs">brief_attach</code> records which
+          Google Slides deck — and which slide of it — a card was briefed on.
+          Both live <strong className="font-semibold">on the card</strong>: a
+          brief is not a separate entity, so the call needs a{" "}
+          <code className="font-mono text-xs">draft_id</code>. The Drive{" "}
+          <strong className="font-semibold">file id</strong> is what gets
+          stored, so the editor link, the Drive link and a link with a{" "}
+          <code className="font-mono text-xs">#slide</code> fragment are one
+          deck rather than three;{" "}
+          <code className="font-mono text-xs">list_briefs</code> groups the
+          cards by that id and returns{" "}
+          <code className="font-mono text-xs">open_drafts</code> /{" "}
+          <code className="font-mono text-xs">promoted</code> per deck, which
+          answer &ldquo;what came of this brief?&rdquo; without a status field
+          to keep in sync. The app&apos;s{" "}
+          <strong className="font-semibold">Drafts</strong> page shows the same
+          cards, filtered by product rather than grouped.
         </p>
       </Section>
 

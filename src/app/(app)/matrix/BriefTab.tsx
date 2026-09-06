@@ -6,22 +6,19 @@
 //
 // ONE field, because a Slides link carries both facts. `parseSlidesFileId`
 // takes the deck, `parseSlideAnchor` takes the page — one paste, and the deck
-// is identified without ever asking about it. That matters because the deck is
-// stored as a `briefs` ROW (idempotent on the Drive file id), which is what
-// makes "these six cards came from one deck" a fact rather than a string match
-// across three spellings of one URL. It is also what MCP's list_briefs counts
-// open_drafts/promoted from. None of that needs a control on this screen: the
-// user picks a slide, the deck follows.
+// is identified without ever asking about it. What gets STORED is the file id,
+// never the URL, which is what makes "these six cards came from one deck" a
+// comparison rather than a string match across three spellings of one link,
+// and is what MCP's list_briefs groups open_drafts/promoted by. None of that
+// needs a control on this screen: the user picks a slide, the deck follows.
 //
 // On a DRAFT this tab is also the intake: what the card IS, before anyone has
 // decided where it goes. The reserved-number line and the product live here
 // (passed in as `intake`, which a placed card simply does not have) because
 // they answer the same question the slide does. Promote is left with WHERE.
 import { useEffect, useState } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, ExternalLink } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import Field from "./EditorField";
-import type { Brief } from "./types";
 import {
   parseSlideAnchor,
   parseSlidesFileId,
@@ -33,15 +30,9 @@ import {
 // the editor's EditableFields so the two files don't have to import each other.
 export type BriefFields = {
   brief: string | null;
-  briefId: number | null;
+  briefSlidesFileId: string | null;
   briefSlideId: string | null;
 };
-
-async function fetchJSON<T>(url: string): Promise<T> {
-  const r = await fetch(url, { credentials: "include" });
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-  return r.json();
-}
 
 /** The canonical link for what is stored, so the field shows the saved state. */
 function linkFor(fileId: string | null, slideId: string | null): string {
@@ -78,39 +69,32 @@ export default function BriefTab({
   onChange: (patch: Partial<BriefFields>) => void;
 }) {
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const qc = useQueryClient();
-
-  // Read-only lookup: the embed needs the deck's file id, and the row holds
-  // only the brief's id. No control is rendered from this.
-  const briefsQ = useQuery({
-    queryKey: ["briefs"],
-    queryFn: () =>
-      fetchJSON<{ briefs: Brief[] }>("/api/briefs").then((d) => d.briefs),
-  });
-  const current =
-    (briefsQ.data ?? []).find((b) => b.id === draft.briefId) ?? null;
 
   // The field is seeded from what is stored and then owned by the user until
-  // the card changes underneath it (prev/next navigation).
-  const stored = linkFor(current?.slidesFileId ?? null, draft.briefSlideId);
+  // the card changes underneath it (prev/next navigation). The deck's file id
+  // is ON the card, so there is nothing to look up — this tab used to fetch
+  // the whole briefs list to turn an id back into the string it was parsed
+  // from.
+  const stored = linkFor(draft.briefSlidesFileId, draft.briefSlideId);
   const [link, setLink] = useState(stored);
   useEffect(() => {
     setLink(stored);
     setError(null);
   }, [stored]);
 
-  // Applied on blur rather than per keystroke: attaching is a write, and a
-  // paste is finished when focus leaves.
-  async function apply() {
+  // Applied on blur rather than per keystroke: a paste is finished when focus
+  // leaves. Attaching used to be its own POST — now it is two fields on the
+  // card, saved by the editor like every other edit.
+  function apply() {
     const value = link.trim();
     if (value === stored) return;
     if (!value) {
-      onChange({ briefId: null, briefSlideId: null });
+      onChange({ briefSlidesFileId: null, briefSlideId: null });
       setError(null);
       return;
     }
-    if (!parseSlidesFileId(value)) {
+    const fileId = parseSlidesFileId(value);
+    if (!fileId) {
       setError(
         /\/folders\//.test(value)
           ? "that is a Drive FOLDER link — paste the link to the slide itself"
@@ -118,33 +102,15 @@ export default function BriefTab({
       );
       return;
     }
-    setBusy(true);
     setError(null);
-    try {
-      // Idempotent on the file id: the same deck pasted again — or pasted as a
-      // Drive link where someone pasted the editor link — lands on one row.
-      const r = await fetch("/api/briefs", {
-        method: "POST",
-        credentials: "include",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ link: value }),
-      });
-      const json = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(json?.error ?? `${r.status} ${r.statusText}`);
-      onChange({
-        briefId: (json.brief as Brief).id,
-        briefSlideId: parseSlideAnchor(value),
-      });
-      qc.invalidateQueries({ queryKey: ["briefs"] });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
+    // The FILE ID is what gets stored, never the URL: one deck pasted three
+    // ways is one value, which is what makes "these cards share a deck" a
+    // comparison rather than a guess.
+    onChange({ briefSlidesFileId: fileId, briefSlideId: parseSlideAnchor(value) });
   }
 
-  const embed = slidesEmbedUrl(current?.slidesFileId, draft.briefSlideId);
-  const openUrl = linkFor(current?.slidesFileId ?? null, draft.briefSlideId);
+  const embed = slidesEmbedUrl(draft.briefSlidesFileId, draft.briefSlideId);
+  const openUrl = linkFor(draft.briefSlidesFileId, draft.briefSlideId);
 
   return (
     <div className="message-editor-tab message-editor-tab--brief">
@@ -203,9 +169,6 @@ export default function BriefTab({
             placeholder="https://docs.google.com/presentation/d/…#slide=id.g123abc_0_1"
             className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 pr-7 text-xs focus:border-slate-500 focus:outline-none"
           />
-          {busy ? (
-            <Loader2 className="brief-tab__spinner absolute right-2 top-1/2 size-3.5 -translate-y-1/2 animate-spin text-slate-400" />
-          ) : null}
         </div>
       </Field>
 

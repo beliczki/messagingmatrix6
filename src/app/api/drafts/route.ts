@@ -1,47 +1,24 @@
 import { NextResponse } from "next/server";
-import { and, eq, inArray } from "drizzle-orm";
-import { db } from "@/db";
-import { messagePreviews } from "@/db/schema";
 import {
   createDraft,
   listDrafts,
   MessageError,
   pickWritable,
 } from "@/lib/entities/messages";
-import { listBriefsWithProgress } from "@/lib/entities/briefs";
 import { denyDemo, withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 
-// The drafts surface. A draft is a `messages` row with no audience, so its
-// previews are ordinary message_previews — there is no separate preview table
-// and no separate staleness rule to keep in step. Briefs come bundled because
-// the page groups by them.
+// The drafts surface. A draft is a `messages` row with no audience, so it needs
+// nothing here but the rows: the page renders each card live from its template
+// (the same /api/render the matrix grid uses), and a card with a template can
+// always be rendered — so there are no shot PNGs to ship and nothing to go
+// stale. `briefs` is gone for a different reason: the deck a draft came in on
+// is a column on the draft itself now, so the card carries it.
 export const GET = withSession(async ({ req, claims }) => {
   const includeArchived =
     new URL(req.url).searchParams.get("includeArchived") === "1";
-  const drafts = await listDrafts(claims.cid, { includeArchived });
-  const ids = drafts.map((d) => d.id);
-  const previews = ids.length
-    ? await db
-        .select({
-          id: messagePreviews.id,
-          messageId: messagePreviews.messageId,
-          size: messagePreviews.size,
-          messageVersion: messagePreviews.messageVersion,
-          updatedAt: messagePreviews.updatedAt,
-        })
-        .from(messagePreviews)
-        .where(
-          and(
-            eq(messagePreviews.clientId, claims.cid),
-            inArray(messagePreviews.messageId, ids),
-          ),
-        )
-    : [];
   return NextResponse.json({
-    drafts,
-    previews,
-    briefs: await listBriefsWithProgress(claims.cid),
+    drafts: await listDrafts(claims.cid, { includeArchived }),
   });
 });
 

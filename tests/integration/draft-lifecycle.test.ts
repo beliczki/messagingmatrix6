@@ -6,6 +6,7 @@ import {
   copyMessages,
   createDraft,
   createMessage,
+  deleteDraft,
   promoteDraft,
   updateMessage,
   findSiblings,
@@ -125,6 +126,51 @@ describe("draft number reservation", () => {
   it("has no siblings — it is on no axis and in no cell", async () => {
     const d = await createDraft(erste.id);
     expect(await findSiblings(erste.id, d)).toEqual([]);
+  });
+});
+
+describe("deleteDraft", () => {
+  it("removes the row and GIVES THE NUMBER BACK", async () => {
+    // The whole reason this exists next to archive. An archived card keeps its
+    // number retired, which is right for work that happened; a draft created by
+    // mistake never happened, and burning a number to record that is the bug.
+    const d = await createDraft(erste.id);
+    const claimed = d.number;
+
+    const res = await deleteDraft(erste.id, d.id, d.version);
+    expect(res.ok).toBe(true);
+    expect(await db.select().from(messages).where(eq(messages.id, d.id))).toHaveLength(0);
+
+    const next = await createDraft(erste.id);
+    expect(next.number).toBe(claimed);
+  });
+
+  it("refuses a card that has a cell — that one gets archived", async () => {
+    const mc = await createMessage(erste.id, {
+      audience: "SZK_visitors",
+      topic: "SZK_brand",
+    });
+    const res = await deleteDraft(erste.id, mc.id, mc.version);
+    expect(res).toMatchObject({ ok: false, reason: "not_a_draft" });
+    expect(await db.select().from(messages).where(eq(messages.id, mc.id))).toHaveLength(1);
+  });
+
+  it("refuses a stale version instead of deleting the wrong state", async () => {
+    const d = await createDraft(erste.id);
+    const res = await deleteDraft(erste.id, d.id, d.version + 1);
+    expect(res).toMatchObject({ ok: false, reason: "version_conflict" });
+    expect(await db.select().from(messages).where(eq(messages.id, d.id))).toHaveLength(1);
+  });
+
+  it("is scoped to the client", async () => {
+    const [telekom] = await db
+      .insert(clients)
+      .values({ key: "telekom", name: "Telekom" })
+      .returning();
+    const d = await createDraft(erste.id);
+    const res = await deleteDraft(telekom!.id, d.id, d.version);
+    expect(res).toMatchObject({ ok: false, reason: "not_found" });
+    expect(await db.select().from(messages).where(eq(messages.id, d.id))).toHaveLength(1);
   });
 });
 

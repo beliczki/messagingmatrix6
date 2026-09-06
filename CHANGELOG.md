@@ -5,6 +5,31 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.65.0] — 2026-09-06
+
+### Fixed
+- **Every status dot in the app was transparent except ACTIVE.** The
+  `.status-dot--*` and `.status-badge--*` rules lived in `@layer components`,
+  but no consumer writes those class names out — they are all built at runtime
+  as `status-dot--${statusSlug(s)}`. Tailwind's scanner therefore never saw them
+  as candidates and purged the rules. `ACTIVE` survived by pure accident:
+  `ClientsTab.tsx` happens to write `status-dot--active` literally. So the
+  status filter's option dots, the matrix chips, the feed row stripe and the
+  sankey tooltip all rendered their colour as `rgba(0,0,0,0)` for five of the
+  six statuses. The rules are now unlayered — the file's existing remedy for
+  exactly this, already used by the platform-edge block — so they cannot go
+  missing again as literals come and go elsewhere.
+
+### Added
+- **The sankey's MC column is coloured by status.** On a leaf the useful
+  question is what state the card is in, so status wins there; the other columns
+  keep the platform/depth encoding the tree uses, so the two views still read
+  alike. A card put out across several audiences can hold more than one status,
+  and picking a "dominant" one would paint a 13/11 split solid green — so a
+  mixed card gets a proportional gradient with hard stops and shows the split it
+  actually has, with the counts named in the tooltip. Colours come from the
+  `--status-*` variables, so Settings → Design carries through.
+
 ## [6.64.1] — 2026-09-06
 
 ### Fixed

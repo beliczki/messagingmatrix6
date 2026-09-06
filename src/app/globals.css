@@ -143,27 +143,6 @@ html.dark {
     height: 0.5rem;
     border-radius: 9999px;
   }
-  .status-dot--draft { background-color: var(--status-draft); }
-  .status-dot--preview { background-color: var(--status-preview); }
-  .status-dot--approved { background-color: var(--status-approved); }
-  .status-dot--active { background-color: var(--status-active); }
-  .status-dot--inactive { background-color: var(--status-inactive); }
-  .status-dot--dead { background-color: var(--status-dead); }
-
-  .status-badge {
-    display: inline-flex;
-    align-items: center;
-    border-radius: 0.25rem;
-    padding: 0.125rem 0.375rem;
-    font-size: 0.75rem;
-    font-weight: 500;
-  }
-  .status-badge--draft { background-color: color-mix(in srgb, var(--status-draft) 18%, white); color: var(--status-draft); }
-  .status-badge--preview { background-color: color-mix(in srgb, var(--status-preview) 18%, white); color: var(--status-preview); }
-  .status-badge--approved { background-color: color-mix(in srgb, var(--status-approved) 18%, white); color: var(--status-approved); }
-  .status-badge--active { background-color: color-mix(in srgb, var(--status-active) 18%, white); color: var(--status-active); }
-  .status-badge--inactive { background-color: color-mix(in srgb, var(--status-inactive) 18%, white); color: var(--status-inactive); }
-  .status-badge--dead { background-color: color-mix(in srgb, var(--status-dead) 18%, white); color: var(--status-dead); }
 
   /* Feeds list: the live row's whole Live cell takes the ACTIVE status tint, so
      the one export AdForm is actually serving is findable at a glance in a long
@@ -403,6 +382,12 @@ html.dark {
   /* The folded branch is deliberately neutral: visible as mass, never competing
      with the named groups for attention. */
   .sankey-view__node-wrap--other .sankey-view__bar { background: #94a3b8; }
+  /* MC leaves are coloured by status instead. The value is a computed
+     solid-or-gradient handed in as --sankey-status-bar by SankeyView, because a
+     card split across statuses shows the split rather than a picked winner. */
+  .sankey-view__node-wrap--status .sankey-view__bar {
+    background: var(--sankey-status-bar, #94a3b8);
+  }
 
   .sankey-view__pill {
     display: inline-flex;
@@ -571,6 +556,38 @@ html.dark {
     border-color: #334155;
   }
 }
+
+/* Status colours. UNLAYERED ON PURPOSE, like the platform edge below.
+   These class names are never written out in the source — every consumer builds
+   them at runtime as `status-dot--${statusSlug(s)}` — so Tailwind's scanner
+   never sees them as candidates and drops any of these rules that sit inside
+   `@layer components`. That is not hypothetical: it shipped. Only
+   `status-dot--active` survived, purely because ClientsTab.tsx happens to write
+   that one literally, so every status dot in the app except ACTIVE rendered
+   transparent — the matrix chips, the feed stripe, the status filter's option
+   dots and the sankey tooltip alike. Unlayered CSS is never purged, so the
+   colours cannot go missing again as literals come and go. */
+.status-dot--draft { background-color: var(--status-draft); }
+.status-dot--preview { background-color: var(--status-preview); }
+.status-dot--approved { background-color: var(--status-approved); }
+.status-dot--active { background-color: var(--status-active); }
+.status-dot--inactive { background-color: var(--status-inactive); }
+.status-dot--dead { background-color: var(--status-dead); }
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.status-badge--draft { background-color: color-mix(in srgb, var(--status-draft) 18%, white); color: var(--status-draft); }
+.status-badge--preview { background-color: color-mix(in srgb, var(--status-preview) 18%, white); color: var(--status-preview); }
+.status-badge--approved { background-color: color-mix(in srgb, var(--status-approved) 18%, white); color: var(--status-approved); }
+.status-badge--active { background-color: color-mix(in srgb, var(--status-active) 18%, white); color: var(--status-active); }
+.status-badge--inactive { background-color: color-mix(in srgb, var(--status-inactive) 18%, white); color: var(--status-inactive); }
+.status-badge--dead { background-color: color-mix(in srgb, var(--status-dead) 18%, white); color: var(--status-dead); }
 
 /* Buying-platform colours — the single place the values live. Consumed by the
    matrix audience-header edge (below) and the tree-view node stripe. Which

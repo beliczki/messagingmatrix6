@@ -40,6 +40,7 @@ import {
   type Topic,
 } from "../types";
 import { useIsDarkMode } from "./useIsDarkMode";
+import { MC_STATUSES, statusSlug } from "@/lib/mc-status";
 
 type ConfigRow = { key: string; value: unknown };
 
@@ -91,6 +92,34 @@ function loadExpanded(): Set<number> {
   } catch {
     return new Set();
   }
+}
+
+/**
+ * The bar colour for an MC leaf: its status.
+ *
+ * A card put out in 24 audiences can hold more than one status, and picking the
+ * "dominant" one would paint a 13/11 split solid green. So a mixed card gets a
+ * proportional gradient with hard stops — the bar shows the split it actually
+ * has, and the tooltip names the counts. Colours come from the `--status-*`
+ * variables, which is where Settings → Design writes them, so a client's own
+ * palette carries through.
+ */
+function statusBarBackground(
+  statusCounts: Record<string, number>,
+): string | null {
+  const present = MC_STATUSES.filter((st) => (statusCounts[st] ?? 0) > 0);
+  if (present.length === 0) return null;
+  if (present.length === 1) return `var(--status-${statusSlug(present[0])})`;
+
+  const total = present.reduce((sum, st) => sum + statusCounts[st], 0);
+  let at = 0;
+  const stops = present.map((st) => {
+    const from = (at / total) * 100;
+    at += statusCounts[st];
+    const to = (at / total) * 100;
+    return `var(--status-${statusSlug(st)}) ${from.toFixed(2)}% ${to.toFixed(2)}%`;
+  });
+  return `linear-gradient(to bottom, ${stops.join(", ")})`;
 }
 
 function idOf(x: string | SankeyNodeDatum): string {
@@ -426,12 +455,19 @@ export default function SankeyView({
         // Platform colour wins over the depth colour when the whole subtree
         // shares one recognised buying platform — the same encoding the tree
         // node stripe and the matrix audience header use.
+        // On an MC leaf the useful question is "what state is this card in",
+        // so status wins there. Everywhere else the platform/depth encoding the
+        // tree already uses is kept, so the two views still read alike.
+        const statusBar =
+          n.messageId !== undefined ? statusBarBackground(n.statusCounts) : null;
         const plat = platformToken(n.platform);
-        const stripe = n.isOther
-          ? "sankey-view__node-wrap--other"
-          : plat
-            ? `sankey-view__node-wrap--plat-${plat}`
-            : `sankey-view__node-wrap--lvl-${n.level % LEVEL_COLOR_CYCLE}`;
+        const stripe = statusBar
+          ? "sankey-view__node-wrap--status"
+          : n.isOther
+            ? "sankey-view__node-wrap--other"
+            : plat
+              ? `sankey-view__node-wrap--plat-${plat}`
+              : `sankey-view__node-wrap--lvl-${n.level % LEVEL_COLOR_CYCLE}`;
         const data: SankeyNodeData = {
           label: n.label,
           countLabel: formatMetric(n.count, metric, true),
@@ -456,6 +492,12 @@ export default function SankeyView({
           draggable: false,
           selectable: false,
           className: `sankey-view__node-wrap ${stripe}`,
+          // A computed gradient has no CSS-file form; it is handed over as a
+          // custom property so the rule that consumes it still lives in the
+          // stylesheet.
+          style: statusBar
+            ? ({ "--sankey-status-bar": statusBar } as React.CSSProperties)
+            : undefined,
           data: data as unknown as Record<string, unknown>,
         };
       }),

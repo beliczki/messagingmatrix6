@@ -74,29 +74,32 @@ export default function DraftsView() {
   // The Promote tab offers both axes, so it needs both halves of the audience
   // list. Channels are merged in as Audience-shaped rows (channel = code) the
   // same way MatrixGrid does it — one list, partitioned on `channel`.
+  //
+  // A QUERY KEY IS A SHAPE CONTRACT. These three keys are shared with the
+  // matrix, the creative library, monitoring and the dimension editors, and
+  // every one of those caches the API ENVELOPE ({ audiences: [...] }). This
+  // view used to unwrap to the bare array, so whichever page mounted first
+  // decided what the other one read: coming here from the matrix handed this
+  // memo an object to spread — "(intermediate value) is not iterable", the
+  // whole page replaced by the error boundary — and going the other way handed
+  // the matrix an array whose `.audiences` is undefined, which renders an
+  // empty grid and says nothing. Keep the envelope; unwrap at the use site.
   const audiencesQ = useQuery({
     queryKey: ["audiences"],
-    queryFn: () =>
-      fetchJSON<{ audiences: Audience[] }>("/api/audiences").then(
-        (d) => d.audiences,
-      ),
+    queryFn: () => fetchJSON<{ audiences: Audience[] }>("/api/audiences"),
   });
   const channelsQ = useQuery({
     queryKey: ["channels"],
-    queryFn: () =>
-      fetchJSON<{ channels: Channel[] }>("/api/channels").then(
-        (d) => d.channels,
-      ),
+    queryFn: () => fetchJSON<{ channels: Channel[] }>("/api/channels"),
   });
   const topicsQ = useQuery({
     queryKey: ["topics"],
-    queryFn: () =>
-      fetchJSON<{ topics: Topic[] }>("/api/topics").then((d) => d.topics),
+    queryFn: () => fetchJSON<{ topics: Topic[] }>("/api/topics"),
   });
   const audiences = useMemo(
     () => [
-      ...(audiencesQ.data ?? []),
-      ...(channelsQ.data ?? []).map(channelToAudience),
+      ...(audiencesQ.data?.audiences ?? []),
+      ...(channelsQ.data?.channels ?? []).map(channelToAudience),
     ],
     [audiencesQ.data, channelsQ.data],
   );
@@ -319,7 +322,7 @@ export default function DraftsView() {
         open={detail !== null}
         message={detail}
         audiences={audiences}
-        topics={topicsQ.data ?? []}
+        topics={topicsQ.data?.topics ?? []}
         visibleMessages={drafts}
         siblingCount={0}
         onClose={() => setDetailId(null)}

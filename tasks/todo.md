@@ -2038,50 +2038,79 @@ kollégák MCP-behívása előtt bizonyítható legyen: draft → brief → prom
 - [x] F0–F11 forgatókönyv magyar, tool-nevet nem tartalmazó promptokkal + jegyzőkönyv-sablon.
 - [x] Takarítási terv: célzott törlés (objektumtár → `messages` DELETE → brief → token).
 
-**A modellezés közben kiesett, külön ticketet érő megfigyelések:**
+**Az élő tokenkészlet (2026-09-06) átrendezte a tesztet:** egyetlen `full` token van
+(`admin@local`), a két erstés (`tamas.varfi@`, `csaba.brunner@`) **`read`**. Vagyis ma egy
+behívott kolléga nem tud draftot csinálni, briefet kötni, promotálni — a 30 író tool meg sem
+jelenik neki. A `read` futam ezért az **elsődleges** eset, a `full` a másodlagos.
 
-1. **Draftot nem lehet MCP-n szerkeszteni.** Nincs `draft_update`; a `mc_update`
-   `findMessageByPmmid`-del keres, egy draftnak pedig nincs PMMID-je
-   (`messages_draft_has_no_pmmid`). Az egyetlen út: `draft_delete` + újra.
-   A workflow „content update" lépése tehát **MCP-n ma nem létezik**.
-2. **Nincs `target: both`** az MCP promote-on, míg a felületen (`PromoteTab.tsx:23`)
-   DCO/Agentic/Both van. MCP-n a kétoldali kihelyezés = `draft_promote` + `mc_copy_batch`.
+---
+
+### MCP tool-leírás javítások — a workflow-teszt modellezéséből (2026-09-06)
+
+Ezek **nem** a tesztfutamból jöttek (az még nem futott), hanem a `src/lib/mcp.ts`
+átolvasásából, miközben a fenti forgatókönyvet terveztem. Azért kerültek ide, mert
+mindkettő olyan pont, ahol az agent **kénytelen találgatni**, és a találgatás a
+workflow közepén fog kiderülni.
+
+- [ ] **T1 — a tartalom-módosítás útja hiányzik a leírásokból.** Az agent ma nem tudja
+      kitalálni, hogyan írjon át egy szöveget. A valóság kétágú:
+      - **Draft** (`status=DRAFT`, nincs audience): **nem szerkeszthető MCP-n.** Nincs
+        `draft_update`, a `mc_update` pedig `findMessageByPmmid`-del keres, egy draftnak
+        viszont nincs PMMID-je (DB check `messages_draft_has_no_pmmid`). Egyetlen út:
+        `draft_delete` + `generate_test_creative` újra.
+      - **Promotált MC**: `list_mc` (vagy `mc_get`) → a sor **`pmmid` + `version`** →
+        `mc_update(mc_label: <pmmid>, version: <version>, fields: {…})`. A `version`
+        kötelező (optimistic lock), utána a preview elavul → `preview_generate`.
+
+      **Teendő:** ez a két ág menjen bele a tool-leírásokba, hogy az agent ne találgasson:
+      - `mc_update` leírásába: honnan jön az `mc_label` és a `version` (`list_mc`/`mc_get`),
+        és hogy **draftra nem működik**.
+      - `generate_test_creative` és `draft_get` leírásába: a draft tartalma MCP-n nem
+        módosítható, csak eldobás + újra, vagy promote után `mc_update`.
+      - `draft_promote` leírásába egy záró mondat: promote után a szerkesztés útja
+        `list_mc → pmmid → mc_update`.
+      - `preview_generate` leírásába: `mc_update` után a preview elavul, ez a lépés kell.
+      ⚠ **Csak leírás-változás, kódlogika nem.** A `docs/MM6_MCP_E2E_TEST.md` F6 lépése
+      ezt méri — a javítás után az agentnek magától be kell járnia a láncot.
+      ⚠ `feedback_mcp_settings_page_sync`: a Settings › MCP tool-listája automatikusan
+      szinkronizál a `mcp.ts`-ből, de a `McpTab.tsx` **prózai** szakaszai kézzel írottak —
+      ha ott is szerepel a szerkesztés útja, azt külön kell frissíteni.
+
+- [ ] **T2 — `matrix_status.last_export` mindig `null`.** (`mcp.ts:1077`,
+      `// No export-history tracking yet — Phase 8d/9c TBD.`) Az agent ebből azt a
+      hamis következtetést vonja le, hogy „még sosem exportáltunk".
+      A `feed_exports` tábla viszont **létezik és él** (egy sor per Preview & Export
+      akció, `uploaded_to_adform_at`-tal) — tehát van mit visszaadni.
+      **Teendő:** `last_export` a `feed_exports` legutóbbi sorából (`created_at`, és
+      külön a legutóbbi `uploaded_to_adform_at`), vagy ha nem érjük meg, akkor a mező
+      **kivétele** a válaszból — a `null` rosszabb, mint a hiány.
+      Döntés kell: visszaadjuk vagy kivesszük.
+
+### A modellezés közben kiesett további megfigyelések (nem tesztelt, nem ütemezett)
+
 3. **A snapshot/restore veszteséges.** `SnapshotPayload` 10 táblát ment, `message_previews`-t
    **nem**, a restore viszont törli a `messages`-t → a cascade elviszi az **összes** preview-t
    az egész kliensen. Takarításra tilos használni; és önmagában is bug.
-4. `matrix_status.last_export` mindig `null` (nincs export-history) — félreérthető válasz.
-5. `draft_delete` leírása szerint a szám „nyugdíjazva marad", de `nextNewNumber` a live sorok
+4. `draft_delete` leírása szerint a szám „nyugdíjazva marad", de `nextNewNumber` a live sorok
    maximumát nézi → a **legnagyobb** szám archiválása után újra kiosztódik.
 
 **Nyitott (roadmap, sorrendben):**
 - [ ] `scripts/mcp-e2e-cleanup.ts` — a §7 három lépése egy tranzakcióban, `--dry-run`.
-      Ez kell **már az első kézi futam után is**.
+      Ez kell **már az első kézi futam után is**. (Ma még nincs mit takarítani: a
+      forgatókönyv **nem futott le**, csak a kódolvasásból készült.)
 - [ ] Lefedettség 24/51-ről feljebb: asset/creative feltöltés, `creative_promote`,
       `prodlist_upsert`, batch család, audience/topic írás, `preview_generate`, `get_media_file`.
       Előfeltétele a takarítószkript (ezek fájlokat is hagynak az objektumtárban).
 - [ ] Automatizált futtatás — csak ha a kézi kör után kiderül, hogy ismételni akarjuk.
 
-### 2026-09-06 — draft-szerkesztő tab-sorrend + a drafts oldal szűrőre váltása — 6.69.0
+### 2026-09-06 — /drafts összeomlás: a query-key alakszerződés ÖTÖDSZÖR — 6.69.1
 
-**User:** „lehet itt okosabb ha brief tab van elől, és a promote kerül a végére és de a mi a promote elején van product meg infó az a brief tabra kerüljön, a Targettől lefele meg a promote tabra" + „a name mezeje nem editálható a draft-nak a brief fülön kén legyen, és beragadt egy brief tag ami már nincs, és kéne egy product tag a draft kártyákra és akkor nem kell a kategorizálás oldalon belül viszont lehetne egy product filter meg egy filter a top toolbarba mint a matrix oldalon"
+**User (képernyőképpel):** „csomószor járok igy frisítés után hogy menube kattintgatá ilyen és egyéb eroroket dobál, nem jó" — `TypeError: (intermediate value)(intermediate value) is not iterable` a `useMemo`-ban, a `/drafts` az error boundary-ra cserélve.
 
-**Eldöntve (AskUserQuestion):**
-1. **A tab-átrendezés csak a draft-szerkesztőben.** A mátrix-kártya marad Naming-gel elöl, Briefjel hátul — a két nézet tab-készlete amúgy is különbözik.
-2. **A draft a Briefen nyílik**, nem a Promote-on.
-3. A „beragadt brief tag" a **kártyán látszó topic-chip** volt (nem a briefs-tábla árva 3-as sora — az ottmaradt, nem nyúltam hozzá).
+**Ok:** a `DraftsView` három megosztott kulcson (`["audiences"]`, `["topics"]`, `["channels"]`) a **csupasz tömböt** tette a cache-be (`.then((d) => d.audiences)`), miközben a MatrixGrid, CreativeLibrary, MonitoringTable, AudiencesEditor és TopicsEditor mind a **burkolót**. Így az döntötte el, mit olvas a másik, hogy melyik oldal mountolt előbb — pontosan ezért „frissítés után, menüben kattintgatva". Mátrixról jőve a drafts egy objektumot spreadelt (crash); fordítva a mátrix egy tömb `.audiences`-ét olvasta (undefined → **néma üres rács**). Nem a mai szelet okozta, de a mai szelet oldalán csapódott ki.
 
-- [x] Tab-sorrend draftnál: `Brief | Template | Content | Styles | Promote`; nyitó tab `brief`
-- [x] `PromoteTab` → csak a WHERE (Target és lefelé); a bevezető sor + Product a `BriefTab` `intake` propjába költözött (placed kártyán a blokk nem létezik)
-- [x] **Draft name** szerkeszthető a Brief fülön (`intake.nameValue`) — eddig sehol nem volt szerkeszthető, mert a draftnak nincs Naming füle
-- [x] `productOptions` a `MessageEditor`-ba (audiences+topics uniója), onnan megy a Brief fülre
-- [x] Drafts oldal: `ProductGroup` törölve, egyetlen `Masonry` fal
-- [x] Toolbar a mátrix nyelvén: `parseSearchQuery` szabadszöveg (`mc:`, `t:`, OR, idézőjel) + `MultiPill` Product per-termék számlálókkal + Clear + `N/M open`
-- [x] `drafts-tile__product` chip a kártyán; `drafts-tile__topic` törölve
-- [x] Két külön empty-state: „nincs draft" vs. „a szűrő mindent elrejt"
-- [x] `tasks/component-inventory.md` frissítve (új: `drafts-tile__product`, `brief-tab__reserved-note`; megszűnt: `product-group`, `drafts-tile__topic`)
+- [x] A `DraftsView` három queryFn-je a burkolót adja vissza, a kicsomagolás a használat helyére került
+- [x] `tests/unit/query-key-shape.test.ts` — statikus őr: egy kulcs-literálhoz egy alak. **Ellenőrizve, hogy fog is**: a hibát visszatéve mind a négy hívási helyet kiírja
+- [x] Az őr a TELJES kulcstömbre néz, nem az első elemére (`["feed-exports","all"]` ≠ `[…, product]`), és az `invalidateQueries`-t nem számolja alak-deklarációnak
 
-**A `mc:`/`t:` mezőket kisbetűsíteni kell** a predikátum előtt — a `parseSearchQuery` lowercase-eli a lekérdezést, és az `mcMatches` `\bmc401\b` regexe soha nem talált volna rá a `MC401a`-ra. A Creative Library ugyanezt csinálja (`CreativeLibrary.tsx:551`); a hiba az lett volna, hogy a `mc:401` némán nulla találatot ad.
-
-**Nyitva:** a `briefs` tábla 3-as sora árva (semmi nem mutat rá) — a 6.67.1-es leválasztás nullázza a draft `brief_id`-jét, de a sort nem takarítja. Nem tünet, csak szemét; ha zavaró, egy takarítás eldönthető külön.
-
-**DEPLOYOLVA 6.69.0 (2026-09-06):** commit `4170942`, box `f6620d2`→`4170942`, build 36.7s, `pm2 restart mm6-erste --update-env` → Ready 1275ms. Séma-migráció nincs (csak kliens-oldal). Health: `/` 307 · `/login` 200 · `/drafts` 307 · `/matrix` 307 · `/api/drafts` 401 · `/mcp` 401; publikus `/login` 200. ⚠️ **Vizuálisan nincs ellenőrizve** — a tab-sorrend, a Brief-fül intake-blokkja és az új drafts-toolbar képernyőn még nem volt látva.
+**Ez a memóriámban rögzített hibaosztály 5. előfordulása** (`project_query_key_shape_contract.md`: „two useQuery on one key with different shapes = order-dependent crash a reload hides; found 4× in prod"). A négy korábbi javítás után is visszajött, mert a szabály a figyelmen múlt — most a teszten múlik.

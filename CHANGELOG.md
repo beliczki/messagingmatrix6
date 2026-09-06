@@ -5,6 +5,24 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.69.1] — 2026-09-06
+
+### Fixed
+- **/drafts crashed when you arrived from another page.** Its `["audiences"]`,
+  `["topics"]` and `["channels"]` queries cached the bare array while the
+  matrix, creative library, monitoring and the dimension editors all cache the
+  API envelope — so whichever page mounted first decided what the other one
+  read. Coming from the matrix handed the drafts view an object to spread
+  ("(intermediate value) is not iterable", the page replaced by its error
+  boundary); going the other way handed the matrix an array whose `.audiences`
+  is undefined, which renders an empty grid and says nothing.
+
+### Added
+- `tests/unit/query-key-shape.test.ts` — fails the build when one React Query
+  key is stored under two shapes. TypeScript cannot see this (each `useQuery`
+  declares its own generic, the key is just a string) and a reload hides it, so
+  the rule is now checked instead of remembered. Fifth occurrence of this bug.
+
 ## [6.69.0] — 2026-09-06
 
 ### Changed

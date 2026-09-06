@@ -2175,3 +2175,5 @@ workflow közepén fog kiderülni.
 **A 6.70.0-s mondat visszatért, de már igazat mond.** Akkor a *preview* hiányát mondta ki tartalom-hiánynak (ezért jelent meg tele copyval bíró draftokon is); most pontosan azt jelenti, amit ír.
 
 **Bump-megjegyzés:** felhasználó által látható viselkedésváltozás → minor. Patch is védhető lett volna (pár órája szállított feature csiszolása) — a magasabbat választottam, ahogy a CLAUDE.md kéri kétes esetben.
+
+**DEPLOYOLVA 6.72.0 (2026-09-07):** commit `e1886f7`, box `c4d82e5`→`e1886f7`, build 40s, `pm2 restart mm6-erste --update-env` → Ready 1443ms. Séma-migráció nincs. **Böngészőben ellenőrizve:** a meta egy sor mind a 9 kártyán (`MC404a [SZK] BlackFriday 2026 Q4`, a hosszabb nevek „…"-tal csonkolva), a négy üres draft a 300×250-es „No content yet" dobozt kapja, az öt tartalommal bíró élőben renderel.

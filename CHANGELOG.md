@@ -5,6 +5,22 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.72.0] — 2026-09-07
+
+### Changed
+- **A draft card's meta is one line: MC · product · name.** The product tag
+  moved up next to the MC label — the two short fixed things first, so the eye
+  scans a column of them — and the name takes what is left and truncates, with
+  the full text on hover. It used to wrap, and a card that grew a second meta
+  row pushed its neighbours out of alignment.
+- **"No content yet" is back, now attached to the fact it always meant.** A
+  draft with a template but no copy rendered as the empty template — a blue
+  rectangle that reads as a finished card whose words failed to load. The tile
+  renders only once some content field is filled; until then it says so, in a
+  300x250-shaped box that holds the card's place in the wall. (The sentence
+  used to fire on the absence of a PREVIEW, which is why it appeared on drafts
+  that were full of copy — fixed in 6.70.0.)
+
 ## [6.71.0] — 2026-09-06
 
 ### Changed

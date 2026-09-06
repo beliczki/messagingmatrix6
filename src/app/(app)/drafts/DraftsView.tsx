@@ -48,6 +48,28 @@ import type { Draft } from "./types";
 // rather than simply "matched by no product".
 const NO_PRODUCT = "(no product)";
 
+// What "this draft has something to show" means. Every field a template can
+// actually paint — the words and the pictures. `template` is deliberately NOT
+// one of them: a template with nothing in it renders as an empty frame, which
+// on a wall of cards reads as a finished creative whose copy failed to load.
+// `landingUrl` is not one either — it changes where a click goes, not what the
+// card looks like.
+const CONTENT_FIELDS = [
+  "headline",
+  "copy1",
+  "copy2",
+  "disclaimer",
+  "flash",
+  "cta",
+  "image1",
+  "image2",
+  "image3",
+  "image4",
+  "image5",
+  "image6",
+  "video1",
+] as const satisfies readonly (keyof Draft)[];
+
 async function fetchJSON<T>(url: string): Promise<T> {
   const r = await fetch(url, { credentials: "include" });
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
@@ -364,15 +386,20 @@ function DraftTile({
   onOpen: () => void;
 }) {
   // Render the card, the way the matrix renders a cell — same component, same
-  // /api/render call, always current.
+  // /api/render call, always current. It used to show a PNG shot by the MCP
+  // draft pipeline, so nothing hand-written in the editor ever had a picture.
   //
-  // This used to show a PNG shot by the MCP draft pipeline, and the fallback
-  // when no such shot existed read "No content yet — this draft has only its
-  // number". That sentence described the absence of a PREVIEW and claimed the
-  // absence of CONTENT: every draft written by hand in the editor said it,
-  // headline, copy and all. A card with a template can always be rendered, so
-  // there is nothing to shoot ahead of time and nothing to go stale.
+  // But only once there is something to see. A draft with a template and no
+  // copy renders as the empty template — a blue rectangle that looks like a
+  // finished card with the words missing — so the "nothing here yet" sentence
+  // survives, now attached to the fact it always meant: no CONTENT. (It used
+  // to fire on the absence of a PREVIEW, which is why it appeared on drafts
+  // that were full of copy.)
   const size = template?.defaultSize ?? template?.sizes[0] ?? "300x250";
+  const hasContent = CONTENT_FIELDS.some((f) => {
+    const v = draft[f];
+    return typeof v === "string" && v.trim() !== "";
+  });
   return (
     <button
       type="button"
@@ -380,7 +407,7 @@ function DraftTile({
       className="creative-card drafts-tile group block w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-left shadow-sm transition hover:shadow-md"
     >
       <div className="creative-card__thumb drafts-tile__media relative flex min-h-24 items-center justify-center bg-slate-50">
-        {draft.template ? (
+        {draft.template && hasContent ? (
           <MatrixIframePreview
             message={draft as unknown as Message}
             templateName={draft.template}
@@ -390,22 +417,27 @@ function DraftTile({
             quietConsole
           />
         ) : (
-          /* Same footprint a 300x250 render takes at this column width, so a
-             template-less card holds its place in the masonry instead of
+          /* 300x250-shaped, the footprint a render takes at this column width,
+             so an empty card holds its place in the masonry instead of
              collapsing to its text and pulling the wall out of line. */
           <div className="drafts-tile__placeholder flex aspect-[300/250] w-full items-center justify-center p-6 text-center text-[11px] leading-relaxed text-slate-400">
-            No template yet —
+            No content yet —
             <br />
-            pick one on the draft&apos;s Template tab.
+            {draft.template
+              ? "this draft has only its number and a template."
+              : "this draft has only its number."}
           </div>
         )}
       </div>
-      <div className="creative-card__meta drafts-tile__meta flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-2 py-1.5">
-        <span className="creative-card__mc text-xs font-semibold text-slate-900">
+      {/* ONE line, always: MC · product · name, in that order — the two short
+          fixed things first so the eye scans a column of them, and the name
+          takes what is left and truncates. No wrapping: a card that grew a
+          second meta row pushed its neighbours out of alignment, and the tile
+          heights are what make the wall readable. The full name is in the
+          title attribute for when the truncation hides something. */}
+      <div className="creative-card__meta drafts-tile__meta flex items-center gap-x-2 overflow-hidden px-2 py-1.5">
+        <span className="creative-card__mc shrink-0 text-xs font-semibold text-slate-900">
           {mcLabel(draft)}
-        </span>
-        <span className="drafts-tile__name truncate text-[11px] text-slate-500">
-          {draft.name || "Untitled"}
         </span>
         {/* The product travels on the card instead of in a group header. It is
             the ONE tag here: the topic chip that used to sit beside it showed
@@ -414,13 +446,19 @@ function DraftTile({
             the Promote tab's Topic picker. */}
         <span
           className={clsx(
-            "tag-chip drafts-tile__product rounded px-1.5 py-0.5 text-[10px]",
+            "tag-chip drafts-tile__product shrink-0 rounded px-1.5 py-0.5 text-[10px]",
             draft.draftProduct
               ? "bg-slate-800 text-white"
               : "border border-dashed border-slate-300 text-slate-400",
           )}
         >
           {draft.draftProduct ?? "no product"}
+        </span>
+        <span
+          className="drafts-tile__name min-w-0 flex-1 truncate text-[11px] text-slate-500"
+          title={draft.name ?? undefined}
+        >
+          {draft.name || "Untitled"}
         </span>
       </div>
     </button>

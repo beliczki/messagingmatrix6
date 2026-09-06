@@ -2162,3 +2162,16 @@ workflow közepén fog kiderülni.
 ⚠️ **Ez töri az agent-szerződést:** a `~/ERSTE Addressable AI Agent` skill (és bármely más kliens), ha hívja a `draft_delete`-et, `tool not found`-ot fog kapni. A paraméterek és a válasz változatlanok, csak a név más.
 
 **DEPLOYOLVA 6.71.0 (2026-09-06):** commit `c4d82e5`, box `342bb19`→`c4d82e5`, build 35.7s, `pm2 restart mm6-erste --update-env` → Ready 1249ms. Séma-migráció nincs. Health: `/login` 200 · `/mcp` 401 · `/drafts` 307. A Settings › MCP tool-listája magától felveszi az új nevet (a `/api/mcp/tools` a `mcp.ts`-ből generál).
+
+### 2026-09-07 — draft-kártya: egysoros meta + a „no content" a tartalomra vonatkozik — 6.72.0
+
+**User:** „legyen trimmelve a name úgy hogy kiférjen egy sorba, MC + Product + name, legyen a product tag az MC után, és ahol nincs content mező kitöltve ott ne üres template hanem az jelenjen meg ami korábban hogy no content yet, de annak a doboznak a mérete legyen 300x250"
+
+- [x] Meta egy sorban: `flex items-center` (nincs `flex-wrap`), `overflow-hidden`; MC és a product-chip `shrink-0`, a név `min-w-0 flex-1 truncate` + `title` a teljes névvel
+- [x] Sorrend: **MC → product tag → név**
+- [x] Új `CONTENT_FIELDS` konstans (headline, copy1/2, disclaimer, flash, cta, image1–6, video1). A csempe **csak akkor renderel**, ha van sablon ÉS legalább egy tartalmi mező kitöltve; egyébként a „No content yet" doboz, `aspect-[300/250]`-ben
+- [x] A `template` szándékosan NEM tartalmi mező: üres sablon = kész kártyának látszó keret, aminek nem töltődött be a szövege. A `landingUrl` sem: azt változtatja, hova visz a kattintás, nem azt, hogy mit látsz
+
+**A 6.70.0-s mondat visszatért, de már igazat mond.** Akkor a *preview* hiányát mondta ki tartalom-hiánynak (ezért jelent meg tele copyval bíró draftokon is); most pontosan azt jelenti, amit ír.
+
+**Bump-megjegyzés:** felhasználó által látható viselkedésváltozás → minor. Patch is védhető lett volna (pár órája szállított feature csiszolása) — a magasabbat választottam, ahogy a CLAUDE.md kéri kétes esetben.

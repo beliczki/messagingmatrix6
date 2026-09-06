@@ -43,7 +43,7 @@ export default function SankeyMetricPanel({
         <ToggleBtn
           active={metric === "messages"}
           onClick={() => setMetric("messages")}
-          title="Ribbon width = number of messages"
+          title="Ribbon width = MC placements — a card put out in 24 audiences counts 24"
         >
           MC
         </ToggleBtn>
@@ -65,7 +65,9 @@ export default function SankeyMetricPanel({
 
       {metric === "messages" ? (
         <p className="sankey-metric-panel__hint mt-2 text-[10px] leading-snug text-slate-500">
-          Structure only — every message weighs one, and no report is involved.
+          Structure only — no report involved. Width counts{" "}
+          <strong>placements</strong>: one card put out in 24 audiences weighs
+          24, not 1.
         </p>
       ) : metricsQ.isLoading ? (
         <p className="sankey-metric-panel__hint mt-2 text-[10px] text-slate-500">

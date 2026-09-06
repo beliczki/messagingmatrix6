@@ -274,8 +274,8 @@ describe("buildSankeyData — metric weighting", () => {
     // A1 carries messages 1, 2 and 3 → 100 + 50 + 0.
     const a1 = nodesAt(nodes, 0).find((n) => n.label === "A1");
     expect(a1?.count).toBe(150);
-    // The message count is kept alongside, so the tooltip can still say three.
-    expect(a1?.messageCount).toBe(3);
+    // The placement count is kept alongside, so the tooltip can still say three.
+    expect(a1?.placementCount).toBe(3);
     const t1 = nodesAt(nodes, 1).find((n) => n.label === "T1");
     expect(links.find((l) => l.source === a1?.id && l.target === t1?.id)?.value).toBe(150);
   });
@@ -310,6 +310,28 @@ describe("buildSankeyData — metric weighting", () => {
     const { nodes } = buildSankeyData(fixture(), LEVELS, 100);
     const a1 = nodesAt(nodes, 0).find((n) => n.label === "A1");
     expect(a1?.count).toBe(3);
-    expect(a1?.messageCount).toBe(3);
+    expect(a1?.placementCount).toBe(3);
+  });
+});
+
+describe("buildSankeyData — cards vs placements", () => {
+  it("separates how many cards a node holds from how many places they sit in", () => {
+    // The fixture's MC1a is carried by two audiences on the same topic, so T1
+    // holds three CARDS over four PLACEMENTS. Reporting four as "messages" would
+    // read as four different things.
+    const { nodes } = buildSankeyData(fixture(), LEVELS, 100);
+    const t1 = nodesAt(nodes, 1).find((n) => n.label === "T1");
+    expect(t1?.cardCount).toBe(3);
+    expect(t1?.placementCount).toBe(4);
+    expect(t1?.audienceCount).toBe(3);
+  });
+
+  it("gives a leaf one card and counts where that card sits", () => {
+    const { nodes } = buildSankeyData(fixture(), LEVELS, 100);
+    const mc1a = nodesAt(nodes, 2).find((n) => n.label === "MC1a");
+    expect(mc1a?.cardCount).toBe(1);
+    expect(mc1a?.placementCount).toBe(2);
+    expect(mc1a?.audienceCount).toBe(2);
+    expect(mc1a?.topicCount).toBe(1);
   });
 });

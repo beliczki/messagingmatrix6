@@ -41,8 +41,19 @@ export type SankeyNodeDatum = {
   level: number;
   /** The weight the diagram is drawn on — the active metric's total. */
   count: number;
-  /** Always the number of messages, whatever the active metric is. */
-  messageCount: number;
+  /**
+   * Rows of `messages` under the node — which is a count of PLACEMENTS, not of
+   * cards, at every level. One card put out in 24 audiences is 24 rows, so a
+   * topic holding three cards across 24 audiences counts 72. Calling that "72
+   * messages" reads as 72 different things; `cardCount` is the number of
+   * different things.
+   */
+  placementCount: number;
+  /** Distinct MC cards (number + variant) under the node. 1 on a leaf. */
+  cardCount: number;
+  /** Distinct audiences and topics the node's rows sit in. */
+  audienceCount: number;
+  topicCount: number;
   /** Conversions attributed to this node in the chosen period. */
   conversions: number;
   /** True for the synthetic per-column fold node. */
@@ -106,6 +117,9 @@ type NodeAgg = {
   label: string;
   rows: Set<number>;
   platforms: Set<string>;
+  cardKeys: Set<string>;
+  audienceKeys: Set<string>;
+  topicKeys: Set<string>;
   messageId?: number;
 };
 
@@ -137,11 +151,17 @@ function buildGraph(
           label: gv.label,
           rows: new Set(),
           platforms: new Set(),
+          cardKeys: new Set(),
+          audienceKeys: new Set(),
+          topicKeys: new Set(),
         };
         if (levels[i].kind === "messages") agg.messageId = row.message.id;
         nodeMap.set(id, agg);
       }
       agg.rows.add(row.message.id);
+      agg.cardKeys.add(`${row.message.number}${row.message.variant}`);
+      agg.audienceKeys.add(row.audience.key);
+      agg.topicKeys.add(row.topic.key);
       if (row.audience.buyingPlatform) agg.platforms.add(row.audience.buyingPlatform);
 
       if (prevId !== null) {
@@ -251,7 +271,10 @@ export function buildSankeyData(
         label: n.label,
         level,
         count: sumWeight(n.rows),
-        messageCount: n.rows.size,
+        placementCount: n.rows.size,
+        cardCount: n.cardKeys.size,
+        audienceCount: n.audienceKeys.size,
+        topicCount: n.topicKeys.size,
         conversions: sumConversions(n.rows),
         isOther: false,
         foldedGroups: 0,
@@ -265,16 +288,25 @@ export function buildSankeyData(
     if (foldList.length > 0) {
       const oid = otherNodeId(level);
       const rows = new Set<number>();
+      const cardKeys = new Set<string>();
+      const audienceKeys = new Set<string>();
+      const topicKeys = new Set<string>();
       for (const n of foldList) {
         renderAs.set(n.id, oid);
         for (const r of n.rows) rows.add(r);
+        for (const c of n.cardKeys) cardKeys.add(c);
+        for (const a of n.audienceKeys) audienceKeys.add(a);
+        for (const t of n.topicKeys) topicKeys.add(t);
       }
       nodes.push({
         id: oid,
         label: `Other (${foldList.length})`,
         level,
         count: sumWeight(rows),
-        messageCount: rows.size,
+        placementCount: rows.size,
+        cardCount: cardKeys.size,
+        audienceCount: audienceKeys.size,
+        topicCount: topicKeys.size,
         conversions: sumConversions(rows),
         isOther: true,
         foldedGroups: foldList.length,

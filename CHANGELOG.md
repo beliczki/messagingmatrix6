@@ -5,6 +5,19 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.64.1] — 2026-09-06
+
+### Fixed
+- **The sankey called placements "messages".** A row of `messages` is a
+  placement, not a message: one card put out in 24 audiences is 24 rows. So a
+  topic holding three cards across 24 audiences read as "72 messages" — 72
+  different things, when there are three. The tooltip now names both: a non-leaf
+  says `3 MCs · 72 placements · 24 audiences`, and a leaf — where the node *is*
+  one card — says `24 placements · 24 audiences · 1 topic` instead. The MC-mode
+  weight is still the row count (a card node must weigh what its ribbon carries,
+  or the flow stops adding up), but the pill's hover title and the `Weight by`
+  hint now say `placements` outright.
+
 ## [6.64.0] — 2026-09-06
 
 ### Added

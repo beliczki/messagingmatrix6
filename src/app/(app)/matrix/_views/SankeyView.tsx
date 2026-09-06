@@ -116,6 +116,8 @@ type SankeyNodeData = {
   label: string;
   /** Already formatted for the active metric — the node pill shows it as-is. */
   countLabel: string;
+  /** Spelled out for the hover title, where there is room to say the unit. */
+  countTitle: string;
   messageId?: number;
   expandLevel?: number;
   onOpenMessage: (id: number) => void;
@@ -167,8 +169,8 @@ function SankeyNodeBox({ id, data }: NodeProps) {
         className="sankey-view__pill"
         title={
           expandTarget !== undefined
-            ? `${d.label} — ${d.countLabel} · click to show all`
-            : `${d.label} — ${d.countLabel}`
+            ? `${d.label} — ${d.countTitle} · click to show all`
+            : `${d.label} — ${d.countTitle}`
         }
         role={clickable ? "button" : undefined}
         tabIndex={clickable ? 0 : undefined}
@@ -433,6 +435,13 @@ export default function SankeyView({
         const data: SankeyNodeData = {
           label: n.label,
           countLabel: formatMetric(n.count, metric, true),
+          // In MC mode the weight is the row count, and a row is a placement —
+          // one card in 24 audiences is 24 of them. The bare pill has no room to
+          // say so; the title does.
+          countTitle:
+            metric === "messages"
+              ? `${n.placementCount} placement${n.placementCount === 1 ? "" : "s"}`
+              : formatMetric(n.count, metric),
           onOpenMessage,
           onToggleExpand: toggleExpand,
         };
@@ -484,10 +493,28 @@ export default function SankeyView({
     if (hover.kind === "node") {
       const n = nodeById.get(hover.id);
       if (!n) return null;
+      const isLeaf = n.messageId !== undefined;
+      // A row of `messages` is a PLACEMENT, not a message: one card put out in
+      // 24 audiences is 24 rows. Saying "72 messages" on a topic that holds
+      // three cards across 24 audiences reads as 72 different things. So the
+      // tooltip names both — how many different cards, and how many places they
+      // are put out in — and on a leaf, where the node IS one card, it drops the
+      // card count and says where that one card sits instead.
+      const spread = isLeaf
+        ? [
+            `${n.placementCount} placement${n.placementCount === 1 ? "" : "s"}`,
+            `${n.audienceCount} audience${n.audienceCount === 1 ? "" : "s"}`,
+            `${n.topicCount} topic${n.topicCount === 1 ? "" : "s"}`,
+          ]
+        : [
+            `${n.cardCount} MC${n.cardCount === 1 ? "" : "s"}`,
+            `${n.placementCount} placement${n.placementCount === 1 ? "" : "s"}`,
+            `${n.audienceCount} audience${n.audienceCount === 1 ? "" : "s"}`,
+          ];
       return {
         title: n.label,
-        value: formatMetric(n.count, metric),
-        messages: n.messageCount,
+        value: metric === "messages" ? null : formatMetric(n.count, metric),
+        spread,
         // Shown even at zero, on purpose: a blank would read as "no data" when
         // it means "nothing converted", and the two are not the same answer.
         conversions: metric === "messages" ? null : n.conversions,
@@ -501,7 +528,10 @@ export default function SankeyView({
     return {
       title: `${s?.label ?? "?"} → ${t?.label ?? "?"}`,
       value: formatMetric(l.value, metric),
-      messages: null,
+      spread:
+        metric === "messages"
+          ? [`${Math.round(l.value)} placement${l.value === 1 ? "" : "s"}`]
+          : [],
       conversions: null,
       statuses: null,
     };
@@ -595,15 +625,12 @@ export default function SankeyView({
           style={{ left: tooltipAt.x + 14, top: tooltipAt.y + 14 }}
         >
           <div className="sankey-view__tooltip-title">{tooltip.title}</div>
-          <div className="sankey-view__tooltip-value">
-            {tooltip.value}
-            {metric === "messages"
-              ? ` message${tooltip.value === "1" ? "" : "s"}`
-              : ""}
-          </div>
-          {tooltip.messages !== null && metric !== "messages" ? (
+          {tooltip.value !== null ? (
+            <div className="sankey-view__tooltip-value">{tooltip.value}</div>
+          ) : null}
+          {tooltip.spread.length > 0 ? (
             <div className="sankey-view__tooltip-value">
-              {tooltip.messages} message{tooltip.messages === 1 ? "" : "s"}
+              {tooltip.spread.join(" · ")}
             </div>
           ) : null}
           {tooltip.conversions !== null ? (

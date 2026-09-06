@@ -324,6 +324,12 @@ A `buildSankey` mostantol maga jarja a szinteket es entitasra merge-el, de a sor
 
 *Nyitva a userenel:* a konverzio-import javitasa (120-bol 9 matchel) — ha ez import-hiba es nem valosag, az a kovetkezo lepes.
 
+**6.64.1 (user, 2026-09-06) — a sankey kirakasokat nevezett uzenetnek.** Ket egymas utani user-eszrevetel ugyanarrol: „a 24 messages az nem 24 uzenet hanem 24 instance nem?" es „itt meg a 72 messages az 72 instance of 3 mc nem?". **Mindketto igaz** — es az elso valaszomban tevesen allitottam, hogy nem-level node-on a szo helyes. Elo DB-vel ellenorizve: `MC398a` = 24 sor / 24 audience / 1 topic; `Ne maradj le 26Q2` = **72 sor / 3 kartya (MC314a,b,c) / 24 audience**.
+
+A `messages` tabla egy sora **kirakas (placement)**, nem uzenet: egy 24 audience-be kitett kartya 24 sor. A sorszam tehat MINDEN szinten kirakas-szam. A tooltip mostantol mindkettot megnevezi — nem-levelen `3 MCs · 72 placements · 24 audiences`, levelen (ahol a node MAGA a kartya) `24 placements · 24 audiences · 1 topic`. Az MC-modu suly **marad a sorszam** (egy kartya-node-nak annyit kell nyomnia, amennyit a befuto szalag hoz, kulonben a flow nem jon ki), de a pill hover-title-je es a `Weight by` hint kimondja: `placements`. `SankeyNodeDatum.messageCount` → `placementCount`, plusz uj `cardCount` / `audienceCount` / `topicCount`. 815 teszt zold, box `6.64.1`.
+
+⚠️ **Nem ellenorizve vizualisan:** a 6.64.1 deploy utani utolso screenshot elmaradt (a bongeszoablak 0 szelessegu volt). A logikat unit teszt es DB-lekerdezes fedi, a health 307/200, de a tooltip uj szovege elohen meg nincs szemmel latva.
+
 **Amit szándékosan NEM csináltunk:** nincs `sankeyStructure` config (a `treeStructure` hajtja mindkét nézetet), nincs cost-dimenzió a matrix-sankey-ben (az a monitoring oldalra való — `tasks/cost-sankey-szakertes.md`), nincs v5 canvas-renderer portolás.
 
 ---

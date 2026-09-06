@@ -330,6 +330,16 @@ A `messages` tabla egy sora **kirakas (placement)**, nem uzenet: egy 24 audience
 
 ⚠️ **Nem ellenorizve vizualisan:** a 6.64.1 deploy utani utolso screenshot elmaradt (a bongeszoablak 0 szelessegu volt). A logikat unit teszt es DB-lekerdezes fedi, a health 307/200, de a tooltip uj szovege elohen meg nincs szemmel latva.
 
+**6.65.0 (user, 2026-09-06) — statusz-szin az MC oszlopon + egy elesben elo, tagabb hiba.**
+
+*A user ket dolgot kert:* legyen statusz-fuggo az MC oszlop szine, es a statusz-legordoloben latszodjon a tobbi statusz szine is (setting alapjan). A masodikat **nem tudtam volna kitalalni** — eloben megmertem a DOM-ot, mielott barmit irtam volna:
+
+⚠️ **GYOKER-OK, es nem csak a legordulore igaz: az appban MINDEN statusz-pott atlatszo volt az ACTIVE kivetelevel.** A `.status-dot--*` es `.status-badge--*` szabalyok `@layer components`-ben ultek, az osztalynevek viszont futasidoben allnak ossze (`status-dot--${statusSlug(s)}`), tehat a Tailwind scanner sosem latja oket jeloltkent es **kipurgalja a szabalyt**. Az `ACTIVE` **veletlenul** maradt eletben: a `ClientsTab.tsx:79` kiirja szo szerint. Erintett volt a statusz-szuro opcioi, a matrix chipek, a feed sor-csik es a sankey tooltip is. Mert bizonyitek: `getComputedStyle(dot).backgroundColor === "rgba(0, 0, 0, 0)"` mindenhol az ACTIVE-on kivul.
+
+*Javitas:* a szabalyok **unlayered**-ek lettek — a fajl sajat, mar meglevo gyogyszere erre (a platform-el blokk is igy all, „Unlayered ON PURPOSE"). Igy nem tunhetnek el ujra, ahogy a literalok jonnek-mennek. Ellenorizve deploy utan: mind az ot pott a **kliens mentett szinet** kapja (APPROVED = `rgb(15,138,97)` = az erste `#0f8a61`, nem a `#10b981` default).
+
+*MC oszlop szine:* levelen a statusz nyer, a tobbi oszlopon marad a platform/melyseg kodolas (hogy a Tree-vel egyutt olvasson). **Kevert kartyanal nem valasztunk „dominans" szint** — egy 13/11 megoszlast zoldre festeni hazugsag lenne —, hanem aranyos `linear-gradient` kemeny stopokkal. Eloben: 100 statusz-szinezett level, 98 egyszinu, **2 gradiens**, es az aranyok pontosak (`MC134a` 29 kirakas → 68,97% ACTIVE / 31,03% INACTIVE; `MC94b` 9 → 44,44% / 55,56%). 815 teszt zold, box `6.65.0`.
+
 **Amit szándékosan NEM csináltunk:** nincs `sankeyStructure` config (a `treeStructure` hajtja mindkét nézetet), nincs cost-dimenzió a matrix-sankey-ben (az a monitoring oldalra való — `tasks/cost-sankey-szakertes.md`), nincs v5 canvas-renderer portolás.
 
 ---

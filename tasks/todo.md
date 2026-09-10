@@ -2259,3 +2259,16 @@ mm6-erste --update-env`. Az oszlop nullable + check, a régi kód sosem írja, t
 önmagában ártalmatlan a futó verzióra.
 
 **A dashboard-szelet (üres hónap-oszlop + fókusz-frissítés) ugyanebben a bumpban ment.**
+
+**DEPLOYOLVA 6.73.0 (2026-09-10):** commit `5f285d0`, box `e1886f7`→`5f285d0`. **Séma-migráció VAN**,
+egy passzban: `export $(grep '^DATABASE_URL=' .env | xargs) && npm run db:migrate` (0018) → build →
+`pm2 restart mm6-erste --update-env` → Ready 1240ms. Mentés nem kellett: a migráció tisztán additív
+(`ADD COLUMN draft_target text` + check), a rollback egyetlen `ALTER TABLE messages DROP COLUMN
+draft_target`. Ellenőrizve élesben: az oszlop és a `messages_draft_target_values` constraint ott van,
+`error.log` üres a restart óta, `deployed 6.73.0`. Health: `/login` 200 · `/` 307 · `/drafts` 307 ·
+`/matrix` 307 · `/api/drafts` 401 · `/mcp` 401 · **`/share/fke-60Mn5frC` 200** — ez utóbbi a lényeg,
+mert publikus és `messages`-t olvas az új sémán át, tehát a kód és a DB együtt van.
+
+**Böngészőben NEM ellenőrizve** (a session bejelentkezést igényel): a szaggatott Sep oszlop, a Brief
+fül két új gombja + Target vezérlője, a Promote fül matched-sora és a kártya-cover kinézete.
+Ez a következő session első feladata.

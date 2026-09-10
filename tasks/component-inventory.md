@@ -973,3 +973,9 @@ A lap gyökere `dashboard`. Meglévő névből vettük: `toolbar-btn` (nap-lépt
 - `feed-export-panel__preview-toggle` (6.61.0, 6.64.0-ben atalakitva) — mar nem checkbox, hanem **pipas gomb** a `preview-pane__skip-anim` mintajara (keretes gomb + kis negyzet, aktivan kitoltve). A feed tabla nem dialogusban nyilik, hanem **atveszi a matrix vasznat** — dialoguson belul egy sor nem tudna megnyitni az MC-t egy masodik dialogus nelkul. Nezetvaltasra torlodik.
 - `sankey-view__node-wrap--status` (6.65.0) — MC-level bar szinezese statusz szerint; az erteket a `SankeyView` adja at `--sankey-status-bar` custom propertyben (egyszinu, vagy kevert kartyanal aranyos `linear-gradient` kemeny stopokkal). A `--plat-*` / `--lvl-*` csik csak a nem-level oszlopokon marad.
 - ⚠️ **`status-dot--*` / `status-badge--*` UNLAYERED** (6.65.0) — nem kerulhetnek vissza `@layer components`-be. Az osztalynevek futasidoben allnak ossze (`status-dot--${statusSlug(s)}`), a Tailwind scanner nem latja oket jeloltkent, es kipurgalja a szabalyt. Ez elesben megtortent: csak az `ACTIVE` maradt eletben, mert a `ClientsTab.tsx` veletlenul kiirja szo szerint.
+
+### MessageEditor › Styles tab — selector chips (2026-09-10, M7)
+- `styles-tab__selectors` — a Custom CSS textarea alatti chip-blokk (a `Field` `<label>`-en KÍVÜL, hogy a chip-klikk ne aktiválja a labelt).
+- `styles-tab__selector-row` — egy sor (`Sizes` / `Elements`), `flex flex-wrap gap-1`.
+- `styles-tab__selector-label` — sor-címke, a projekt szokásos `text-[10px] uppercase tracking-wider text-slate-400` szekció-label tokenje.
+- `styles-tab__selector-chip` — kattintható token-chip a globális `tag-chip`-re ülve (`font-mono text-[10px]`, slate keret + hover). Beszúrás a kurzorpozícióba, szóköz-normalizálással.

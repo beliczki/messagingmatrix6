@@ -76,6 +76,8 @@ const STATUS_OPTIONS = MATRIX_STATUSES;
 type TemplateInfo = {
   name: string;
   sizes: string[];
+  /** DOM ids declared in the template's index.html (html kind only). */
+  elementIds: string[];
   defaultSize: string | null;
   tagOptions: string[];
   placeholders: Array<{ name: string; type: string }>;
@@ -391,6 +393,13 @@ export default function MessageEditor({
     },
     enabled: open,
   });
+
+  // The template this draft renders with. Three consumers (Content sizes, Styles
+  // chips, the preview) asked the same question of the same list; one lookup
+  // keeps them from drifting on what "no template picked" falls back to.
+  const currentTemplate = templatesQ.data?.templates.find(
+    (t) => t.name === (draft?.template ?? "html"),
+  );
 
   const qc = useQueryClient();
   // Saves are strictly serialized: a second PATCH while one is in flight
@@ -892,14 +901,17 @@ export default function MessageEditor({
                   draft={draft}
                   setDraft={setDraft}
                   mcLabel={mcLabel}
-                  templateSizes={
-                    templatesQ.data?.templates.find(
-                      (t) => t.name === (draft.template ?? "html"),
-                    )?.sizes ?? []
-                  }
+                  templateSizes={currentTemplate?.sizes ?? []}
                 />
               ) : null}
-              {tab === "styles" ? <StylesTab draft={draft} setDraft={setDraft} /> : null}
+              {tab === "styles" ? (
+                <StylesTab
+                  draft={draft}
+                  setDraft={setDraft}
+                  templateSizes={currentTemplate?.sizes ?? []}
+                  templateElementIds={currentTemplate?.elementIds ?? []}
+                />
+              ) : null}
               {tab === "trafficking" && placedRow !== null ? (
                 <TraffickingTab
                   message={placedRow}
@@ -976,7 +988,7 @@ export default function MessageEditor({
             <MessagePreview
               message={committedSnapshot ?? message}
               draft={draft}
-              templateInfo={templatesQ.data?.templates.find((t) => t.name === (draft.template ?? "html"))}
+              templateInfo={currentTemplate}
               onSizeChange={setPreviewSize}
             />
           </section>
@@ -1910,12 +1922,50 @@ function MediaField({
 function StylesTab({
   draft,
   setDraft,
+  templateSizes,
+  templateElementIds,
 }: {
   draft: EditableFields;
   setDraft: SetDraft;
+  templateSizes: string[];
+  templateElementIds: string[];
 }) {
+  const cssRef = useRef<HTMLTextAreaElement>(null);
+  // Where the caret belongs once React has re-rendered the textarea with the
+  // inserted token. Set during the click, applied by the effect below — the
+  // value is controlled, so the DOM does not carry the new text yet at click
+  // time and setting the range there would place it against the old string.
+  const [pendingCaret, setPendingCaret] = useState<number | null>(null);
+  useEffect(() => {
+    if (pendingCaret === null) return;
+    const el = cssRef.current;
+    if (!el) return;
+    el.focus();
+    el.setSelectionRange(pendingCaret, pendingCaret);
+    setPendingCaret(null);
+  }, [pendingCaret]);
+
   function set(k: keyof EditableFields, v: string) {
     setDraft((prev) => (prev ? { ...prev, [k]: v || null } : prev));
+  }
+
+  // Drops a selector token in at the caret (replacing any selection), so the
+  // chips compose: `.size-300x250` then `#headlineWrapper` reads as one
+  // descendant selector. A space is added on each side as needed — without it
+  // the two would fuse into `.size-300x250#headlineWrapper`, a selector that
+  // matches nothing and looks like a typo rather than a tooling bug.
+  function insertToken(token: string) {
+    const el = cssRef.current;
+    const value = draft.customCss ?? "";
+    const start = el ? el.selectionStart : value.length;
+    const end = el ? el.selectionEnd : value.length;
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+    const lead = before !== "" && !/\s$/.test(before) ? " " : "";
+    const trail = /^\s/.test(after) ? "" : " ";
+    const text = `${lead}${token}${trail}`;
+    set("customCss", before + text + after);
+    setPendingCaret(start + text.length);
   }
   const stylePairs: Array<[keyof EditableFields, string]> = [
     ["headlineStyle", "Headline style"],
@@ -1947,6 +1997,7 @@ function StylesTab({
         hint="Free-form per-message overrides. Wrap with .size-300x250 selectors when scoping to a banner size."
       >
         <textarea
+          ref={cssRef}
           value={draft.customCss ?? ""}
           onChange={(e) => set("customCss", e.target.value)}
           rows={10}
@@ -1954,7 +2005,58 @@ function StylesTab({
           className="w-full rounded-md border border-slate-300 px-2 py-1.5 font-mono text-xs focus:border-slate-500 focus:outline-none"
         />
       </Field>
+      {/* Outside the Field: its <label> would forward every chip click to the
+          textarea as a label activation, on top of the focus the insert
+          already places. */}
+      <SelectorChips
+        sizes={templateSizes}
+        elementIds={templateElementIds}
+        onInsert={insertToken}
+      />
     </>
+  );
+}
+
+// The selectors the current template actually offers, as one-click tokens: the
+// sizes it has a stylesheet for, and the ids its markup declares. Both lists
+// were previously answerable only by opening the template folder.
+function SelectorChips({
+  sizes,
+  elementIds,
+  onInsert,
+}: {
+  sizes: string[];
+  elementIds: string[];
+  onInsert: (token: string) => void;
+}) {
+  if (sizes.length === 0 && elementIds.length === 0) return null;
+  const rows: Array<[string, string[]]> = [
+    ["Sizes", sizes.map((s) => `.size-${s}`)],
+    ["Elements", elementIds.map((id) => `#${id}`)],
+  ];
+  return (
+    <div className="styles-tab__selectors -mt-1 mb-3">
+      {rows.map(([label, tokens]) =>
+        tokens.length === 0 ? null : (
+          <div key={label} className="styles-tab__selector-row mb-1 flex flex-wrap items-center gap-1">
+            <span className="styles-tab__selector-label mr-1 text-[10px] uppercase tracking-wider text-slate-400">
+              {label}
+            </span>
+            {tokens.map((token) => (
+              <button
+                key={token}
+                type="button"
+                onClick={() => onInsert(token)}
+                title={`Insert ${token} at the cursor`}
+                className="tag-chip styles-tab__selector-chip rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px] text-slate-600 hover:border-slate-400 hover:bg-slate-100 hover:text-slate-900"
+              >
+                {token}
+              </button>
+            ))}
+          </div>
+        ),
+      )}
+    </div>
   );
 }
 

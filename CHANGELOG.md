@@ -5,6 +5,16 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.78.0] — 2026-09-10
+
+### Changed
+- **The scrub reads out on the MC label, not over the artwork.** The strip of
+  letters along the bottom of the preview is gone; instead the card's MC gains
+  the letter it is currently showing — `MC404a` → `MC404b` as the mouse moves
+  across. Same answer to "which one am I looking at", given where the eye
+  already is, and the picture is left alone. A single-variant card has nothing
+  to switch and stays `MC404`.
+
 ## [6.77.0] — 2026-09-10
 
 ### Fixed

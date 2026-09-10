@@ -2401,3 +2401,14 @@ látta és `c`-t adott (36021).
 
 **A user 404c sorához nem nyúltam** — az új törlés-gombbal maga akarta eltüntetni, utána a duplicate
 már `b`-t ad.
+
+### 2026-09-10 — a scrub kiolvasása az MC címkén — 6.78.0
+
+**User:** „nem kell ide a c jelölés a preview kép fölé, de a működés az jó — úgy tegyük érthetővé
+hogy miért vált a kép, hogy mouse overre az MC jelölés végére tegyük oda azt a variánst, amit épp
+a mouse over megjelenít."
+
+- [x] `drafts-tile__variants` / `__variant` **megszűnt** — a betűcsík lekerült a képről.
+- [x] `drafts-tile__mc` több variáns esetén a végén viszi az aktív betűt (`MC404a` → `MC404b`).
+      Egy variánsnál nincs mit váltani, marad `MC404`.
+- [x] A `__scrub` zónák maradnak, csak most semmit nem rajzolnak.

@@ -671,38 +671,20 @@ function DraftTile({
         )}
 
         {rows.length > 1 ? (
-          <>
-            {/* The scrub zones sit ON the media, one per variant. They are
-                divs, not buttons: the card's own button is underneath and must
-                keep taking the click — these only steer which variant that
-                click lands on. */}
-            <div className="drafts-tile__scrub absolute inset-0 flex">
-              {rows.map((r, i) => (
-                <div
-                  key={r.id}
-                  className="drafts-tile__scrub-zone flex-1"
-                  onMouseEnter={() => setActive(i)}
-                />
-              ))}
-            </div>
-            {/* The letters, not dots: "which one am I looking at" is the whole
-                question the scrub raises, and a dot cannot answer it. */}
-            <div className="drafts-tile__variants pointer-events-none absolute inset-x-0 bottom-0 flex gap-px bg-white/50">
-              {rows.map((r, i) => (
-                <span
-                  key={r.id}
-                  className={clsx(
-                    "drafts-tile__variant flex-1 py-0.5 text-center text-[9px] font-medium uppercase tracking-wider",
-                    i === active
-                      ? "drafts-tile__variant--active bg-slate-900 text-white"
-                      : "text-slate-500",
-                  )}
-                >
-                  {r.variant}
-                </span>
-              ))}
-            </div>
-          </>
+          // The scrub zones sit ON the media, one per variant. They are divs,
+          // not buttons: the card's own button is underneath and must keep
+          // taking the click — these only steer which variant that click lands
+          // on. Nothing is drawn here; what says which variant you are looking
+          // at is the LETTER on the MC label below, which changes as you move.
+          <div className="drafts-tile__scrub absolute inset-0 flex">
+            {rows.map((r, i) => (
+              <div
+                key={r.id}
+                className="drafts-tile__scrub-zone flex-1"
+                onMouseEnter={() => setActive(i)}
+              />
+            ))}
+          </div>
         ) : null}
       </div>
       {/* TWO lines, always exactly two: product + MC (+ what the library holds)
@@ -728,8 +710,14 @@ function DraftTile({
           >
             {draft.draftProduct ?? "no product"}
           </span>
+          {/* The letter is the scrub's readout (user, 2026-09-10): the card is
+              the MC, so at rest it would carry no letter at all — but with the
+              cover switching under the mouse, something has to say WHICH
+              variant is on screen, and the MC label is where the eye already
+              is. A single-variant card has nothing to switch and stays MC404. */}
           <span className="creative-card__mc drafts-tile__mc shrink-0 text-xs font-semibold text-slate-900">
             MC{draft.number}
+            {rows.length > 1 ? draft.variant : ""}
           </span>
           {matchedTotal > 0 ? (
             <span

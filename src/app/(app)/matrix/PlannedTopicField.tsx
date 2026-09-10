@@ -24,13 +24,13 @@
 // evaluates the stored pattern. This composes (and splits) on "_" to match it;
 // the two would drift only if a client changed the pattern's separator, and
 // what drifts is a suggestion in a text field, not a key anything resolves by.
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Field from "./EditorField";
 import type { TopicRow } from "./BriefTab";
 
-type Parts = { tag1: string; tag2: string; tag3: string; tag4: string };
+export type Parts = { tag1: string; tag2: string; tag3: string; tag4: string };
 
-function splitTopic(value: string | null, product: string | null): Parts {
+export function splitTopic(value: string | null, product: string | null): Parts {
   const empty = { tag1: "", tag2: "", tag3: "", tag4: "" };
   if (!value) return empty;
   let rest = value;
@@ -50,11 +50,18 @@ function splitTopic(value: string | null, product: string | null): Parts {
   };
 }
 
-function joinTopic(product: string | null, p: Parts): string {
-  return [product, p.tag1, p.tag2, p.tag3, p.tag4]
-    .map((s) => (s ?? "").trim())
-    .filter((s) => s !== "")
-    .join("_");
+// POSITION-PRESERVING, and that is not a detail: dropping the empty parts made
+// "tag4 = t" compose to `MARKET_t`, which reads back as tag1 = "t" — the
+// character typed into the last field reappeared in the first one, and the
+// caret went with it. Empty slots stay as empty segments (`MARKET____t`), which
+// is also exactly what the stored key pattern produces for the same input.
+// Trailing empties are dropped, since nothing follows them to hold a position.
+export function joinTopic(product: string | null, p: Parts): string {
+  const parts = [product ?? "", p.tag1, p.tag2, p.tag3, p.tag4].map((s) =>
+    (s ?? "").trim(),
+  );
+  while (parts.length > 0 && parts[parts.length - 1] === "") parts.pop();
+  return parts.join("_");
 }
 
 /** The values a tag column already carries across the dimension. */
@@ -91,7 +98,21 @@ export default function PlannedTopicField({
   onChange: (topic: string | null) => void;
 }) {
   const tagged = target !== "agentic";
-  const parts = useMemo(() => splitTopic(value, product), [value, product]);
+
+  // The four parts are LOCAL state, not a re-parse of `value` on every render.
+  // Deriving them meant every keystroke went out as a composed string and came
+  // back through the splitter, so the input's value was whatever survived that
+  // round-trip — the caret jumped on every character. `composedRef` remembers
+  // what we last wrote, so a `value` that differs from it is a genuine outside
+  // change (another variant opened, a reload) and re-seeds the fields.
+  const [parts, setParts] = useState<Parts>(() => splitTopic(value, product));
+  const composedRef = useRef<string>(value ?? "");
+  useEffect(() => {
+    if ((value ?? "") !== composedRef.current) {
+      setParts(splitTopic(value, product));
+      composedRef.current = value ?? "";
+    }
+  }, [value, product]);
   const vocab = useMemo(
     () => ({
       tag1: vocabulary(topics, (t) => t.tag1),
@@ -116,7 +137,11 @@ export default function PlannedTopicField({
   }
 
   function set(patch: Partial<Parts>) {
-    onChange(joinTopic(product, { ...parts, ...patch }) || null);
+    const next = { ...parts, ...patch };
+    setParts(next);
+    const composed = joinTopic(product, next);
+    composedRef.current = composed;
+    onChange(composed || null);
   }
 
   return (
@@ -161,7 +186,7 @@ export default function PlannedTopicField({
         {/* What the four parts add up to, so the field shows the key it is
             proposing rather than making the user assemble it in their head. */}
         <p className="planned-topic__preview truncate text-[10px] text-slate-400">
-          {value || "— nothing picked yet —"}
+          {joinTopic(product, parts) || "— nothing picked yet —"}
         </p>
       </div>
     </Field>

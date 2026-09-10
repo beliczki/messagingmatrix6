@@ -5,6 +5,17 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.81.1] — 2026-09-10
+
+### Fixed
+- **Typing in the planned topic's tag 4 no longer moves the text into tag 1.**
+  The composer dropped empty parts when it joined, so `tag4 = "t"` became
+  `MARKET_t`, which read back as `tag1 = "t"` — the character typed into the
+  last field reappeared in the first one and took the caret with it. The join
+  now preserves position (empty slots stay as empty segments, exactly what the
+  stored key pattern produces), and the four fields hold their own state instead
+  of being re-parsed out of the composed string on every keystroke.
+
 ## [6.81.0] — 2026-09-10
 
 ### Fixed

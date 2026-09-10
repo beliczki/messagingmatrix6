@@ -2473,3 +2473,24 @@ hazudott: a szerver oldalon ott volt, csak a képernyőn nem.
 - [x] **A mátrix szerkesztő nem volt érintett:** a rács kulcsa `["messages", { showArchived }]`, amit
       a meglévő prefix-illesztésű `setQueriesData` már lefed — ezt a kód kommentje ki is mondja.
 - [x] `planned-topic__row` — a négy tag egy sorban, kulcs-sorrendben.
+
+### 2026-09-10 — a tag4-be gépelés a tag1-be került — 6.81.1
+
+**User:** „nem tudok rendesen gépelni pl. a tag4 mezőbe, mert mindig a mentés miatt elugrik a kurzor."
+
+**Nem a mentés volt, hanem a tegnapi composerem.** A `joinTopic` `filter(Boolean)`-nel dobta az üres
+részeket, így `tag4 = "t"` → `MARKET_t`, amit a `splitTopic` **tag1 = "t"**-nek olvasott vissza: a
+karakter átugrott az első mezőbe, a kurzor vele. Ráadásul minden leütés a composed stringen keresztül
+ment oda-vissza, tehát az input értéke az volt, ami a round-tripet túlélte.
+
+- [x] `joinTopic` **pozíciótartó** (üres slot üres szegmens marad: `MARKET____t`) — pont az, amit a
+      tárolt kulcs-minta is előállít ugyanerre a bemenetre. Csak a záró üresek esnek ki.
+- [x] A négy rész **saját state**, `composedRef`-fel: a `value` csak akkor seedel újra, ha kívülről
+      változott (másik variáns, reload), nem minden leütésnél.
+- [x] 7 unit teszt a `tests/unit/planned-topic.test.ts`-ben, benne a konkrét hibás eset.
+
+**NYITVA — külön feladat:** a user jelezte, hogy a mátrix szerkesztőben időnként „beleakad a saját
+munkájába", és feljön a reload/konfliktus üzenet (409 a saját mentése ellen). Nem reprodukáltam,
+és nem tippelek bele a konfliktus-gépezetbe (soros mentés `saveInFlightRef`-fel + „Phase B"
+stale-tab detektálás a `message.version > committedSnapshot.version` ágon). Külön menetben,
+reprodukcióval kell nekifutni.

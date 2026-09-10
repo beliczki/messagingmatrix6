@@ -16,7 +16,7 @@
 
 ## Jelen állapot (2026-09-10)
 
-- **Verzió: `6.81.1`**, **live** a Hetzner boxon (`erste.messagingmatrix.ai`, pm2 `mm6-erste`). A 6.73–6.81.1 munkák egy része **még commitálatlan** a working tree-ben (dashboard-csempék + draft-variáns kód) — lásd NOW.
+- **Verzió: `6.83.0`**, **live** a Hetzner boxon (`erste.messagingmatrix.ai`, pm2 `mm6-erste`). Working tree tiszta; a 6.82.x munkák commitálva.
 - Phase 0–10 + a 2026-08/09-es epicek mind leszállítva: DCO/Agentic mátrix, Creative Library rebuild, DRAFT-modell (draft = `messages` sor `audience IS NULL`), draft-variánsok, státusz-takarítás (6 státusz), monitoring periódus-tartomány + nap-grain, Drive-linkek, feed diff-alap + „semmi nem tűnik el", dashboard napi áttekintő, Channels-entitás, MCP per-user tokenek.
 - **Átrendezés 2026-09-10:** minden lezárt epic-log és a 2026-09-10 előtti checkpointok szó szerint átkerültek a `todo-archive.md`-be („Archivált 2026-09-10 — todo.md átrendezés" szekció). Itt csak a nyitott munka maradt.
 
@@ -26,17 +26,16 @@
 
 ## 🟢 NOW — indulásra kész (nincs blokkoló külső input)
 
-### WIP lezárása — commit + deploy (2026-09-10)
-A working tree-ben 14 fájl commitálatlan (dashboard `CoverageTile`/`DeliveryTrend`/`DashboardLiveRefresh`, `BriefTab`/`PromoteTab`/`DraftsView`/`MessageEditor`, `entities/messages.ts`, tesztek) + 2 untracked script (`scripts/copy-mc328a-to-bc.ts`, `scripts/renumber-mc404-to-328.ts`). A részletek a lenti 2026-09-10 checkpointokban.
-- [ ] Commit + box deploy (build + pm2 restart). **Előbb ez, mint bármelyik új kör** — a rollback-pont különben elvész.
-- [ ] A két untracked script: retire (egyszeri adat-javítás volt) vagy commit `scripts/` alá döntés.
+### Box deploy — 6.83.0 (2026-09-10)
+A working tree tiszta, minden commitálva (6.82.1 + a 6.83.0 apróság-kör). Nincs séma-migráció ebben a körben.
+- [ ] Box deploy: build + `pm2 restart mm6-erste`.
 
 ### Apróság-kör (user, 2026-09-10) — M12 + M9.1 + M4.2
 Tételenként külön commit, `tsc` + vitest mindegyik után. A `MultiPill`-hez csak az M12.1 nyúl. Végén egy minor bump + CHANGELOG.
 
 ### M12 — Mátrix szűrő-pillek: kijelölt érték a pillben + product tag a sor/oszlop-fejléceken (user, 2026-09-10)
 Apróságok, screenshotból (`/matrix`, Product + Status `multi-pill`):
-- [ ] **M12.1** Ha a Product vagy Status pillben **1–2 elem** van kijelölve, a `multi-pill__badge` szám helyett a **kijelölt értékeket** írjuk ki a pillbe (pl. `HK, SZK` / `ACTIVE, PREVIEW`). **3+** kijelölésnél marad a szám-badge. Mindkét pillre ugyanaz a szabály (közös `MultiPill` prop, ne két külön logika).
+- [x] **M12.1 (✅ KÉSZ, 6.83.0, 2026-09-10)** 1–2 kijelölésnél a `multi-pill__badge` a **kijelölt értékeket** írja ki (`HK, SZK`), 3+-nál marad a szám (tooltipben az értékek). Nem prop, hanem **alapviselkedés** minden `MultiPill`-en (Product, Status, Size, Platform, Type, DimensionGrid) — egy `describeSelection()` dönt, nincs call-site logika. Sorrend az **opció-lista** szerint, nem a Set (=klikk-)sorrend szerint; az opciók közül eltűnt, de kijelölt érték a végére kerül és **számít** (perzisztált szűrő, ami tényleg rejt sorokat). 6 unit teszt.
 - [ ] **M12.2** Ha **több product** van kijelölve, az **audience oszlop-fejléc** és a **topic sor-fejléc** elejére (a név elé) **product tag** kerül, hogy látsszon melyik termékhez tartozik. Vizuál = a draft-kártya `tag-chip drafts-tile__product` pillje (sötét `bg-slate-800 text-white`, `text-[10px]`) — reuse, ne új család. **Minden density-ben ott legyen, a dense-ben is.** Egy product kijelölésnél (vagy szűrő nélkül, ha egy termék látszik) nem kell.
 
 ### M9 — MC archive/delete edit módban: már megoldott, csak a súgószöveg hiányos (user-döntés, 2026-09-10)
@@ -54,25 +53,22 @@ Az edit-mode panel Delete gombja archivál vagy töröl (M10 dialog), tehát az 
 
 ### UI-apróságok (mátrix + editor + library)
 
-### M1 — Matrix "Color by" (Strategy | Platform | Both)
-Cél: audience-oszlopok színezése strategy/platform szerint, legenddel.
-- [ ] **M1.1** `Color by: None|Strategy|Platform|Both` dropdown a `MatrixToolbar`-ba; persist `mm6_matrix_color_by`.
-- [ ] **M1.2** Determinisztikus value→color map a látható audience-ök distinct `strategy`/`buyingPlatform` értékeiből (sorted distinct → paletta-index). Szín-token reuse (ne hardcode `bg-*`; STATUS_COLOR mintája = `status-dot--*` CSS-var class).
-- [ ] **M1.3** Szín **band az audience oszlop-fejlécen** (nem a cellán); `Both` = két vékony sáv; kis legend. ⚠️ OPEN Q: `Both` vizuál + header-only.
+### ~~M1 — Matrix „Color by"~~ — **KIVEZETVE (user, 2026-09-10)**
+A funkció lényege **már él, más néven**: `GridView.audienceEdgeClasses()` (`:33`) az audience-fejléc élére csíkot rak, ahol a **vastagság = strategy** (pro 3px / rem 5px), a **szín = platform** (`--plat-dv360` / `--plat-adform`), transzponált nézetben is (`globals.css:609-619`). A user döntése: **sem a „Color by" dropdown, sem legend nem kell.** Az M1.1–M1.3 törölve, nem építjük.
 
-### M7 — Custom-CSS beszúró chipek az MC-editorban
-- [ ] **M7.1** Két chip-sor a `customCss` textarea alá (`:1725-1731`); beszúrás cursor-pozícióba (ref + selectionStart/End splice).
-- [ ] **M7.2** Méret-chipek: `TemplateInfo.sizes[]` (`:688-693`) → `.size-<W>x<H>`.
-- [ ] **M7.3** Elem-ID chipek: parse-olt `id="..."` → `#<id>`.
-- [ ] **M7.4** Plumbing: `elementIds: string[]` a `TemplateInfo`-ba `index.html` parse-olásával a `listVisibleTemplates`-ben (`lib/templates.ts`), a `sizes[]`-szel azonos cache-úton. (Ma nincs API-n kivezetve.)
+### M7 — Custom-CSS beszúró chipek az MC-editorban — **✅ KÉSZ (6.83.0, 2026-09-10)**
+- [x] **M7.4** `elementIds` + `elementClasses` a `TemplateInfo`-ba, `index.html` parse-olásával a `readTemplate`-ben (`lib/templates.ts`), a `sizes[]`-szel azonos cache-úton — az API (`/api/templates`) a teljes `TemplateInfo`-t adja vissza, így külön kivezetés nem kellett. Placeholderből épített név (`id="{{pmmid}}"`, `class="{{template_variant_class}}"`) kiesik. Non-html kind: üres, ahogy a `sizes` is.
+- [x] **M7.1** Chip-blokk a `customCss` textarea alá (`SelectorChips`), beszúrás a kurzorpozícióba (ref + selectionStart/End splice), szóköz-normalizálással mindkét oldalon — két chip így **descendant selectorrá** áll össze, nem fúzionál. A kurzor `useEffect`-tel áll a beszúrt token mögé (a textarea kontrollált: klikk-időben a DOM még a régi stringet hordja).
+- [x] **M7.2** Méret-chipek: `.size-<W>x<H>`.
+- [x] **M7.3 + bővítés** Elem-chipek **két sorban**: `CLASSES` (`.headline_text_1`) és `ELEMENTS` (`#adContainer`). **Felfedezés a valós adatból:** a mentett override-ok mind **osztályra** hivatkoznak (MC94a: `.size-300x250 .copy_text_2 {…}`), az id-k a konténereken ülnek — a todo eredeti `#<id>`-only terve a rossz szókincset kínálta volna.
+- **Nyitva hagyva (kicsi):** a `html` sablonnál 25 class + 22 id = 47 chip, ami hosszú blokk. Ha zavaró, egy „több…" összecsukás a Classes sorra a következő kör.
 
-### M8 — Creative Library size filter csoportosított dropdown
-- [ ] **M8.1** `MultiPill` bővítése opcionális `groups` proppal (statikus kategória→méret map: Display / Social / Other; ismeretlen → Other). (Ma `MultiPill` flat only.)
-- [ ] **M8.2** Csoport-fejléc tri-state checkbox (all/none/some); egyedi checkboxok maradnak; üres csoport rejtve. Persist `mm6_creative_library_filter_sizes` marad.
+### ~~M8 — Creative Library size filter csoportosított dropdown~~ — **KIVEZETVE (user, 2026-09-10)**
+A legolcsóbb 80% már él: a Size pill `SIZE_QUICK_SELECT` preset-linkjei (`CreativeLibrary.tsx:44-51`) — `default / social / iab / none`, és egy preset csak akkor jelenik meg, ha a data tényleg tartalmazza azokat a méreteket. Csoport-fejléc + tri-state = `MultiPill`-műtét (5 használati hely) egy megoldott problémára. **Ha a méretlista tényleg hosszúra nő és zavaró lesz, visszahozzuk** — addig nem.
 
 ### Monitoring maradék (Wave 3)
-- [ ] **W3.g** Matrix cella stat-badge: linkelt monitoring-sorral rendelkező MC-cellán kis impr/CTR badge (`GridView.tsx`); adat-wiring a lényeg, styling follow-up.
-- [ ] **W3.h** Unmatched sor → message manuális link `MonitoringTable`-ben (ma csak match-filter `:369`, nincs kézi hozzárendelés).
+- ~~**W3.g** Matrix cella stat-badge~~ — **KIVEZETVE (user, 2026-09-10).** Nem kell. (Tény a jövőnek: az adat-út kész lenne — `useMessageMetrics` + `/api/monitoring/message-metrics` per-`messageId` impr/cost/conv-ot ad; csak `clicks` hiányzik a `MessageMetricRow`-ból a CTR-hez.)
+- [ ] **W3.h → átkeretezve, saját szelet, NEM UI-apróság (user: „most túl nagy", 2026-09-10).** Unmatched sor → message kézi link. **A naiv megoldás némán elveszik:** a monitoring import **periódusonként töröl + újratölt** minden sort (`import/route.ts:121-135`), tehát egy kézzel beírt `monitoring.messageId` **eltűnik a következő feltöltéskor** — és a W3.j-6 (mind a 4-5 riportfájl újraimportja) nyitva áll, szóval ez biztosan bekövetkezik. Túléléshez: override-tábla a **message-kulcsra** (`mcNumber+variant+audienceKey+topicKey` vagy pmmid) + **4. resolver-szint** a `buildMessageResolver`-ben + reapply-pass. Kész minta: `resolveProduct` keyword→product szabályok + `/api/monitoring/reapply-products` — **szabály, nem soronkénti kézimunka**, és épp ezért éli túl az újraimportot. **Első lépés felméréssel:** hány unmatched sor van, ebből mennyi `family_known` vs teljes no-match, és mennyi impressziót visznek — a szám dönti el, megéri-e bármit építeni.
 - Deferred: **Meta parser/resolver** — blokkolva valós Meta export sample-ig.
 
 ### Agent-oldal (MCP + provenance)
@@ -194,7 +190,7 @@ Előfeltétel: W3.j-6 újraimport (fent). UI-t és dashboard-csempéket is érin
 
 ## Nyitott döntések — AJÁNLOTT DEFAULTOK (user bólint / felülír)
 
-1. **M1 `Both` vizuál** → *default:* két vékony egymásra-rakott sáv (strategy fent, platform lent) az oszlop-fejlécen, kis legenddel. Színezés **csak a fejlécen**, nem a cellákon.
+1. ~~**M1 `Both` vizuál**~~ — tárgytalan, az M1 kivezetve (2026-09-10).
 2. **M4 pin + hover** → *default:* mindkettő — hover ideiglenes crosshair, kattintás pinnel escape/újraklikkig.
 3. **W2.5 soft-link vs join-tábla** → *default:* marad a soft `(mcNumber, mcVariant)` link; join-tábla csak valós many-to-many workflow igényére.
 4. **FR-A/B/C tábla vs view** → *default:* FR-C = strukturált `todo.md` szekció előbb (nincs új tábla); FR-A/B = új tábla nullable soft-linkkel a messages-hez + MCP write-tool — de csak a 3-kérdéses push-back után.
@@ -557,3 +553,27 @@ szerkesztés rajtuk elavult `If-Match`-csel ment ki. **Innen jött a „saját m
 - [x] `save.onSuccess`: ha a mentett sor draft ÉS a payload intake-mezőt érint → `["drafts"]`
       invalidate. A payloadra van kapuzva, hogy a sima gépelés ne indítson újratöltést.
 - [x] Lokális build kihagyva az új szabály szerint; `tsc` + `eslint` tiszta, `npm test` 895/895.
+
+### 2026-09-10 — apróság-kör: pill-kiírás + Custom-CSS chipek — 6.83.0
+
+**User-döntések a NEXT/UI-apróságokról (M1, M7, M8, W3.g, W3.h):** „a color by strategy nem kell és
+legend se kell a pixel magassághoz, M7 kell egyértelmű, M8-ból ami megvalósult jobb, W3.g nem kell,
+W3.h most túl nagy" + **M12.1 most**: „ha max 2 van kijelölve, a szám helyett írja ki, mi van
+kijelölve; a szám csak 3-nál többnél".
+
+- [x] **M12.1** `MultiPill.describeSelection()` — 1–2 kijelölés = értékek, 3+ = szám. Alapviselkedés
+      minden pillen, nem prop. Opció-lista sorrend (nem klikk-sorrend). 6 unit teszt.
+- [x] **M7 teljes** (3 commit): `elementIds` + `elementClasses` a `TemplateInfo`-ba → `SelectorChips`
+      a Styles fülön → a Classes sor a valós szókincs. Részletek a NEXT M7 szekciójában.
+- [x] `MessageEditor`: a draft sablonjának keresése **egy** helyen (`currentTemplate`), nem harmadszor
+      másolva — a Content-méretek, a chipek és a preview ugyanazt kérdezik.
+- [x] M1 / M8 / W3.g kivezetve a roadmapről indoklással; W3.h átkeretezve saját, felméréssel induló
+      szeletté.
+
+**⚠️ Incidens — élő MC-n teszteltem, autosave-vel:** a chip-beszúrást az MC94a-n (`messages.id=31590`)
+próbáltam ki; a takarításhoz használt `shift+Home` macOS textareában a **dokumentum elejéig** jelöl ki,
+így a Backspace az egész `custom_css` mezőt törölte, az autosave pedig elmentette (`audit_log` 16349,
+`after=null`). A visszagépelés karaktereket ejtett (`.sie-300x250`), ezért az `audit_log` 16346-os sor
+`before` mezőjéből írtam vissza byte-pontosan (`EXACT MATCH` ellenőrizve). A `version` 5→7, az
+`updated_at` 20:56 — tartalmilag ép. **Tanulság a fájlba: UI-t DRAFT-on kell próbálni, nem élő
+kártyán** (a második kör már az MC402a drafton ment, azt is visszaürítettem).

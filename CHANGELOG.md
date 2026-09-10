@@ -5,6 +5,31 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.83.0] — 2026-09-10
+
+### Added
+- **A filter pill names one or two picks instead of counting them.** Every
+  multi-select filter (Product, Status, Size, Platform, Type) showed the same
+  "2" whether the answer was HK+SZK or LAK+BIZT, so reading the filter meant
+  opening the menu. One or two selected values now spell themselves out; three
+  or more stay a count, with the values in the tooltip. Ordered by the option
+  list, not by the order you happened to click.
+- **The Styles tab offers the selectors the template actually has.** Chips under
+  the Custom CSS box insert `.size-300x250`, `.headline_text_1` and
+  `#adContainer` at the cursor, spaced so two clicks compose into one descendant
+  selector. Classes lead the list because that is what the stored overrides
+  target; the ids sit on the containers around them. Both are read from the
+  template's own `index.html`.
+
+### Removed
+- **Matrix "Color by" dropped from the roadmap.** The audience header already
+  carries a strategy/platform edge strip — width for strategy, colour for
+  platform — so the planned dropdown, palette and legend would have replaced a
+  working, meaningful encoding with a re-derived one.
+- **Grouped size filter dropped.** The Size pill's quick-select presets
+  (default / social / iab / none) already do the job, and grouping would have
+  meant surgery on a component five screens share.
+
 ## [6.82.1] — 2026-09-10
 
 ### Fixed

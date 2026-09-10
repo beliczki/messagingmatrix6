@@ -77,6 +77,12 @@ export default function MultiPill({
 
   if (options.length === 0) return null;
 
+  // What the closed pill says about the selection. One or two picks name
+  // themselves ("HK, SZK") — the whole answer fits, so a "2" that forces the
+  // menu open is wasted. Three or more go back to the count, which is where
+  // the values stop being readable at pill width.
+  const selectedLabel = describeSelection(values, options);
+
   // A subset preset only lists sizes/values the current data actually has, so
   // a preset naming nothing present is dropped rather than rendered as a link
   // that visibly does nothing.
@@ -109,9 +115,14 @@ export default function MultiPill({
         className="multi-pill__button flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2 py-1 text-slate-700 hover:bg-slate-50"
       >
         <span>{label}</span>
-        {values.size > 0 ? (
-          <span className="multi-pill__badge rounded-full bg-slate-900 px-1.5 text-[10px] font-medium text-white">
-            {values.size}
+        {selectedLabel ? (
+          <span
+            className={`multi-pill__badge max-w-[12rem] truncate rounded-full bg-slate-900 px-1.5 text-[10px] font-medium text-white ${
+              selectedLabel.kind === "values" ? "multi-pill__badge--values" : ""
+            }`}
+            title={selectedLabel.kind === "count" ? selectedLabel.full : undefined}
+          >
+            {selectedLabel.text}
           </span>
         ) : null}
       </button>
@@ -172,6 +183,39 @@ export default function MultiPill({
       ) : null}
     </div>
   );
+}
+
+/** Up to this many selected values are spelled out instead of counted. */
+const NAME_VALUES_UP_TO = 2;
+
+export type SelectionLabel =
+  /** The values themselves, in menu order. */
+  | { kind: "values"; text: string; full: string }
+  /** How many, with the values kept for the tooltip. */
+  | { kind: "count"; text: string; full: string };
+
+/**
+ * What the closed pill shows for the current selection, or null for none.
+ *
+ * Ordered by the option list rather than by the Set, whose order is the order
+ * the user happened to click — the same two picks would otherwise read "SZK, HK"
+ * or "HK, SZK" depending on history. A selected value the options no longer
+ * carry (a persisted filter outliving its data) is kept at the end so it still
+ * counts: it is filtering the result set either way, and hiding it would make
+ * the pill lie about why rows are missing.
+ */
+export function describeSelection(
+  values: Set<string>,
+  options: string[],
+): SelectionLabel | null {
+  if (values.size === 0) return null;
+  const inOrder = options.filter((o) => values.has(o));
+  const orphans = [...values].filter((v) => !options.includes(v)).sort();
+  const selected = [...inOrder, ...orphans];
+  const full = selected.join(", ");
+  return selected.length <= NAME_VALUES_UP_TO
+    ? { kind: "values", text: full, full }
+    : { kind: "count", text: String(selected.length), full };
 }
 
 function OptionCount({

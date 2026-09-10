@@ -65,7 +65,8 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `toolbar__actions` | Jobb oldali akció gombok (Clear, Upload, …) | mindenhol | – |
 | `multi-pill` | Multi-select filter pill (badge + dropdown) | `_components/MultiPill.tsx` | shared, kontrolállt open state |
 | `multi-pill__button` | A pill maga (label + count badge) | MultiPill.tsx 38–49 | – |
-| `multi-pill__badge` | A számláló badge | MultiPill.tsx 44–48 | – |
+| `multi-pill__badge` | A kijelölés badge-e: 1–2 kijelölésnél a **értékek** (`HK, SZK`), 3+-nál a **szám** (tooltipben az értékek) | MultiPill.tsx | `describeSelection()` dönt; `max-w-[12rem] truncate` |
+| `multi-pill__badge--values` | Modifier az érték-formára (1–2 kijelölés) | MultiPill.tsx | a szám-forma modifier nélkül marad |
 | `multi-pill__menu` | Lefelé nyíló popover | MultiPill.tsx 50–74 | – |
 | `multi-pill__option` | Egy checkbox + label sor | MultiPill.tsx 55–70 | – |
 | `multi-pill__count` | Opciónkénti darabszám a sor jobb szélén (`ml-auto text-xs tabular-nums text-slate-400`) | MultiPill.tsx | csak ha `optionCounts` prop van; Status-szűrő: MC-szám a szűrt eredményben |

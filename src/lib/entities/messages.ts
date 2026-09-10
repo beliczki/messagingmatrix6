@@ -30,6 +30,7 @@ import {
   listChannels,
 } from "@/lib/entities/channels";
 import { readDefaultTemplate } from "@/lib/templates";
+import { MC_LEVEL_DRAFT_FIELDS } from "@/lib/draft-intake";
 import { BIRTH_STATUS, isMeasurementLocked } from "@/lib/mc-status";
 
 // A row that occupies a cell. DRAFT rows are the only audience-less ones (DB
@@ -913,15 +914,6 @@ export async function updateMessage(
  * Divergence that predates this converges on the first edit: the fan-out writes
  * the whole intake, not only the field that changed.
  */
-const MC_LEVEL_DRAFT_FIELDS = [
-  "brief",
-  "briefSlidesFileId",
-  "briefSlideId",
-  "topic",
-  "draftProduct",
-  "draftTarget",
-] as const satisfies readonly WritableField[];
-
 async function propagateBriefAcrossDraftVariants(
   clientId: number,
   updated: Message,

@@ -53,6 +53,7 @@ type AssetRow = {
 const IMAGE_FORMATS = new Set(["jpg", "jpeg", "png", "svg", "gif", "webp"]);
 const VIDEO_FORMATS = new Set(["mp4", "webm", "mov", "m4v"]);
 import { MATRIX_STATUSES } from "@/lib/mc-status";
+import { touchesDraftIntake } from "@/lib/draft-intake";
 
 const ASSET_AUTOCOMPLETE_MIN = 2;
 
@@ -435,7 +436,7 @@ export default function MessageEditor({
       };
       return { message: body.message, siblings: body.siblings ?? [] };
     },
-    onSuccess: (saved) => {
+    onSuccess: (saved, payload) => {
       if (saved) {
         // Bump our snapshot so the next save uses the new version — but ONLY
         // while the editor is still on the row this save targeted. If the user
@@ -495,6 +496,20 @@ export default function MessageEditor({
                 }
               : prev,
         );
+      }
+      // The intake fields fan out SERVER-side to every other draft variant of
+      // the number (a brief belongs to the MC, not to the variant), and those
+      // rows are not in the response — patching only what came back left the
+      // other variants showing their pre-fan-out values until a reload, which
+      // is the same staleness that made a saved edit look unsaved. Refetching
+      // the drafts list is cheap (a handful of rows) and cannot drift; it is
+      // gated on the payload so ordinary typing does not trigger it.
+      if (
+        saved &&
+        saved.message.audience === null &&
+        touchesDraftIntake(payload)
+      ) {
+        void qc.invalidateQueries({ queryKey: ["drafts"] });
       }
       setSaveState({ kind: "saved" });
       // Clear "saved" indicator after 1.5s.

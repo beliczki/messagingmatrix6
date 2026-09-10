@@ -5,6 +5,17 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.82.1] — 2026-09-10
+
+### Fixed
+- **The intake fan-out now reaches the screen, not just the database.** Writing
+  the brief to every variant of the number changes rows the PATCH response does
+  not carry, and the client only patched the row that came back — so the other
+  variants kept showing their pre-fan-out values until a reload. Worse, their
+  cached `version` also stayed behind, and the next edit on one of them sent a
+  stale `If-Match`: that is where the "reload" conflict on your own work came
+  from. The drafts list is refetched when a save touched an intake field.
+
 ## [6.82.0] — 2026-09-10
 
 ### Changed

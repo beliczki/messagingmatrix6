@@ -540,3 +540,20 @@ draft MC-re."
 - [x] **Live adat rendezve:** `a` variáns intake-je ráírva a többire (MC400 b/c topicja
       `SZA____szamlavalaszto` → `SZA_edukacio_NA_tudatossag_szamlavalaszto`; MC404 már egyezett).
       2 sor módosult, mentés előtte: `scratchpad/draft-intake-backup-20260910.csv` (8 sor).
+
+### 2026-09-10 — a fan-out a képernyőig — 6.82.1
+
+**User:** „ha egy MC minden variánsának ugyanaz a brief füle, akkor hogy lehet a 404a ilyen, a 404b meg
+ilyen?" — a **DB-ben nem is tért el**: mindkettő `agentic`, ugyanazzal az `updated_at`-tel. Amit
+látott, kizárólag kliens-cache.
+
+**Gyökérok:** a 6.82.0 fan-outja a szám többi draft sorát is írja, de azok **nincsenek benne a PATCH
+válaszában**, a kliens pedig csak a visszakapott sort patchelte. A többi variáns így a fan-out előtti
+értéket mutatta reloadig — és a cache-elt **`version`-jük is ott maradt**, tehát a következő
+szerkesztés rajtuk elavult `If-Match`-csel ment ki. **Innen jött a „saját munkámba akadok" 409 is.**
+
+- [x] `src/lib/draft-intake.ts` — a mezőlista egy helyen, szerver és kliens is ezt nevezi meg
+      (a kliens nem húzhatja be az entity modult a db-vel együtt).
+- [x] `save.onSuccess`: ha a mentett sor draft ÉS a payload intake-mezőt érint → `["drafts"]`
+      invalidate. A payloadra van kapuzva, hogy a sima gépelés ne indítson újratöltést.
+- [x] Lokális build kihagyva az új szabály szerint; `tsc` + `eslint` tiszta, `npm test` 895/895.

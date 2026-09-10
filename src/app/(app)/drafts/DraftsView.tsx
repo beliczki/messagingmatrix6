@@ -15,13 +15,18 @@
 // The toolbar is the matrix's on purpose: the same `parseSearchQuery` language
 // (mc:, t:, free text, OR, quotes) and the same Product MultiPill, so one
 // filter habit works on both pages.
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Archive,
+  CopyPlus,
+  FilePlus2,
   Filter as FilterIcon,
   FlaskConical,
   Loader2,
+  MoreHorizontal,
   Plus,
+  Trash2,
   X,
 } from "lucide-react";
 import clsx from "clsx";
@@ -236,15 +241,39 @@ export default function DraftsView() {
   // A second draft under the open one's number (MC404a → MC404b). The refetch
   // has to LAND before the jump: the editor resolves its row out of the list
   // above, so jumping to an id the list has not seen yet opens nothing.
-  async function addVariant(mode: "duplicate" | "empty") {
-    if (detail === null) return;
+  async function addVariantOf(sourceId: number, mode: "duplicate" | "empty") {
     const created = await postJSON<{ draft: { id: number } }>("/api/drafts", {
-      from_draft_id: detail.id,
+      from_draft_id: sourceId,
       mode,
     });
     await qc.invalidateQueries({ queryKey: ["drafts"] });
     await qc.refetchQueries({ queryKey: ["drafts"] });
     setDetailId(created.draft.id);
+  }
+
+  async function addVariant(mode: "duplicate" | "empty") {
+    if (detail === null) return;
+    await addVariantOf(detail.id, mode);
+  }
+
+  // Two ends, and the difference is the MC NUMBER — the same pair the Promote
+  // tab offers, said the same way. Archive shelves work that was real and keeps
+  // the number retired; delete is for a card created by mistake and gives the
+  // number back, which is why it is the one hard delete in the app.
+  async function discardDraft(draft: Draft, mode: "archive" | "delete") {
+    const url =
+      mode === "archive" ? `/api/messages/${draft.id}` : `/api/drafts/${draft.id}`;
+    const r = await fetch(url, {
+      method: "DELETE",
+      credentials: "include",
+      headers: { "if-match": String(draft.version) },
+    });
+    if (!r.ok) {
+      const json = await r.json().catch(() => ({}));
+      throw new Error(json?.error ?? `${r.status} ${r.statusText}`);
+    }
+    if (detailId === draft.id) setDetailId(null);
+    refresh();
   }
 
   return (
@@ -338,7 +367,14 @@ export default function DraftsView() {
                   draft={d}
                   template={d.template ? templatesByName.get(d.template) : undefined}
                   match={matches[`${d.number}|${d.variant}`]}
+                  siblingDraftCount={
+                    drafts.filter(
+                      (o) => o.number === d.number && o.id !== d.id,
+                    ).length
+                  }
                   onOpen={() => setDetailId(d.id)}
+                  onAddVariant={(mode) => addVariantOf(d.id, mode)}
+                  onDiscard={(mode) => discardDraft(d, mode)}
                 />
               )}
             />
@@ -399,7 +435,10 @@ function DraftTile({
   draft,
   template,
   match,
+  siblingDraftCount,
   onOpen,
+  onDiscard,
+  onAddVariant,
 }: {
   draft: Draft;
   template?: {
@@ -412,7 +451,11 @@ function DraftTile({
   };
   /** What the Creative Library holds for this MC, if anything. */
   match?: McMatch;
+  /** Other drafts on this number — they keep it when this one is deleted. */
+  siblingDraftCount: number;
   onOpen: () => void;
+  onAddVariant: (mode: "duplicate" | "empty") => Promise<void>;
+  onDiscard: (mode: "archive" | "delete") => Promise<void>;
 }) {
   // Render the card, the way the matrix renders a cell — same component, same
   // /api/render call, always current. It used to show a PNG shot by the MCP
@@ -443,12 +486,17 @@ function DraftTile({
   const target = draft.draftTarget ?? (match && match.total > 0 ? "agentic" : "dco");
   const wantsLibrary = target === "agentic" || target === "both";
   const cover = wantsLibrary ? (match?.cover ?? null) : null;
+  // The card is a DIV wrapping a button, not a button: the actions menu is a
+  // button too, and a button inside a button is invalid markup — the browser
+  // closes the outer one early and the card's own click stops working on part
+  // of itself.
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="creative-card drafts-tile group block w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-left shadow-sm transition hover:shadow-md"
-    >
+    <div className="creative-card drafts-tile group relative overflow-hidden rounded-lg border border-slate-200 bg-white text-left shadow-sm transition hover:shadow-md">
+      <button
+        type="button"
+        onClick={onOpen}
+        className="drafts-tile__open block w-full text-left"
+      >
       <div className="creative-card__thumb drafts-tile__media relative flex min-h-24 items-center justify-center bg-slate-50">
         {cover !== null && cover.fileId !== null ? (
           <div className="drafts-tile__library-cover aspect-[300/250] w-full">
@@ -501,45 +549,200 @@ function DraftTile({
         {match && match.total > 0 ? (
           <span
             title={`${match.total} file${match.total === 1 ? "" : "s"} in the Creative Library carry ${mcLabel(draft)}`}
-            className="status-badge drafts-tile__matched absolute right-1.5 top-1.5 rounded bg-slate-900/80 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white"
+            className="status-badge drafts-tile__matched absolute left-1.5 top-1.5 rounded bg-slate-900/80 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white"
           >
             {match.total}
             {match.videoCount > 0 ? ` · ${match.videoCount}▶` : ""}
           </span>
         ) : null}
       </div>
-      {/* ONE line, always: MC · product · name, in that order — the two short
-          fixed things first so the eye scans a column of them, and the name
-          takes what is left and truncates. No wrapping: a card that grew a
-          second meta row pushed its neighbours out of alignment, and the tile
-          heights are what make the wall readable. The full name is in the
-          title attribute for when the truncation hides something. */}
-      <div className="creative-card__meta drafts-tile__meta flex items-center gap-x-2 overflow-hidden px-2 py-1.5">
-        <span className="creative-card__mc shrink-0 text-xs font-semibold text-slate-900">
+      {/* TWO lines, always exactly two: the MC on its own, then product + name
+          under it (user, 2026-09-10). Fixed-height beats the old single line —
+          what pulled the wall out of alignment before was WRAPPING, a row that
+          grew to two lines on some cards and not others. Neither line wraps
+          here: the name truncates and carries the full text in its title. */}
+      <div className="creative-card__meta drafts-tile__meta flex flex-col gap-y-0.5 overflow-hidden px-2 py-1.5">
+        <span className="creative-card__mc drafts-tile__mc text-xs font-semibold text-slate-900">
           {mcLabel(draft)}
         </span>
-        {/* The product travels on the card instead of in a group header. It is
-            the ONE tag here: the topic chip that used to sit beside it showed
-            the draft's working title, which promoting never uses — a leftover
-            reading as a fact. It survives where it is true, as the hint under
-            the Promote tab's Topic picker. */}
-        <span
-          className={clsx(
-            "tag-chip drafts-tile__product shrink-0 rounded px-1.5 py-0.5 text-[10px]",
-            draft.draftProduct
-              ? "bg-slate-800 text-white"
-              : "border border-dashed border-slate-300 text-slate-400",
-          )}
-        >
-          {draft.draftProduct ?? "no product"}
-        </span>
-        <span
-          className="drafts-tile__name min-w-0 flex-1 truncate text-[11px] text-slate-500"
-          title={draft.name ?? undefined}
-        >
-          {draft.name || "Untitled"}
+        <span className="drafts-tile__sub flex items-center gap-x-2 overflow-hidden">
+          {/* The product travels on the card instead of in a group header. It
+              is the ONE tag here: the topic chip that used to sit beside it
+              showed the draft's working title, which promoting never uses — a
+              leftover reading as a fact. It survives where it is true, as the
+              hint under the Promote tab's Topic picker. */}
+          <span
+            className={clsx(
+              "tag-chip drafts-tile__product shrink-0 rounded px-1.5 py-0.5 text-[10px]",
+              draft.draftProduct
+                ? "bg-slate-800 text-white"
+                : "border border-dashed border-slate-300 text-slate-400",
+            )}
+          >
+            {draft.draftProduct ?? "no product"}
+          </span>
+          <span
+            className="drafts-tile__name min-w-0 flex-1 truncate text-[11px] text-slate-500"
+            title={draft.name ?? undefined}
+          >
+            {draft.name || "Untitled"}
+          </span>
         </span>
       </div>
-    </button>
+      </button>
+
+      <DraftTileMenu
+        draft={draft}
+        siblingDraftCount={siblingDraftCount}
+        onAddVariant={onAddVariant}
+        onDiscard={onDiscard}
+      />
+    </div>
+  );
+}
+
+/**
+ * The card's own actions: the two ways to add a variant, and the two ways to
+ * put the card down.
+ *
+ * On the card rather than only in the editor because these are wall-level
+ * decisions — "another version of this one", "this was a mistake" — and
+ * reaching them meant opening the draft, finding the Promote tab and reading
+ * past the promote controls to get to them.
+ *
+ * Delete confirms in place, two clicks, exactly as the Promote tab does it:
+ * the second click is the confirmation and it says what happens to the NUMBER,
+ * which is the only difference between delete and archive. With a sibling
+ * draft on the number, deleting this row does not give the number back, and
+ * the label must not claim it does. Dismiss-on-outside-click and Escape follow
+ * the Creative Library's warning dropdown.
+ */
+function DraftTileMenu({
+  draft,
+  siblingDraftCount,
+  onAddVariant,
+  onDiscard,
+}: {
+  draft: Draft;
+  siblingDraftCount: number;
+  onAddVariant: (mode: "duplicate" | "empty") => Promise<void>;
+  onDiscard: (mode: "archive" | "delete") => Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocMouseDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  // Reopening a menu that was left mid-confirmation must not still be armed.
+  useEffect(() => {
+    if (!open) {
+      setConfirming(false);
+      setError(null);
+    }
+  }, [open]);
+
+  function run(fn: () => Promise<void>) {
+    setBusy(true);
+    setError(null);
+    fn()
+      .then(() => setOpen(false))
+      .catch((e: unknown) =>
+        setError(e instanceof Error ? e.message : String(e)),
+      )
+      .finally(() => setBusy(false));
+  }
+
+  const label = mcLabel(draft);
+
+  return (
+    <div ref={ref} className="drafts-tile__menu absolute right-1.5 top-1.5">
+      <button
+        type="button"
+        aria-label={`Actions for ${label}`}
+        onClick={() => setOpen((o) => !o)}
+        className={clsx(
+          "drafts-tile__menu-btn rounded bg-white/90 p-1 text-slate-600 shadow-sm ring-1 ring-slate-200 transition hover:bg-white",
+          // Out of the way until the card is reached for; always there once the
+          // menu is open, or it would vanish under its own dropdown.
+          open ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+        )}
+      >
+        <MoreHorizontal className="size-4" />
+      </button>
+
+      {open ? (
+        <div className="dropdown drafts-tile__menu-list absolute right-0 top-full z-50 mt-1 w-56 rounded-md border border-slate-200 bg-white p-1 shadow-lg">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => run(() => onAddVariant("duplicate"))}
+            className="drafts-tile__menu-item flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+          >
+            <CopyPlus className="size-3.5 shrink-0" />
+            Duplicate as variant
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => run(() => onAddVariant("empty"))}
+            className="drafts-tile__menu-item flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+          >
+            <FilePlus2 className="size-3.5 shrink-0" />
+            New empty variant
+          </button>
+
+          <div className="drafts-tile__menu-divider my-1 border-t border-slate-100" />
+
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => run(() => onDiscard("archive"))}
+            title={`Shelve ${label} — MC${draft.number} stays retired`}
+            className="drafts-tile__menu-item flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+          >
+            <Archive className="size-3.5 shrink-0" />
+            Archive
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() =>
+              confirming ? run(() => onDiscard("delete")) : setConfirming(true)
+            }
+            className="drafts-tile__menu-item toolbar-btn--danger flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+          >
+            <Trash2 className="size-3.5 shrink-0" />
+            {confirming
+              ? siblingDraftCount > 0
+                ? `Delete ${label}? MC${draft.number} stays reserved.`
+                : `Delete ${label}, free the number?`
+              : "Delete"}
+          </button>
+
+          {error ? (
+            <p className="form-field__error mt-1 rounded bg-rose-50 px-2 py-1 text-[11px] text-rose-700">
+              {error}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
   );
 }

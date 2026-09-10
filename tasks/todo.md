@@ -2272,3 +2272,22 @@ mert publikus és `messages`-t olvas az új sémán át, tehát a kód és a DB 
 **Böngészőben NEM ellenőrizve** (a session bejelentkezést igényel): a szaggatott Sep oszlop, a Brief
 fül két új gombja + Target vezérlője, a Promote fül matched-sora és a kártya-cover kinézete.
 Ez a következő session első feladata.
+
+### 2026-09-10 — draft-kártya: kétsoros meta + akció-menü — 6.74.0
+
+**User:** „tegyük az MC alá a product taget és a draft name-et, és tegyünk egy ellipsis local menüt a
+kártyára ahonnan lehet a duplicate, new variant, az archive és delete akciókat választani"
+
+- [x] `drafts-tile__meta` **két sor**: `__mc` külön, alatta `__sub` = product chip + név. A 6.72.0-s
+      egysoros szabályt a *tördelés* indokolta (egyes kártyákon két sorra nőtt, másokon nem) — a fix
+      kétsoros blokk ezt nem hozza vissza, egyik sor sem tördel.
+- [x] `drafts-tile__menu` — ellipszis a média jobb felső sarkában, `opacity-0 group-hover:opacity-100`;
+      Duplicate as variant · New empty variant · ─ · Archive · Delete. Kívülre kattintás + Escape zár
+      (a `creative-library__preview-warning` mintája).
+- [x] **A csempe külső eleme `div` lett, benne a kattintható `button`** — gomb a gombban érvénytelen
+      markup, a böngésző lezárja a külsőt és a kártya saját kattintása elromlik egy részén.
+- [x] A Delete helyben, két kattintással erősít, és a SZÁMRÓL beszél: testvér-drafttal
+      „MC404 stays reserved.", egyébként „free the number?". Ugyanaz a nyelv, mint a Promote fülön.
+- [x] A matched-badge **balra** költözött, mert a jobb felső sarkot a menü kapta.
+
+`npm test` 871/871, `tsc` + `eslint` + `next build` tiszta. Séma-migráció nincs.

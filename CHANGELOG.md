@@ -5,6 +5,30 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.74.0] — 2026-09-10
+
+### Added
+- **An actions menu on the draft card**: Duplicate as variant, New empty
+  variant, Archive, Delete. These are wall-level decisions — "another version
+  of this one", "this was a mistake" — and reaching them used to mean opening
+  the draft, finding the Promote tab and reading past the promote controls.
+  Delete confirms in place, two clicks, and says what happens to the NUMBER,
+  which is the only difference between it and Archive: with a sibling draft on
+  the number it reads `MC404 stays reserved.` instead of `free the number?`.
+
+### Changed
+- **The draft card's meta is two lines: the MC, then product and name under
+  it.** The single-line rule it replaces was there to stop WRAPPING — a row
+  that grew to two lines on some cards and not others pulled the wall out of
+  alignment. A block that is always exactly two lines does not reintroduce
+  that: neither line wraps, and the name still truncates with the full text on
+  hover.
+- The matched-creatives badge moved to the card's top-left corner, since the
+  actions menu now owns the top-right.
+- The card is a `div` wrapping a button rather than one big button — an actions
+  menu inside a button is invalid markup, and the browser closes the outer
+  button early, breaking the card's own click on part of itself.
+
 ## [6.73.0] — 2026-09-10
 
 ### Added

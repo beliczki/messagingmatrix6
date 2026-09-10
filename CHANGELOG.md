@@ -5,6 +5,21 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.80.0] — 2026-09-10
+
+### Changed
+- **"Target" is now "Production target", and the planned topic sits under it** —
+  because the target is what decides the shape the topic takes.
+- **The planned topic offers the dimension's own vocabulary on the DCO side.**
+  Topics are tagged (product + tag1..tag4, joined into the key), so tags 1–3 are
+  dropdowns of the values already in use — `NA` first, since "does not apply" is
+  the most frequently correct answer on tags 2 and 3 — and tag 4 is free text,
+  because it names this campaign and nothing else. The composed key is shown
+  under the controls, so the field proposes a key instead of asking the user to
+  assemble one in their head. An Agentic draft keeps a single free field: those
+  topics are strings synthesized from delivered filenames, with no row in the
+  topics table to take a vocabulary from.
+
 ## [6.79.0] — 2026-09-10
 
 ### Fixed

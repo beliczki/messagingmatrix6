@@ -2431,3 +2431,25 @@ is jöhet. Mind a négy csempe **feltöltött fájl** volt: `MC404a` és `MC404b
 - [x] A `sourceCount` ugyanígy számol, különben a „N in this window" és a lapozás elcsúszna.
 - [x] Három új teszt (mindkét méret megérkezett · csak a négyzetes van · számozatlanok nem
       csoportosulnak). `npm test` 884/884.
+
+### 2026-09-10 — Production target + tagelt planned topic — 6.80.0
+
+**User:** „a planned topicot tegyük a Target alá (a Targetet nevezzük át production target-re), ha DCO
+akkor legyen itt a tag 1-2-3 lehulló egymás után és a Tag 4 free input field, és ha both akkor is,
+ha pedig agentic akkor legyen egy üres mező, Topic input field."
+
+- [x] `Target` → **`Production target`**, a planned topic **alá** került.
+- [x] `PlannedTopicField` — DCO/Both: tag1–3 legördülő + tag4 szabad szöveg + a összeálló kulcs
+      előnézete; Agentic: egy szabad mező.
+- [x] A szótár a **ténylegesen használt** értékekből jön (`topics.tag1..tag3`), `NA` elöl. Egy olyan
+      érték, amit a draft visz, de a dimenzió már nem (archivált topic), nem tűnik el a saját
+      legördülőjéből.
+- [x] Az összefűzés a kliens `topicKey` mintáját követi
+      (`{{product}}_{{tag1}}_{{tag2}}_{{tag3}}_{{tag4}}`); a mérvadó generátor továbbra is a
+      `keyFromPattern`. A komponens `_`-ra fűz és `_`-nál bont, tehát a két fele egymással
+      konzisztens; a tag4 megtarthatja a saját aláhúzásait.
+
+**Mellékesen tisztázva (user kérdés):** a dashboard creative-strip **nincs 5-re vágva** — a lusta
+vízszintes végtelen görgetés megvan (`CreativeStrip.loadMore`, `nextOffset`, oldalanként 24). Az
+„5 in this window" a teljes találat; 7-ről 5-re a 6.79.0-s összevonás vitte (MC404a/b négy csempéje
+kettő lett).

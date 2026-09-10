@@ -20,6 +20,7 @@ import { useEffect, useState } from "react";
 import { ExternalLink } from "lucide-react";
 import clsx from "clsx";
 import Field from "./EditorField";
+import PlannedTopicField from "./PlannedTopicField";
 import {
   parseSlideAnchor,
   parseSlidesFileId,
@@ -29,6 +30,13 @@ import {
 
 // Exactly the fields this tab writes. Declared here rather than imported from
 // the editor's EditableFields so the two files don't have to import each other.
+/** Only what the planned-topic composer reads off a topic. */
+export type TopicRow = {
+  tag1: string | null;
+  tag2: string | null;
+  tag3: string | null;
+};
+
 export type BriefFields = {
   brief: string | null;
   briefSlidesFileId: string | null;
@@ -75,6 +83,8 @@ export type BriefIntake = {
   /** The draft's free-text working topic — a planned NAME, not a topics row. */
   topicValue: string | null;
   onTopicChange: (topic: string | null) => void;
+  /** The topics dimension, for the tag vocabulary the DCO composer offers. */
+  topics: TopicRow[];
 };
 
 export default function BriefTab({
@@ -171,23 +181,7 @@ export default function BriefTab({
             </div>
           </div>
 
-          {/* The planned topic lives here now (user, 2026-09-10). It used to be
-              readable only as a hint under the Promote tab's topic picker, and
-              that tab is gone — but the field belongs on the intake anyway: it
-              is part of what the work IS, written when it is briefed. Free text
-              on purpose. Promoting never creates a topic from it; it only
-              preselects the picker when it happens to name a real one. */}
-          <Field label="Planned topic">
-            <input
-              type="text"
-              value={intake.topicValue ?? ""}
-              onChange={(e) => intake.onTopicChange(e.target.value || null)}
-              placeholder="working title — the real topic is picked at promote"
-              className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
-            />
-          </Field>
-
-          <Field label="Target">
+          <Field label="Production target">
             <div className="brief-tab__target tab-bar tab-bar--segmented inline-flex rounded-md border border-slate-300 p-0.5">
               {TARGETS.map((t) => (
                 <button
@@ -207,6 +201,18 @@ export default function BriefTab({
             </div>
           </Field>
 
+          {/* Under the target, because the target decides what shape it takes:
+              the DCO dimension is tagged and offers its own vocabulary, an
+              Agentic topic is a string synthesized from filenames and has none.
+              It used to be readable only as a hint under the old Promote tab's
+              picker; it belongs on the intake, where it is written. */}
+          <PlannedTopicField
+            target={intake.targetValue}
+            product={intake.productValue}
+            topics={intake.topics}
+            value={intake.topicValue}
+            onChange={intake.onTopicChange}
+          />
         </>
       ) : null}
 

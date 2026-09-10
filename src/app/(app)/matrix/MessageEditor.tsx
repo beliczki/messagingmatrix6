@@ -884,6 +884,7 @@ export default function MessageEditor({
                             setDraft((prev) =>
                               prev ? { ...prev, draftProduct: product } : prev,
                             ),
+                          topics,
                           topicValue: draft.topic,
                           onTopicChange: (topic) =>
                             setDraft((prev) => (prev ? { ...prev, topic } : prev)),

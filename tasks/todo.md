@@ -2312,3 +2312,68 @@ szöveg, a variants úgy kerüljön ki az action menübe."
       `form-field__error` mondja ki — a magyarázó bekezdést senki nem olvassa kétszer.
 
 `npm test` 871/871, `tsc` + `eslint` + `next build` tiszta. Séma-migráció nincs.
+
+### 2026-09-10 — draft = egy MC, a variánsok befelé (TERV, jóváhagyásra vár)
+
+**User:** „a draftokat ne kezeljük variánsonként, mert nem tudjuk előre hány lesz — a draft fogja csak
+az MC sorszámot, a variánskezelés menjen belülre: Brief fül, aztán variant a / variant b tabok, de
+csak egy tabbal indulunk. Egy tabon belül legyen minden content dolog: template szekció, content
+szekció, style szekció. Lehessen tabot duplikálni vagy hozzáadni. Ha több tab mint 4, ne írjuk ki
+hogy »variant a«, csak »a, b, c«. A tervezett topic mezőt vezessük ki a Brief fülre a Target fölé.
+A promote akció kerüljön a kártya ellipszis-menüjébe, dialógust nyisson, ahol beállítható mely
+variánsokat promotáljuk, milyen audience-re (default INCOMING), milyen státusszal (default PREVIEW),
+melyik topicra, és hogy promote után a draft megmaradjon vagy archiválódjon — két megerősítő gomb:
+»Promote and archive« / »Promote«. Nem kell form element."
+
+**Két tisztázott döntés (user, 2026-09-10):**
+- **A promote konvertál, nincs duplikátum** — a sor megszűnik draft lenni, ahogy ma. A „megmaradjon
+  vagy archiválódjon" tehát a **nem promotált** variánsokra vonatkozik: a `Promote` a maradékot a
+  falon hagyja, a `Promote and archive` nyugdíjazza. **Nincs modellváltás**, a szám/brief/történet
+  ugyanúgy átmegy.
+- **Cover:** az `a` variánssal indul, és a kártya fölött **vízszintesen scrubbolva** vált — ahány
+  variáns, annyi aktív sáv a médián, és a preview arra ugrik.
+
+**Séma-migráció NINCS.** A variánsok ma is külön `messages` sorok ugyanazon a `number`-en; a változás
+az, hogy a fal és a szerkesztő ezt **egy kártyaként** kezeli.
+
+- [x] **Slice 1 — a fal MC-számonként csoportosít.** `DraftsView`: `drafts` → `Map<number, Draft[]>`
+      betű szerint rendezve, egy `DraftTile` csoportonként. A csempe címkéje `MC404` (betű nélkül).
+      Cover = `a`, `drafts-tile__scrub` sávokkal: N egyenlő zóna a médián, `onMouseEnter`-re vált az
+      aktív variánsra, `onMouseLeave`-re visszaáll `a`-ra; alul N szegmensű jelző. A `mc:` szűrő a
+      csoportra illeszkedjen. Az Archive/Delete a **teljes MC-re** hat (minden variáns-sora), a
+      megerősítő szöveg mondja ki a darabszámot.
+- [x] **Slice 1b — a matched-jelzés a médiáról a meta sorba.** A sarok-badge megszűnik; helyette az
+      MC szám **mellett**: `MC404 · matched 18 (a,b)` — az összes találat a variánsokon át, és
+      zárójelben azok a betűk, amelyekhez tartozik anyag. Nulla találatnál nem írunk ki semmit.
+      (User, 2026-09-10: „ne a jobb sarokba írjuk ki hogy 9 creative found, hanem az MC szám mellett".)
+- [x] **Slice 2 — variánsváltó a szerkesztő FEJLÉCÉBEN, nem fülekben** (user, menet közben: „ne
+      kelljen szétbaszni az MC editor fülkezelését"). Új, önálló komponens a `‹ ● MC404a › 1/5`
+      léptető mellé: a szám variánsai gombként (`a` `b` `c`), az aktív kiemelve, kattintásra a
+      meglévő `onJump`-pal vált sorra; mellette `+` a *Duplicate this variant* / *New empty variant*
+      párossal. **A Template / Content / Styles fülek érintetlenül maradnak**, és a mátrix
+      fülkezeléséhez egyáltalán nem nyúlunk. A `Promote` fül eltűnik (a kártya dialógusába megy).
+- [x] **Slice 3 — tervezett topic a Brief fülre**, a Target fölé (a draft szabadszöveges `topic`-ja).
+      A Promote fül hintje eddig ott mondta ki; az a hely megszűnik.
+- [x] **Slice 4 — Promote dialógus a kártya menüjéből.** `AppDialog` shell, **nincs `<form>`**:
+      variáns-checkboxok (default mind) · audience `<select>` (default `<PRODUCT>_INCOMING`, ha van
+      ilyen kulcs) · státusz `<select>` (default `PREVIEW`) · topic `<select>` (csak létező topic,
+      a promote sosem hoz létre topicot) · két gomb: `Promote` és `Promote and archive`.
+      Új route: `POST /api/drafts/promote` `{ ids, audienceKey, topicKey, status, archiveRest }`,
+      betűsorrendben hívja a `promoteDraft`-ot, és per-id eredményt ad vissza.
+- [x] **Slice 4b — a saját betű megtartása promotáláskor.** Ma a `promoteDraft` akkor is a következő
+      szabad betűre ugrik, ha a draft SAJÁT betűje szabad a cellában (404a és 404c promotálásakor a
+      `c`-ből `b` lesz, csendben). A javítás: ha a draft betűje szabad a célcellában, maradjon; csak
+      ütközéskor bumpoljon. Enélkül a dialógus részhalmaz-promotálása átnevezi a variánsokat.
+
+**Amit ez visszavon a mai munkából:** a kártya menüjéből a két variáns-akció kikerül (befelé megy a
+fülsorra), a Promote fül megszűnik. Az Archive/Delete a menüben marad, de MC-szintre tágul.
+
+**Leszállítva 6.76.0 (2026-09-10).** `npm test` 880/880 (93 fájl, új: `api/drafts-promote-batch`),
+`tsc` + `eslint` + `next build` tiszta. **Séma-migráció nincs.**
+
+Két dolog, ami menet közben derült ki:
+- A `promoteDraft` **saját betű** javítása nem kozmetika: a dialógus részhalmaz-promotálása nélküle
+  minden alkalommal átnevezte volna a variánsokat (404a + 404c → a és **b**).
+- A `topic` bekerült a szerkesztő `EDITABLE_KEYS`-ébe, de `string | null`-ként felülírva:
+  a placed kártya `topic`-ja nem nullable, a drafté igen, és a Brief fül csak a draft-only
+  intake-blokkban kínálja.

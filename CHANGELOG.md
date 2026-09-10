@@ -5,6 +5,46 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.76.0] — 2026-09-10
+
+### Changed
+- **A draft holds an MC NUMBER, not a number and a letter.** How many creatives
+  a brief will end up with is not knowable when the work is taken on, so the
+  wall stopped asking: one card per MC, and its variants are read as a group.
+  The rows are unchanged — still one per variant, which is what lets each become
+  a card of its own after promote — so there is no migration.
+- **The card cover scrubs.** It opens on `a`, and running the mouse across the
+  media walks the variants: as many hover zones as there are letters, with the
+  letters themselves along the bottom edge, because "which one am I looking at"
+  is the only question a scrub raises and a row of dots cannot answer it.
+- **`matched 18 (a,b)` beside the MC**, replacing the count badge in the
+  corner. The number belongs to the MC, and which variants the files landed on
+  is the half a corner badge could never say.
+- **Variants are switched from the editor header**, beside the card stepper —
+  not from a second tab bar. The tabs are shared with the matrix editor, and
+  folding variants into them would have meant rebuilding that tab handling for
+  one surface. `+` beside the switcher adds one, duplicated or empty.
+- **Promote is one decision about the whole MC**, asked from the card's actions
+  menu: which variants go, into which cell, in what state, and what happens to
+  the ones that stay. `Promote and archive N` shelves the leftovers; plain
+  `Promote` leaves them on the wall. The draft's Promote tab is gone.
+- **The planned topic is a field on the Brief tab**, above Target. It was
+  readable only as a hint under the old Promote tab's picker, and it belongs on
+  the intake anyway — it is part of what the work is, written when it is
+  briefed. Promotion still never mints a topic from it.
+
+### Added
+- `POST /api/drafts/promote` — promote some or all variants of one MC in a
+  single call, with an optional archive of the leftovers. A browser-side loop
+  would have made one decision arrive as N requests with N chances to
+  half-apply.
+
+### Fixed
+- **A promoted variant keeps its own letter when the target cell has room for
+  it.** Taking "the next free letter" the moment the NUMBER was present renamed
+  variants that were in nobody's way: promoting MC404a and MC404c into one cell
+  turned the c into a b, silently. A partial promote does that every time.
+
 ## [6.75.0] — 2026-09-10
 
 ### Changed

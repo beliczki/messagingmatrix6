@@ -72,6 +72,9 @@ export type BriefIntake = {
   /** `draftTarget` from the live edit state. NULL = not decided yet. */
   targetValue: string | null;
   onTargetChange: (target: string) => void;
+  /** The draft's free-text working topic — a planned NAME, not a topics row. */
+  topicValue: string | null;
+  onTopicChange: (topic: string | null) => void;
 };
 
 export default function BriefTab({
@@ -167,6 +170,22 @@ export default function BriefTab({
               </Field>
             </div>
           </div>
+
+          {/* The planned topic lives here now (user, 2026-09-10). It used to be
+              readable only as a hint under the Promote tab's topic picker, and
+              that tab is gone — but the field belongs on the intake anyway: it
+              is part of what the work IS, written when it is briefed. Free text
+              on purpose. Promoting never creates a topic from it; it only
+              preselects the picker when it happens to name a real one. */}
+          <Field label="Planned topic">
+            <input
+              type="text"
+              value={intake.topicValue ?? ""}
+              onChange={(e) => intake.onTopicChange(e.target.value || null)}
+              placeholder="working title — the real topic is picked at promote"
+              className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
+            />
+          </Field>
 
           <Field label="Target">
             <div className="brief-tab__target tab-bar tab-bar--segmented inline-flex rounded-md border border-slate-300 p-0.5">

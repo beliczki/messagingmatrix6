@@ -709,7 +709,15 @@ export async function promoteDraft(
       m.topic === opts.topicKey &&
       m.audience === opts.audienceKey,
   );
-  const variant = liveInCell.some((m) => m.number === draft.number)
+  // The draft keeps its own letter whenever the target cell has room for it,
+  // and only bumps on an actual collision. Taking "the next free letter" the
+  // moment the NUMBER is present renames variants that were not in anyone's
+  // way: promoting MC404a and MC404c into one cell turned the c into a b, in
+  // silence, and a partial promote from the dialog does that every time.
+  const takenInCell = liveInCell.some(
+    (m) => m.number === draft.number && (m.variant ?? "") === draft.variant,
+  );
+  const variant = takenInCell
     ? nextVariantForNumber(liveInCell, draft.number)
     : draft.variant;
 

@@ -19,8 +19,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Archive,
-  CopyPlus,
-  FilePlus2,
+  ArrowUpRight,
   Filter as FilterIcon,
   FlaskConical,
   Loader2,
@@ -38,6 +37,7 @@ import {
 import MultiPill, { ALL_NONE_QUICK_SELECT } from "../_components/MultiPill";
 import RightToolbar from "../_components/RightToolbar";
 import MessageEditor from "../matrix/MessageEditor";
+import PromoteDraftDialog from "./PromoteDraftDialog";
 import {
   channelToAudience,
   type Audience,
@@ -51,6 +51,16 @@ import type { McCreativeMatch } from "@/lib/entities/creatives";
 
 /** The Creative Library's answer for one MC, as the wall receives it. */
 type McMatch = McCreativeMatch;
+
+/** A template as /api/templates/folders describes it. */
+type TemplateInfo = {
+  name: string;
+  sizes: string[];
+  defaultSize: string | null;
+  kind?: string;
+  previewFile?: string | null;
+  externalUrl?: string | null;
+};
 
 // Filter option for the drafts that have no product yet. They were a group of
 // their own before; staying able to isolate them is why this is an option
@@ -103,6 +113,8 @@ export function mcLabel(d: { number: number; variant: string }): string {
 
 export default function DraftsView() {
   const [detailId, setDetailId] = useState<number | null>(null);
+  /** The MC number whose promote dialog is open, if any. */
+  const [promoteNumber, setPromoteNumber] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   const [products, setProducts] = useState<Set<string>>(new Set());
   const qc = useQueryClient();
@@ -204,30 +216,71 @@ export default function DraftsView() {
     return m;
   }, [drafts]);
 
+  // ONE CARD PER MC NUMBER (user, 2026-09-10). A draft holds a number, not a
+  // number and a letter: how many variants it will end up with is not knowable
+  // when the work is taken on, so the wall stops asking. The rows are still one
+  // per variant — that is what makes each one a card of its own after promote —
+  // they are simply read as a group here.
+  //
+  // Ordered by letter inside the group, and the group takes the first row's
+  // place in the wall's own order (newest first, from listDrafts).
+  const groups = useMemo(() => {
+    const byNumber = new Map<number, Draft[]>();
+    for (const d of drafts) {
+      const cur = byNumber.get(d.number);
+      if (cur) cur.push(d);
+      else byNumber.set(d.number, [d]);
+    }
+    return [...byNumber.values()].map((rows) =>
+      [...rows].sort((a, b) => a.variant.localeCompare(b.variant)),
+    );
+  }, [drafts]);
+
   // An empty product set means "no product filter", exactly as on the matrix —
   // the pill narrows, it never starts by hiding everything.
+  //
+  // A group matches when ANY of its variants does: the product and the name
+  // live per row, and hiding an MC because its second variant carries a
+  // different product would hide the card its first variant is on.
   const visible = useMemo(() => {
     const match = parseSearchQuery(search);
-    return drafts.filter((d) => {
-      if (products.size > 0 && !products.has(d.draftProduct ?? NO_PRODUCT)) {
-        return false;
-      }
-      // A draft has no cell, so the audience/strategy/platform axes of the
-      // query language have nothing to match — topic and mc do, and free text
-      // sees everything the card shows. Lowercase throughout: the parser
-      // lowercases the query, so a field that is not lowered never matches.
-      return match({
-        ...emptySearchFields(),
-        topic: (d.topic ?? "").toLowerCase(),
-        mc: mcLabel(d).toLowerCase(),
-        free: [mcLabel(d), d.name ?? "", d.topic ?? "", d.draftProduct ?? ""]
-          .join(" ")
-          .toLowerCase(),
-      });
-    });
-  }, [drafts, products, search]);
+    return groups.filter((rows) =>
+      rows.some((d) => {
+        if (products.size > 0 && !products.has(d.draftProduct ?? NO_PRODUCT)) {
+          return false;
+        }
+        // A draft has no cell, so the audience/strategy/platform axes of the
+        // query language have nothing to match — topic and mc do, and free text
+        // sees everything the card shows. `mc` accepts both the bare number the
+        // card now shows and the per-row label, so an old `mc:mc404a` query
+        // still finds it. Lowercase throughout: the parser lowercases the
+        // query, so a field that is not lowered never matches.
+        return match({
+          ...emptySearchFields(),
+          topic: (d.topic ?? "").toLowerCase(),
+          mc: `mc${d.number} ${mcLabel(d)}`.toLowerCase(),
+          free: [
+            `MC${d.number}`,
+            mcLabel(d),
+            d.name ?? "",
+            d.topic ?? "",
+            d.draftProduct ?? "",
+          ]
+            .join(" ")
+            .toLowerCase(),
+        });
+      }),
+    );
+  }, [groups, products, search]);
 
   const detail = drafts.find((d) => d.id === detailId) ?? null;
+  const promoteRows = useMemo(
+    () =>
+      promoteNumber === null
+        ? []
+        : groups.find((rows) => rows[0]!.number === promoteNumber) ?? [],
+    [groups, promoteNumber],
+  );
 
   function refresh() {
     qc.invalidateQueries({ queryKey: ["drafts"] });
@@ -255,19 +308,28 @@ export default function DraftsView() {
   // tab offers, said the same way. Archive shelves work that was real and keeps
   // the number retired; delete is for a card created by mistake and gives the
   // number back, which is why it is the one hard delete in the app.
-  async function discardDraft(draft: Draft, mode: "archive" | "delete") {
-    const url =
-      mode === "archive" ? `/api/messages/${draft.id}` : `/api/drafts/${draft.id}`;
-    const r = await fetch(url, {
-      method: "DELETE",
-      credentials: "include",
-      headers: { "if-match": String(draft.version) },
-    });
-    if (!r.ok) {
-      const json = await r.json().catch(() => ({}));
-      throw new Error(json?.error ?? `${r.status} ${r.statusText}`);
+  // The card is the MC, so discarding it discards every variant on it. One
+  // request per row rather than a bulk endpoint: the two routes already exist,
+  // both are idempotent-by-version, and a partial failure leaves the survivors
+  // visible on the wall instead of a half-applied batch nobody can see.
+  async function discardMc(rows: Draft[], mode: "archive" | "delete") {
+    for (const draft of rows) {
+      const url =
+        mode === "archive"
+          ? `/api/messages/${draft.id}`
+          : `/api/drafts/${draft.id}`;
+      const r = await fetch(url, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "if-match": String(draft.version) },
+      });
+      if (!r.ok) {
+        const json = await r.json().catch(() => ({}));
+        refresh();
+        throw new Error(json?.error ?? `${r.status} ${r.statusText}`);
+      }
+      if (detailId === draft.id) setDetailId(null);
     }
-    if (detailId === draft.id) setDetailId(null);
     refresh();
   }
 
@@ -315,7 +377,7 @@ export default function DraftsView() {
           ) : null}
 
           <div className="toolbar__count ml-auto text-[11px] tabular-nums text-slate-500">
-            {visible.length}/{drafts.length} open
+            {visible.length}/{groups.length} open
           </div>
         </div>
 
@@ -348,28 +410,23 @@ export default function DraftsView() {
                   No draft matches the filter
                 </h2>
                 <p className="empty-state__hint mt-1 text-xs text-slate-500">
-                  {drafts.length} open{" "}
-                  {drafts.length === 1 ? "draft is" : "drafts are"} hidden by it.
+                  {groups.length} open{" "}
+                  {groups.length === 1 ? "draft is" : "drafts are"} hidden by it.
                 </p>
               </div>
             </div>
           ) : (
             <Masonry
               items={visible}
-              itemKey={(d) => d.id}
-              render={(d) => (
+              itemKey={(rows) => rows[0]!.number}
+              render={(rows) => (
                 <DraftTile
-                  draft={d}
-                  template={d.template ? templatesByName.get(d.template) : undefined}
-                  match={matches[`${d.number}|${d.variant}`]}
-                  siblingDraftCount={
-                    drafts.filter(
-                      (o) => o.number === d.number && o.id !== d.id,
-                    ).length
-                  }
-                  onOpen={() => setDetailId(d.id)}
-                  onAddVariant={(mode) => addVariantOf(d.id, mode)}
-                  onDiscard={(mode) => discardDraft(d, mode)}
+                  rows={rows}
+                  templatesByName={templatesByName}
+                  matches={matches}
+                  onOpen={(id) => setDetailId(id)}
+                  onPromote={() => setPromoteNumber(rows[0]!.number)}
+                  onDiscard={(mode) => discardMc(rows, mode)}
                 />
               )}
             />
@@ -419,38 +476,50 @@ export default function DraftsView() {
         siblingCount={0}
         onClose={() => setDetailId(null)}
         onJump={setDetailId}
-        onPromoted={refresh}
+        onAddVariant={addVariantOf}
       />
+
+      {promoteRows.length > 0 ? (
+        <PromoteDraftDialog
+          rows={promoteRows}
+          audiences={audiences}
+          topics={topicsQ.data?.topics ?? []}
+          onClose={() => setPromoteNumber(null)}
+          onDone={() => {
+            setPromoteNumber(null);
+            setDetailId(null);
+            refresh();
+          }}
+        />
+      ) : null}
     </div>
   );
 }
 
 function DraftTile({
-  draft,
-  template,
-  match,
-  siblingDraftCount,
+  rows,
+  templatesByName,
+  matches,
   onOpen,
   onDiscard,
-  onAddVariant,
+  onPromote,
 }: {
-  draft: Draft;
-  template?: {
-    name: string;
-    sizes: string[];
-    defaultSize: string | null;
-    kind?: string;
-    previewFile?: string | null;
-    externalUrl?: string | null;
-  };
-  /** What the Creative Library holds for this MC, if anything. */
-  match?: McMatch;
-  /** Other drafts on this number — they keep it when this one is deleted. */
-  siblingDraftCount: number;
-  onOpen: () => void;
-  onAddVariant: (mode: "duplicate" | "empty") => Promise<void>;
+  /** Every live draft row on this MC number, ordered by variant letter. */
+  rows: Draft[];
+  templatesByName: Map<string, TemplateInfo>;
+  matches: Record<string, McMatch>;
+  onOpen: (id: number) => void;
   onDiscard: (mode: "archive" | "delete") => Promise<void>;
+  onPromote: () => void;
 }) {
+  // The cover starts on `a` and SCRUBS: the media is divided into as many
+  // hover zones as there are variants, so running the mouse across the card
+  // walks them (user, 2026-09-10). Leaving the card returns to `a`, so a wall
+  // at rest always reads the same way.
+  const [active, setActive] = useState(0);
+  const draft = rows[Math.min(active, rows.length - 1)]!;
+  const template = draft.template ? templatesByName.get(draft.template) : undefined;
+
   // Render the card, the way the matrix renders a cell — same component, same
   // /api/render call, always current. It used to show a PNG shot by the MCP
   // draft pipeline, so nothing hand-written in the editor ever had a picture.
@@ -467,6 +536,8 @@ function DraftTile({
     return typeof v === "string" && v.trim() !== "";
   });
 
+  const match = matches[`${draft.number}|${draft.variant}`];
+
   // An Agentic draft's finished creative is a FILE, not a render — so once the
   // Creative Library holds one, that is the card. Only the 300x250 qualifies:
   // this slot is 300x250-shaped, and a cropped 1080x1080 would claim to be the
@@ -480,15 +551,30 @@ function DraftTile({
   const target = draft.draftTarget ?? (match && match.total > 0 ? "agentic" : "dco");
   const wantsLibrary = target === "agentic" || target === "both";
   const cover = wantsLibrary ? (match?.cover ?? null) : null;
+
+  // "matched 18 (a,b)" beside the MC instead of a count badge in the corner
+  // (user, 2026-09-10): the number belongs to the MC, and which VARIANTS the
+  // files landed on is the half a corner badge could never say.
+  const matchedTotal = rows.reduce(
+    (n, r) => n + (matches[`${r.number}|${r.variant}`]?.total ?? 0),
+    0,
+  );
+  const matchedLetters = rows
+    .filter((r) => (matches[`${r.number}|${r.variant}`]?.total ?? 0) > 0)
+    .map((r) => r.variant);
+
   // The card is a DIV wrapping a button, not a button: the actions menu is a
   // button too, and a button inside a button is invalid markup — the browser
   // closes the outer one early and the card's own click stops working on part
   // of itself.
   return (
-    <div className="creative-card drafts-tile group relative overflow-hidden rounded-lg border border-slate-200 bg-white text-left shadow-sm transition hover:shadow-md">
+    <div
+      className="creative-card drafts-tile group relative overflow-hidden rounded-lg border border-slate-200 bg-white text-left shadow-sm transition hover:shadow-md"
+      onMouseLeave={() => setActive(0)}
+    >
       <button
         type="button"
-        onClick={onOpen}
+        onClick={() => onOpen(draft.id)}
         className="drafts-tile__open block w-full text-left"
       >
       <div className="creative-card__thumb drafts-tile__media relative flex min-h-24 items-center justify-center bg-slate-50">
@@ -540,29 +626,55 @@ function DraftTile({
               : "this draft has only its number."}
           </div>
         )}
-        {match && match.total > 0 ? (
-          <span
-            title={`${match.total} file${match.total === 1 ? "" : "s"} in the Creative Library carry ${mcLabel(draft)}`}
-            className="status-badge drafts-tile__matched absolute left-1.5 top-1.5 rounded bg-slate-900/80 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white"
-          >
-            {match.total}
-            {match.videoCount > 0 ? ` · ${match.videoCount}▶` : ""}
-          </span>
+
+        {rows.length > 1 ? (
+          <>
+            {/* The scrub zones sit ON the media, one per variant. They are
+                divs, not buttons: the card's own button is underneath and must
+                keep taking the click — these only steer which variant that
+                click lands on. */}
+            <div className="drafts-tile__scrub absolute inset-0 flex">
+              {rows.map((r, i) => (
+                <div
+                  key={r.id}
+                  className="drafts-tile__scrub-zone flex-1"
+                  onMouseEnter={() => setActive(i)}
+                />
+              ))}
+            </div>
+            {/* The letters, not dots: "which one am I looking at" is the whole
+                question the scrub raises, and a dot cannot answer it. */}
+            <div className="drafts-tile__variants pointer-events-none absolute inset-x-0 bottom-0 flex gap-px bg-white/50">
+              {rows.map((r, i) => (
+                <span
+                  key={r.id}
+                  className={clsx(
+                    "drafts-tile__variant flex-1 py-0.5 text-center text-[9px] font-medium uppercase tracking-wider",
+                    i === active
+                      ? "drafts-tile__variant--active bg-slate-900 text-white"
+                      : "text-slate-500",
+                  )}
+                >
+                  {r.variant}
+                </span>
+              ))}
+            </div>
+          </>
         ) : null}
       </div>
-      {/* TWO lines, always exactly two: product + MC on the first, the name on
-          the second (user, 2026-09-10). Fixed height, and neither line wraps —
-          what pulled the wall out of alignment before was WRAPPING, a row that
-          grew to two lines on some cards and not others. The name truncates and
-          carries the full text in its title. Right padding leaves the corner to
-          the actions menu, which sits over this block. */}
+      {/* TWO lines, always exactly two: product + MC (+ what the library holds)
+          on the first, the name on the second. Fixed height, and neither line
+          wraps — what pulled the wall out of alignment before was WRAPPING, a
+          row that grew to two lines on some cards and not others. The name
+          truncates and carries the full text in its title. Right padding leaves
+          the corner to the actions menu, which sits over this block. */}
       <div className="creative-card__meta drafts-tile__meta flex flex-col gap-y-0.5 overflow-hidden py-1.5 pl-2 pr-8">
         <span className="drafts-tile__sub flex items-center gap-x-2 overflow-hidden">
           {/* The product travels on the card instead of in a group header. It
               is the ONE tag here: the topic chip that used to sit beside it
               showed the draft's working title, which promoting never uses — a
               leftover reading as a fact. It survives where it is true, as the
-              hint under the Promote tab's Topic picker. */}
+              planned-topic field on the Brief tab. */}
           <span
             className={clsx(
               "tag-chip drafts-tile__product shrink-0 rounded px-1.5 py-0.5 text-[10px]",
@@ -573,9 +685,17 @@ function DraftTile({
           >
             {draft.draftProduct ?? "no product"}
           </span>
-          <span className="creative-card__mc drafts-tile__mc truncate text-xs font-semibold text-slate-900">
-            {mcLabel(draft)}
+          <span className="creative-card__mc drafts-tile__mc shrink-0 text-xs font-semibold text-slate-900">
+            MC{draft.number}
           </span>
+          {matchedTotal > 0 ? (
+            <span
+              className="drafts-tile__matched min-w-0 truncate text-[10px] tabular-nums text-slate-500"
+              title={`${matchedTotal} file${matchedTotal === 1 ? "" : "s"} in the Creative Library carry MC${draft.number}`}
+            >
+              matched {matchedTotal} ({matchedLetters.join(",")})
+            </span>
+          ) : null}
         </span>
         <span
           className="drafts-tile__name truncate text-[11px] text-slate-500"
@@ -587,9 +707,8 @@ function DraftTile({
       </button>
 
       <DraftTileMenu
-        draft={draft}
-        siblingDraftCount={siblingDraftCount}
-        onAddVariant={onAddVariant}
+        rows={rows}
+        onPromote={onPromote}
         onDiscard={onDiscard}
       />
     </div>
@@ -597,30 +716,27 @@ function DraftTile({
 }
 
 /**
- * The card's own actions: the two ways to add a variant, and the two ways to
- * put the card down.
+ * The card's actions: promote it, or put it down.
  *
- * On the card rather than only in the editor because these are wall-level
- * decisions — "another version of this one", "this was a mistake" — and
- * reaching them meant opening the draft, finding the Promote tab and reading
- * past the promote controls to get to them.
+ * On the card rather than in the editor because these are decisions about the
+ * MC as a whole — where does it go, was it a mistake — and reaching them meant
+ * opening a draft, picking a variant and reading past the promote controls to
+ * get to them. Adding VARIANTS is not here: that is a decision about one
+ * creative, and it lives beside the variant switcher in the editor header.
  *
- * Delete confirms in place, two clicks, exactly as the Promote tab does it:
- * the second click is the confirmation and it says what happens to the NUMBER,
- * which is the only difference between delete and archive. With a sibling
- * draft on the number, deleting this row does not give the number back, and
- * the label must not claim it does. Dismiss-on-outside-click and Escape follow
- * the Creative Library's warning dropdown.
+ * Archive and delete act on every variant of the number, because the card IS
+ * the number. Delete confirms in place, two clicks: the second click is the
+ * confirmation and it says what happens to the NUMBER, which is the only
+ * difference between the two. Dismiss-on-outside-click and Escape follow the
+ * Creative Library's warning dropdown.
  */
 function DraftTileMenu({
-  draft,
-  siblingDraftCount,
-  onAddVariant,
+  rows,
+  onPromote,
   onDiscard,
 }: {
-  draft: Draft;
-  siblingDraftCount: number;
-  onAddVariant: (mode: "duplicate" | "empty") => Promise<void>;
+  rows: Draft[];
+  onPromote: () => void;
   onDiscard: (mode: "archive" | "delete") => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
@@ -664,13 +780,15 @@ function DraftTileMenu({
       .finally(() => setBusy(false));
   }
 
-  const label = mcLabel(draft);
+  const number = rows[0]!.number;
+  const many = rows.length > 1;
+  const what = many ? `MC${number} (${rows.length} variants)` : `MC${number}`;
 
   return (
     <div ref={ref} className="drafts-tile__menu absolute bottom-1.5 right-1.5">
       <button
         type="button"
-        aria-label={`Actions for ${label}`}
+        aria-label={`Actions for MC${number}`}
         onClick={() => setOpen((o) => !o)}
         className={clsx(
           "drafts-tile__menu-btn rounded bg-white/90 p-1 text-slate-600 shadow-sm ring-1 ring-slate-200 transition hover:bg-white",
@@ -686,24 +804,18 @@ function DraftTileMenu({
           wall, so a downward menu would open past the card and, on the last
           row, past the scroll container. */}
       {open ? (
-        <div className="dropdown drafts-tile__menu-list absolute bottom-full right-0 z-50 mb-1 w-56 rounded-md border border-slate-200 bg-white p-1 shadow-lg">
+        <div className="dropdown drafts-tile__menu-list absolute bottom-full right-0 z-50 mb-1 w-60 rounded-md border border-slate-200 bg-white p-1 shadow-lg">
           <button
             type="button"
             disabled={busy}
-            onClick={() => run(() => onAddVariant("duplicate"))}
+            onClick={() => {
+              setOpen(false);
+              onPromote();
+            }}
             className="drafts-tile__menu-item flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
           >
-            <CopyPlus className="size-3.5 shrink-0" />
-            Duplicate as variant
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => run(() => onAddVariant("empty"))}
-            className="drafts-tile__menu-item flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-          >
-            <FilePlus2 className="size-3.5 shrink-0" />
-            New empty variant
+            <ArrowUpRight className="size-3.5 shrink-0" />
+            Promote…
           </button>
 
           <div className="drafts-tile__menu-divider my-1 border-t border-slate-100" />
@@ -712,11 +824,11 @@ function DraftTileMenu({
             type="button"
             disabled={busy}
             onClick={() => run(() => onDiscard("archive"))}
-            title={`Shelve ${label} — MC${draft.number} stays retired`}
+            title={`Shelve ${what} — the number stays retired`}
             className="drafts-tile__menu-item flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
           >
             <Archive className="size-3.5 shrink-0" />
-            Archive
+            Archive{many ? ` all ${rows.length}` : ""}
           </button>
           <button
             type="button"
@@ -727,11 +839,7 @@ function DraftTileMenu({
             className="drafts-tile__menu-item toolbar-btn--danger flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-rose-700 hover:bg-rose-50 disabled:opacity-50"
           >
             <Trash2 className="size-3.5 shrink-0" />
-            {confirming
-              ? siblingDraftCount > 0
-                ? `Delete ${label}? MC${draft.number} stays reserved.`
-                : `Delete ${label}, free the number?`
-              : "Delete"}
+            {confirming ? `Delete ${what}, free the number?` : "Delete"}
           </button>
 
           {error ? (

@@ -21,7 +21,6 @@ import {
   Globe,
   Users,
   BookOpen,
-  ArrowUpRight,
 } from "lucide-react";
 import clsx from "clsx";
 import {
@@ -38,7 +37,7 @@ import EntityHistoryDrawer from "../_components/EntityHistoryDrawer";
 import { useTextFormattingRules } from "./useTextFormattingRules";
 import Field from "./EditorField";
 import BriefTab from "./BriefTab";
-import PromoteTab from "./PromoteTab";
+import DraftVariantSwitcher from "./DraftVariantSwitcher";
 
 type AssetRow = {
   id: number;
@@ -63,7 +62,6 @@ const ASSET_AUTOCOMPLETE_MIN = 2;
 // component rather than two that drift.
 type Tab =
   | "naming"
-  | "promote"
   | "template"
   | "content"
   | "styles"
@@ -98,8 +96,12 @@ type Props = {
   siblingCount: number;
   onClose: () => void;
   onJump: (id: number) => void;
-  /** Drafts only: promoting leaves the drafts list, so the page can refresh. */
-  onPromoted?: () => void;
+  /**
+   * Drafts only: another draft row under this one's number, opened once the
+   * list has it. The page owns it because the editor resolves its row out of
+   * visibleMessages — jumping to an id the list has not seen yet opens nothing.
+   */
+  onAddVariant?: (sourceId: number, mode: "duplicate" | "empty") => Promise<void>;
 };
 
 type EditableFields = Pick<
@@ -138,7 +140,13 @@ type EditableFields = Pick<
   | "briefSlideId"
   | "draftProduct"
   | "draftTarget"
->;
+> & {
+  // A DRAFT's free-text working topic, nullable because a draft may not have
+  // one yet. A placed card's topic is its CELL — changed by move, never by an
+  // edit — so the Brief tab only offers this field on the draft-only intake
+  // block, and `Message["topic"]` (non-null) would not describe it.
+  topic: string | null;
+};
 
 const EDITABLE_KEYS: Array<keyof EditableFields> = [
   "name",
@@ -173,6 +181,7 @@ const EDITABLE_KEYS: Array<keyof EditableFields> = [
   "briefSlideId",
   "draftProduct",
   "draftTarget",
+  "topic",
 ];
 
 // The tabs receive the real state setter so field updates can use the
@@ -220,7 +229,7 @@ export default function MessageEditor({
   siblingCount,
   onClose,
   onJump,
-  onPromoted,
+  onAddVariant,
 }: Props) {
   const [tab, setTab] = useState<Tab>("naming");
   const [draft, setDraft] = useState<EditableFields | null>(null);
@@ -594,6 +603,12 @@ export default function MessageEditor({
   if (!open || !message || !draft) return null;
 
   const mcLabel = `MC${message.number}${message.variant}`;
+  // The other draft rows on this MC number, from the list the page already
+  // handed us — a draft's variants are ordinary sibling rows, so no fetch.
+  const draftVariants = visibleMessages
+    .filter((m) => m.audience === null && m.number === message.number)
+    .map((m) => ({ id: m.id, variant: m.variant }))
+    .sort((a, b) => a.variant.localeCompare(b.variant));
 
   return (
     <>
@@ -636,6 +651,14 @@ export default function MessageEditor({
             <span className="message-editor__nav-counter text-xs text-slate-500">
               {navIndex + 1}/{uniqueMcs.length}
             </span>
+          ) : null}
+          {isDraft && onAddVariant ? (
+            <DraftVariantSwitcher
+              variants={draftVariants}
+              activeId={message.id}
+              onJump={onJump}
+              onAdd={(mode) => onAddVariant(message.id, mode)}
+            />
           ) : null}
           {globalEdit && siblingCount > 0 ? (
             <span
@@ -791,12 +814,11 @@ export default function MessageEditor({
               </TabBtn>
               {/* Trafficking is derived from the CELL (audience/topic patterns),
                   so a draft has nothing to generate it from — updateMessage
-                  skips drafts for the same reason. */}
-              {isDraft ? (
-                <TabBtn active={tab === "promote"} onClick={() => setTab("promote")} icon={<ArrowUpRight className="size-3.5" />}>
-                  Promote
-                </TabBtn>
-              ) : (
+                  skips drafts for the same reason.
+                  A draft has no Promote tab either (user, 2026-09-10):
+                  promoting is a decision about the whole MC, so it is asked
+                  once, from the card's actions menu on the drafts wall. */}
+              {isDraft ? null : (
                 <>
                   <TabBtn active={tab === "trafficking"} onClick={() => setTab("trafficking")} icon={<Rocket className="size-3.5" />}>
                     Trafficking
@@ -811,17 +833,6 @@ export default function MessageEditor({
             <div className="message-editor__tab-content flex-1 overflow-y-auto px-5 pb-80 pt-4">
               {tab === "naming" && message.audience !== null ? (
                 <NamingTab message={message} aud={aud} top={top} draft={draft} setDraft={setDraft} />
-              ) : null}
-              {tab === "promote" && message.audience === null ? (
-                <PromoteTab
-                  draft={message}
-                  audiences={audiences}
-                  topics={topics}
-                  onDone={() => {
-                    onPromoted?.();
-                    onClose();
-                  }}
-                />
               ) : null}
               {tab === "content" ? (
                 <ContentTab
@@ -861,6 +872,9 @@ export default function MessageEditor({
                             setDraft((prev) =>
                               prev ? { ...prev, draftProduct: product } : prev,
                             ),
+                          topicValue: draft.topic,
+                          onTopicChange: (topic) =>
+                            setDraft((prev) => (prev ? { ...prev, topic } : prev)),
                           targetValue: draft.draftTarget,
                           onTargetChange: (draftTarget) =>
                             setDraft((prev) =>

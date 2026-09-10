@@ -2377,3 +2377,27 @@ Két dolog, ami menet közben derült ki:
 - A `topic` bekerült a szerkesztő `EDITABLE_KEYS`-ébe, de `string | null`-ként felülírva:
   a placed kártya `topic`-ja nem nullable, a drafté igen, és a Brief fül csak a draft-only
   intake-blokkban kínálja.
+
+### 2026-09-10 — a variáns-betű a draft sorozata, nem a mátrixé — 6.77.0
+
+**User:** „duplicate-re egyből C-re ugrott, nem látszik a B variáns, amúgy van már hozzá creative
+library item, lehet ez a baj?" — igen, és a szabály volt rossz, nem a library.
+
+Az adat: `MC404` — draft `a` (36016) + **négy élő Agentic sor** (`404a`/`404b` × `ch_disp`/`ch_soc`,
+36017–36020), amiket a `ensureAgenticMc` mintázott a feltöltött `ERSTE_MARKET_MC404_a/b_…` fájlokból.
+A 6.75.0-s `createDraft` a **teljes élő halmazon** kereste a következő betűt, így a `b`-t foglaltnak
+látta és `c`-t adott (36021).
+
+- [x] A betű a **draft sorokon** fut (`live.filter(audience === null && number === n)`), nem az
+      összes élő soron. A leszállított MC404b fájlok nem „valami más": pont az, amiért a `b` variáns
+      van, és `(number, variant)`-tal találják meg. Draftnak nincs cellája, tehát nem is ütközhet
+      placed sorral; az igazi ütközés a promote-nál van, ahol a `promoteDraft` már bumpol.
+- [x] A teszt megfordítva (`takes the next DRAFT letter…`), plusz új eset: másik **draft** által
+      tartott betű elutasítva.
+- [x] `draft-variants__item--ghost` — a máshol létező betűk (matched kreatívok alapján) szaggatottan
+      megjelennek a fejlécben, tartalom nélkül. A `matches` map-ből, új lekérdezés nélkül.
+- [x] `draft-variants__delete` — a nyitott variáns törlése a `+` mellett, két kattintással; utána a
+      szerkesztő a megmaradt betűre ugrik, vagy bezár, ha a szám elfogyott.
+
+**A user 404c sorához nem nyúltam** — az új törlés-gombbal maga akarta eltüntetni, utána a duplicate
+már `b`-t ad.

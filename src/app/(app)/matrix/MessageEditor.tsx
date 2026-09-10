@@ -102,6 +102,10 @@ type Props = {
    * visibleMessages — jumping to an id the list has not seen yet opens nothing.
    */
   onAddVariant?: (sourceId: number, mode: "duplicate" | "empty") => Promise<void>;
+  /** Drafts only: hard-delete the open variant and move on. */
+  onDeleteVariant?: (id: number) => Promise<void>;
+  /** Drafts only: letters this MC carries elsewhere, with no draft row. */
+  ghostVariants?: string[];
 };
 
 type EditableFields = Pick<
@@ -230,6 +234,8 @@ export default function MessageEditor({
   onClose,
   onJump,
   onAddVariant,
+  onDeleteVariant,
+  ghostVariants,
 }: Props) {
   const [tab, setTab] = useState<Tab>("naming");
   const [draft, setDraft] = useState<EditableFields | null>(null);
@@ -655,9 +661,15 @@ export default function MessageEditor({
           {isDraft && onAddVariant ? (
             <DraftVariantSwitcher
               variants={draftVariants}
+              ghosts={ghostVariants}
               activeId={message.id}
               onJump={onJump}
               onAdd={(mode) => onAddVariant(message.id, mode)}
+              onDeleteActive={() =>
+                onDeleteVariant
+                  ? onDeleteVariant(message.id)
+                  : Promise.resolve()
+              }
             />
           ) : null}
           {globalEdit && siblingCount > 0 ? (

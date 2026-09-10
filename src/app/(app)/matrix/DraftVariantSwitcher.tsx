@@ -13,27 +13,53 @@
 // Template / Content / Styles and they are the same tabs the matrix editor
 // uses. Folding variants into them would have meant rebuilding that tab
 // handling for one surface.
-import { useEffect, useRef, useState } from "react";
-import { CopyPlus, FilePlus2, Plus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CopyPlus, FilePlus2, Plus, Trash2 } from "lucide-react";
 import clsx from "clsx";
 
 export type DraftVariant = { id: number; variant: string };
 
 export default function DraftVariantSwitcher({
   variants,
+  ghosts = [],
   activeId,
   onJump,
   onAdd,
+  onDeleteActive,
 }: {
   /** Every live draft row on this number, ordered by letter. */
   variants: DraftVariant[];
+  /**
+   * Letters this MC already carries somewhere else — files delivered to the
+   * Creative Library under MC404b, say — with no draft row behind them. Shown
+   * so the header tells the whole truth about which letters exist, and greyed
+   * because there is nothing here to edit.
+   */
+  ghosts?: string[];
   activeId: number;
   onJump: (id: number) => void;
   onAdd: (mode: "duplicate" | "empty") => Promise<void>;
+  /** Hard-delete the variant currently open. Gone for good, number freed only
+   *  when it was the last one — the card menu's Delete does the whole MC. */
+  onDeleteActive: () => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+
+  // One row of letters, in letter order, whichever side they came from.
+  const slots = useMemo(() => {
+    const held = new Set(variants.map((v) => v.variant));
+    return [
+      ...variants.map((v) => ({ kind: "draft" as const, ...v })),
+      ...ghosts
+        .filter((g) => !held.has(g))
+        .map((variant) => ({ kind: "ghost" as const, variant })),
+    ].sort((a, b) => a.variant.localeCompare(b.variant));
+  }, [variants, ghosts]);
+
+  const activeVariant = variants.find((v) => v.id === activeId)?.variant;
 
   useEffect(() => {
     if (!open) return;
@@ -66,21 +92,31 @@ export default function DraftVariantSwitcher({
       title="Variants of this MC"
     >
       <div className="draft-variants__list tab-bar tab-bar--segmented inline-flex rounded-md border border-slate-300 p-0.5">
-        {variants.map((v) => (
-          <button
-            key={v.id}
-            type="button"
-            onClick={() => onJump(v.id)}
-            className={clsx(
-              "draft-variants__item tab-bar__tab rounded px-2 py-0.5 text-xs font-medium uppercase transition",
-              v.id === activeId
-                ? "tab-bar__tab--active bg-slate-900 text-white"
-                : "text-slate-600 hover:bg-slate-50",
-            )}
-          >
-            {v.variant}
-          </button>
-        ))}
+        {slots.map((slot) =>
+          slot.kind === "draft" ? (
+            <button
+              key={slot.id}
+              type="button"
+              onClick={() => onJump(slot.id)}
+              className={clsx(
+                "draft-variants__item tab-bar__tab rounded px-2 py-0.5 text-xs font-medium uppercase transition",
+                slot.id === activeId
+                  ? "tab-bar__tab--active bg-slate-900 text-white"
+                  : "text-slate-600 hover:bg-slate-50",
+              )}
+            >
+              {slot.variant}
+            </button>
+          ) : (
+            <span
+              key={`ghost-${slot.variant}`}
+              title={`MC${slot.variant.toUpperCase()} already exists outside this draft — files were delivered to the Creative Library under this letter. There is no draft row to edit.`}
+              className="draft-variants__item draft-variants__item--ghost tab-bar__tab rounded border border-dashed border-slate-300 px-2 py-0.5 text-xs font-medium uppercase text-slate-300"
+            >
+              {slot.variant}
+            </span>
+          ),
+        )}
       </div>
 
       <button
@@ -91,6 +127,36 @@ export default function DraftVariantSwitcher({
         className="draft-variants__add rounded border border-slate-300 p-1 text-slate-500 hover:bg-slate-50 disabled:opacity-50"
       >
         <Plus className="size-3.5" />
+      </button>
+
+      {/* Delete the variant that is open. Two clicks, and the label says which
+          letter is going — the switcher is a row of single characters, and
+          "Delete" on its own would not say which one it meant. */}
+      <button
+        type="button"
+        disabled={busy}
+        onBlur={() => setConfirming(false)}
+        onClick={() => {
+          if (!confirming) {
+            setConfirming(true);
+            return;
+          }
+          setBusy(true);
+          void onDeleteActive().finally(() => {
+            setBusy(false);
+            setConfirming(false);
+          });
+        }}
+        title={`Delete variant ${activeVariant?.toUpperCase() ?? ""} for good`}
+        className={clsx(
+          "draft-variants__delete flex items-center gap-1 rounded border p-1 text-xs disabled:opacity-50",
+          confirming
+            ? "toolbar-btn--danger border-rose-200 px-1.5 font-medium text-rose-700 hover:bg-rose-50"
+            : "border-slate-300 text-slate-500 hover:bg-slate-50",
+        )}
+      >
+        <Trash2 className="size-3.5" />
+        {confirming ? `Delete ${activeVariant?.toUpperCase() ?? ""}?` : null}
       </button>
 
       {open ? (

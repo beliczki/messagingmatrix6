@@ -308,6 +308,47 @@ export default function DraftsView() {
   // tab offers, said the same way. Archive shelves work that was real and keeps
   // the number retired; delete is for a card created by mistake and gives the
   // number back, which is why it is the one hard delete in the app.
+  // Delete ONE variant, from the editor header. The wall's Delete is about the
+  // whole MC; this is about the row that is open — most often one just created
+  // by mistake. Afterwards the editor moves to whatever letter is left, or
+  // closes when the number is gone entirely.
+  async function deleteVariant(id: number) {
+    const row = drafts.find((d) => d.id === id);
+    if (!row) return;
+    const r = await fetch(`/api/drafts/${id}`, {
+      method: "DELETE",
+      credentials: "include",
+      headers: { "if-match": String(row.version) },
+    });
+    if (!r.ok) {
+      const json = await r.json().catch(() => ({}));
+      throw new Error(json?.error ?? `${r.status} ${r.statusText}`);
+    }
+    await qc.invalidateQueries({ queryKey: ["drafts"] });
+    await qc.refetchQueries({ queryKey: ["drafts"] });
+    const sibling = drafts.find((d) => d.number === row.number && d.id !== id);
+    setDetailId(sibling?.id ?? null);
+  }
+
+  /**
+   * Letters this MC already carries with no draft row behind them — a
+   * Creative Library upload named MC404b mints the files (and their Agentic
+   * cell) whether or not a draft variant b was ever written. The header shows
+   * them greyed so it tells the whole truth about which letters exist.
+   *
+   * Read off the matches map the wall already has; no extra request.
+   */
+  function ghostVariantsFor(number: number): string[] {
+    const held = new Set(
+      drafts.filter((d) => d.number === number).map((d) => d.variant),
+    );
+    return Object.keys(matches)
+      .map((k) => k.split("|"))
+      .filter(([n, v]) => Number(n) === number && v && !held.has(v))
+      .map(([, v]) => v!)
+      .sort();
+  }
+
   // The card is the MC, so discarding it discards every variant on it. One
   // request per row rather than a bulk endpoint: the two routes already exist,
   // both are idempotent-by-version, and a partial failure leaves the survivors
@@ -477,6 +518,8 @@ export default function DraftsView() {
         onClose={() => setDetailId(null)}
         onJump={setDetailId}
         onAddVariant={addVariantOf}
+        onDeleteVariant={deleteVariant}
+        ghostVariants={detail ? ghostVariantsFor(detail.number) : undefined}
       />
 
       {promoteRows.length > 0 ? (

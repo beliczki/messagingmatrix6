@@ -5,6 +5,28 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.77.0] — 2026-09-10
+
+### Fixed
+- **A new draft variant takes the next DRAFT letter, not the next letter free
+  across the whole matrix.** Uploading `ERSTE_MARKET_MC404_b_….png` mints a live
+  Agentic MC404b, and the old rule read that as "b is taken" — so duplicating
+  MC404a jumped straight to `c` and left a hole exactly where the delivered
+  files were. Those files are not something else: they are what variant b is
+  FOR, and they find it by (number, variant). A draft sits in no cell and cannot
+  collide with a placed row anyway; the collision that matters happens at
+  promote, where the target cell is finally known and the letter already bumps.
+
+### Added
+- **Letters the MC carries elsewhere show in the editor header, greyed.** If
+  files were delivered under MC404b but no draft variant b was ever written, the
+  switcher shows a dashed `b` beside the real ones — there is nothing to edit on
+  it, and saying so beats a header that quietly pretends the letter is free.
+- **Delete the open variant from the header**, beside `+`. Two clicks, and the
+  label names the letter going — in a row of single characters, a bare "Delete"
+  would not say which one it meant. The wall's Delete still discards the whole
+  MC; this is for a variant just created by mistake.
+
 ## [6.76.0] — 2026-09-10
 
 ### Changed

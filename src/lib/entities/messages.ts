@@ -516,23 +516,35 @@ export async function createDraft(
     number = nextNewNumber(live);
   }
 
-  // The letter is taken from the WHOLE live set, not just the drafts on this
-  // number: a Creative Library upload may already have minted an Agentic
-  // MC404b (ensureAgenticMc honours the number a filename carries), and the
-  // new draft must not reuse a letter that already names something else.
+  // The letter runs over the DRAFTS on this number, not over every live row.
+  //
+  // It read the whole live set once, to keep a new draft off a letter an
+  // Agentic mirror already carried — and that was backwards. Uploading
+  // ERSTE_MARKET_MC404_b_….png mints a live MC404b (ensureAgenticMc honours
+  // the number and letter a filename carries), so the whole-set rule made the
+  // NEXT draft variant skip to `c` and leave a hole exactly where the delivered
+  // files were. Those files are not "something else": they are what the draft's
+  // variant b is FOR, and they find it by (number, variant).
+  //
+  // A draft sits in no cell, so it cannot collide with a placed row anyway;
+  // the collision that matters happens at promote, where the target cell is
+  // finally known, and promoteDraft already bumps the letter there.
+  const draftsOnNumber = live.filter(
+    (m) => isLive(m) && m.audience === null && m.number === number,
+  );
   const variant =
     opts.requestedVariant ??
     (opts.requestedNumber !== undefined
-      ? nextVariantForNumber(live, opts.requestedNumber)
+      ? nextVariantForNumber(draftsOnNumber, opts.requestedNumber)
       : "a");
   if (!/^[a-z]$/.test(variant)) {
     throw new MessageError(
       `variant '${variant}' is invalid — must be a single lowercase letter a–z`,
     );
   }
-  if (live.some((m) => isLive(m) && m.number === number && m.variant === variant)) {
+  if (draftsOnNumber.some((m) => m.variant === variant)) {
     throw new MessageError(
-      `MC${number}${variant} already exists — pick a free variant`,
+      `MC${number}${variant} is already a draft — pick a free variant`,
     );
   }
 

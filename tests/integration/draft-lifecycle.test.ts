@@ -116,10 +116,12 @@ describe("createDraftVariant", () => {
     });
   });
 
-  it("skips a letter a Creative Library upload already minted", async () => {
+  it("takes the next DRAFT letter, not the next free one across the matrix", async () => {
     const a = await createDraft(erste.id);
     // What ensureAgenticMc does when ERSTE_..._MC404_b_..._1080x1080.png lands:
     // a live Agentic row under the draft's number, carrying the letter "b".
+    // Those files are what the draft's variant b is FOR — they find it by
+    // (number, variant) — so the new variant must land ON b, not skip past it.
     await db.insert(messages).values({
       clientId: erste.id,
       number: a.number,
@@ -132,7 +134,15 @@ describe("createDraftVariant", () => {
     });
 
     const next = await createDraftVariant(erste.id, a.id);
-    expect(next.variant).toBe("c");
+    expect(next.variant).toBe("b");
+  });
+
+  it("refuses a letter another DRAFT of the number already holds", async () => {
+    const a = await createDraft(erste.id);
+    await createDraftVariant(erste.id, a.id);
+    await expect(
+      createDraft(erste.id, {}, { requestedNumber: a.number, requestedVariant: "b" }),
+    ).rejects.toThrow(/already a draft/);
   });
 
   it("refuses a source that is already in the matrix", async () => {

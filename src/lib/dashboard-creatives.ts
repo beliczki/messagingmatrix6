@@ -1,6 +1,5 @@
 import {
   and,
-  count,
   desc,
   eq,
   gte,
@@ -26,10 +25,17 @@ import { listAllTemplates } from "@/lib/templates";
 import type { DayScope } from "@/lib/day-scope";
 
 /**
- * The two formats the strip shows. A delivery arrives in a dozen sizes; on a
- * dashboard the point is to recognize the creative, not to audit the set, so
- * one landscape banner and one square is what goes out. The rest stay one
- * click away in the Creative Library.
+ * The two formats the strip will take a delivery in. A delivery arrives in a
+ * dozen sizes; on a dashboard the point is to recognize the creative, not to
+ * audit the set, so only these two are eligible and the rest stay one click
+ * away in the Creative Library.
+ *
+ * ONE of them makes it, not both: the uploaded side collapses to a single tile
+ * per (mc_number, mc_variant), the first entry here winning. Showing a
+ * landscape AND a square of one creative filled the strip with what reads as
+ * duplicates — MC404a and MC404b arriving in both sizes took four of the seven
+ * slots — and it also contradicted the MC side, which has always collapsed to
+ * one tile per (number, variant) for exactly that reason.
  */
 export const STRIP_SIZES = ["300x250", "1080x1080"];
 
@@ -283,11 +289,23 @@ export async function listStripCreatives(
     changed_at: string;
   }>(sql`
     select kind, row_id, changed_at from (
-      select 'uploaded' as kind, ${creatives.id} as row_id,
-             ${creatives.updatedAt} as changed_at,
-             ${rate.uploaded} as rate
-      from ${creatives}
-      where ${creativeWhere}
+      select 'uploaded' as kind, c.id as row_id, c.updated_at as changed_at,
+             c.rate as rate
+      from (
+        select distinct on (
+                 coalesce(${creatives.mcNumber}, -${creatives.id}),
+                 coalesce(${creatives.mcVariant}, '')
+               )
+               ${creatives.id} as id, ${creatives.updatedAt} as updated_at,
+               ${rate.uploaded} as rate,
+               ${creatives.fileDimensions} as dims
+        from ${creatives}
+        where ${creativeWhere}
+        order by coalesce(${creatives.mcNumber}, -${creatives.id}),
+                 coalesce(${creatives.mcVariant}, ''),
+                 (${creatives.fileDimensions} = ${STRIP_SIZES[0]}) desc,
+                 ${creatives.updatedAt} desc, ${creatives.id} desc
+      ) c
       union all
       select 'mc' as kind, m.id as row_id, m.updated_at as changed_at,
              ${rate.mc} as rate
@@ -336,18 +354,27 @@ export async function listStripCreatives(
 
 // Source rows, counted the way the cursor selects them — messages by distinct
 // MC, not by cell, or the total would promise tiles the strip never renders.
+// How many TILES the window holds. Both sides count the way they render: one
+// per (number, variant). An uploaded creative that names no MC cannot be
+// grouped by one, so it counts as itself — the id keeps those rows distinct.
 async function sourceCount(
   creativeWhere: ReturnType<typeof and>,
   messageWhere: ReturnType<typeof and>,
 ): Promise<number> {
   const [c, m] = await Promise.all([
-    db.select({ n: count() }).from(creatives).where(creativeWhere),
+    db
+      .selectDistinct({
+        number: sql<string>`coalesce(${creatives.mcNumber}::text, 'c' || ${creatives.id})`,
+        variant: sql<string>`coalesce(${creatives.mcVariant}, '')`,
+      })
+      .from(creatives)
+      .where(creativeWhere),
     db
       .selectDistinct({ number: messages.number, variant: messages.variant })
       .from(messages)
       .where(messageWhere),
   ]);
-  return (c[0]?.n ?? 0) + m.length;
+  return c.length + m.length;
 }
 
 async function hydrateUploaded(

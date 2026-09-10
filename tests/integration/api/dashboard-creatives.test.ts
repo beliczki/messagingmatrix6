@@ -85,6 +85,42 @@ describe("dashboard creative strip", () => {
     expect(page.total).toBe(2);
   });
 
+  it("gives one MC variant ONE tile, even when both strip sizes arrived", async () => {
+    // What a delivery actually looks like: every variant in every size. Showing
+    // the landscape AND the square of each read as duplicates on the wall.
+    await seed(erste.id, [
+      { name: "MC404_a_1080.png", size: "1080x1080", mcNumber: 404, mcVariant: "a", updatedAt: "2026-08-30 09:00:03" },
+      { name: "MC404_a_300.png", size: "300x250", mcNumber: 404, mcVariant: "a", updatedAt: "2026-08-30 09:00:02" },
+      { name: "MC404_b_1080.png", size: "1080x1080", mcNumber: 404, mcVariant: "b", updatedAt: "2026-08-30 09:00:01" },
+      { name: "MC404_b_300.png", size: "300x250", mcNumber: 404, mcVariant: "b", updatedAt: "2026-08-30 09:00:00" },
+    ]);
+    const page = await listStripCreatives(erste.id, today);
+    // The 300x250 wins even where the square is the newer row: the strip's
+    // other tiles are that shape.
+    expect(names(page)).toEqual(["MC404_a_300.png", "MC404_b_300.png"]);
+    expect(page.total).toBe(2);
+  });
+
+  it("keeps the square when no 300x250 was delivered", async () => {
+    await seed(erste.id, [
+      { name: "MC404_a_1080.png", size: "1080x1080", mcNumber: 404, mcVariant: "a", updatedAt: "2026-08-30 09:00:00" },
+    ]);
+    expect(names(await listStripCreatives(erste.id, today))).toEqual([
+      "MC404_a_1080.png",
+    ]);
+  });
+
+  it("does not group creatives that name no MC", async () => {
+    // Nothing to group them BY — two unnumbered files are two deliveries.
+    await seed(erste.id, [
+      { name: "loose-one.png", updatedAt: "2026-08-30 09:00:01" },
+      { name: "loose-two.png", updatedAt: "2026-08-30 09:00:00" },
+    ]);
+    const page = await listStripCreatives(erste.id, today);
+    expect(names(page)).toEqual(["loose-one.png", "loose-two.png"]);
+    expect(page.total).toBe(2);
+  });
+
   it("collapses a version family to its newest member", async () => {
     await seed(erste.id, [
       { name: "ERSTE_SZK_MC1_a_thing_n1_300x250.png", updatedAt: "2026-08-30 09:00:01" },

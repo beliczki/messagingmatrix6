@@ -5,6 +5,20 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.79.0] — 2026-09-10
+
+### Fixed
+- **One tile per MC variant in the dashboard creative strip.** A delivery
+  arrives in every size, and the strip took BOTH of the two it accepts — so
+  MC404a and MC404b, each delivered as a 300×250 and a 1080×1080, filled four of
+  the seven slots and read as duplicates. The uploaded side now collapses to one
+  tile per (mc_number, mc_variant), the 300×250 winning because that is the
+  shape the rest of the strip is. This also settles a contradiction: the MC side
+  has always collapsed to one tile per (number, variant), for exactly the reason
+  the uploaded side did not.
+  Creatives that name no MC are not grouped — there is nothing to group them by,
+  and two unnumbered files are two deliveries.
+
 ## [6.78.0] — 2026-09-10
 
 ### Changed

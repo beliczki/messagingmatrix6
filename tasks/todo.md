@@ -2412,3 +2412,22 @@ a mouse over megjelenít."
 - [x] `drafts-tile__mc` több variáns esetén a végén viszi az aktív betűt (`MC404a` → `MC404b`).
       Egy variánsnál nincs mit váltani, marad `MC404`.
 - [x] A `__scrub` zónák maradnak, csak most semmit nem rajzolnak.
+
+### 2026-09-10 — a dashboard strip egy csempét ad egy variánsnak — 6.79.0
+
+**User:** „miért van kétszer itt a legfrissebbek között a 404 a és b — 404 most nem both hanem
+agentic, így nem kell a html preview."
+
+**A diagnózis más volt, mint a feltételezés:** nem html preview duplázott. Az MC404 Agentic tükrei
+`template = null`-lal ülnek, a strip `mc` ága pedig csak sablonos sort vesz, tehát onnan MC404 nem
+is jöhet. Mind a négy csempe **feltöltött fájl** volt: `MC404a` és `MC404b`, egyenként 300×250-ben
+ÉS 1080×1080-ban — a strip mindkét elfogadott méretet kirakta.
+
+- [x] Az uploaded ág `distinct on (mc_number, mc_variant)`-ra ment, a 300×250 nyer (az a forma,
+      amiben a strip többi csempéje is van). Ez egy **ellentmondást is felold**: az `mc` ág mindig is
+      `(number, variant)`-onként egy csempét adott, épp azért, amiért az uploaded ág nem.
+- [x] MC-szám nélküli kreatívokat NEM csoportosít — nincs mi szerint; két számozatlan fájl két
+      szállítás. Az id tartja őket külön.
+- [x] A `sourceCount` ugyanígy számol, különben a „N in this window" és a lapozás elcsúszna.
+- [x] Három új teszt (mindkét méret megérkezett · csak a négyzetes van · számozatlanok nem
+      csoportosulnak). `npm test` 884/884.

@@ -20,7 +20,7 @@ export default function DeliveryTrend({
 }: {
   months: DeliveryMonth[];
 }) {
-  if (months.length === 0) {
+  if (months.every((m) => !m.reported)) {
     return (
       <div className="signal-tile delivery-trend block rounded-xl border border-slate-200 bg-white p-4">
         <p className="signal-tile__label text-[10px] uppercase tracking-wider text-slate-500">
@@ -36,9 +36,19 @@ export default function DeliveryTrend({
     );
   }
 
-  const latest = months[months.length - 1];
-  const previous = months.length > 1 ? months[months.length - 2] : null;
-  const peak = Math.max(...months.map((m) => m.impressions));
+  // The headline is about the newest month that was actually MEASURED. Months
+  // the series carries only to show the gap (reported: false) have zeros, and
+  // reading a zero as this month's delivery is the misreport this tile exists
+  // to avoid — so they rank no bar, set no peak and never become `latest`.
+  const measured = months.filter((m) => m.reported);
+  const latest = measured[measured.length - 1];
+  const previous = measured.length > 1 ? measured[measured.length - 2] : null;
+  const peak = Math.max(...measured.map((m) => m.impressions));
+  const latestIndex = months.lastIndexOf(latest);
+  // Newest month the series shows but reporting has not reached. Named in the
+  // hint as well as drawn: the chart says "there is a gap", the sentence says
+  // which month it is, and the value above is explicitly about an older one.
+  const missing = months.filter((m) => !m.reported).at(-1) ?? null;
   const delta =
     previous && previous.impressions > 0
       ? (latest.impressions - previous.impressions) / previous.impressions
@@ -68,27 +78,42 @@ export default function DeliveryTrend({
       <p className="signal-tile__hint mt-0.5 text-xs text-slate-500">
         impressions · {monthLabel(latest.periodFrom)}
         {previous ? ` vs ${monthLabel(previous.periodFrom, true)}` : ""}
+        {missing ? ` · no ${monthLabel(missing.periodFrom, true)} data yet` : ""}
       </p>
       <div className="delivery-trend__chart mt-3 flex h-10 items-end gap-1">
-        {months.map((m, i) => (
-          <div
-            key={m.periodFrom}
-            title={`${monthLabel(m.periodFrom)}: ${compactNumber(m.impressions)} impressions`}
-            className={`delivery-trend__bar flex-1 rounded-sm ${
-              i === months.length - 1
-                ? "delivery-trend__bar--current bg-slate-800"
-                : "bg-slate-200"
-            }`}
-            // Data-driven height — a floor of 6% keeps a near-empty month visible.
-            style={{
-              height: `${Math.max(6, peak > 0 ? (m.impressions / peak) * 100 : 0)}%`,
-            }}
-          />
-        ))}
+        {months.map((m, i) =>
+          m.reported ? (
+            <div
+              key={m.periodFrom}
+              title={`${monthLabel(m.periodFrom)}: ${compactNumber(m.impressions)} impressions`}
+              className={`delivery-trend__bar flex-1 rounded-sm ${
+                i === latestIndex
+                  ? "delivery-trend__bar--current bg-slate-800"
+                  : "bg-slate-200"
+              }`}
+              // Data-driven height — a floor of 6% keeps a near-empty month visible.
+              style={{
+                height: `${Math.max(6, peak > 0 ? (m.impressions / peak) * 100 : 0)}%`,
+              }}
+            />
+          ) : (
+            // Not a 6% stub: a short bar would read as "almost no delivery",
+            // which is the opposite of "not measured yet". A dashed full-height
+            // outline is empty by construction and cannot be misread as a value.
+            <div
+              key={m.periodFrom}
+              title={`${monthLabel(m.periodFrom)}: not imported yet`}
+              className="delivery-trend__bar delivery-trend__bar--missing h-full flex-1 rounded-sm border border-dashed border-slate-300"
+            />
+          ),
+        )}
       </div>
       <div className="delivery-trend__axis mt-1 flex gap-1 text-[10px] text-slate-400">
         {months.map((m) => (
-          <span key={m.periodFrom} className="flex-1 text-center">
+          <span
+            key={m.periodFrom}
+            className={`flex-1 text-center ${m.reported ? "" : "text-slate-300"}`}
+          >
             {monthLabel(m.periodFrom, true)}
           </span>
         ))}

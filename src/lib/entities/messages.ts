@@ -85,6 +85,7 @@ const WRITABLE_FIELDS = [
   "briefSlidesFileId",
   "briefSlideId",
   "draftProduct",
+  "draftTarget",
 ] as const;
 type WritableField = (typeof WRITABLE_FIELDS)[number];
 
@@ -477,7 +478,10 @@ export async function createMessage(
 export async function createDraft(
   clientId: number,
   input: MessageInput = {},
-  opts: { requestedVariant?: string } = {},
+  // requestedNumber: sit beside a draft that already holds this number, as a
+  // further variant of it. Only a number a LIVE DRAFT holds is accepted — see
+  // the guard below.
+  opts: { requestedVariant?: string; requestedNumber?: number } = {},
 ): Promise<Message> {
   if (input.audience) {
     throw new MessageError(
@@ -489,14 +493,49 @@ export async function createDraft(
       `a draft's status is DRAFT, not '${input.status}' — use promote to move it on`,
     );
   }
-  const variant = opts.requestedVariant ?? "a";
+  const live = await listLiveMessages(clientId);
+
+  // A draft variant attaches to a number a draft is already holding; anything
+  // else keeps the global max+1 allocation. Refusing an arbitrary number is
+  // what stops this from becoming a second reservation mechanism beside the
+  // drafts page — claiming a number for a CARD is createMessage's job, and it
+  // has its own (axis-aware) rules for it.
+  let number: number;
+  if (opts.requestedNumber !== undefined) {
+    const heldByDraft = live.some(
+      (m) =>
+        isLive(m) && m.audience === null && m.number === opts.requestedNumber,
+    );
+    if (!heldByDraft) {
+      throw new MessageError(
+        `MC number ${opts.requestedNumber} is not held by a draft — a variant sits beside an existing draft; start a new draft for a new number`,
+      );
+    }
+    number = opts.requestedNumber;
+  } else {
+    number = nextNewNumber(live);
+  }
+
+  // The letter is taken from the WHOLE live set, not just the drafts on this
+  // number: a Creative Library upload may already have minted an Agentic
+  // MC404b (ensureAgenticMc honours the number a filename carries), and the
+  // new draft must not reuse a letter that already names something else.
+  const variant =
+    opts.requestedVariant ??
+    (opts.requestedNumber !== undefined
+      ? nextVariantForNumber(live, opts.requestedNumber)
+      : "a");
   if (!/^[a-z]$/.test(variant)) {
     throw new MessageError(
       `variant '${variant}' is invalid — must be a single lowercase letter a–z`,
     );
   }
+  if (live.some((m) => isLive(m) && m.number === number && m.variant === variant)) {
+    throw new MessageError(
+      `MC${number}${variant} already exists — pick a free variant`,
+    );
+  }
 
-  const live = await listLiveMessages(clientId);
   const [row] = await db
     .insert(messages)
     .values({
@@ -507,7 +546,7 @@ export async function createDraft(
       // Free text at this stage: a working title the user can edit. Promotion
       // is what forces it to resolve to a real topics row.
       topic: input.topic ?? null,
-      number: nextNewNumber(live),
+      number,
       variant,
       versionNo: 1,
       // No PMMID until the row has a cell to name (check
@@ -520,6 +559,59 @@ export async function createDraft(
     })
     .returning();
   return row;
+}
+
+/** What a variant created "empty" inherits: the frame, not the creative. */
+const VARIANT_FRAME_FIELDS = [
+  "template",
+  "topic",
+  "draftProduct",
+  "draftTarget",
+  "briefSlidesFileId",
+  "briefSlideId",
+] as const;
+
+export type DraftVariantMode = "duplicate" | "empty";
+
+// A second draft beside an existing one, under the SAME MC number — MC404a and
+// MC404b as two creatives of one brief.
+//
+// Two modes because the two cases are genuinely different work: `duplicate` is
+// "the same card with different copy" and carries everything writable across;
+// `empty` is "a second idea for the same brief" and carries only the frame —
+// the deck link, the product, the template and the working title — so the wall
+// shows it as what it is, a card still to be written.
+//
+// The number comes from the source rather than from a caller-supplied value:
+// that way it can never name a number no draft holds, and this stays a variant
+// mechanism rather than a general-purpose number reservation.
+export async function createDraftVariant(
+  clientId: number,
+  sourceId: number,
+  mode: DraftVariantMode = "duplicate",
+): Promise<Message> {
+  const source = await getMessage(clientId, sourceId);
+  if (!source) throw new MessageError(`message ${sourceId} not found`);
+  if (source.status !== "DRAFT" || source.audience !== null) {
+    throw new MessageError(
+      `MC${source.number}${source.variant} is in the matrix, not a draft — placing a card into more cells is copy's job`,
+    );
+  }
+  if (source.archivedAt !== null) {
+    throw new MessageError(
+      `MC${source.number}${source.variant} is archived — restore it before adding a variant`,
+    );
+  }
+
+  const { audience: _audience, ...cloneable } = pickWritable(source);
+  const seed: MessageInput =
+    mode === "duplicate"
+      ? cloneable
+      : Object.fromEntries(
+          VARIANT_FRAME_FIELDS.map((f) => [f, cloneable[f] ?? null]),
+        );
+
+  return createDraft(clientId, seed, { requestedNumber: source.number });
 }
 
 // Place a draft into a cell. The row is UPDATED, not re-created: the draft and
@@ -571,6 +663,46 @@ export async function promoteDraft(
   }
 
   const live = await listLiveMessages(clientId);
+  // Resolved before the guards below because they are axis-scoped, and reused
+  // by regeneratedIdentity further down — the pmmid/trafficking patterns look
+  // the audience up by key. Channels are merged in as Audience-shaped rows so
+  // an Agentic row's `ch_*` key resolves to a channel, exactly as in
+  // createMessage.
+  const audienceList = [
+    ...(await listAudiences(clientId)),
+    ...(await listChannels(clientId)).map(channelToAudience),
+  ];
+  const channelByAudience = new Map(
+    audienceList.map((a) => [a.key, a.channel ?? null]),
+  );
+  const targetIsDco = (audienceRow.channel ?? null) === null;
+  const onTargetAxis = (m: { audience?: string | null }) =>
+    ((channelByAudience.get(m.audience ?? "") ?? null) === null) === targetIsDco;
+
+  // A number never spans topics WITHIN an axis. createMessage enforces it at
+  // create time; promoteDraft could not reach the case while a number could
+  // only ever have one draft, and two drafts on one number (MC404a + MC404b)
+  // is exactly what makes it reachable — without this, promoting them into
+  // different topics mints a cross-topic number in silence.
+  //
+  // Axis-scoped, and that is load-bearing rather than pedantic: uploading
+  // ERSTE_HK_MC404_b_..._1080x1080.png mints a live AGENTIC MC404b in a topic
+  // derived from the filename (ensureAgenticMc). An unscoped check would let
+  // that row refuse the perfectly legal DCO promote of the same draft.
+  const crossTopic = live.find(
+    (m) =>
+      isLive(m) &&
+      m.audience !== null &&
+      m.number === draft.number &&
+      m.topic !== opts.topicKey &&
+      onTargetAxis(m),
+  );
+  if (crossTopic) {
+    throw new MessageError(
+      `MC number ${draft.number} is already in use in topic '${crossTopic.topic}' — a number never spans topics; promote into that topic, or renumber first`,
+    );
+  }
+
   const liveInCell = live.filter(
     (m) =>
       isLive(m) &&
@@ -581,11 +713,25 @@ export async function promoteDraft(
     ? nextVariantForNumber(liveInCell, draft.number)
     : draft.variant;
 
+  // The same dormant-twin refusal createMessage makes: a live twin of an
+  // archived same-cell row would carry the identical PMMID, and restoring the
+  // archived one would resurrect a duplicate. listLiveMessages returns every
+  // row, so the archived ones are already here.
+  const dormantTwin = live.find(
+    (m) =>
+      !isLive(m) &&
+      m.topic === opts.topicKey &&
+      m.audience === opts.audienceKey &&
+      m.number === draft.number &&
+      (m.variant ?? "") === variant,
+  );
+  if (dormantTwin) {
+    throw new MessageError(
+      `MC${draft.number}${variant} exists archived in this cell — restore it instead of promoting a twin`,
+    );
+  }
+
   const patterns = await readClientPatterns(clientId);
-  const audienceList = [
-    ...(await listAudiences(clientId)),
-    ...(await listChannels(clientId)).map(channelToAudience),
-  ];
   const identity = regeneratedIdentity(
     {
       audience: opts.audienceKey,

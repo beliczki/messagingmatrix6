@@ -11,6 +11,13 @@ export type DeliveryMonth = {
   cost: number;
   /** Impressions on rows the importer could link to a matrix message. */
   matchedImpressions: number;
+  /**
+   * False for a calendar month `monthlyDelivery` filled in because no report
+   * covering it has been imported yet. Zeros on such a month mean "not
+   * measured", not "measured as nothing" — the tiles draw the two differently,
+   * and neither one may be read as the current month's delivery.
+   */
+  reported: boolean;
 };
 
 /**
@@ -30,11 +37,18 @@ export type DeliveryMonth = {
  *
  * No pagination needed: the group is one row per report period, i.e. twelve a
  * year for a monthly ingest — three orders of magnitude below the row cap.
+ *
+ * `throughMonth` ("YYYY-MM", normally the day scope's anchor month) extends the
+ * series with the calendar months that have no import yet, flagged
+ * `reported: false`. Without it the newest bar is always the newest IMPORT, so
+ * a September dashboard presents August as if it were the current month —
+ * reporting arrives weeks late, and a missing month has to look missing.
  */
 export async function monthlyDelivery(
   clientId: number,
   n = 6,
   products: string[] = [],
+  throughMonth?: string,
 ): Promise<DeliveryMonth[]> {
   const rows = await db
     .select({
@@ -64,13 +78,57 @@ export async function monthlyDelivery(
   // Ordered on the parsed date, never on the stored text: `period_from` is
   // "DD/MM/YYYY", so "01/12/2025" sorts after "01/05/2026" and the trend would
   // read backwards across a year end.
-  return rows
+  const reported: DeliveryMonth[] = rows
+    .map((r) => ({ ...r, reported: true }))
     .sort((a, b) =>
       (periodDateKey(a.periodFrom) ?? "").localeCompare(
         periodDateKey(b.periodFrom) ?? "",
       ),
-    )
-    .slice(-n);
+    );
+
+  return padMissingMonths(reported, throughMonth).slice(-n);
+}
+
+/**
+ * Append the calendar months between the newest import and `throughMonth`.
+ *
+ * Anchored on the newest REPORTED month, so browsing back to June pads nothing
+ * — the tile then shows what was true in June rather than back-dating today's
+ * gap onto it. With no import at all there is no anchor and nothing to pad:
+ * the tiles' own "no monitoring import yet" state says it better than a row of
+ * blanks would.
+ */
+function padMissingMonths(
+  reported: DeliveryMonth[],
+  throughMonth: string | undefined,
+): DeliveryMonth[] {
+  if (!throughMonth || reported.length === 0) return reported;
+  const lastKey = periodDateKey(reported[reported.length - 1].periodFrom);
+  if (!lastKey) return reported;
+
+  const out = [...reported];
+  let [year, month] = lastKey.slice(0, 7).split("-").map(Number);
+  while (`${year}-${String(month).padStart(2, "0")}` < throughMonth) {
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+    const mm = String(month).padStart(2, "0");
+    // Written in the stored "DD/MM/YYYY HH:MM:SS" shape so `monthLabel` and
+    // every other period reader treat a filled month like an imported one.
+    const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+    out.push({
+      periodFrom: `01/${mm}/${year} 00:00:00`,
+      periodTo: `${lastDay}/${mm}/${year} 23:59:59`,
+      impressions: 0,
+      clicks: 0,
+      cost: 0,
+      matchedImpressions: 0,
+      reported: false,
+    });
+  }
+  return out;
 }
 
 const MONTHS = [

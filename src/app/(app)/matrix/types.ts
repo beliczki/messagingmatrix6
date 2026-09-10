@@ -162,6 +162,8 @@ export type Message = {
   briefSlideId: string | null;
   /** Draft-only. A placed card's product comes from its cell — see schema.ts. */
   draftProduct: string | null;
+  /** Draft-only: 'dco' | 'agentic' | 'both' — which preview the card shows. */
+  draftTarget: string | null;
 };
 
 // The same row before it has a cell. The schema made `audience`/`topic`

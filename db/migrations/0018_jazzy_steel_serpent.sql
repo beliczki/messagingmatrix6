@@ -1,0 +1,2 @@
+ALTER TABLE "messages" ADD COLUMN "draft_target" text;--> statement-breakpoint
+ALTER TABLE "messages" ADD CONSTRAINT "messages_draft_target_values" CHECK ("messages"."draft_target" IS NULL OR "messages"."draft_target" IN ('dco', 'agentic', 'both'));

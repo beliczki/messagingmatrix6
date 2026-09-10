@@ -5,6 +5,62 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.73.0] — 2026-09-10
+
+### Added
+- **A draft can have variants: MC404a and MC404b side by side.** `createDraft`
+  would only ever hand out `max + 1`, so a second creative under one number had
+  to be arranged by hand in SQL. The Brief tab now offers two actions, because
+  the two cases are different work: *Duplicate as variant* carries the copy and
+  images across, *New empty variant* keeps only the frame — deck link, product,
+  target, template — so the wall shows it as a card still to be written. The
+  letter is taken from the whole live set, not just the drafts: if a Creative
+  Library upload already minted an Agentic MC404b, the new draft gets `c`.
+- **A draft says what the Creative Library already holds for it.** The Promote
+  tab lists the delivered files that carry its MC number, with a counter and
+  thumbnails, and the wall puts the matched 300×250 on the card instead of the
+  local render. Nothing new had to be built for the files to *arrive* — the
+  filename has always carried the MC number and a correctly named upload
+  already mints the Agentic cell. What was missing was the draft knowing.
+- **`draft_target` on `messages` (migration 0018):** `dco` | `agentic` | `both`,
+  draft-only like `draft_product`, with a database check on the three values.
+  It decides which preview the card and the editor show, and it is read long
+  before any file exists — so it is a stored decision, not something inferred
+  from "are there creatives yet".
+- **Delivery and Matrix coverage show the month that has no report yet.** The
+  tiles ended on the newest *import*, so a September dashboard presented August
+  as if it were the current month. The series now runs to the day scope's month
+  and draws the gap as a dashed, empty column — not a short bar, which would
+  read as "almost no delivery" — and names it: `no Sep data yet`. The headline
+  figure stays on the last month that was actually measured.
+
+### Changed
+- **The draft's Target moved from the Promote tab to the Brief tab.** Promote
+  answers WHERE; the target says what the work IS for, and the preview needs
+  that answer before anyone reaches Promote. Promote now reads the stored value
+  and shows it, so the move leaves a trace rather than a missing control.
+- **The dashboard refreshes when its tab is looked at again.** A tab left open
+  overnight kept asking for yesterday's window, because the day anchor lives in
+  the URL — today's work was genuinely outside it. On `visibilitychange` the
+  anchor rolls forward to today if it went stale, otherwise the server
+  components re-render in place. No reload, no lost client state, no polling.
+- **The Delete confirm on a draft no longer promises a number back when there
+  is a sibling.** With two drafts on MC404, deleting one leaves the number held
+  by the other; the button now says `MC404 stays reserved.`
+
+### Fixed
+- **`promoteDraft` refuses a number that already lives in another topic on the
+  same axis**, the rule `createMessage` has always enforced. It was unreachable
+  while a number could only ever have one draft, and draft variants are exactly
+  what makes it reachable — without it, promoting MC404a and MC404b into
+  different topics minted a cross-topic number in silence. The check is
+  axis-scoped on purpose: a Creative Library upload mints an Agentic twin in
+  its own filename-derived topic, and an unscoped check would have let that row
+  refuse the perfectly legal DCO promote of the same draft.
+- **`promoteDraft` refuses a twin of an archived row in the target cell**, for
+  the same reason `createMessage` does: restoring the archived one would
+  resurrect a duplicate PMMID.
+
 ## [6.72.0] — 2026-09-07
 
 ### Changed

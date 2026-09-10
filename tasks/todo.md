@@ -165,10 +165,9 @@ Cél: agent mintát kérdez (mc_get / list_assets / get_media_file — mind lét
 A `getActiveClient()` a SQLite→PG váltáskor lett async; a route-okat akkor javították, a `scripts/`-et nem (a tsconfig nem fedi, `tsc` nem fogja). A `seed-channel-audiences.ts` élesben elhasalt (`UNDEFINED_VALUE`, params:[undefined]) — 2026-08-13-án javítva. **9 további script ugyanígy törött:** scan-creatives, import-erste-sample, link-creative-files, reimport-media, import-erste, seed-multi, seed-perf, seed-keywords, seed-dev. Háromnál a befogadó `main()` nem is async → scriptenként kell (async-esítés + hívás). Előbb döntsd el, melyik retire-elhető (import-erste* / seed-dev SQLite-éra); a maradékra egyenkénti fix + kézi futtatás-teszt.
 - [ ] Retire-vs-fix döntés scriptenként, aztán a maradék javítása egyesével.
 
-### M9 — MC archiválás UI-ból (legkisebb; backend teljesen kész)
-Cél: MC-t archiválni/visszaállítani lehessen az appból (ma csak MCP/HTTP). A DELETE-hívás + ARCHIVED status már megvan (`MessageEditor.tsx:1275`), csak a dedikált gomb hiányzik.
-- [ ] **M9.1** Archive/Restore control a `MessageEditor` header action-clusterébe (`:544-624`), a `MediaEntityDialog:319,408-428` mintát másolva. Archive → `DELETE /api/messages/[id]` `If-Match: version`; Restore → `POST /api/messages/[id]/restore`; `parent_archived` 409 tiszta üzenettel; `["messages",{showArchived}]` invalidáció + dialog-zárás.
-- [ ] **M9.2** (opcionális) chip-context akció `GridView.tsx`-ben editor-nyitás nélkül.
+### M9 — MC archive/delete edit módban: már megoldott, csak a súgószöveg hiányos (user-döntés, 2026-09-10)
+Az edit-mode panel Delete gombja archivál vagy töröl (M10 dialog), tehát az MC archiválás use-case-e **megvan** — az egykori M9.1 (külön Archive gomb a `MessageEditor` headerben) **kikerül**, nem építjük.
+- [ ] **M9.1** `EditModePanel.tsx:40` súgószöveg bővítése: „Add / duplicate topics and audiences; add, copy and move Messaging Cards." → vegye fel, hogy **MC delete és archive** is edit módban érhető el (a Delete gomb dialogja dönt). Copy-only, semmi logika.
 - [ ] **M9.3** (szomszédos, külön commit) audience/topic Archive-akció a `DimensionEditPanel`-be — a restore route-ok + editor-szintű showArchived már élnek, csak a panel kínál ma kizárólag hard-delete-et.
 
 ### M10 — Bulk Delete az edit-mode panelben: Archive **vagy** Delete dialog (✅ KÉSZ, 6.22.0, 2026-08-17)
@@ -207,10 +206,8 @@ Reuse: a `keywords/reorder` minta (`reorderKeywords` `entities/keywords.ts:190` 
   - [x] **M11.6** CHANGELOG + bump **minor `6.22.2` → `6.23.0`** + component-inventory (`matrix-grid__row-reorder`/`__col-reorder`/`__reorder-overlay`/`__hide-inactive`).
 - **Fázis 2 — nonDCO SZINTETIZÁLT topic-sorok sorrendje (⚠️ ÚJ TÁROLÁSI RÉTEG — push-back-first):** a nonDCO topic-sorok a `message.topic` keywordből szintetizálódnak menet közben (`MatrixGrid nonDcoTopics`, 6.18.0 óta nincsenek a `topics` táblában), nincs `orderIndex`-ük. Sorrend-mentéshez **új overlay-tábla kell** (`matrix_row_order(clientId, axis, rowKey, orderIndex)`, `0007+` migráció, deploy egy passzban). A user kérte ("handle mindenhol"), de ez külön epic — **3-kérdéses push-back kell (tényleg kell perzisztens sorrend a szintetizált soroknak? legolcsóbb 80% = kliens-oldali localStorage-order? build vs outcome?) MIELŐTT tábla születik.** Fázis 1 leszállítása után külön green-light.
 
-### W2.6 + W2.7 — Unmatrixed filter pill + badge (Creative Library)
-Cél: uploaded creative-ek MC-link nélkül láthatóak/szűrhetőek legyenek. (A link-mezők + a `CreativeDetailDialog` szerkesztés már él — csak a szűrő/badge hiányzik.)
-- [ ] **W2.6** `All | Matrixed | Unmatrixed` pill a `CreativeLibrary` toolbarba (`:821-823` mellé), meglévő toolbar-pill stílus. Logika: `kind==='uploaded' && (mcNumber==null || mcVariant==null)`; persist `mm6_creative_library_match_filter`; `(N)` count.
-- [ ] **W2.7** `status-badge--unmatrixed` sarok-badge a tile-on (látszik "All"-ban is).
+### W2.6 + W2.7 — Unmatrixed filter pill + badge (Creative Library) (❌ KIVÉVE, user-döntés 2026-09-10)
+Nem építjük: „unmatrixed" kreatív fogalmilag már nincs. Az Agentic nézetben minden feltöltött kreatív besorolódik egy channel-struktúrájú külön mátrixba; a DCO és az Agentic mátrix nem keveredik többé, így nincs MC-link nélkül lógó feltöltés, amit szűrni vagy jelölni kellene.
 
 ### D1 — Státusz-szűrő: MC-darabszám opciónként a szűrt eredményben (✅ KÉSZ, 6.31.0, 2026-08-30)
 Cél: a Status legördülőben minden opció jobb szélén **kis szürke szám** = hány MC esik arra a státuszra a JELENLEGI szűrt eredményben. Nem pill, nem badge (a pill a gombon már megvan) — csak jobbra igazított `text-xs text-slate-400`.
@@ -358,6 +355,11 @@ A workflow-agent ma vagy `read` (semmit nem tud létrehozni), vagy `full` (a tel
 Miért ez a helyes gránulátum: a draft már ma is egy `messages` sor `audience IS NULL`-lal, tehát a „mit írhat" kérdésre **létező invariáns** válaszol — nem kell új jogosultsági fogalom, csak a meglévőt kell a token-scope-hoz kötni.
 
 
+### M12 — Mátrix szűrő-pillek: kijelölt érték a pillben + product tag a sor/oszlop-fejléceken (user, 2026-09-10)
+Apróságok, screenshotból (`/matrix`, Product + Status `multi-pill`):
+- [ ] **M12.1** Ha a Product vagy Status pillben **1–2 elem** van kijelölve, a `multi-pill__badge` szám helyett a **kijelölt értékeket** írjuk ki a pillbe (pl. `HK, SZK` / `ACTIVE, PREVIEW`). **3+** kijelölésnél marad a szám-badge. Mindkét pillre ugyanaz a szabály (közös `MultiPill` prop, ne két külön logika).
+- [ ] **M12.2** Ha **több product** van kijelölve, az **audience oszlop-fejléc** és a **topic sor-fejléc** elejére (a név elé) **product tag** kerül, hogy látsszon melyik termékhez tartozik. Vizuál = a draft-kártya `tag-chip drafts-tile__product` pillje (sötét `bg-slate-800 text-white`, `text-[10px]`) — reuse, ne új család. **Minden density-ben ott legyen, a dense-ben is.** Egy product kijelölésnél (vagy szűrő nélkül, ha egy termék látszik) nem kell.
+
 ### M1 — Matrix "Color by" (Strategy | Platform | Both)
 Cél: audience-oszlopok színezése strategy/platform szerint, legenddel.
 - [ ] **M1.1** `Color by: None|Strategy|Platform|Both` dropdown a `MatrixToolbar`-ba; persist `mm6_matrix_color_by`.
@@ -368,8 +370,8 @@ Cél: audience-oszlopok színezése strategy/platform szerint, legenddel.
 - [x] **M4.1 (✅ KÉSZ, 6.24.0, 2026-08-25)** Él-rail crosshair, NEM state-alapú. Imperatív (`GridView.paintCrosshair` + delegált `onMouseOver`/`onMouseLeave` a `<table>`-ön, ref) → hoverkor nincs grid-újrarajzolás. `data-col-key`/`data-row-key` a 2 header-`<th>`-re + mindkét cella-`<td>`-re; a `c`+`c-1` oszlop `border-right`-ja és a `r`+`r-1` sor `border-bottom`-ja kap `--mx-cross` színt (`matrix-grid__x--edge-r`/`--edge-b`, unlayered CSS). Csak meglévő border SZÍNE vált → **0 layout-shift**, `transition: border-color 140ms` → nem villódzik. Edit módban is megy (border-color ≠ ring box-shadow). Header-hover = csak az az oszlop/sor. Korlát: legszélső bal oszlop / legfelső sor külső élét a sticky header adja (nincs `c-1`/`r-1`).
 - [ ] **M4.2** Click-to-pin: kattintásra pinnel escape/újraklikkig; a chip-open klikket nem nyeli el. ⚠️ OPEN Q: pin+hover mindkettő.
 
-### M5 — Detail-view audience header: strategy tag + lineitem_id
-- [ ] **M5.1** `MessageEditor` header (`:499-625`): `strategy` pill + `lineitemId` (ha van) az MC-label mellé; a ma Naming-tabon rejtett infó (`audienceRows` `:946,:950`) felhozva; status-badge stílus reuse.
+### M5 — Detail-view audience header: strategy tag + lineitem_id (❌ KIVÉVE, user-döntés 2026-09-10)
+Nem építjük: a `MessageEditor` Naming fülén már ott a properties panel, a strategy és a lineitem_id ott látszik — nem kell a headerbe kiemelni.
 
 ### M6 — Detail-view: teljes key helyett product + tag pillék
 - [ ] **M6.1** `NamingTab` disabled full-key inputjai (`:914-931`) helyett dekompozíció a betöltött rekordból (nincs key-parser). Topic: `product`+`tag1..4` (üres elhagyva). Audience: `product`+`strategy`+`buyingPlatform`+`device`+`tag`. ⚠️ OPEN Q: audience-mezőkészlet.
@@ -2177,3 +2179,83 @@ workflow közepén fog kiderülni.
 **Bump-megjegyzés:** felhasználó által látható viselkedésváltozás → minor. Patch is védhető lett volna (pár órája szállított feature csiszolása) — a magasabbat választottam, ahogy a CLAUDE.md kéri kétes esetben.
 
 **DEPLOYOLVA 6.72.0 (2026-09-07):** commit `e1886f7`, box `c4d82e5`→`e1886f7`, build 40s, `pm2 restart mm6-erste --update-env` → Ready 1443ms. Séma-migráció nincs. **Böngészőben ellenőrizve:** a meta egy sor mind a 9 kártyán (`MC404a [SZK] BlackFriday 2026 Q4`, a hosszabb nevek „…"-tal csonkolva), a négy üres draft a 300×250-es „No content yet" dobozt kapja, az öt tartalommal bíró élőben renderel.
+
+### 2026-09-10 — dashboard: friss adat kattintásra + „ebben a hónapban még nincs riport" (TERV, jóváhagyásra vár)
+
+**User (két kérés, egy képernyő):**
+1. „frissítési gond volt, kéne hogy ha átkattintok akkor reload nélkül is frissüljön"
+2. „ha szeptemberi időszakban vagyunk sept 4-10 ig akkor azt kéne mutassa … hogy szeptemberre nincs adatunk, még akkor is ha mutatja a multat ami jó, de kéne ott egy szeptember oszlop hogy üres"
+
+**Gyökérok (1) — nem cache-bug.** A `staleTimes.dynamic` alapértéke a Next 15.5-ben `0`
+(`node_modules/next/dist/server/config-shared.js:203`), a `/` ráadásul `force-dynamic`
+(`src/app/(app)/page.tsx:63`), tehát appon belüli navigációnál a szerver úgyis újrarenderel.
+Ami tegnap megfogott: **a fül órákig nyitva állt, és a napi horgony a URL-be van fagyasztva**
+(`?d=2026-09-09&r=7d`). Éjfél után ugyanaz a URL már a *tegnapi* ablakot kéri — a ma készült
+MC-k nem hiányoztak, csak kívül estek. A cookie ezt jól kezeli (`dashboard-view.ts`: „a CHOSEN
+VIEW, nem egy befagyasztott dátum"), a nyitva felejtett fül URL-je nem.
+
+- [x] `_dashboard/DashboardLiveRefresh.tsx` (client, semmit nem renderel): `visibilitychange` →
+      ha a URL `d`-je < mai UTC nap, `router.replace` a mai horgonyra (a `r`/`p`/`cs`
+      paramétereket megtartva); egyébként `router.refresh()`.
+- [x] Nincs interval, nincs polling — a kiváltó ok a fül visszafókuszálása, nem az idő múlása.
+      Csak `visibilitychange`: egy eseményt hallgat, így nincs mit deduplikálni (a `focus`
+      ugyanarra a fülváltásra másodszor is tüzelne).
+- [x] Csak a dashboardon (user: „Csak a dashboardon"). A Matrix / Creative Library szerkesztési
+      állapotot tart; ott egy magától érkező refresh kockázat, nem szolgáltatás.
+
+**Gyökérok (2).** `monthlyDelivery` (`src/lib/dashboard-monitoring.ts:33`) azt a néhány perió­dust
+adja vissza, ami a `monitoring`-ban **létezik** — szeptemberi import nincs, így szeptemberi oszlop
+sincs. Mindkét csempe (`DeliveryTrend`, `CoverageTile`) a sor utolsó elemét tekinti „current"-nek,
+ezért az augusztus úgy néz ki, mintha a mostani hónap volna.
+
+- [x] `DeliveryMonth` kap egy `reported: boolean` mezőt; `monthlyDelivery` új 4. paramétere
+      (`throughMonth`, „YYYY-MM") a legutolsó importált periódus és a scope horgony-hónapja közti
+      naptári hónapokat **üres elemként** hozzáfűzi (`padMissingMonths`). A page a
+      `scope.date.slice(0, 7)`-et adja át.
+- [x] A fejszám (20.1M / 35%) **marad az utolsó importált hónapon** — a user szerint a múlt mutatása
+      jó. Mindkét csempében `measured = months.filter(m => m.reported)`, és a `latest` innen jön;
+      a coverage `0/0`-t sosem oszt.
+- [x] Az üres hónap oszlopa **nem 6%-os csonk** (az „majdnem nulla delivery"-t jelentene), hanem
+      szaggatott keretű, teljes magasságú placeholder; tooltip: „Sep 2026: not imported".
+      A tengelyfelirat `text-slate-300`. A hint mondatban is ki van mondva:
+      „impressions · Aug 2026 vs Jul · no Sep data yet".
+- [x] Új szemantikus nevek a `component-inventory.md`-ben: `delivery-trend__bar--missing`,
+      `coverage-tile__bar--missing`.
+- [x] 4 új teszt a `tests/integration/dashboard-monitoring.test.ts`-ben (kitöltés, évforduló,
+      „a scope hónapja ≤ utolsó import → nincs padding", „nincs import → nincs horgony").
+      13/13 zöld.
+
+**Döntés (user, 2026-09-10):** a feltöltés a *scope* horgony-hónapjáig megy — júniusra
+visszalapozva nincs padding, a csempe azt mutatja, ami akkor igaz volt.
+
+**Nyitva:** a lokális prod buildet böngészőben nem néztem meg (a login a userre tartozik);
+`npm run build` + `tsc` + `eslint` + a 13 teszt zöld.
+
+### 2026-09-10 — draft variánsok + Creative Library mint a draft anyagtára (TERV jóváhagyva)
+
+Teljes terv: `~/.claude/plans/v-rjunk-m-g-van-m-g-jiggly-storm.md`. User-döntések: a draft **nyitva marad indexként**
+(nincs auto-promote/archiválás), a `target` **átkerül a Brief fülre**, variáns-létrehozás **két akció**
+(duplicate / empty), cover **csak 300×250**, egyébként „No 300×250 agentic preview yet".
+
+- [x] **Slice 1 — `promoteDraft` guardok** (séma nélkül, UI nélkül): cross-topic szám-guard (axis-scoped,
+      `sameAxisAs`) + archivált-iker guard. Előbb megy ki, mint a Slice 2, mert az teszi elérhetővé őket.
+- [x] **Slice 2 — MC404b**: `createDraft` `requestedNumber`, `createDraftVariant(mode)`, `POST /api/drafts`
+      `{ from_draft_id, mode }`, két gomb a Brief fülön, Delete-copy javítás több draft esetén.
+- [x] **Slice 3 — `draft_target`**: 0018 migráció + check constraint, plumbing, szegmentált vezérlő a Brief
+      fülön, a Promote fül olvassa (read-only sorral).
+- [x] **Slice 4a — matched adat + Promote fül**: `listCreativeMatchesForMcs`, additív `matches` a
+      `/api/creatives/by-mc`-n és a `/api/drafts`-on, számláló + bélyegkép-sor.
+- [x] **Slice 4b — fal + jobb panel**: kártya-cover szabály, sarok-badge, editor jobb panel library-preview.
+
+**Mind az öt szelet leszállítva, 6.73.0 (2026-09-10).** `npm test` 871/871 (92 fájl, ebből új:
+`draft-target`, `creative-matches`, `api/drafts-variant`, plusz 9 új eset a `draft-lifecycle`-ben),
+`tsc` + `eslint` + `next build` tiszta.
+
+⚠️ **Deploy-figyelmeztetés: séma-migráció VAN (`0018_jazzy_steel_serpent.sql`).** A dev a *közös*
+Hetzner Postgresre néz, tehát amíg a migráció nem futott, **sem lokálisan, sem élesben nem indul**
+a `messages`-t olvasó lekérdezés (`column "draft_target" does not exist`). Egy passzban, a boxon:
+`export $(grep '^DATABASE_URL=' .env | xargs) && npm run db:migrate` → build → `pm2 restart
+mm6-erste --update-env`. Az oszlop nullable + check, a régi kód sosem írja, tehát a migráció
+önmagában ártalmatlan a futó verzióra.
+
+**A dashboard-szelet (üres hónap-oszlop + fókusz-frissítés) ugyanebben a bumpban ment.**

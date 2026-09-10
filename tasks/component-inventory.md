@@ -837,6 +837,12 @@ A régi `draft_messages`-alapú változat blokk-nevei nagyrészt megmaradnak, de
 - Megszűnt: `drafts-tile__topic` — a draft munkacíme nem tény, a Promote fül Topic-hintjében él tovább.
 - `brief-tab__reserved-note` — a Brief fül draft-only intake-blokkjának bevezető sora („MC400a is already reserved…"), a Promote fülről ideköltözve. Vele jött a Draft name + Product `form-field` is; placed kártyán az egész blokk hiányzik (`intake` prop nélkül).
 
+- `brief-tab__target` — a DCO / Agentic / Both szegmentált vezérlő (globális `tab-bar tab-bar--segmented` + `tab-bar__tab` / `--active`), a Promote fülről ideköltözve. Nem a hely változott csak: itt **döntés**, ami eldönti, melyik preview megy a kártyára és a jobb panelre. `null` = egyik pill sem aktív (a mező előtti draftok őszinte állapota).
+- `brief-tab__variant` — két `toolbar-btn` egy sorban: `Duplicate as variant` / `New empty variant`. Draft-only, ugyanabban az intake-blokkban. A falon szándékosan NINCS párja: a csempe maga egy `<button>`, és a meta sora egysoros.
+- `promote-tab__target` — a Target **olvasható** sora a Promote fülön (a vezérlő helyén), hogy a költözés nyomot hagyjon.
+- `promote-tab__matched` + `__matched-count` / `__matched-strip` / `__matched-thumb` — „Creative library matched": `tabular-nums` számláló (`N matched · M videos`) és vízszintesen görgethető 64px-es bélyegkép-sor; videónál `<video …#t=0.1>` poszter, képnél `/api/files/{id}/thumbnail?w=96` — a Creative Library csempéivel azonos ág. Üres állapot a globális `empty-state` hangnemben.
+- `drafts-tile__library-cover` — a csempe médiája, ha a draft Agentic/Both és van hozzá **300×250** a Creative Libraryban: `aspect-[300/250]` + `object-cover`. Csak ez a méret veheti át a rendert; egyéb esetben a `drafts-tile__placeholder` mondja ki („No 300×250 agentic preview yet").
+- `drafts-tile__matched` — sarok-badge a médián (`status-badge`, `bg-slate-900/80`, `tabular-nums`): hány library-fájl viszi ezt az MC-t, videószámmal. A régi `drafts-tile__promoted` helyén; nem második meta sor.
 **Inactive header jelölés a mátrixban (2026-08-14):**
 - `matrix-grid__col-header-label--inactive` / `matrix-grid__row-header-label--inactive` — INACTIVE státuszú audience/topic fejléc-szövege halványszürke (dense függőleges labelre is). Csak a szöveg halványul, a cella/fejléc háttere változatlan.
 - `text-text-disabled` — új globális text-token (`--text-disabled`: light `#cccccc` / dark `#4d4d4d`), a tertiary-nél egy fokkal halványabb, inaktív/de-emphasized tartalomra. Első használó: az inactive mátrix-fejlécek.
@@ -915,8 +921,8 @@ A lap gyökere `dashboard`. Meglévő névből vettük: `toolbar-btn` (nap-lépt
 | Az aktuális nap kiírva | `day-scope__date` | mono, `YYYY-MM-DD UTC` |
 | Felső jelző-csempe sor | `dashboard__signals` | 3 csempe: delivery-trend, coverage, reporting-freshness |
 | Egy jelző-csempe | `signal-tile` + `__label` / `__value` / `__hint` | `href`-fel linkké válik; tónus: ok / warn (amber) / muted |
-| Delivery-trend csempe | `delivery-trend` + `__delta` / `__chart` / `__bar` (`--current`) / `__axis` | a `signal-tile` dobozában él; HAVI grain, nem követi a nap-scope-ot; oszlopmagasság = adat, ezért inline `style` |
-| Matrix-lefedettség csempe | `coverage-tile` + `__chart` / `__bar` (`--current`) / `__axis` | ugyanaz az oszlop-nyelv, de fix 0–100 %-os skálán; `--current` amber, ha < 50 % |
+| Delivery-trend csempe | `delivery-trend` + `__delta` / `__chart` / `__bar` (`--current`, `--missing`) / `__axis` | a `signal-tile` dobozában él; HAVI grain, nem követi a nap-scope-ot; oszlopmagasság = adat, ezért inline `style`. `--missing` = még nem importált naptári hónap: szaggatott, teljes magasságú keret, **nem** rövid oszlop (az „majdnem nulla delivery"-t jelentene) |
+| Matrix-lefedettség csempe | `coverage-tile` + `__chart` / `__bar` (`--current`, `--missing`) / `__axis` | ugyanaz az oszlop-nyelv, de fix 0–100 %-os skálán; `--current` amber, ha < 50 %; `--missing` a delivery-csempével azonos szaggatott placeholder |
 | Két-hasábos törzs | `dashboard__columns` | `items-start` — a rövidebb panel nem nyúlik |
 | Panel keret (cím + hint + „Open →") | `panel` + `__header` / `__title` / `__hint` / `__link` | a dashboard általános doboza |
 | Activity aggregátum lista | `activity-digest` + `__row` / `__action` / `__entity` / `__actors` / `__count` | entity × action, darabszámmal |

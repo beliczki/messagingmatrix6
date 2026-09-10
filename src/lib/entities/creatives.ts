@@ -1,7 +1,9 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { creatives, nowUtc, type Creative } from "@/db/schema";
+import { creatives, nowUtc, uploadedFiles, type Creative } from "@/db/schema";
 import { parseDriveFolderId } from "@/lib/drive-link";
+import { parseCreativeFilename } from "@/lib/parse-creative-filename";
+import { mediaKindFromFilename } from "@/lib/parse-filename";
 
 export class CreativeError extends Error {}
 
@@ -82,6 +84,118 @@ export async function listCreativesByMc(
       ),
     )
     .orderBy(creatives.id);
+}
+
+/** One delivered file, as a draft card and the Promote tab need to show it. */
+export type McCreativeItem = {
+  id: number;
+  fileId: string | null;
+  fileName: string | null;
+  dimensions: string | null;
+  isVideo: boolean;
+};
+
+/** What the Creative Library holds for one MC. */
+export type McCreativeMatch = {
+  total: number;
+  videoCount: number;
+  /**
+   * The 300x250 file, and ONLY that one. A card's cover is a 300x250 slot, and
+   * dropping a 1080x1080 into it says "here is the creative" while showing a
+   * crop of a different format. No match ⇒ the card says so instead.
+   */
+  cover: McCreativeItem | null;
+  items: McCreativeItem[];
+};
+
+/** The size a cover has to be to stand in for the card's own render. */
+export const COVER_SIZE = "300x250";
+
+/**
+ * What the Creative Library holds for a set of MCs, in ONE query.
+ *
+ * The drafts wall asks this for every card it shows, so a per-card lookup
+ * (listCreativesByMc in a loop) would be one request per tile. The pair-OR
+ * shape is `attachTopics`' (dashboard-creatives.ts), and it rides the
+ * `creatives_client_mc_idx` index on (clientId, mcNumber, mcVariant).
+ *
+ * Unbounded reads have to answer the 1000-row truncation question: this one is
+ * bounded by its INPUT — tens of open drafts, each matching a handful of
+ * delivered files — so there is nothing to paginate. It must never be called
+ * with an unbounded pair list.
+ */
+export async function listCreativeMatchesForMcs(
+  clientId: number,
+  pairs: ReadonlyArray<{ number: number; variant: string }>,
+): Promise<Map<string, McCreativeMatch>> {
+  const out = new Map<string, McCreativeMatch>();
+  if (pairs.length === 0) return out;
+
+  const rows = await db
+    .select({
+      id: creatives.id,
+      number: creatives.mcNumber,
+      variant: creatives.mcVariant,
+      fileId: creatives.fileId,
+      fileName: creatives.fileName,
+      fileDimensions: creatives.fileDimensions,
+      mimeType: uploadedFiles.mimeType,
+    })
+    .from(creatives)
+    .leftJoin(uploadedFiles, eq(creatives.fileId, uploadedFiles.id))
+    .where(
+      and(
+        eq(creatives.clientId, clientId),
+        isNull(creatives.archivedAt),
+        or(
+          ...pairs.map((p) =>
+            and(
+              eq(creatives.mcNumber, p.number),
+              eq(creatives.mcVariant, p.variant),
+            ),
+          ),
+        ),
+      ),
+    )
+    .orderBy(creatives.id);
+
+  for (const r of rows) {
+    if (r.number === null) continue;
+    const key = `${r.number}|${r.variant ?? ""}`;
+    const match =
+      out.get(key) ??
+      ({ total: 0, videoCount: 0, cover: null, items: [] } as McCreativeMatch);
+
+    // The FILENAME's declared size wins over the measured one — the same
+    // fallback ensureAgenticMc uses. This is what makes a video visible at
+    // all: sharp only measures images, so a video's fileDimensions is always
+    // null while its name carries the size it was cut to.
+    const dimensions = r.fileName
+      ? (parseCreativeFilename(r.fileName).declaredDimensions ??
+        r.fileDimensions)
+      : r.fileDimensions;
+    // A creative linked only to Drive has no uploaded file to read a mime type
+    // off, so the name answers instead.
+    const isVideo = r.mimeType
+      ? r.mimeType.startsWith("video/")
+      : r.fileName
+        ? mediaKindFromFilename(r.fileName) === "video"
+        : false;
+
+    const item: McCreativeItem = {
+      id: r.id,
+      fileId: r.fileId,
+      fileName: r.fileName,
+      dimensions,
+      isVideo,
+    };
+    match.items.push(item);
+    match.total += 1;
+    if (isVideo) match.videoCount += 1;
+    if (match.cover === null && dimensions === COVER_SIZE) match.cover = item;
+    out.set(key, match);
+  }
+  return out;
 }
 
 export async function getCreative(

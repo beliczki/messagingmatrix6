@@ -5,6 +5,7 @@ import { clients, audiences, topics, channels, messages } from "@/db/schema";
 import {
   copyMessages,
   createDraft,
+  createDraftVariant,
   createMessage,
   deleteDraft,
   promoteDraft,
@@ -71,6 +72,99 @@ describe("createDraft", () => {
     await expect(
       createDraft(erste.id, { status: "ACTIVE" }),
     ).rejects.toThrow(/status is DRAFT/);
+  });
+});
+
+describe("createDraftVariant", () => {
+  it("sits beside the source under the same number, next letter", async () => {
+    const a = await createDraft(erste.id, { name: "EasyPay", headline: "Hi" });
+    const b = await createDraftVariant(erste.id, a.id);
+    expect(b).toMatchObject({
+      number: a.number,
+      variant: "b",
+      status: "DRAFT",
+      audience: null,
+      pmmid: null,
+    });
+  });
+
+  it("duplicate carries the creative across; empty carries only the frame", async () => {
+    const a = await createDraft(erste.id, {
+      name: "EasyPay",
+      headline: "Hi",
+      copy1: "Body",
+      draftProduct: "HK",
+      briefSlidesFileId: "deck-1",
+    });
+
+    const dup = await createDraftVariant(erste.id, a.id, "duplicate");
+    expect(dup).toMatchObject({
+      headline: "Hi",
+      copy1: "Body",
+      draftProduct: "HK",
+      briefSlidesFileId: "deck-1",
+    });
+
+    const empty = await createDraftVariant(erste.id, a.id, "empty");
+    expect(empty).toMatchObject({
+      headline: null,
+      copy1: null,
+      name: null,
+      draftProduct: "HK",
+      briefSlidesFileId: "deck-1",
+      template: a.template,
+    });
+  });
+
+  it("skips a letter a Creative Library upload already minted", async () => {
+    const a = await createDraft(erste.id);
+    // What ensureAgenticMc does when ERSTE_..._MC404_b_..._1080x1080.png lands:
+    // a live Agentic row under the draft's number, carrying the letter "b".
+    await db.insert(messages).values({
+      clientId: erste.id,
+      number: a.number,
+      variant: "b",
+      audience: "ch_disp",
+      topic: "VAL_from_filename",
+      status: "ACTIVE",
+      versionNo: 1,
+      pmmid: `p_-a_ch_disp-m_${a.number}-v_b`,
+    });
+
+    const next = await createDraftVariant(erste.id, a.id);
+    expect(next.variant).toBe("c");
+  });
+
+  it("refuses a source that is already in the matrix", async () => {
+    const a = await createDraft(erste.id);
+    await promoteDraft(erste.id, a.id, {
+      audienceKey: "SZK_visitors",
+      topicKey: "SZK_brand",
+    });
+    await expect(createDraftVariant(erste.id, a.id)).rejects.toThrow(
+      /not a draft/,
+    );
+  });
+
+  it("refuses a bare number no draft is holding", async () => {
+    await expect(
+      createDraft(erste.id, {}, { requestedNumber: 9999 }),
+    ).rejects.toThrow(/not held by a draft/);
+  });
+
+  it("keeps the number reserved when one of two variants is deleted", async () => {
+    const a = await createDraft(erste.id);
+    const b = await createDraftVariant(erste.id, a.id);
+    await deleteDraft(erste.id, b.id, b.version);
+
+    // The surviving sibling still holds it — the delete freed a row, not a number.
+    await expect(
+      createMessage(
+        erste.id,
+        { audience: "SZK_visitors", topic: "SZK_brand" },
+        { requestedNumber: a.number },
+      ),
+    ).rejects.toThrow(/reserved by a draft/);
   });
 });
 
@@ -226,6 +320,88 @@ describe("promoteDraft", () => {
       topicKey: "SZK_brand",
     });
     expect(promoted.variant).toBe("b");
+  });
+
+  // Two drafts on one number is what Slice 2 (draft variants) makes possible;
+  // until then the fixture arranges it by hand, exactly as the variant-bump
+  // test above does.
+  async function draftOnNumber(number: number) {
+    const d = await createDraft(erste.id);
+    await db.update(messages).set({ number }).where(eq(messages.id, d.id));
+    return { ...d, number };
+  }
+
+  it("refuses a second draft of the same number into a different topic on the same axis", async () => {
+    const first = await createDraft(erste.id);
+    await promoteDraft(erste.id, first.id, {
+      audienceKey: "SZK_visitors",
+      topicKey: "SZK_brand",
+    });
+
+    const second = await draftOnNumber(first.number);
+    await expect(
+      promoteDraft(erste.id, second.id, {
+        audienceKey: "SZK_lookalike",
+        topicKey: "SZK_offer",
+      }),
+    ).rejects.toThrow(/never spans topics/);
+  });
+
+  it("allows the same number into another topic on the OTHER axis", async () => {
+    const first = await createDraft(erste.id);
+    await promoteDraft(erste.id, first.id, {
+      audienceKey: "SZK_visitors",
+      topicKey: "SZK_brand",
+    });
+
+    // The Agentic mirror a Creative Library upload mints lands in its own
+    // filename-derived topic — refusing this would break the very workflow the
+    // guard is meant to protect.
+    const second = await draftOnNumber(first.number);
+    const promoted = await promoteDraft(erste.id, second.id, {
+      audienceKey: "ch_disp",
+      topicKey: "SZK_offer",
+    });
+    expect(promoted).toMatchObject({
+      number: first.number,
+      audience: "ch_disp",
+      topic: "SZK_offer",
+    });
+  });
+
+  it("still allows the second draft into the topic the number already lives in", async () => {
+    const first = await createDraft(erste.id);
+    await promoteDraft(erste.id, first.id, {
+      audienceKey: "SZK_visitors",
+      topicKey: "SZK_brand",
+    });
+
+    const second = await draftOnNumber(first.number);
+    const promoted = await promoteDraft(erste.id, second.id, {
+      audienceKey: "SZK_lookalike",
+      topicKey: "SZK_brand",
+    });
+    expect(promoted.topic).toBe("SZK_brand");
+  });
+
+  it("refuses to promote a twin of an archived row in the target cell", async () => {
+    const first = await createDraft(erste.id);
+    const placed = await promoteDraft(erste.id, first.id, {
+      audienceKey: "SZK_visitors",
+      topicKey: "SZK_brand",
+    });
+    await db
+      .update(messages)
+      .set({ archivedAt: "2026-09-10 00:00:00" })
+      .where(eq(messages.id, placed.id));
+
+    const second = await draftOnNumber(first.number);
+    await expect(
+      promoteDraft(erste.id, second.id, {
+        audienceKey: "SZK_visitors",
+        topicKey: "SZK_brand",
+      }),
+    ).rejects.toThrow(/exists archived in this cell/);
   });
 
   it("refuses a topic that does not exist — promotion may not mint topics", async () => {

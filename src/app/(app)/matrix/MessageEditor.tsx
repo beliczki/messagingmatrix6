@@ -100,6 +100,12 @@ type Props = {
   onJump: (id: number) => void;
   /** Drafts only: promoting leaves the drafts list, so the page can refresh. */
   onPromoted?: () => void;
+  /**
+   * Drafts only: create another draft under this one's number and open it.
+   * The page owns it because the new row has to be in the list before the
+   * editor can resolve it (the editor reads its row out of visibleMessages).
+   */
+  onAddVariant?: (mode: "duplicate" | "empty") => Promise<void>;
 };
 
 type EditableFields = Pick<
@@ -137,6 +143,7 @@ type EditableFields = Pick<
   | "briefSlidesFileId"
   | "briefSlideId"
   | "draftProduct"
+  | "draftTarget"
 >;
 
 const EDITABLE_KEYS: Array<keyof EditableFields> = [
@@ -171,6 +178,7 @@ const EDITABLE_KEYS: Array<keyof EditableFields> = [
   "briefSlidesFileId",
   "briefSlideId",
   "draftProduct",
+  "draftTarget",
 ];
 
 // The tabs receive the real state setter so field updates can use the
@@ -219,6 +227,7 @@ export default function MessageEditor({
   onClose,
   onJump,
   onPromoted,
+  onAddVariant,
 }: Props) {
   const [tab, setTab] = useState<Tab>("naming");
   const [draft, setDraft] = useState<EditableFields | null>(null);
@@ -246,6 +255,7 @@ export default function MessageEditor({
     });
   }
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
+  const [variantBusy, setVariantBusy] = useState<boolean>(false);
   const [splitPercent, setSplitPercent] = useState<number>(50);
   const [previewSize, setPreviewSize] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -592,6 +602,13 @@ export default function MessageEditor({
   if (!open || !message || !draft) return null;
 
   const mcLabel = `MC${message.number}${message.variant}`;
+  // Other DRAFTS on this number, from the list the page already handed us — a
+  // number with a second draft does not come back when one of them is deleted,
+  // and the Delete button must not promise otherwise.
+  const siblingDraftCount = visibleMessages.filter(
+    (m) =>
+      m.audience === null && m.number === message.number && m.id !== message.id,
+  ).length;
 
   return (
     <>
@@ -815,6 +832,7 @@ export default function MessageEditor({
                   draft={message}
                   audiences={audiences}
                   topics={topics}
+                  siblingDraftCount={siblingDraftCount}
                   onDone={() => {
                     onPromoted?.();
                     onClose();
@@ -859,6 +877,21 @@ export default function MessageEditor({
                             setDraft((prev) =>
                               prev ? { ...prev, draftProduct: product } : prev,
                             ),
+                          targetValue: draft.draftTarget,
+                          onTargetChange: (draftTarget) =>
+                            setDraft((prev) =>
+                              prev ? { ...prev, draftTarget } : prev,
+                            ),
+                          mcNumber: message.number,
+                          onAddVariant: onAddVariant
+                            ? (mode) => {
+                                setVariantBusy(true);
+                                void onAddVariant(mode).finally(() =>
+                                  setVariantBusy(false),
+                                );
+                              }
+                            : undefined,
+                          variantBusy,
                         }
                       : undefined
                   }
@@ -2083,9 +2116,23 @@ function MessagePreview({
       if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
       return r.json() as Promise<{
         sizes: { dimensions: string; fileName: string; type: string | null }[];
+        match: {
+          total: number;
+          videoCount: number;
+          items: {
+            id: number;
+            fileId: string | null;
+            fileName: string | null;
+            dimensions: string | null;
+            isVideo: boolean;
+          }[];
+        };
       }>;
     },
-    enabled: isStatic,
+    // Drafts ask too: an Agentic draft has no template to render, and what it
+    // is going to BE is the delivered file. The whole envelope is cached
+    // either way — the Promote tab reads `match` off this same key.
+    enabled: isStatic || message.audience === null,
   });
 
   // dim → fileName (first wins), largest area first for a sensible dropdown order.
@@ -2108,7 +2155,39 @@ function MessagePreview({
     "970x250",
     "1080x510",
   ];
-  const sizes = isStatic ? staticSizes : templateSizes;
+  // A DRAFT made for the Agentic world previews its delivered files, not a
+  // template it will never be rendered from. Same map shape as the static-MC
+  // switcher, so the size dropdown and PreviewPane need no new code path —
+  // PreviewPane already resolves a filename through /api/drive/proxy and
+  // branches image-vs-video on the name.
+  const draftTarget = draft.draftTarget ?? message.draftTarget ?? null;
+  const libraryItems = siblingsQ.data?.match.items ?? [];
+  const wantsLibrary =
+    message.audience === null &&
+    (draftTarget === "agentic" ||
+      draftTarget === "both" ||
+      (draftTarget === null && libraryItems.length > 0)) &&
+    libraryItems.length > 0;
+  const librarySizeMap = useMemo(() => {
+    const m = new Map<string, string>();
+    if (!wantsLibrary) return m;
+    const rows = [...libraryItems]
+      .filter((i) => i.dimensions && i.fileName)
+      .sort((a, b) => {
+        const ar = a.dimensions!.match(/^(\d+)x(\d+)$/);
+        const br = b.dimensions!.match(/^(\d+)x(\d+)$/);
+        return (br ? +br[1]! * +br[2]! : 0) - (ar ? +ar[1]! * +ar[2]! : 0);
+      });
+    for (const r of rows) if (!m.has(r.dimensions!)) m.set(r.dimensions!, r.fileName!);
+    return m;
+  }, [wantsLibrary, siblingsQ.data]);
+  const librarySizes = useMemo(() => [...librarySizeMap.keys()], [librarySizeMap]);
+
+  const sizes = isStatic
+    ? staticSizes
+    : wantsLibrary && librarySizes.length > 0
+      ? librarySizes
+      : templateSizes;
   const [size, setSize] = useState<string>(templateSizes[0] ?? "300x250");
   // Reset the selected size when the available set changes. In static mode
   // default to the size whose file IS the current image1 (else the first).
@@ -2285,7 +2364,13 @@ function MessagePreview({
       }}
       templateName={templateInfo?.name}
       templateMeta={templateMetaFor(templateInfo)}
-      staticImage={isStatic ? (staticSizeMap.get(size) ?? draftImage1) : null}
+      staticImage={
+        isStatic
+          ? (staticSizeMap.get(size) ?? draftImage1)
+          : wantsLibrary
+            ? (librarySizeMap.get(size) ?? null)
+            : null
+      }
     />
   );
 }

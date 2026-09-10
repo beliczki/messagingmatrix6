@@ -17,7 +17,12 @@ import {
  * Monthly, like its neighbour: it does not follow the day scope.
  */
 export default function CoverageTile({ months }: { months: DeliveryMonth[] }) {
-  const latest = months.length > 0 ? months[months.length - 1] : null;
+  // Same rule as the delivery tile beside it: a share is computed only from a
+  // month that was measured. A filled month carries zeros, and 0/0 is not 0%
+  // coverage — it is no coverage question at all.
+  const measured = months.filter((m) => m.reported);
+  const latest = measured.length > 0 ? measured[measured.length - 1] : null;
+  const missing = months.filter((m) => !m.reported).at(-1) ?? null;
 
   if (!latest || latest.impressions === 0) {
     return (
@@ -59,15 +64,27 @@ export default function CoverageTile({ months }: { months: DeliveryMonth[] }) {
         {compactNumber(latest.matchedImpressions)} of{" "}
         {compactNumber(latest.impressions)} impressions linked to an MC ·{" "}
         {monthLabel(latest.periodFrom)}
+        {missing ? ` · no ${monthLabel(missing.periodFrom, true)} data yet` : ""}
       </p>
       {/* Same bar grammar as the delivery tile next to it, so the row reads as
           one chart language. Fixed 0-100% scale here — a share is only
           meaningful against the whole, not against the best month. */}
       <div className="coverage-tile__chart mt-3 flex h-10 items-end gap-1">
-        {months.map((m, i) => {
+        {months.map((m) => {
+          if (!m.reported) {
+            // Dashed and full height, like the delivery tile's gap: a short bar
+            // would claim the month was measured and came back near zero.
+            return (
+              <div
+                key={m.periodFrom}
+                title={`${monthLabel(m.periodFrom)}: not imported yet`}
+                className="coverage-tile__bar coverage-tile__bar--missing h-full flex-1 rounded-sm border border-dashed border-slate-300"
+              />
+            );
+          }
           const pct =
             m.impressions > 0 ? (m.matchedImpressions / m.impressions) * 100 : 0;
-          const current = i === months.length - 1;
+          const current = m === latest;
           return (
             <div
               key={m.periodFrom}
@@ -85,7 +102,10 @@ export default function CoverageTile({ months }: { months: DeliveryMonth[] }) {
       </div>
       <div className="coverage-tile__axis mt-1 flex gap-1 text-[10px] text-slate-400">
         {months.map((m) => (
-          <span key={m.periodFrom} className="flex-1 text-center">
+          <span
+            key={m.periodFrom}
+            className={`flex-1 text-center ${m.reported ? "" : "text-slate-300"}`}
+          >
             {monthLabel(m.periodFrom, true)}
           </span>
         ))}

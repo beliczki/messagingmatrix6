@@ -193,4 +193,54 @@ describe("monthlyDelivery", () => {
   it("returns an empty series when nothing was ever imported", async () => {
     expect(await monthlyDelivery(erste.id)).toEqual([]);
   });
+
+  it("fills the months between the newest import and the scope month", async () => {
+    await db.insert(monitoring).values([
+      row({
+        periodFrom: "01/07/2026 00:00:00",
+        periodTo: "31/07/2026 23:59:59",
+      }),
+      row(),
+    ]);
+
+    const months = await monthlyDelivery(erste.id, 6, [], "2026-10");
+    expect(months.map((m) => [m.periodFrom.slice(0, 10), m.reported])).toEqual([
+      ["01/07/2026", true],
+      ["01/08/2026", true],
+      ["01/09/2026", false],
+      ["01/10/2026", false],
+    ]);
+    // A filled month is not a measurement: reading its zeros as delivery is
+    // exactly the misreport the flag exists to prevent.
+    expect(months[2]).toMatchObject({ impressions: 0, matchedImpressions: 0 });
+  });
+
+  it("crosses the year end when filling", async () => {
+    await db.insert(monitoring).values([
+      row({
+        periodFrom: "01/12/2026 00:00:00",
+        periodTo: "31/12/2026 23:59:59",
+      }),
+    ]);
+
+    const months = await monthlyDelivery(erste.id, 6, [], "2027-02");
+    expect(months.map((m) => m.periodFrom.slice(0, 10))).toEqual([
+      "01/12/2026",
+      "01/01/2027",
+      "01/02/2027",
+    ]);
+  });
+
+  it("pads nothing when the scope month is at or before the newest import", async () => {
+    await db.insert(monitoring).values([row()]);
+
+    expect(await monthlyDelivery(erste.id, 6, [], "2026-08")).toHaveLength(1);
+    // Browsing back to June must show what was true in June, not today's gap
+    // back-dated onto it.
+    expect(await monthlyDelivery(erste.id, 6, [], "2026-06")).toHaveLength(1);
+  });
+
+  it("has no anchor to pad from when nothing was imported", async () => {
+    expect(await monthlyDelivery(erste.id, 6, [], "2026-09")).toEqual([]);
+  });
 });

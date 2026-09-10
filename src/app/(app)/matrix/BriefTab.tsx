@@ -17,7 +17,8 @@
 // (passed in as `intake`, which a placed card simply does not have) because
 // they answer the same question the slide does. Promote is left with WHERE.
 import { useEffect, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { CopyPlus, ExternalLink, FilePlus2 } from "lucide-react";
+import clsx from "clsx";
 import Field from "./EditorField";
 import {
   parseSlideAnchor,
@@ -33,6 +34,17 @@ export type BriefFields = {
   briefSlidesFileId: string | null;
   briefSlideId: string | null;
 };
+
+// The three worlds a draft can be made for. This control used to live on the
+// Promote tab, where it only chose which audience list to show. It belongs
+// here because it decides something earlier and larger: which preview the card
+// shows — the HTML render, or the file delivered to the Creative Library — on
+// the wall and in this editor, long before anyone promotes anything.
+const TARGETS = [
+  { key: "dco", label: "DCO" },
+  { key: "agentic", label: "Agentic" },
+  { key: "both", label: "Both" },
+] as const;
 
 /** The canonical link for what is stored, so the field shows the saved state. */
 function linkFor(fileId: string | null, slideId: string | null): string {
@@ -57,6 +69,18 @@ export type BriefIntake = {
   /** The product vocabulary the dimensions already use. */
   productOptions: string[];
   onProductChange: (product: string | null) => void;
+  /** `draftTarget` from the live edit state. NULL = not decided yet. */
+  targetValue: string | null;
+  onTargetChange: (target: string) => void;
+  /** "404" — the number the new variant will share. */
+  mcNumber: number;
+  /**
+   * Add a second draft under the same number (MC404a → MC404b). Omitted where
+   * the surface cannot navigate to the row it creates.
+   */
+  onAddVariant?: (mode: "duplicate" | "empty") => void;
+  /** True while a variant is being created, so the pair can't be double-fired. */
+  variantBusy?: boolean;
 };
 
 export default function BriefTab({
@@ -150,6 +174,57 @@ export default function BriefTab({
               ))}
             </select>
           </Field>
+
+          <Field
+            label="Target"
+            hint="What this draft is being made for. DCO renders the template live from the feed; Agentic is delivered files matched by MC number in the Creative Library — and that is what the card and the preview show. Not set yet: the library file is used as soon as one carries this MC number."
+          >
+            <div className="brief-tab__target tab-bar tab-bar--segmented inline-flex rounded-md border border-slate-300 p-0.5">
+              {TARGETS.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => intake.onTargetChange(t.key)}
+                  className={clsx(
+                    "tab-bar__tab rounded px-3 py-1 text-xs font-medium transition",
+                    intake.targetValue === t.key
+                      ? "tab-bar__tab--active bg-slate-900 text-white"
+                      : "text-slate-600 hover:bg-slate-50",
+                  )}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          {intake.onAddVariant ? (
+            <Field
+              label="Variants"
+              hint={`A second creative under MC${intake.mcNumber}. Duplicate carries this card's copy and images across; empty keeps only the deck, the product and the template, so the wall shows it as still to be written.`}
+            >
+              <div className="brief-tab__variant flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => intake.onAddVariant?.("duplicate")}
+                  disabled={intake.variantBusy}
+                  className="toolbar-btn flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <CopyPlus className="size-3.5" />
+                  Duplicate as variant
+                </button>
+                <button
+                  type="button"
+                  onClick={() => intake.onAddVariant?.("empty")}
+                  disabled={intake.variantBusy}
+                  className="toolbar-btn flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                >
+                  <FilePlus2 className="size-3.5" />
+                  New empty variant
+                </button>
+              </div>
+            </Field>
+          ) : null}
         </>
       ) : null}
 

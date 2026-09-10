@@ -42,6 +42,10 @@ import {
 } from "../matrix/types";
 import { emptySearchFields, parseSearchQuery } from "@/lib/search-query";
 import type { Draft } from "./types";
+import type { McCreativeMatch } from "@/lib/entities/creatives";
+
+/** The Creative Library's answer for one MC, as the wall receives it. */
+type McMatch = McCreativeMatch;
 
 // Filter option for the drafts that have no product yet. They were a group of
 // their own before; staying able to isolate them is why this is an option
@@ -149,16 +153,22 @@ export default function DraftsView() {
       }>("/api/templates/folders"),
   });
 
+  // `matches` rides on the same envelope: what the Creative Library already
+  // holds for each draft's MC, resolved server-side in ONE query. Fetching it
+  // per tile would be one request per card on every mount of the wall.
   const draftsQ = useQuery({
     queryKey: ["drafts"],
     queryFn: () =>
-      fetchJSON<{ drafts: Draft[] }>("/api/drafts"),
+      fetchJSON<{ drafts: Draft[]; matches?: Record<string, McMatch> }>(
+        "/api/drafts",
+      ),
   });
 
   // Memoised rather than `?? []` inline: a fresh empty array on every render
   // invalidates every memo below on every render too.
   const data = draftsQ.data;
   const drafts = useMemo(() => data?.drafts ?? [], [data]);
+  const matches = useMemo(() => data?.matches ?? {}, [data]);
 
   const templatesByName = useMemo(
     () =>
@@ -221,6 +231,20 @@ export default function DraftsView() {
   async function newDraft() {
     await postJSON("/api/drafts", {});
     refresh();
+  }
+
+  // A second draft under the open one's number (MC404a → MC404b). The refetch
+  // has to LAND before the jump: the editor resolves its row out of the list
+  // above, so jumping to an id the list has not seen yet opens nothing.
+  async function addVariant(mode: "duplicate" | "empty") {
+    if (detail === null) return;
+    const created = await postJSON<{ draft: { id: number } }>("/api/drafts", {
+      from_draft_id: detail.id,
+      mode,
+    });
+    await qc.invalidateQueries({ queryKey: ["drafts"] });
+    await qc.refetchQueries({ queryKey: ["drafts"] });
+    setDetailId(created.draft.id);
   }
 
   return (
@@ -313,6 +337,7 @@ export default function DraftsView() {
                 <DraftTile
                   draft={d}
                   template={d.template ? templatesByName.get(d.template) : undefined}
+                  match={matches[`${d.number}|${d.variant}`]}
                   onOpen={() => setDetailId(d.id)}
                 />
               )}
@@ -364,6 +389,7 @@ export default function DraftsView() {
         onClose={() => setDetailId(null)}
         onJump={setDetailId}
         onPromoted={refresh}
+        onAddVariant={addVariant}
       />
     </div>
   );
@@ -372,6 +398,7 @@ export default function DraftsView() {
 function DraftTile({
   draft,
   template,
+  match,
   onOpen,
 }: {
   draft: Draft;
@@ -383,6 +410,8 @@ function DraftTile({
     previewFile?: string | null;
     externalUrl?: string | null;
   };
+  /** What the Creative Library holds for this MC, if anything. */
+  match?: McMatch;
   onOpen: () => void;
 }) {
   // Render the card, the way the matrix renders a cell — same component, same
@@ -400,6 +429,20 @@ function DraftTile({
     const v = draft[f];
     return typeof v === "string" && v.trim() !== "";
   });
+
+  // An Agentic draft's finished creative is a FILE, not a render — so once the
+  // Creative Library holds one, that is the card. Only the 300x250 qualifies:
+  // this slot is 300x250-shaped, and a cropped 1080x1080 would claim to be the
+  // creative while showing a different format. Nothing at that size yet is a
+  // fact worth saying, not a reason to fall back to a render of a template the
+  // final file will not use.
+  //
+  // Which world this draft is in comes from draftTarget. NULL predates the
+  // field, so the library answers instead: a draft with matched files is being
+  // made as Agentic whether or not anyone ticked the box.
+  const target = draft.draftTarget ?? (match && match.total > 0 ? "agentic" : "dco");
+  const wantsLibrary = target === "agentic" || target === "both";
+  const cover = wantsLibrary ? (match?.cover ?? null) : null;
   return (
     <button
       type="button"
@@ -407,7 +450,34 @@ function DraftTile({
       className="creative-card drafts-tile group block w-full overflow-hidden rounded-lg border border-slate-200 bg-white text-left shadow-sm transition hover:shadow-md"
     >
       <div className="creative-card__thumb drafts-tile__media relative flex min-h-24 items-center justify-center bg-slate-50">
-        {draft.template && hasContent ? (
+        {cover !== null && cover.fileId !== null ? (
+          <div className="drafts-tile__library-cover aspect-[300/250] w-full">
+            {cover.isVideo ? (
+              <video
+                src={`/api/files/${cover.fileId}#t=0.1`}
+                preload="metadata"
+                muted
+                playsInline
+                className="size-full object-cover"
+              />
+            ) : (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={`/api/files/${cover.fileId}/thumbnail?w=400`}
+                alt={cover.fileName ?? mcLabel(draft)}
+                className="size-full object-cover"
+              />
+            )}
+          </div>
+        ) : wantsLibrary ? (
+          <div className="drafts-tile__placeholder flex aspect-[300/250] w-full items-center justify-center p-6 text-center text-[11px] leading-relaxed text-slate-400">
+            No 300×250 agentic preview yet —
+            <br />
+            {match && match.total > 0
+              ? `${match.total} other file${match.total === 1 ? "" : "s"} delivered.`
+              : "nothing delivered to the library."}
+          </div>
+        ) : draft.template && hasContent ? (
           <MatrixIframePreview
             message={draft as unknown as Message}
             templateName={draft.template}
@@ -428,6 +498,15 @@ function DraftTile({
               : "this draft has only its number."}
           </div>
         )}
+        {match && match.total > 0 ? (
+          <span
+            title={`${match.total} file${match.total === 1 ? "" : "s"} in the Creative Library carry ${mcLabel(draft)}`}
+            className="status-badge drafts-tile__matched absolute right-1.5 top-1.5 rounded bg-slate-900/80 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-white"
+          >
+            {match.total}
+            {match.videoCount > 0 ? ` · ${match.videoCount}▶` : ""}
+          </span>
+        ) : null}
       </div>
       {/* ONE line, always: MC · product · name, in that order — the two short
           fixed things first so the eye scans a column of them, and the name

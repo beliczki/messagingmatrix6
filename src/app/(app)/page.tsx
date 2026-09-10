@@ -58,6 +58,7 @@ import CoverageTile from "./_dashboard/CoverageTile";
 import CreativeStrip from "./_dashboard/CreativeStrip";
 import DeliveryTrend from "./_dashboard/DeliveryTrend";
 import ProductFilter from "./_dashboard/ProductFilter";
+import DashboardLiveRefresh from "./_dashboard/DashboardLiveRefresh";
 import RememberView from "./_dashboard/RememberView";
 
 export const dynamic = "force-dynamic";
@@ -223,7 +224,9 @@ export default async function Dashboard({
     userRows,
   ] = await Promise.all([
     libraryCounts(client.id, products),
-    monthlyDelivery(client.id, 6, products),
+    // The anchor month, so a September dashboard shows September as the empty
+    // column it is instead of ending on the newest import (August).
+    monthlyDelivery(client.id, 6, products, scope.date.slice(0, 7)),
     activityDigest(client.id, scope, products),
     feedsInScope(client.id, scope, products),
     reportFreshness(client.id),
@@ -253,6 +256,7 @@ export default async function Dashboard({
   return (
     <div className="dashboard flex h-full flex-col">
       <RememberView value={rememberedView} />
+      <DashboardLiveRefresh />
       {/* Same sticky toolbar every other screen opens with — title, then the
           filters, then a count on the right. The client is named in the
           sidebar on every screen, so repeating it here cost a heading's worth

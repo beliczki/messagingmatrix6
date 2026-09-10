@@ -11,34 +11,49 @@
 // second axis is a CLONE of the first (copy fans a card out; create would make
 // two unrelated cards that merely share a number).
 //
-// WHERE only. What the card IS — its brief slide, its product, the note — is
-// the Brief tab's half of the draft, and it is read first: Brief opens the
-// draft, Promote closes it.
+// WHERE only. What the card IS — its brief slide, its product, its TARGET, the
+// note — is the Brief tab's half of the draft, and it is read first: Brief
+// opens the draft, Promote closes it. The target moved there because it says
+// what the work IS for, and the preview needs the answer long before anyone
+// reaches this tab; here it is only read, and shown so the move leaves a trace
+// for whoever reaches for the control they used yesterday.
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Archive, ArrowUpRight, Loader2, Trash2 } from "lucide-react";
-import clsx from "clsx";
 import Field from "./EditorField";
 import type { Audience, DraftMessage, Topic } from "./types";
 
-const TARGETS = [
-  { key: "dco", label: "DCO" },
-  { key: "agentic", label: "Agentic" },
-  { key: "both", label: "Both" },
-] as const;
-type Target = (typeof TARGETS)[number]["key"];
+const TARGET_LABELS: Record<Target, string> = {
+  dco: "DCO",
+  agentic: "Agentic",
+  both: "Both",
+};
+type Target = "dco" | "agentic" | "both";
 
 export default function PromoteTab({
   draft,
   audiences,
   topics,
+  siblingDraftCount = 0,
   onDone,
 }: {
   draft: DraftMessage;
   audiences: Audience[];
   topics: Topic[];
+  /** Other drafts holding this MC number — they keep it after a delete. */
+  siblingDraftCount?: number;
   onDone: () => void;
 }) {
-  const [target, setTarget] = useState<Target>("dco");
+  // Read, never owned. NULL means nobody has decided yet, and the honest
+  // stand-in is what the library already knows: a draft that has matched files
+  // is being made as Agentic whether or not anyone ticked the box.
+  const target: Target =
+    draft.draftTarget === "agentic" ||
+    draft.draftTarget === "both" ||
+    draft.draftTarget === "dco"
+      ? draft.draftTarget
+      : "dco";
+  const targetIsSet = draft.draftTarget !== null;
   const [audienceKey, setAudienceKey] = useState("");
   const [channelKey, setChannelKey] = useState("");
   const [topicKey, setTopicKey] = useState("");
@@ -118,24 +133,17 @@ export default function PromoteTab({
 
   return (
     <div className="message-editor-tab message-editor-tab--promote">
+      <MatchedCreatives number={draft.number} variant={draft.variant} />
+
       <Field label="Target">
-        <div className="tab-bar tab-bar--segmented inline-flex rounded-md border border-slate-300 p-0.5">
-          {TARGETS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setTarget(t.key)}
-              className={clsx(
-                "tab-bar__tab rounded px-3 py-1 text-xs font-medium transition",
-                target === t.key
-                  ? "tab-bar__tab--active bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-50",
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <p className="promote-tab__target text-xs text-slate-600">
+          <span className="font-medium text-slate-900">
+            {TARGET_LABELS[target]}
+          </span>
+          {targetIsSet
+            ? " — set on the Brief tab"
+            : " — not set on the Brief tab yet, so the DCO cell is assumed"}
+        </p>
       </Field>
 
       {needsDco ? (
@@ -228,13 +236,20 @@ export default function PromoteTab({
             title={
               confirming
                 ? undefined
-                : `Delete MC${draft.number}${draft.variant} for good — the number becomes free again`
+                : siblingDraftCount > 0
+                  ? `Delete MC${draft.number}${draft.variant} for good — MC${draft.number} stays reserved by its other draft${siblingDraftCount > 1 ? "s" : ""}`
+                  : `Delete MC${draft.number}${draft.variant} for good — the number becomes free again`
             }
             className="toolbar-btn toolbar-btn--danger flex items-center gap-1.5 rounded-md border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
           >
             <Trash2 className="size-3.5" />
+            {/* The confirm says what happens to the NUMBER, which is the whole
+                difference from Archive — and with a sibling draft on it, the
+                number is not what comes back. */}
             {confirming
-              ? `Delete MC${draft.number}${draft.variant}, free the number?`
+              ? siblingDraftCount > 0
+                ? `Delete MC${draft.number}${draft.variant}? MC${draft.number} stays reserved.`
+                : `Delete MC${draft.number}${draft.variant}, free the number?`
               : "Delete"}
           </button>
         </div>
@@ -253,5 +268,104 @@ export default function PromoteTab({
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * What the Creative Library already holds for this MC.
+ *
+ * The draft stays OPEN when its files arrive — nothing here promotes or
+ * archives anything. A correctly named upload mints the Agentic cell on its own
+ * (createCreativeWithMirror); making the draft react to that too would have one
+ * upload change two things. This is the index, and the Promote button is still
+ * the only thing that places the card.
+ *
+ * Same query key as the preview pane's size switcher, so an open editor asking
+ * both questions makes one request. That means the WHOLE envelope has to be
+ * cached here too: unwrapping to `.match` would hand the other consumer an
+ * object with no `sizes`.
+ */
+function MatchedCreatives({
+  number,
+  variant,
+}: {
+  number: number;
+  variant: string;
+}) {
+  const q = useQuery({
+    queryKey: ["creatives", "by-mc", number, variant],
+    queryFn: async () => {
+      const r = await fetch(
+        `/api/creatives/by-mc?number=${number}&variant=${encodeURIComponent(variant)}`,
+        { credentials: "include" },
+      );
+      if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+      return r.json() as Promise<{
+        sizes: { dimensions: string; fileName: string; type: string | null }[];
+        match: {
+          total: number;
+          videoCount: number;
+          items: {
+            id: number;
+            fileId: string | null;
+            fileName: string | null;
+            dimensions: string | null;
+            isVideo: boolean;
+          }[];
+        };
+      }>;
+    },
+  });
+
+  const match = q.data?.match;
+  const label = match
+    ? `${match.total} matched${match.videoCount > 0 ? ` · ${match.videoCount} video${match.videoCount > 1 ? "s" : ""}` : ""}`
+    : "—";
+
+  return (
+    <Field
+      label="Creative library matched"
+      hint={`Files whose name carries MC${number}${variant}. They arrive by upload, not from here — the draft stays open either way.`}
+    >
+      <div className="promote-tab__matched">
+        <p className="promote-tab__matched-count mb-2 text-xs tabular-nums text-slate-600">
+          {label}
+        </p>
+        {match && match.total > 0 ? (
+          <div className="promote-tab__matched-strip flex gap-1.5 overflow-x-auto pb-1">
+            {match.items.map((it) => (
+              <div
+                key={it.id}
+                title={`${it.fileName ?? ""}${it.dimensions ? ` · ${it.dimensions}` : ""}`}
+                className="promote-tab__matched-thumb size-16 shrink-0 overflow-hidden rounded border border-slate-200 bg-slate-50"
+              >
+                {it.fileId === null ? null : it.isVideo ? (
+                  <video
+                    src={`/api/files/${it.fileId}#t=0.1`}
+                    preload="metadata"
+                    muted
+                    playsInline
+                    className="size-full object-cover"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={`/api/files/${it.fileId}/thumbnail?w=96`}
+                    alt={it.fileName ?? ""}
+                    className="size-full object-cover"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        ) : q.isLoading ? null : (
+          <p className="empty-state text-xs text-slate-500">
+            Nothing in the library carries MC{number}
+            {variant} yet — upload the finished files with the MC number in the
+            filename and they appear here.
+          </p>
+        )}
+      </div>
+    </Field>
   );
 }

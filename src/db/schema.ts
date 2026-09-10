@@ -313,6 +313,18 @@ export const messages = pgTable(
     // `product` would invite exactly the second source of truth that would
     // then drift from the matrix and the dashboard.
     draftProduct: text("draft_product"),
+    // Which world this DRAFT is being made for: 'dco' (a template rendered
+    // live from the feed), 'agentic' (delivered files in the Creative Library)
+    // or 'both'. Draft-only, for the same reason as draftProduct above — a
+    // placed card's world is its axis, read off the cell.
+    //
+    // It is stored rather than inferred because it is a DECISION, taken on the
+    // Brief tab when the work is briefed, and it is read before any file
+    // exists: it decides which preview the card shows (the HTML render, or the
+    // matched creative). Inferring it from "are there creatives yet" would
+    // answer a later question, and answer it wrong for every draft that is
+    // still waiting for its files. NULL = not decided yet.
+    draftTarget: text("draft_target"),
     versionNo: integer("version_no").notNull().default(1),
     pmmid: text("pmmid"),
     // "No status" is not a legal state for an MC: a status-less row is invisible
@@ -414,6 +426,14 @@ export const messages = pgTable(
     check(
       "messages_draft_has_no_pmmid",
       sql`${t.status} != 'DRAFT' OR ${t.pmmid} IS NULL`,
+    ),
+    // The three targets, spelled out in the database. WRITABLE_FIELDS is a
+    // pass-through with no per-field validation anywhere, so without this a
+    // typo'd PATCH would store 'agenic' and the card would fall back to the
+    // wrong preview in silence, forever.
+    check(
+      "messages_draft_target_values",
+      sql`${t.draftTarget} IS NULL OR ${t.draftTarget} IN ('dco', 'agentic', 'both')`,
     ),
   ],
 );

@@ -251,11 +251,6 @@ export default function DraftsView() {
     setDetailId(created.draft.id);
   }
 
-  async function addVariant(mode: "duplicate" | "empty") {
-    if (detail === null) return;
-    await addVariantOf(detail.id, mode);
-  }
-
   // Two ends, and the difference is the MC NUMBER — the same pair the Promote
   // tab offers, said the same way. Archive shelves work that was real and keeps
   // the number retired; delete is for a card created by mistake and gives the
@@ -425,7 +420,6 @@ export default function DraftsView() {
         onClose={() => setDetailId(null)}
         onJump={setDetailId}
         onPromoted={refresh}
-        onAddVariant={addVariant}
       />
     </div>
   );
@@ -556,15 +550,13 @@ function DraftTile({
           </span>
         ) : null}
       </div>
-      {/* TWO lines, always exactly two: the MC on its own, then product + name
-          under it (user, 2026-09-10). Fixed-height beats the old single line —
+      {/* TWO lines, always exactly two: product + MC on the first, the name on
+          the second (user, 2026-09-10). Fixed height, and neither line wraps —
           what pulled the wall out of alignment before was WRAPPING, a row that
-          grew to two lines on some cards and not others. Neither line wraps
-          here: the name truncates and carries the full text in its title. */}
-      <div className="creative-card__meta drafts-tile__meta flex flex-col gap-y-0.5 overflow-hidden px-2 py-1.5">
-        <span className="creative-card__mc drafts-tile__mc text-xs font-semibold text-slate-900">
-          {mcLabel(draft)}
-        </span>
+          grew to two lines on some cards and not others. The name truncates and
+          carries the full text in its title. Right padding leaves the corner to
+          the actions menu, which sits over this block. */}
+      <div className="creative-card__meta drafts-tile__meta flex flex-col gap-y-0.5 overflow-hidden py-1.5 pl-2 pr-8">
         <span className="drafts-tile__sub flex items-center gap-x-2 overflow-hidden">
           {/* The product travels on the card instead of in a group header. It
               is the ONE tag here: the topic chip that used to sit beside it
@@ -581,12 +573,15 @@ function DraftTile({
           >
             {draft.draftProduct ?? "no product"}
           </span>
-          <span
-            className="drafts-tile__name min-w-0 flex-1 truncate text-[11px] text-slate-500"
-            title={draft.name ?? undefined}
-          >
-            {draft.name || "Untitled"}
+          <span className="creative-card__mc drafts-tile__mc truncate text-xs font-semibold text-slate-900">
+            {mcLabel(draft)}
           </span>
+        </span>
+        <span
+          className="drafts-tile__name truncate text-[11px] text-slate-500"
+          title={draft.name ?? undefined}
+        >
+          {draft.name || "Untitled"}
         </span>
       </div>
       </button>
@@ -672,7 +667,7 @@ function DraftTileMenu({
   const label = mcLabel(draft);
 
   return (
-    <div ref={ref} className="drafts-tile__menu absolute right-1.5 top-1.5">
+    <div ref={ref} className="drafts-tile__menu absolute bottom-1.5 right-1.5">
       <button
         type="button"
         aria-label={`Actions for ${label}`}
@@ -687,8 +682,11 @@ function DraftTileMenu({
         <MoreHorizontal className="size-4" />
       </button>
 
+      {/* Drops UP: the button sits at the bottom edge of a card in a masonry
+          wall, so a downward menu would open past the card and, on the last
+          row, past the scroll container. */}
       {open ? (
-        <div className="dropdown drafts-tile__menu-list absolute right-0 top-full z-50 mt-1 w-56 rounded-md border border-slate-200 bg-white p-1 shadow-lg">
+        <div className="dropdown drafts-tile__menu-list absolute bottom-full right-0 z-50 mb-1 w-56 rounded-md border border-slate-200 bg-white p-1 shadow-lg">
           <button
             type="button"
             disabled={busy}

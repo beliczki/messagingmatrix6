@@ -17,7 +17,7 @@
 // (passed in as `intake`, which a placed card simply does not have) because
 // they answer the same question the slide does. Promote is left with WHERE.
 import { useEffect, useState } from "react";
-import { CopyPlus, ExternalLink, FilePlus2 } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import clsx from "clsx";
 import Field from "./EditorField";
 import {
@@ -72,15 +72,6 @@ export type BriefIntake = {
   /** `draftTarget` from the live edit state. NULL = not decided yet. */
   targetValue: string | null;
   onTargetChange: (target: string) => void;
-  /** "404" — the number the new variant will share. */
-  mcNumber: number;
-  /**
-   * Add a second draft under the same number (MC404a → MC404b). Omitted where
-   * the surface cannot navigate to the row it creates.
-   */
-  onAddVariant?: (mode: "duplicate" | "empty") => void;
-  /** True while a variant is being created, so the pair can't be double-fired. */
-  variantBusy?: boolean;
 };
 
 export default function BriefTab({
@@ -145,40 +136,39 @@ export default function BriefTab({
             number. Promoting gives it a cell and keeps the number.
           </p>
 
-          <Field
-            label="Draft name"
-            hint="Short label shown on the card in the drafts list and, once promoted, in the matrix and feed views."
-          >
-            <input
-              type="text"
-              value={intake.nameValue ?? ""}
-              onChange={(e) => intake.onNameChange(e.target.value || null)}
-              className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
-            />
-          </Field>
+          {/* Name and product on one row: the name takes the width, the product
+              is a short fixed thing beside it — the same order the drafts card
+              reads them in. */}
+          <div className="brief-tab__intake-row flex items-start gap-3">
+            <div className="min-w-0 flex-1">
+              <Field label="Draft name">
+                <input
+                  type="text"
+                  value={intake.nameValue ?? ""}
+                  onChange={(e) => intake.onNameChange(e.target.value || null)}
+                  className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
+                />
+              </Field>
+            </div>
+            <div className="w-36 shrink-0">
+              <Field label="Product">
+                <select
+                  value={intake.productValue ?? ""}
+                  onChange={(e) => intake.onProductChange(e.target.value || null)}
+                  className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
+                >
+                  <option value="">— not set yet —</option>
+                  {intake.productOptions.map((p) => (
+                    <option key={p} value={p}>
+                      {p}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          </div>
 
-          <Field
-            label="Product"
-            hint="Tags the draft on the drafts page and drives its Product filter. Once it has a cell the product comes from the cell instead, so this is only needed while it is a draft."
-          >
-            <select
-              value={intake.productValue ?? ""}
-              onChange={(e) => intake.onProductChange(e.target.value || null)}
-              className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
-            >
-              <option value="">— not set yet —</option>
-              {intake.productOptions.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field
-            label="Target"
-            hint="What this draft is being made for. DCO renders the template live from the feed; Agentic is delivered files matched by MC number in the Creative Library — and that is what the card and the preview show. Not set yet: the library file is used as soon as one carries this MC number."
-          >
+          <Field label="Target">
             <div className="brief-tab__target tab-bar tab-bar--segmented inline-flex rounded-md border border-slate-300 p-0.5">
               {TARGETS.map((t) => (
                 <button
@@ -198,40 +188,13 @@ export default function BriefTab({
             </div>
           </Field>
 
-          {intake.onAddVariant ? (
-            <Field
-              label="Variants"
-              hint={`A second creative under MC${intake.mcNumber}. Duplicate carries this card's copy and images across; empty keeps only the deck, the product and the template, so the wall shows it as still to be written.`}
-            >
-              <div className="brief-tab__variant flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => intake.onAddVariant?.("duplicate")}
-                  disabled={intake.variantBusy}
-                  className="toolbar-btn flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  <CopyPlus className="size-3.5" />
-                  Duplicate as variant
-                </button>
-                <button
-                  type="button"
-                  onClick={() => intake.onAddVariant?.("empty")}
-                  disabled={intake.variantBusy}
-                  className="toolbar-btn flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  <FilePlus2 className="size-3.5" />
-                  New empty variant
-                </button>
-              </div>
-            </Field>
-          ) : null}
         </>
       ) : null}
 
-      <Field
-        label="Brief slide"
-        hint="Open the slide this card was briefed on and paste its URL — the one ending in #slide=id.g…. A plain deck link works too; the preview then opens at the first slide."
-      >
+      {/* No hint under the input (user, 2026-09-10): the placeholder already
+          shows the shape of the URL this expects, and the error below says
+          exactly what is wrong when a paste misses. */}
+      <Field label="Brief slide">
         <div className="brief-tab__link-row relative">
           <input
             type="url"
@@ -285,10 +248,7 @@ export default function BriefTab({
         </div>
       )}
 
-      <Field
-        label="Note"
-        hint="Free text. What the brief asked for, in your own words."
-      >
+      <Field label="Note">
         <textarea
           value={draft.brief ?? ""}
           onChange={(e) => onChange({ brief: e.target.value || null })}

@@ -2291,3 +2291,24 @@ kártyára ahonnan lehet a duplicate, new variant, az archive és delete akciók
 - [x] A matched-badge **balra** költözött, mert a jobb felső sarkot a menü kapta.
 
 `npm test` 871/871, `tsc` + `eslint` + `next build` tiszta. Séma-migráció nincs.
+
+### 2026-09-10 — a draft akciói egy helyre: a kártya drop-up menüje — 6.75.0
+
+**User:** „legyen az első sor Product tag + MC, és a name legyen a második sor, az ellipsis legyen
+felhulló menü és jobb alsó sarokban, vízszintes ellipsis, és legyenek bele kivezetve az akciógombok
+ne csak bemenjen a kártyára, és ezeket az akciógombokat meg vegyük ki belülről. A Brief fülön a
+product lehet egymás mellett a Draft name-mel, nem kell az input mezők alá a magyarázat szürke
+szöveg, a variants úgy kerüljön ki az action menübe."
+
+- [x] `drafts-tile__meta` első sor: `__product` + `__mc`; második sor: `__name`. `pr-8`, hogy a menü
+      ne üljön rá.
+- [x] `drafts-tile__menu` a **jobb alsó** sarokban, **felfelé** nyílik (`bottom-full mb-1`) — a gomb a
+      kártya alsó élén ül, lefelé nyílva kilógna a kártyából és az utolsó soron a görgetőből is.
+- [x] `brief-tab__variant` **megszűnt** — a két variáns-akció a kártya menüjében él.
+- [x] A Promote fül `promote-tab__discard` párosa (Archive/Delete) **megszűnt** — ugyanoda költözött.
+      A fül egy kérdést válaszol meg: hova. Vele ment a `siblingDraftCount` prop és a `confirming` state.
+- [x] `brief-tab__intake-row`: Draft name (`flex-1`) + Product (`w-36`) egy sorban.
+- [x] A Brief fül `Field`-jei **hint nélkül**. A Brief slide inputnak placeholdere van, a hibát a
+      `form-field__error` mondja ki — a magyarázó bekezdést senki nem olvassa kétszer.
+
+`npm test` 871/871, `tsc` + `eslint` + `next build` tiszta. Séma-migráció nincs.

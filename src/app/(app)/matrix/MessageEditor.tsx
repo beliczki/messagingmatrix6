@@ -100,12 +100,6 @@ type Props = {
   onJump: (id: number) => void;
   /** Drafts only: promoting leaves the drafts list, so the page can refresh. */
   onPromoted?: () => void;
-  /**
-   * Drafts only: create another draft under this one's number and open it.
-   * The page owns it because the new row has to be in the list before the
-   * editor can resolve it (the editor reads its row out of visibleMessages).
-   */
-  onAddVariant?: (mode: "duplicate" | "empty") => Promise<void>;
 };
 
 type EditableFields = Pick<
@@ -227,7 +221,6 @@ export default function MessageEditor({
   onClose,
   onJump,
   onPromoted,
-  onAddVariant,
 }: Props) {
   const [tab, setTab] = useState<Tab>("naming");
   const [draft, setDraft] = useState<EditableFields | null>(null);
@@ -255,7 +248,6 @@ export default function MessageEditor({
     });
   }
   const [historyOpen, setHistoryOpen] = useState<boolean>(false);
-  const [variantBusy, setVariantBusy] = useState<boolean>(false);
   const [splitPercent, setSplitPercent] = useState<number>(50);
   const [previewSize, setPreviewSize] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -602,13 +594,6 @@ export default function MessageEditor({
   if (!open || !message || !draft) return null;
 
   const mcLabel = `MC${message.number}${message.variant}`;
-  // Other DRAFTS on this number, from the list the page already handed us — a
-  // number with a second draft does not come back when one of them is deleted,
-  // and the Delete button must not promise otherwise.
-  const siblingDraftCount = visibleMessages.filter(
-    (m) =>
-      m.audience === null && m.number === message.number && m.id !== message.id,
-  ).length;
 
   return (
     <>
@@ -832,7 +817,6 @@ export default function MessageEditor({
                   draft={message}
                   audiences={audiences}
                   topics={topics}
-                  siblingDraftCount={siblingDraftCount}
                   onDone={() => {
                     onPromoted?.();
                     onClose();
@@ -882,16 +866,6 @@ export default function MessageEditor({
                             setDraft((prev) =>
                               prev ? { ...prev, draftTarget } : prev,
                             ),
-                          mcNumber: message.number,
-                          onAddVariant: onAddVariant
-                            ? (mode) => {
-                                setVariantBusy(true);
-                                void onAddVariant(mode).finally(() =>
-                                  setVariantBusy(false),
-                                );
-                              }
-                            : undefined,
-                          variantBusy,
                         }
                       : undefined
                   }

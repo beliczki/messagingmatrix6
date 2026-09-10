@@ -5,6 +5,27 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.75.0] — 2026-09-10
+
+### Changed
+- **Every action on a draft now lives in one place: the card's menu.** The
+  variant pair moved off the Brief tab and Archive/Delete off the Promote tab,
+  so the Promote tab answers the one question it is for — where does this go —
+  and the wall-level decisions are reachable without opening the card at all.
+- **The card menu is a horizontal ellipsis in the bottom-right corner, and it
+  drops UP.** The button sits on the bottom edge of a card in a masonry wall, so
+  a downward menu would open past the card and, on the last row, past the scroll
+  container.
+- **The card's first line is product + MC; the name has the second line to
+  itself.** Still exactly two lines, neither wrapping — the name truncates with
+  the full text on hover — and the meta keeps a right inset so the menu button
+  never sits on top of it.
+- **The Brief tab puts Draft name and Product on one row** (the name takes the
+  width, the product is the short fixed thing beside it) and drops the grey
+  explanation under its inputs. The slide field's placeholder already shows the
+  URL shape it wants, and a bad paste is answered by the error line, not by a
+  paragraph nobody reads twice.
+
 ## [6.74.0] — 2026-09-10
 
 ### Added

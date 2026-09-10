@@ -126,6 +126,50 @@ describe("readTemplate — kind parsing", () => {
     expect(t!.externalUrl).toBeNull();
   });
 
+  it("reads element ids from index.html in document order, deduped", () => {
+    writeTemplate("ids", {
+      "manifest.json": JSON.stringify({ kind: "html" }),
+      "300x250.css": "/* */",
+      "index.html": [
+        '<html id="html">',
+        '  <body id="{{pmmid}}">',
+        '    <div id="adContainer">',
+        "      <div id='headlineWrapper'></div>",
+        '      <div id="adContainer"></div>',
+        '      <div id=" logoWrapper ">',
+        '      <div class="no-id"></div>',
+        "    </div>",
+        "  </body>",
+        "</html>",
+      ].join("\n"),
+    });
+    const t = readTemplate("ids");
+    // Document order, first occurrence wins, single or double quotes, trimmed.
+    // The placeholder id is dropped — its rendered value differs per message.
+    expect(t!.elementIds).toEqual([
+      "html",
+      "adContainer",
+      "headlineWrapper",
+      "logoWrapper",
+    ]);
+  });
+
+  it("yields no element ids when index.html is missing", () => {
+    writeTemplate("no-index", {
+      "manifest.json": JSON.stringify({ kind: "html" }),
+      "300x250.css": "/* */",
+    });
+    expect(readTemplate("no-index")!.elementIds).toEqual([]);
+  });
+
+  it("non-html kinds carry no element ids even with an index.html", () => {
+    writeTemplate("figma-ids", {
+      "manifest.json": JSON.stringify({ kind: "figma" }),
+      "index.html": '<div id="ignored"></div>',
+    });
+    expect(readTemplate("figma-ids")!.elementIds).toEqual([]);
+  });
+
   it("returns null for non-existent template name", () => {
     expect(readTemplate("does-not-exist")).toBeNull();
   });

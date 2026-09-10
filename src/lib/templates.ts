@@ -57,6 +57,10 @@ export type TemplateInfo = {
   /** WIDTHxHEIGHT identifiers parsed from {w}x{h}.css filenames. Always empty
    *  for non-html kinds (they have no sized variants). */
   sizes: string[];
+  /** DOM ids declared in index.html, in document order. The two things a
+   *  per-message CSS override can scope to are a size and an element, and
+   *  `sizes` already carried the first half. Always empty for non-html kinds. */
+  elementIds: string[];
   defaultSize: string | null;
   placeholders: TemplatePlaceholder[];
   /** Convenience: union of all placeholders[type=tag].options. */
@@ -71,6 +75,7 @@ export type TemplateInfo = {
 };
 
 const SIZE_RE = /^(\d+)x(\d+)\.css$/i;
+const ELEMENT_ID_RE = /\sid\s*=\s*["']([^"']+)["']/gi;
 const PREVIEW_EXTS = ["png", "jpg", "jpeg", "webp", "gif"] as const;
 
 function templatesRoot(): string {
@@ -162,6 +167,7 @@ export function readTemplate(name: string): TemplateInfo | null {
       name,
       kind,
       sizes: [],
+      elementIds: [],
       defaultSize: null,
       placeholders: [],
       tagOptions: [],
@@ -211,6 +217,7 @@ export function readTemplate(name: string): TemplateInfo | null {
     name,
     kind,
     sizes,
+    elementIds: readElementIds(dir),
     defaultSize:
       typeof tj?.default_size === "string" ? tj.default_size : (sizes[0] ?? null),
     placeholders,
@@ -219,6 +226,27 @@ export function readTemplate(name: string): TemplateInfo | null {
     previewFile,
     externalUrl,
   };
+}
+
+// DOM ids declared in index.html, in document order, deduped. Ids built from a
+// placeholder (`id="{{pmmid}}"`) are dropped: the rendered value differs per
+// message, so it is not something a CSS override can name. A missing or
+// unreadable index.html yields no ids rather than an error — a template folder
+// is allowed to be mid-edit, and the chips it feeds are an affordance, not a
+// requirement.
+function readElementIds(dir: string): string[] {
+  const file = path.join(dir, "index.html");
+  if (!fs.existsSync(file)) return [];
+  const html = fs.readFileSync(file, "utf8");
+  const seen = new Set<string>();
+  const ids: string[] = [];
+  for (const m of html.matchAll(ELEMENT_ID_RE)) {
+    const id = m[1]!.trim();
+    if (id === "" || id.includes("{{") || seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  return ids;
 }
 
 export function listAllTemplates(): TemplateInfo[] {

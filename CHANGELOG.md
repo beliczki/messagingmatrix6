@@ -5,6 +5,22 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.82.0] — 2026-09-10
+
+### Changed
+- **A draft's intake belongs to the MC, not to the variant.** The brief deck and
+  slide, the note, the planned topic, the product and the production target are
+  now written to every variant of the number whenever any one of them is edited.
+  Variants are alternative creatives for ONE brief — "a and b are DCO but c is
+  Agentic" was a state the model allowed and nothing could mean. Only the
+  creative itself (template, content, styles) stays per-variant.
+  Divergence that predates this converges on the first edit: the fan-out writes
+  the whole intake, not just the field that changed.
+  The columns stay on each row rather than moving to a per-MC table, because
+  they are not draft-only: a placed card carries its own brief, the matrix
+  editor edits it per card, and MCP's `list_briefs` groups by it — normalising
+  onto the number would take that away from the surface that needs it.
+
 ## [6.81.1] — 2026-09-10
 
 ### Fixed

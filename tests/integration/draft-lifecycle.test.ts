@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, audiences, topics, channels, messages } from "@/db/schema";
 import {
   copyMessages,
   createDraft,
   createDraftVariant,
+  getMessage,
   createMessage,
   deleteDraft,
   promoteDraft,
@@ -175,6 +176,99 @@ describe("createDraftVariant", () => {
         { requestedNumber: a.number },
       ),
     ).rejects.toThrow(/reserved by a draft/);
+  });
+});
+
+// The intake is the MC's, not the variant's: one brief, one planned topic, one
+// production target for every creative under the number.
+describe("the intake fans out across a draft's variants", () => {
+  it("writes the brief onto every other variant of the number", async () => {
+    const a = await createDraft(erste.id);
+    const b = await createDraftVariant(erste.id, a.id, "empty");
+    const c = await createDraftVariant(erste.id, a.id, "empty");
+
+    const res = await updateMessage(erste.id, a.id, a.version, {
+      briefSlidesFileId: "deck-9",
+      briefSlideId: "g12",
+      draftTarget: "agentic",
+      draftProduct: "HK",
+      topic: "HK_edukacio_NA_NA_thing",
+      brief: "what the brief asked for",
+    });
+    expect(res.ok).toBe(true);
+
+    for (const id of [b.id, c.id]) {
+      const [row] = await db.select().from(messages).where(eq(messages.id, id));
+      expect(row).toMatchObject({
+        briefSlidesFileId: "deck-9",
+        briefSlideId: "g12",
+        draftTarget: "agentic",
+        draftProduct: "HK",
+        topic: "HK_edukacio_NA_NA_thing",
+        brief: "what the brief asked for",
+      });
+    }
+  });
+
+  it("converges variants that had already diverged", async () => {
+    const a = await createDraft(erste.id);
+    const b = await createDraftVariant(erste.id, a.id, "empty");
+    // b goes its own way, the way the old per-row model allowed.
+    await db
+      .update(messages)
+      .set({ draftTarget: "dco", draftProduct: "VAL" })
+      .where(eq(messages.id, b.id));
+
+    const fresh = await getMessage(erste.id, a.id);
+    await updateMessage(erste.id, a.id, fresh!.version, {
+      draftTarget: "agentic",
+    });
+
+    const [after] = await db.select().from(messages).where(eq(messages.id, b.id));
+    // The whole intake is rewritten, not only the field that changed — which
+    // is what makes the divergence go away rather than half go away.
+    expect(after).toMatchObject({ draftTarget: "agentic", draftProduct: null });
+  });
+
+  it("leaves the creative alone — that is per variant", async () => {
+    const a = await createDraft(erste.id, { headline: "A copy" });
+    const b = await createDraftVariant(erste.id, a.id, "empty");
+    await updateMessage(erste.id, b.id, b.version, { headline: "B copy" });
+
+    const fresh = await getMessage(erste.id, a.id);
+    await updateMessage(erste.id, a.id, fresh!.version, {
+      draftTarget: "both",
+    });
+
+    const [after] = await db.select().from(messages).where(eq(messages.id, b.id));
+    expect(after!.headline).toBe("B copy");
+    expect(after!.draftTarget).toBe("both");
+  });
+
+  it("does not reach a placed card that shares the number", async () => {
+    const a = await createDraft(erste.id);
+    await db.insert(messages).values({
+      clientId: erste.id,
+      number: a.number,
+      variant: "z",
+      audience: "ch_disp",
+      topic: "VAL_from_filename",
+      status: "ACTIVE",
+      versionNo: 1,
+      pmmid: `p_-a_ch_disp-m_${a.number}-v_z`,
+      draftTarget: null,
+    });
+
+    await updateMessage(erste.id, a.id, a.version, { draftTarget: "agentic" });
+
+    const [placed] = await db
+      .select()
+      .from(messages)
+      .where(
+        and(eq(messages.number, a.number), eq(messages.variant, "z")),
+      );
+    expect(placed!.draftTarget).toBeNull();
+    expect(placed!.topic).toBe("VAL_from_filename");
   });
 });
 

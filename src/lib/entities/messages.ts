@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   audiences,
@@ -888,7 +888,71 @@ export async function updateMessage(
     })
     .where(and(eq(messages.clientId, clientId), eq(messages.id, id)))
     .returning();
+
+  await propagateBriefAcrossDraftVariants(clientId, updated, input);
   return { ok: true, row: updated };
+}
+
+/**
+ * The intake belongs to the MC, not to the variant (user, 2026-09-10).
+ *
+ * A draft's variants are alternative creatives for ONE brief: they cannot be
+ * briefed on different decks, headed for different topics, or made for
+ * different production targets — "a and b are DCO but c is Agentic" is not a
+ * state that means anything. Only what the Brief tab calls the creative
+ * (template, content, styles) is per-variant.
+ *
+ * Kept as columns on each row and fanned out here, rather than moved to a
+ * per-MC table: these are NOT draft-only columns. `briefSlidesFileId` and
+ * `brief` live on placed cards too, where the matrix editor's Brief tab edits
+ * them per card and MCP's list_briefs groups by them — two cards in different
+ * cells legitimately carry different briefs. Normalising them onto the number
+ * would take that away from the surface that needs it, to serve the one that
+ * does not.
+ *
+ * Divergence that predates this converges on the first edit: the fan-out writes
+ * the whole intake, not only the field that changed.
+ */
+const MC_LEVEL_DRAFT_FIELDS = [
+  "brief",
+  "briefSlidesFileId",
+  "briefSlideId",
+  "topic",
+  "draftProduct",
+  "draftTarget",
+] as const satisfies readonly WritableField[];
+
+async function propagateBriefAcrossDraftVariants(
+  clientId: number,
+  updated: Message,
+  input: MessageInput,
+): Promise<void> {
+  // Only a draft has variants in this sense; a placed card's siblings are
+  // audience copies, and those are propagateToSiblings' business.
+  if (updated.status !== "DRAFT" || updated.audience !== null) return;
+  if (!MC_LEVEL_DRAFT_FIELDS.some((f) => f in input)) return;
+
+  const intake = Object.fromEntries(
+    MC_LEVEL_DRAFT_FIELDS.map((f) => [f, updated[f]]),
+  ) as MessageInput;
+
+  await db
+    .update(messages)
+    .set({
+      ...intake,
+      version: sql`${messages.version} + 1`,
+      updatedAt: nowUtc,
+    })
+    .where(
+      and(
+        eq(messages.clientId, clientId),
+        eq(messages.number, updated.number),
+        eq(messages.status, "DRAFT"),
+        isNull(messages.audience),
+        isNull(messages.archivedAt),
+        ne(messages.id, updated.id),
+      ),
+    );
 }
 
 // Single propagation tier (user decision 2026-08-17, superseding the

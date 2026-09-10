@@ -61,6 +61,11 @@ export type TemplateInfo = {
    *  per-message CSS override can scope to are a size and an element, and
    *  `sizes` already carried the first half. Always empty for non-html kinds. */
   elementIds: string[];
+  /** CSS classes declared in index.html, in document order. The ids sit on the
+   *  containers; the text and image elements a message actually restyles carry
+   *  classes (`headline_text_1`, `copy_text_2`), which is what the stored
+   *  overrides target. Always empty for non-html kinds. */
+  elementClasses: string[];
   defaultSize: string | null;
   placeholders: TemplatePlaceholder[];
   /** Convenience: union of all placeholders[type=tag].options. */
@@ -76,6 +81,7 @@ export type TemplateInfo = {
 
 const SIZE_RE = /^(\d+)x(\d+)\.css$/i;
 const ELEMENT_ID_RE = /\sid\s*=\s*["']([^"']+)["']/gi;
+const ELEMENT_CLASS_RE = /\sclass\s*=\s*["']([^"']+)["']/gi;
 const PREVIEW_EXTS = ["png", "jpg", "jpeg", "webp", "gif"] as const;
 
 function templatesRoot(): string {
@@ -168,6 +174,7 @@ export function readTemplate(name: string): TemplateInfo | null {
       kind,
       sizes: [],
       elementIds: [],
+      elementClasses: [],
       defaultSize: null,
       placeholders: [],
       tagOptions: [],
@@ -217,7 +224,7 @@ export function readTemplate(name: string): TemplateInfo | null {
     name,
     kind,
     sizes,
-    elementIds: readElementIds(dir),
+    ...readSelectors(dir),
     defaultSize:
       typeof tj?.default_size === "string" ? tj.default_size : (sizes[0] ?? null),
     placeholders,
@@ -228,25 +235,42 @@ export function readTemplate(name: string): TemplateInfo | null {
   };
 }
 
-// DOM ids declared in index.html, in document order, deduped. Ids built from a
-// placeholder (`id="{{pmmid}}"`) are dropped: the rendered value differs per
-// message, so it is not something a CSS override can name. A missing or
-// unreadable index.html yields no ids rather than an error — a template folder
-// is allowed to be mid-edit, and the chips it feeds are an affordance, not a
-// requirement.
-function readElementIds(dir: string): string[] {
+// The ids and classes index.html declares, in document order, deduped. Values
+// built from a placeholder (`id="{{pmmid}}"`, `class="{{template_variant_class}}"`)
+// are dropped: they differ per rendered message, so a stylesheet cannot name
+// them. A missing or unreadable index.html yields nothing rather than an error —
+// a template folder is allowed to be mid-edit, and the chips these feed are an
+// affordance, not a requirement.
+function readSelectors(dir: string): {
+  elementIds: string[];
+  elementClasses: string[];
+} {
   const file = path.join(dir, "index.html");
-  if (!fs.existsSync(file)) return [];
+  if (!fs.existsSync(file)) return { elementIds: [], elementClasses: [] };
   const html = fs.readFileSync(file, "utf8");
+  return {
+    elementIds: collect(html, ELEMENT_ID_RE, (v) => [v]),
+    // One class attribute holds several names, so each is its own selector.
+    elementClasses: collect(html, ELEMENT_CLASS_RE, (v) => v.split(/\s+/)),
+  };
+}
+
+function collect(
+  html: string,
+  re: RegExp,
+  split: (attrValue: string) => string[],
+): string[] {
   const seen = new Set<string>();
-  const ids: string[] = [];
-  for (const m of html.matchAll(ELEMENT_ID_RE)) {
-    const id = m[1]!.trim();
-    if (id === "" || id.includes("{{") || seen.has(id)) continue;
-    seen.add(id);
-    ids.push(id);
+  const out: string[] = [];
+  for (const m of html.matchAll(re)) {
+    for (const raw of split(m[1]!)) {
+      const v = raw.trim();
+      if (v === "" || v.includes("{{") || seen.has(v)) continue;
+      seen.add(v);
+      out.push(v);
+    }
   }
-  return ids;
+  return out;
 }
 
 export function listAllTemplates(): TemplateInfo[] {

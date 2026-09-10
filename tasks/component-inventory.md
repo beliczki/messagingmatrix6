@@ -976,6 +976,6 @@ A lap gyökere `dashboard`. Meglévő névből vettük: `toolbar-btn` (nap-lépt
 
 ### MessageEditor › Styles tab — selector chips (2026-09-10, M7)
 - `styles-tab__selectors` — a Custom CSS textarea alatti chip-blokk (a `Field` `<label>`-en KÍVÜL, hogy a chip-klikk ne aktiválja a labelt).
-- `styles-tab__selector-row` — egy sor (`Sizes` / `Elements`), `flex flex-wrap gap-1`.
+- `styles-tab__selector-row` — egy sor (`Sizes` / `Classes` / `Elements`), `flex flex-wrap gap-1`. A Classes sor a lényegi: a mentett override-ok osztályokra hivatkoznak (`.headline_text_1`), az id-k a konténereken ülnek.
 - `styles-tab__selector-label` — sor-címke, a projekt szokásos `text-[10px] uppercase tracking-wider text-slate-400` szekció-label tokenje.
 - `styles-tab__selector-chip` — kattintható token-chip a globális `tag-chip`-re ülve (`font-mono text-[10px]`, slate keret + hover). Beszúrás a kurzorpozícióba, szóköz-normalizálással.

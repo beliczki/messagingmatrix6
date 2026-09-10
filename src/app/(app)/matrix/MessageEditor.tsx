@@ -78,6 +78,8 @@ type TemplateInfo = {
   sizes: string[];
   /** DOM ids declared in the template's index.html (html kind only). */
   elementIds: string[];
+  /** CSS classes declared in the template's index.html (html kind only). */
+  elementClasses: string[];
   defaultSize: string | null;
   tagOptions: string[];
   placeholders: Array<{ name: string; type: string }>;
@@ -910,6 +912,7 @@ export default function MessageEditor({
                   setDraft={setDraft}
                   templateSizes={currentTemplate?.sizes ?? []}
                   templateElementIds={currentTemplate?.elementIds ?? []}
+                  templateElementClasses={currentTemplate?.elementClasses ?? []}
                 />
               ) : null}
               {tab === "trafficking" && placedRow !== null ? (
@@ -1924,11 +1927,13 @@ function StylesTab({
   setDraft,
   templateSizes,
   templateElementIds,
+  templateElementClasses,
 }: {
   draft: EditableFields;
   setDraft: SetDraft;
   templateSizes: string[];
   templateElementIds: string[];
+  templateElementClasses: string[];
 }) {
   const cssRef = useRef<HTMLTextAreaElement>(null);
   // Where the caret belongs once React has re-rendered the textarea with the
@@ -2011,6 +2016,7 @@ function StylesTab({
       <SelectorChips
         sizes={templateSizes}
         elementIds={templateElementIds}
+        elementClasses={templateElementClasses}
         onInsert={insertToken}
       />
     </>
@@ -2023,17 +2029,22 @@ function StylesTab({
 function SelectorChips({
   sizes,
   elementIds,
+  elementClasses,
   onInsert,
 }: {
   sizes: string[];
   elementIds: string[];
+  elementClasses: string[];
   onInsert: (token: string) => void;
 }) {
-  if (sizes.length === 0 && elementIds.length === 0) return null;
+  // Classes lead: the stored overrides target them (`.headline_text_1`), while
+  // the ids sit on the containers around them.
   const rows: Array<[string, string[]]> = [
     ["Sizes", sizes.map((s) => `.size-${s}`)],
+    ["Classes", elementClasses.map((c) => `.${c}`)],
     ["Elements", elementIds.map((id) => `#${id}`)],
   ];
+  if (rows.every(([, tokens]) => tokens.length === 0)) return null;
   return (
     <div className="styles-tab__selectors -mt-1 mb-3">
       {rows.map(([label, tokens]) =>

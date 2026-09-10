@@ -154,20 +154,45 @@ describe("readTemplate — kind parsing", () => {
     ]);
   });
 
+  it("reads element classes, splitting multi-name attributes", () => {
+    writeTemplate("classes", {
+      "manifest.json": JSON.stringify({ kind: "html" }),
+      "300x250.css": "/* */",
+      "index.html": [
+        '<div class="headline_text_1 headline_style_1">',
+        '  <div class="copy_text_1 copy_style_1"></div>',
+        '  <div class="copy_text_1"></div>',
+        '  <div class="template_variant_class {{template_variant_class}}"></div>',
+        "</div>",
+      ].join("\n"),
+    });
+    // Each name in an attribute is its own selector; repeats collapse and the
+    // placeholder-built name is dropped.
+    expect(readTemplate("classes")!.elementClasses).toEqual([
+      "headline_text_1",
+      "headline_style_1",
+      "copy_text_1",
+      "copy_style_1",
+      "template_variant_class",
+    ]);
+  });
+
   it("yields no element ids when index.html is missing", () => {
     writeTemplate("no-index", {
       "manifest.json": JSON.stringify({ kind: "html" }),
       "300x250.css": "/* */",
     });
     expect(readTemplate("no-index")!.elementIds).toEqual([]);
+    expect(readTemplate("no-index")!.elementClasses).toEqual([]);
   });
 
   it("non-html kinds carry no element ids even with an index.html", () => {
     writeTemplate("figma-ids", {
       "manifest.json": JSON.stringify({ kind: "figma" }),
-      "index.html": '<div id="ignored"></div>',
+      "index.html": '<div id="ignored" class="ignored-too"></div>',
     });
     expect(readTemplate("figma-ids")!.elementIds).toEqual([]);
+    expect(readTemplate("figma-ids")!.elementClasses).toEqual([]);
   });
 
   it("returns null for non-existent template name", () => {

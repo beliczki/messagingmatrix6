@@ -2453,3 +2453,23 @@ ha pedig agentic akkor legyen egy üres mező, Topic input field."
 vízszintes végtelen görgetés megvan (`CreativeStrip.loadMore`, `nextOffset`, oldalanként 24). Az
 „5 in this window" a teljes találat; 7-ről 5-re a 6.79.0-s összevonás vitte (MC404a/b négy csempéje
 kettő lett).
+
+### 2026-09-10 — a mentés nem perzisztált a drafts oldalon — 6.81.0
+
+**User:** „ha A és B-t átállítom DCO-ra, elkezdek lépkedni a headerben, előbb-utóbb visszaugrik
+Agenticre; oldalfrissítés után jól jelenik meg, pedig kiírta az autosave hogy saved. Általában van
+problémám, hogy a megváltoztatott értékek nem perzisztálnak, valami state-ben bent marad."
+
+**Gyökérok — nem a mentés, hanem a cache.** A `MessageEditor` `save.onSuccess`-e a szerver által
+visszaadott sort **bepatcheli a lista-cache-be**, hogy a rács azonnal a mentett értéket mutassa —
+de csak a `["messages"]` kulcsba (`MessageEditor.tsx:464`). A drafts oldal viszont a saját sorait a
+**`["drafts"]`** borítékban tartja. Az a másolat a mentés ELŐTTI értékeken maradt, a szerkesztő
+pedig minden sor-váltáskor **abból** veti újra a `draft` state-jét — tehát variánsváltás (vagy a
+`‹ ›` léptető) után visszatérve a régi értékek íródtak a frissen mentettek fölé. A „saved" nem
+hazudott: a szerver oldalon ott volt, csak a képernyőn nem.
+
+- [x] `save.onSuccess` a `["drafts"]` borítékot is patcheli (a `matches` kulcsot érintetlenül
+      átvíve). Minden draft-mezőt érint, nem csak a targetet.
+- [x] **A mátrix szerkesztő nem volt érintett:** a rács kulcsa `["messages", { showArchived }]`, amit
+      a meglévő prefix-illesztésű `setQueriesData` már lefed — ezt a kód kommentje ki is mondja.
+- [x] `planned-topic__row` — a négy tag egy sorban, kulcs-sorrendben.

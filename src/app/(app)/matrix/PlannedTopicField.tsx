@@ -121,13 +121,19 @@ export default function PlannedTopicField({
 
   return (
     <Field label="Planned topic">
-      <div className="planned-topic flex flex-col gap-1.5">
+      <div className="planned-topic flex flex-col gap-1">
+        {/* The four parts on ONE row, in key order — they read as the key they
+            compose, and stacked they read as four unrelated questions.
+            `min-w-0` on each: without it a long option value sets the select's
+            intrinsic width and the row overflows instead of sharing. */}
+        <div className="planned-topic__row flex items-center gap-1.5">
         {(["tag1", "tag2", "tag3"] as const).map((tag, i) => (
           <select
             key={tag}
             value={parts[tag]}
             onChange={(e) => set({ [tag]: e.target.value } as Partial<Parts>)}
-            className="input-box custom-dropdown planned-topic__tag w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
+            title={`Tag ${i + 1}`}
+            className="input-box custom-dropdown planned-topic__tag min-w-0 flex-1 rounded-md border border-slate-300 px-1.5 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
           >
             <option value="">— tag {i + 1} —</option>
             {/* A value the draft already carries but the dimension does not —
@@ -147,9 +153,11 @@ export default function PlannedTopicField({
           type="text"
           value={parts.tag4}
           onChange={(e) => set({ tag4: e.target.value })}
-          placeholder="tag 4 — the campaign's own word"
-          className="input-box planned-topic__tag4 w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
+          placeholder="tag 4"
+          title="Tag 4 — the campaign's own word"
+          className="input-box planned-topic__tag4 min-w-0 flex-1 rounded-md border border-slate-300 px-1.5 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
         />
+        </div>
         {/* What the four parts add up to, so the field shows the key it is
             proposing rather than making the user assemble it in their head. */}
         <p className="planned-topic__preview truncate text-[10px] text-slate-400">

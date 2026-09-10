@@ -5,6 +5,26 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.81.0] — 2026-09-10
+
+### Fixed
+- **A saved edit no longer un-saves itself when you step to another draft.**
+  The editor patches the row it just wrote back into the list cache so the grid
+  reflects it immediately — but it only patched `["messages"]`, and the drafts
+  page keeps its rows under `["drafts"]`. That copy stayed at the pre-save
+  values, and since the editor re-seeds its working state from the cached row
+  every time the open row changes, switching variant (or using the ‹ › stepper)
+  and coming back loaded the OLD values over the ones just written. It looked
+  like "saved" was lying; only a reload showed the truth. Any field on a draft
+  was affected, not just the target.
+  The matrix editor was never affected: its grid key is
+  `["messages", { showArchived }]`, which the existing prefix-matched patch
+  already covers.
+
+### Changed
+- The planned topic's four parts sit on one row, in key order — they compose a
+  key, and stacked they read as four unrelated questions.
+
 ## [6.80.0] — 2026-09-10
 
 ### Changed

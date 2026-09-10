@@ -469,6 +469,32 @@ export default function MessageEditor({
                 }
               : prev,
         );
+        // The drafts page keeps its rows under a DIFFERENT key — ["drafts"],
+        // in an envelope that also carries the creative matches — so patching
+        // only ["messages"] left that copy holding the pre-save row.
+        //
+        // That was invisible until the row being edited changed, and then it
+        // undid the save on screen: this editor re-seeds `draft` from
+        // `message` whenever the open row changes, and `message` is resolved
+        // out of that cached list. Stepping to another variant and back (or
+        // using the ‹ › stepper) therefore reloaded the PRE-save values over
+        // the ones just written, on any field — a reload was the only way to
+        // see the truth. The row is in hand here, so patch it; the rest of the
+        // envelope (`matches`, keyed by MC and unaffected by a content save)
+        // is carried through untouched.
+        qc.setQueriesData<{ drafts: EditableMessage[] }>(
+          { queryKey: ["drafts"] },
+          (prev) =>
+            prev
+              ? {
+                  ...prev,
+                  drafts: prev.drafts.map(
+                    (m) =>
+                      (byId.get(m.id) as EditableMessage | undefined) ?? m,
+                  ),
+                }
+              : prev,
+        );
       }
       setSaveState({ kind: "saved" });
       // Clear "saved" indicator after 1.5s.

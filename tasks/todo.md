@@ -26,9 +26,8 @@
 
 ## 🟢 NOW — indulásra kész (nincs blokkoló külső input)
 
-### Box deploy — 6.83.0 (2026-09-10)
-A working tree tiszta, minden commitálva (6.82.1 + a 6.83.0 apróság-kör). Nincs séma-migráció ebben a körben.
-- [ ] Box deploy: build + `pm2 restart mm6-erste`.
+### ~~Box deploy — 6.83.0~~ — **✅ DEPLOYOLVA (2026-09-11)**
+commit `c49d391`, box `0c6bce0`→`c49d391`, `npm run build` OK, `pm2 restart mm6-erste --update-env` → **Ready 1310ms**, box `package.json` **6.83.0**. **Séma-migráció nincs** (`git diff --name-only 0c6bce0..c49d391 -- db/migrations` üres). `error.log` a restart óta üres. Health: `/` 307 · `/login` 200 · `/matrix` 307 · `/drafts` 307 · `/creative-library` 307 · `/api/templates` 401 · `/mcp` 401; publikus `erste.messagingmatrix.ai/login` **200**.
 
 ### Apróság-kör (user, 2026-09-10) — M12 + M9.1 + M4.2
 Tételenként külön commit, `tsc` + vitest mindegyik után. A `MultiPill`-hez csak az M12.1 nyúl. Végén egy minor bump + CHANGELOG.

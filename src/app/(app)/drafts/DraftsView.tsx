@@ -695,8 +695,12 @@ function DraftTile({
           <span
             className={clsx(
               "tag-chip drafts-tile__product shrink-0 rounded px-1.5 py-0.5 text-[10px]",
+              // bg-slate-900, not 800: the "filled dark" pair
+              // (`bg-slate-900` + `text-white`) is the one globals.css flips in
+              // dark mode. At 800 the chip stayed dark-on-dark and read as a
+              // hole in the card.
               draft.draftProduct
-                ? "bg-slate-800 text-white"
+                ? "bg-slate-900 text-white"
                 : "border border-dashed border-slate-300 text-slate-400",
             )}
           >
@@ -814,7 +818,12 @@ function DraftTileMenu({
         aria-label={`Actions for MC${number}`}
         onClick={() => setOpen((o) => !o)}
         className={clsx(
-          "drafts-tile__menu-btn rounded bg-white/90 p-1 text-slate-600 shadow-sm ring-1 ring-slate-200 transition hover:bg-white",
+          // `bg-white/90` carries an alpha, which puts it outside the
+          // dark-mode shim in globals.css (that matches `.bg-white`, a
+          // different class) — so it needs the explicit dark pair, the way the
+          // grid's reorder overlay already does it. The hover does NOT: the
+          // shim covers `hover:bg-white` and lands on the same surface var.
+          "drafts-tile__menu-btn rounded bg-white/90 p-1 text-slate-600 shadow-sm ring-1 ring-slate-200 transition hover:bg-white dark:bg-slate-800/90 dark:ring-slate-600",
           // Out of the way until the card is reached for; always there once the
           // menu is open, or it would vanish under its own dropdown.
           open ? "opacity-100" : "opacity-0 group-hover:opacity-100",

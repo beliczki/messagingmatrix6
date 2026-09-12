@@ -1063,7 +1063,9 @@ function TabBtn({
       className={clsx(
         "tab-bar__tab inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition",
         active
-          ? "tab-bar__tab--active border-slate-900 text-slate-900"
+          // Brand primary, like the Settings tab bar — one tab-bar vocabulary
+          // across the app (user, 2026-09-12).
+          ? "tab-bar__tab--active border-brand-primary text-brand-primary"
           : "border-transparent text-slate-500 hover:text-slate-700",
       )}
     >

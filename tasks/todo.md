@@ -1128,3 +1128,38 @@ doboznak — legyen".
 Séma-migráció nincs. Health: `/login` 200 · `/creative-library` 307 · `/matrix` 307.
 Lokálisan (6001) ellenőrizve: a két health-panel dobozos, a Details a fekete gomb fölött; a Design
 preview-logó light módban fekete, dark módban fehér, 1.7rem.
+
+### 2026-09-12 — dark-mode kör + a mátrix product-tagek lecsendesítése — 6.92.0
+
+**User (sorozatban, képernyőképekkel):** a draft product tag nem invertál · a mátrixban zavar a sok
+product tag (legyen háttér nélküli, kisebb, nem bold) · az ellipsis menü sem invertál · az Activity
+elválasztó vonala sem · a checker sem a kreatív-dialógusban · az „update" warning sem · a feeds `true`
+sem · az activity tagek sem · a placeholder-bindings ikonok elszálltak · az editor tabok legyenek úgy
+színezve, mint a settingsé · a CL action gombok legyenek a mátrix Export gombjának magasságával.
+
+**A gyökérok egy helyen volt:** a `globals.css` dark-shim **csak a semleges rámpát** (white/slate)
+képezte le. Minden más light-mode fényerőn maradt a sötét felületen. Amit most lefed:
+- [x] **tone-tintek** (amber/rose/red/emerald/blue/violet/sky `-50`/`-100` háttér + `-600…-900` szöveg)
+      — a háttér a **jelenlegi felületbe** keveredik (`color-mix(... var(--surface))`), a szöveg a
+      `-400` fokra lép. Ez egyszerre javítja a „updates N other audiences" figyelmeztetést, a
+      hibadobozokat, a badge-eket és a menük danger-sorát.
+- [x] **status-badge-ek + a feeds Live cella**: eddig **literál `white`-ba** keverték a színt; most
+      `var(--surface)`-be, és dark módban a felirat feljebb van emelve (egy tenant DEAD-je `#000000`).
+- [x] **`divide-*` elválasztók**: a Tailwind gyerek-kombinátoron állítja a `border-color`-t, amire a
+      `border-*` szabályok soha nem illeszkedtek.
+- [x] **draft product chip** (`bg-slate-800` → `bg-slate-900`, ezt a párt a shim már fordítja) és az
+      **ellipsis gomb** (`bg-white/90` — az alfa miatt **más osztály**, mint a `bg-white`).
+- [x] **checker a kreatív-dialógusban**: inline stílusként volt megírva — a `preview-bg.ts` kommentje
+      pontosan ezt tiltja, mert inline stílus nem tud témát követni. Most a `preview-viewport--*` osztály.
+- [x] **mátrix product tagek**: háttér nélkül, `text-[8px]`, normál súly. Száz kitöltött chip a cellák
+      elől vitte a figyelmet; saját felület nélkül dark módban sincs mit fordítani rajtuk.
+- [x] **editor tabok** = `border-brand-primary text-brand-primary`, mint a Settings tab-bar.
+- [x] **`TypeIcon`** (template placeholder-bindings): lucide `size`/`color` propokat adott át, amiket a
+      registry **szándékosan eldob** (a generált Core-ikonnak nincs megfelelője) → a glyph a saját
+      intrinsic méretén rajzolódott és kitöltötte a kártyát. Most className + `currentColor`.
+- [x] **CL action gombok** a mátrix Export gombjának metrikájával (`px-3 py-1.5`, `text-sm`, `size-4`).
+
+**Nyitva maradt (nem reprodukálható lokálisan):** a dashboard CREATIVES csíkban a html-render tileok
+világos pereme. A dev szerver nem rendereli a bannereket (`</>` placeholder), az élesen viszont látszik;
+a saját keretünk (`thumb-checker`, `creative-strip__mc bg-slate-100 dark:bg-black`, `border-slate-200`)
+mind témafüggő, tehát a perem gyanúm szerint **a banner saját fehér vászna**. Kérdés a userhez.

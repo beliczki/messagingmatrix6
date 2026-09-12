@@ -5,6 +5,43 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.92.0] — 2026-09-12
+
+### Fixed
+- **Dark mode reached the parts the shim never covered.** `globals.css` only
+  remapped the neutral ramp (white / slate), so everything else stayed at
+  light-mode brightness on a dark surface. Now also themed:
+  - **tone tints** — amber / rose / red / emerald / blue / violet / sky at -50
+    and -100 mix into the current surface instead of glowing, and their -600…-900
+    text moves to the -400 step (the "updates N other audiences" warning, error
+    boxes, badge chips, the danger row in a menu);
+  - **status badges and the feeds Live cell**, which mixed their colour into a
+    literal `white`; they mix into `--surface` now, and in dark mode the label is
+    lifted so a tenant's near-black DEAD is legible;
+  - **`divide-*` list dividers** (the dashboard Activity panel), which set the
+    colour through a child combinator the `border-*` rules never matched;
+  - **the draft card's product chip** (`bg-slate-800` → `bg-slate-900`, the pair
+    the shim already flips) and **its ellipsis button**, whose `bg-white/90`
+    carries an alpha and so is a different class from `bg-white`;
+  - **the creative preview's transparency checker in the matrix detail dialog**,
+    which was built as an inline style — the one thing that can never follow a
+    theme, as `preview-bg.ts` already warned.
+- **The template placeholder icons were unsized and uncoloured.** `TypeIcon`
+  passed lucide's `size`/`color` props, which the icon registry drops on purpose
+  (a generated Core icon has no equivalent), so each glyph fell back to its
+  intrinsic size and filled the binding card.
+
+### Changed
+- **The matrix's product tags are quiet labels, not filled chips**: no
+  background, one step smaller, regular weight. The grid shows one per row and
+  one per column, so a hundred filled chips fought the cells for attention —
+  and with no surface of its own the tag needs no dark-mode treatment either.
+- **The message editor's tabs use the brand primary**, like the Settings tab
+  bar — one tab vocabulary across the app.
+- **The Creative Library's health buttons take the matrix's action metrics**
+  (`px-3 py-1.5`, `text-sm`, 16px icon), so Run check / Generate previews stand
+  the same height as Export.
+
 ## [6.91.1] — 2026-09-12
 
 ### Changed

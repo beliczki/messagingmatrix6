@@ -168,9 +168,9 @@ export default function DriveHealthCheck({
       <button
         type="button"
         onClick={() => setDetailsOpen(true)}
-        className="drive-health__details toolbar-btn mt-2 flex w-full items-center justify-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 transition hover:bg-slate-100"
+        className="drive-health__details toolbar-btn mt-2 flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
       >
-        <Icon name="list" className="size-3" />
+        <Icon name="list" className="size-4" />
         Details
       </button>
 
@@ -178,13 +178,13 @@ export default function DriveHealthCheck({
         type="button"
         onClick={run}
         disabled={running || creativeIds.length === 0}
-        className="drive-health__run toolbar-btn--primary mt-1.5 flex w-full items-center justify-center gap-1.5 rounded bg-slate-900 px-2 py-1 text-xs font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+        className="drive-health__run toolbar-btn--primary mt-1.5 flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
         title={title}
       >
         {running ? (
-          <Icon name="spinner" className="size-3 animate-spin" />
+          <Icon name="spinner" className="size-4 animate-spin" />
         ) : (
-          <Icon name="google-drive" className="size-3" />
+          <Icon name="google-drive" className="size-4" />
         )}
         Run check
       </button>

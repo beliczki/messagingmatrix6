@@ -126,8 +126,24 @@ const TYPE_COLORS: Record<string, string> = {
   style: "#6366f1",
 };
 
-function TypeIcon({ type, size = 14, color }: { type: string; size?: number; color?: string }) {
-  const props = { size, color };
+// The icon registry takes className and colours from currentColor — it drops
+// lucide's `size`/`color` props on purpose, because a generated Core icon has
+// no equivalent (see _icons/types.ts). Passing them anyway is what left these
+// glyphs unsized: the family SVG fell back to its intrinsic size and filled the
+// binding card.
+function TypeIcon({
+  type,
+  className = "size-3.5",
+  color,
+}: {
+  type: string;
+  className?: string;
+  color?: string;
+}) {
+  const props = {
+    className: `template-type-icon shrink-0 ${className}`,
+    style: color ? { color } : undefined,
+  };
   switch (type) {
     case "image":
       return <Icon name="image" {...props} />;
@@ -1003,7 +1019,6 @@ function BindingsPanel({
               >
                 <TypeIcon
                   type={t}
-                  size={13}
                   color={allTypeFilters[t] ? "#fff" : TYPE_COLORS[t]}
                 />
               </button>
@@ -1030,7 +1045,7 @@ function BindingsPanel({
                 style={{ borderLeftWidth: 3, borderLeftColor: color }}
               >
                 <div className="binding-card__row flex items-center gap-2">
-                  <TypeIcon type={type} size={13} color={color} />
+                  <TypeIcon type={type} color={color} />
                   <span className="binding-card__name font-mono text-xs text-slate-700">{`{{${p.name}}}`}</span>
                   <span className="binding-card__arrow text-slate-300">←</span>
                   {unknown ? (

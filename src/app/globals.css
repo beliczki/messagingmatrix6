@@ -141,6 +141,116 @@ html.dark {
   html.dark .border-slate-300 { border-color: var(--border-default); }
   html.dark .border-gray-300 { border-color: var(--border-default); }
 
+  /* `divide-*` sets border-color on a child combinator, so it is a different
+     selector from `border-*` and the rules above never reached it — the list
+     dividers on the dashboard's Activity panel stayed light-mode bright on the
+     dark surface. Tailwind's own rule is (0,0,3,0); the `html.dark` prefix
+     takes this to (0,0,4,1) without !important. */
+  html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+  html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+    border-color: var(--border-default);
+  }
+
+  /* Tone tints (amber / rose / red / emerald / blue / violet / sky).
+     -50 and -100 backgrounds with a -600..-900 text are the app's notice
+     vocabulary: the "updates N other audiences" warning, status badges, error
+     boxes, the danger row in a menu. The shim above only covers the neutral
+     ramp, so every one of these stayed at full light-mode brightness on the
+     dark surface — a glowing patch, and in a few places dark-on-dark text.
+     Here the tint is mixed into the CURRENT surface instead (so it reads as a
+     tinted panel, not a sticker) and the text moves to the -400 step, which is
+     what carries the same meaning on a dark ground.
+
+     Deliberately NOT remapped: the filled buttons (bg-rose-600/700,
+     bg-amber-600/700) and their light text (text-rose-50, text-amber-200) —
+     those are already light-on-dark and mean the same in both themes. */
+  html.dark .bg-amber-50,
+  html.dark .bg-amber-100,
+  html.dark .hover\:bg-amber-100:hover {
+    background-color: color-mix(in srgb, #f59e0b 16%, var(--surface));
+  }
+  html.dark .border-amber-200,
+  html.dark .border-amber-300 {
+    border-color: color-mix(in srgb, #f59e0b 38%, transparent);
+  }
+  html.dark .text-amber-600,
+  html.dark .text-amber-700,
+  html.dark .text-amber-800,
+  html.dark .text-amber-900 { color: #fbbf24; }
+
+  html.dark .bg-rose-50,
+  html.dark .bg-rose-100,
+  html.dark .hover\:bg-rose-50:hover,
+  html.dark .hover\:bg-rose-100:hover {
+    background-color: color-mix(in srgb, #f43f5e 16%, var(--surface));
+  }
+  html.dark .border-rose-200,
+  html.dark .border-rose-300 {
+    border-color: color-mix(in srgb, #f43f5e 38%, transparent);
+  }
+  html.dark .text-rose-600,
+  html.dark .text-rose-700,
+  html.dark .text-rose-800 { color: #fb7185; }
+
+  html.dark .bg-red-50,
+  html.dark .bg-red-100 {
+    background-color: color-mix(in srgb, #ef4444 16%, var(--surface));
+  }
+  html.dark .border-red-200,
+  html.dark .border-red-300 {
+    border-color: color-mix(in srgb, #ef4444 38%, transparent);
+  }
+  html.dark .text-red-600,
+  html.dark .text-red-700,
+  html.dark .text-red-800 { color: #f87171; }
+
+  html.dark .bg-emerald-50,
+  html.dark .bg-emerald-100,
+  html.dark .hover\:bg-emerald-50:hover,
+  html.dark .hover\:bg-emerald-100:hover {
+    background-color: color-mix(in srgb, #10b981 16%, var(--surface));
+  }
+  html.dark .border-emerald-200,
+  html.dark .border-emerald-300 {
+    border-color: color-mix(in srgb, #10b981 38%, transparent);
+  }
+  html.dark .text-emerald-600,
+  html.dark .text-emerald-700,
+  html.dark .text-emerald-800 { color: #34d399; }
+
+  html.dark .bg-blue-50,
+  html.dark .bg-blue-100 {
+    background-color: color-mix(in srgb, #3b82f6 16%, var(--surface));
+  }
+  html.dark .border-blue-200 {
+    border-color: color-mix(in srgb, #3b82f6 38%, transparent);
+  }
+  html.dark .text-blue-600,
+  html.dark .text-blue-700,
+  html.dark .text-blue-800 { color: #60a5fa; }
+
+  html.dark .bg-violet-50,
+  html.dark .bg-violet-100 {
+    background-color: color-mix(in srgb, #8b5cf6 16%, var(--surface));
+  }
+  html.dark .border-violet-200 {
+    border-color: color-mix(in srgb, #8b5cf6 38%, transparent);
+  }
+  html.dark .text-violet-600,
+  html.dark .text-violet-700,
+  html.dark .text-violet-800 { color: #a78bfa; }
+
+  html.dark .bg-sky-50,
+  html.dark .bg-sky-100 {
+    background-color: color-mix(in srgb, #0ea5e9 16%, var(--surface));
+  }
+  html.dark .border-sky-200 {
+    border-color: color-mix(in srgb, #0ea5e9 38%, transparent);
+  }
+  html.dark .text-sky-600,
+  html.dark .text-sky-700,
+  html.dark .text-sky-800 { color: #38bdf8; }
+
   /* "Filled dark" primary-button pattern (bg-slate-900 + text-white) flips to
      "filled light" so active toggles, filter-count chips, primary CTAs,
      autosave/skip-anim toggles, view-selector active state, and the Upload
@@ -176,7 +286,7 @@ html.dark {
      history. Same colour formula as .status-badge--active above, applied to the
      cell instead of a pill because the cell is the thing being flagged. */
   .feeds-table__cell--live {
-    background-color: color-mix(in srgb, var(--status-active) 18%, white);
+    background-color: color-mix(in srgb, var(--status-active) 18%, var(--surface));
     color: var(--status-active);
   }
 
@@ -609,12 +719,24 @@ html.dark {
   font-size: 0.75rem;
   font-weight: 500;
 }
-.status-badge--draft { background-color: color-mix(in srgb, var(--status-draft) 18%, white); color: var(--status-draft); }
-.status-badge--preview { background-color: color-mix(in srgb, var(--status-preview) 18%, white); color: var(--status-preview); }
-.status-badge--approved { background-color: color-mix(in srgb, var(--status-approved) 18%, white); color: var(--status-approved); }
-.status-badge--active { background-color: color-mix(in srgb, var(--status-active) 18%, white); color: var(--status-active); }
-.status-badge--inactive { background-color: color-mix(in srgb, var(--status-inactive) 18%, white); color: var(--status-inactive); }
-.status-badge--dead { background-color: color-mix(in srgb, var(--status-dead) 18%, white); color: var(--status-dead); }
+.status-badge--draft { background-color: color-mix(in srgb, var(--status-draft) 18%, var(--surface)); color: var(--status-draft); }
+.status-badge--preview { background-color: color-mix(in srgb, var(--status-preview) 18%, var(--surface)); color: var(--status-preview); }
+.status-badge--approved { background-color: color-mix(in srgb, var(--status-approved) 18%, var(--surface)); color: var(--status-approved); }
+.status-badge--active { background-color: color-mix(in srgb, var(--status-active) 18%, var(--surface)); color: var(--status-active); }
+.status-badge--inactive { background-color: color-mix(in srgb, var(--status-inactive) 18%, var(--surface)); color: var(--status-inactive); }
+.status-badge--dead { background-color: color-mix(in srgb, var(--status-dead) 18%, var(--surface)); color: var(--status-dead); }
+
+/* The tints above mix into `--surface`, so they follow the theme; the TEXT does
+   not, and a tenant's DEAD is #000000 — black on a dark panel. In dark mode the
+   label is lifted towards the surface's own light end, which keeps each status
+   its hue and makes the near-black one legible. */
+html.dark .status-badge--draft { color: color-mix(in srgb, var(--status-draft) 70%, #ffffff); }
+html.dark .status-badge--preview { color: color-mix(in srgb, var(--status-preview) 70%, #ffffff); }
+html.dark .status-badge--approved { color: color-mix(in srgb, var(--status-approved) 70%, #ffffff); }
+html.dark .status-badge--active { color: color-mix(in srgb, var(--status-active) 70%, #ffffff); }
+html.dark .status-badge--inactive { color: color-mix(in srgb, var(--status-inactive) 55%, #ffffff); }
+html.dark .status-badge--dead { color: color-mix(in srgb, var(--status-dead) 30%, #ffffff); }
+html.dark .feeds-table__cell--live { color: color-mix(in srgb, var(--status-active) 70%, #ffffff); }
 
 /* Buying-platform colours — the single place the values live. Consumed by the
    matrix audience-header edge (below) and the tree-view node stripe. Which

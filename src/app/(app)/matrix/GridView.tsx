@@ -48,12 +48,16 @@ function audienceEdgeClasses(
 }
 
 /**
- * Which product a topic row or audience column belongs to. Same chip as the
- * draft card's `drafts-tile__product` — reused rather than reinvented, so the
- * two surfaces read as one vocabulary.
+ * Which product a topic row or audience column belongs to.
+ *
+ * NOT the draft card's filled chip, deliberately (user, 2026-09-12): the grid
+ * shows one per row AND one per column, so a hundred filled chips fight the
+ * cells for attention — the thing the grid is actually about. Here it is a
+ * quiet label: no background, one step smaller, regular weight. Carrying no
+ * surface of its own also means dark mode has nothing to flip for it.
  *
  * The dense column header writes its label vertically (rotated 180°, so it
- * reads bottom-to-top); the chip turns with it and sits at the bottom, which
+ * reads bottom-to-top); the label turns with it and sits at the bottom, which
  * is where "before the name" lands in that reading order.
  */
 function ProductTag({
@@ -66,10 +70,10 @@ function ProductTag({
   return (
     <span
       className={clsx(
-        "tag-chip matrix-grid__header-product shrink-0 rounded bg-slate-800 font-semibold leading-none text-white",
+        "tag-chip matrix-grid__header-product shrink-0 font-normal leading-none tracking-wide text-slate-400",
         vertical
-          ? "matrix-grid__header-product--vertical px-0.5 py-1 text-[9px] [writing-mode:vertical-rl] [transform:rotate(180deg)]"
-          : "px-1 py-0.5 text-[9px]",
+          ? "matrix-grid__header-product--vertical py-0.5 text-[8px] [writing-mode:vertical-rl] [transform:rotate(180deg)]"
+          : "text-[8px]",
       )}
     >
       {product}

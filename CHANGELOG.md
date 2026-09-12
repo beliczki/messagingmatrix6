@@ -5,6 +5,47 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.90.0] — 2026-09-12
+
+### Added
+- **The Creative Library health panels moved under VIEW and grew a details
+  dialog.** Drive links and Previews now sit directly under the view switcher
+  and carry only what a 256px rail can hold: a state line, a black primary
+  action (Run check / Generate previews) and an outlined Details button. The
+  tables — which MCs are missing a preview; the run's per-file outcomes, or
+  what carries no Drive file link yet — open in an `AppDialog` built on the
+  feed export dialog's header shape.
+- **The dashboard activity digest opens on the rows behind a count.** Clicking
+  a digest row lists them: when, what (the entity's own name, read out of the
+  audit JSON), id, which fields actually moved, and by whom. Scoped by the same
+  product expression the digest counts with, so a count of 28 cannot open onto
+  31 rows. Admin-only, because the audit log is.
+- **A Slides button next to Drive on the share page**, in the gallery header,
+  in the creative lightbox and in the small-screen menu, whenever the shared
+  cards were briefed on a deck. Resolved live from the cards' brief columns
+  rather than from the snapshot — snapshots predate those columns, and a link
+  to "the brief" should follow the brief. Buttons read `Drive` and `Slides`.
+- **A History tab beside Comments in the share lightbox.** Comments say what a
+  reviewer wants changed; History says what actually changed. Its public route
+  resolves the item key against the share's own snapshot before it becomes an
+  entity, and returns when / what / who (the e-mail's local part) / which
+  fields moved by NAME only.
+
+### Fixed
+- **The floating dialog close button sat 4px below the header's own buttons.**
+  `AppDialog` pinned it at `top-3`; it now centres in the `h-12` toolbar band
+  every header it hosts uses. The feed export dialog's header joined that
+  height.
+- **The dashboard product filter never reached the Shares panel** — with SZA
+  selected the panel still listed a MARKET share. A share carries no product
+  column, only its frozen snapshot, so `shareProducts()` reads it back out
+  (creatives name their product; matrix cells fall back to the topic prefix,
+  where the canonical expression ends anyway). Comments are filtered by the
+  same rule.
+- **An empty Feed exports panel now names the last export before the window**
+  (product-scoped), the way the Creatives strip names its latest change.
+  "Nothing was exported" and "the query is wrong" looked identical.
+
 ## [6.89.1] — 2026-09-12
 
 ### Fixed

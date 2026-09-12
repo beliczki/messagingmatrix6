@@ -1026,30 +1026,45 @@ dialog · a History tab az **audit-változásnaplót** mutatja · a feed-export 
 a legutóbbi exportot** (a 30d ablak a DB szerint helyesen tartalmazza a 2026-08-31-i SZA feedet, tehát
 ez nem query-bug, hanem hiányzó „mi volt legutóbb" jelzés — ugyanaz a minta, mint a Creatives panelé).
 
-- [ ] **U1 — dialóg close-gomb egy vonalban (patch).** `AppDialog` abszolút close gombja ma `top-3`
+- [x] **U1 (✅ 6.90.0) — dialóg close-gomb egy vonalban (patch).** `AppDialog` abszolút close gombja ma `top-3`
       (közép 28px), a `settings__header` viszont `h-12` (közép 24px) → 4px csúszás. A close a
       fejlécsáv közepére kerül, és a `FeedExportDialog` fejléce is a ház `h-12` toolbar-magasságára áll.
-- [ ] **U2 — Creative Library: health-panelek a VIEW alá + Details dialog (minor).** Sorrend:
+- [x] **U2 (✅ 6.90.0) — Creative Library: health-panelek a VIEW alá + Details dialog (minor).** Sorrend:
       View → Drive links → Previews → (mt-auto) Archived → Upload. A panelekben csak **stat + fekete
       futtató gomb + körvonalas Details**; a hosszú offender-lista a panelből a dialogba költözik.
       A dialog `AppDialog`, a `FeedExportDialog` fejléc-mintájával (cím + elsődleges gomb, body = tábla).
-- [ ] **U3 — dashboard Shares: product-szűrés (patch).** A `sharesInScope` ma **egyáltalán nem**
+- [x] **U3 (✅ 6.90.0) — dashboard Shares: product-szűrés (patch).** A `sharesInScope` ma **egyáltalán nem**
       szűr productra, ezért SZA-szűrőnél is jön a MARKET share. A share snapshot `creatives[].product`
       (és a matrixItems üzenetei) hordozzák a terméket → a metadatából számolt product-halmaz szűr,
       a kommentek pedig csak a megmaradt share-ekre.
-- [ ] **U4 — dashboard Feed exports: üres állapot nevezze meg a legutóbbi exportot (patch).**
+- [x] **U4 (✅ 6.90.0) — dashboard Feed exports: üres állapot nevezze meg a legutóbbi exportot (patch).**
       A Creatives panel nyelvén: „none in this window — last export 2026-08-31 · SZA v1", kattintható.
       Product-szűrővel a legutóbbi is product-szűrt.
-- [ ] **U5 — dashboard Activity drill-down (minor).** A digest-sor kattintható → dialog, ami az adott
+- [x] **U5 (✅ 6.90.0) — dashboard Activity drill-down (minor).** A digest-sor kattintható → dialog, ami az adott
       entity+action (+user) mögötti audit-sorokat listázza a nyitott ablakban: idő, action, entity,
       entity-azonosító/címke, user. Az `/api/audit-log` kap `products` + `entity`+`actions`+`since/until`
       szűrést (a `productScoped` újrahasználva, hogy a dialog ugyanazt a halmazt lássa, mint a digest).
       Lapozás a meglévő `limit/offset`-tel (1000-es cap ellen).
-- [ ] **U6 — share oldal: Slides gomb a brief mellé (minor).** A share page szerver-oldalon feloldja a
+- [x] **U6 (✅ 6.90.0) — share oldal: Slides gomb a brief mellé (minor).** A share page szerver-oldalon feloldja a
       snapshot MC-ihez tartozó `messages.brief_slides_file_id`-t (+ `brief_slide_id`), és ha van,
       a fejlécben a Drive mellé kerül egy **Slides** gomb; a gombfeliratok **Drive** / **Slides**.
       Ugyanez a `ShareDetailDialog` fejlécében, a megnyitott creative saját briefjével.
-- [ ] **U7 — share oldal: Comments / History tab (minor).** A `share-detail-dialog__side-tabs` két
+- [x] **U7 (✅ 6.90.0) — share oldal: Comments / History tab (minor).** A `share-detail-dialog__side-tabs` két
       tabot kap; a History a tétel audit-naplóját mutatja egy **publikus, csak a share tételeire
       szűrt** route-ból (`/share/[id]/history`), user-e-mail nélkül (megjelenítő név).
-- [ ] **U8 — bump + CHANGELOG + commit + deploy** (user: „ha végeztél mehet egy full commit and deploy").
+- [x] **U8 — bump + CHANGELOG + commit + deploy** (user: „ha végeztél mehet egy full commit and deploy").
+
+**Eredmény (6.90.0):** `npm test` **946/946** (+5 unit a `shareProducts`-ra, +4 integrációs a publikus
+history route-ra), `tsc` + `eslint` 0 error. Böngészőben ellenőrizve a 6001-es dev szerveren: a Settings
+X egy vonalban a Revert/Save-vel, a CL-panelek a VIEW alatt (261 without a file link / 14 MCs missing),
+a Previews Details dialog táblája, a dashboard SZA-szűrőnél már **nem** hozza a MARKET share-t, a feed
+panel kiírja a legutóbbi exportot (2026-08-31 · SZA), az Activity 28-as sora megnyílik 28 sorra, a share
+fejlécben Drive + Slides, a lightboxban Comments/History tab.
+
+**Két dolog, amit menet közben találtam, és NEM ebben a körben javítottam:**
+- Az Activity drill-down **~8 másodperc** dev módban. A `productScoped` egy uncorrelated IN-subquery az
+  egész kliens messages/topics/creatives/assets/audiences uniójára — a digest ugyanezt fizeti, csak
+  szerver-oldalon nem látszik. Ha zavaró lesz: a union anyagot egy `messages_product` view vagy egy
+  materializált segédtábla oldja meg, nem a route.
+- A feed-export panel a 2026-08-31-i SZA exportot **`v0`**-ként írja ki (`feed_version = 0` a sorban).
+  Vagy a verziószámozás kezdett 0-ról ennél a soron, vagy egy régi import hagyta így — külön szelet.

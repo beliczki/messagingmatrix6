@@ -371,6 +371,7 @@ export default async function Dashboard({
                 more={Math.max(grouped.length - DIGEST_ROWS, 0)}
                 scope={{ from: scope.from, to: scope.to, label: scope.label }}
                 products={products}
+                actors={Object.fromEntries(emailById)}
                 canDrillDown={claims.role === "admin"}
               />
             )}

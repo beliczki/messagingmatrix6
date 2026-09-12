@@ -57,6 +57,7 @@ export default function ActivityDigest({
   more,
   scope,
   products,
+  actors,
   canDrillDown,
 }: {
   groups: DigestGroup[];
@@ -64,6 +65,8 @@ export default function ActivityDigest({
   more: number;
   scope: { from: string; to: string; label: string };
   products: string[];
+  /** userId -> account e-mail, the same names the digest lists as actors. */
+  actors: Record<string, string>;
   /** The audit log is admin-only; everyone else sees the counts alone. */
   canDrillDown: boolean;
 }) {
@@ -118,6 +121,7 @@ export default function ActivityDigest({
         onClose={() => setOpen(null)}
         scope={scope}
         products={products}
+        actors={actors}
       />
     </>
   );
@@ -132,11 +136,13 @@ function ActivityDetailDialog({
   onClose,
   scope,
   products,
+  actors,
 }: {
   group: DigestGroup | null;
   onClose: () => void;
   scope: { from: string; to: string; label: string };
   products: string[];
+  actors: Record<string, string>;
 }) {
   const q = useQuery<{ rows: AuditRow[]; hasMore: boolean }>({
     queryKey: [
@@ -230,7 +236,7 @@ function ActivityDetailDialog({
                         {changedSummary(r)}
                       </td>
                       <td className="activity-dialog__by py-1.5 text-xs text-slate-500">
-                        {r.userId ?? "system"}
+                        {r.userId ? (actors[r.userId] ?? r.userId) : "system"}
                       </td>
                     </tr>
                   ))}

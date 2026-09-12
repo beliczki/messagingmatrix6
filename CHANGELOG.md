@@ -5,6 +5,26 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.86.0] — 2026-09-12
+
+### Changed
+- **Image slots are roles, addressed by the name the template gives them.**
+  `generate_test_creative` and `draft_update` took `background_images` as a list
+  of up to four filenames, which said the four background slots were
+  interchangeable positions. They are not: in the html template
+  `background_image_1` is the full-bleed background, `background_image_2` the
+  cut-out object, `background_image_3` the card image, `brand_image_1` the logo
+  and `sticker_image_1` the sticker. Both tools now take one argument per slot,
+  each travelling on its own — changing the logo leaves the background alone,
+  and an empty string clears a single slot. The slot→column mapping is read off
+  the template's own manifest bindings, so a template that declares different
+  slots is validated against what it really has.
+- An edit validates the image slots it SETS, not every image the draft already
+  carries. Judging the end state there would strand a draft whose earlier
+  filename has left the library — no headline fix until the images were sorted
+  out. The variant-class tokens are still judged on the end state, because they
+  are one field where absent means "keep".
+
 ## [6.85.0] — 2026-09-12
 
 ### Added

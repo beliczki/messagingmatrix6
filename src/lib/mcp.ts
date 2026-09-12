@@ -1234,6 +1234,21 @@ function registerMetaTools(server: McpServer, ctx: McpContext): void {
 // can refetch + retry. The lib functions already do all schema validation and
 // slot allocation; we just thread inputs through.
 
+// The image slots a draft tool was given, keyed by the name the TEMPLATE uses.
+// They are roles, not positions — background, object, card, logo, sticker — so
+// each travels on its own and an absent one is left alone.
+function imageSlotArgs(
+  args: Record<string, unknown>,
+): Record<string, string | undefined> {
+  const out: Record<string, string | undefined> = {};
+  for (const [k, v] of Object.entries(args)) {
+    if (/^(background|brand|sticker)_image_\d+$/.test(k)) {
+      out[k] = v as string | undefined;
+    }
+  }
+  return out;
+}
+
 function mcpUserId(ctx: McpContext): string {
   return ctx.userId;
 }
@@ -3054,7 +3069,7 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
     "generate_test_creative",
     {
       description:
-        "Take work on: stage a draft creative and render it to PNG previews. The draft is OUTSIDE the matrix (no audience, no cell) but it CLAIMS ITS MC NUMBER immediately, and nothing else can take that number while the work is in progress — that is the point of starting here rather than in the matrix. Required: template (an html template from list_templates). Optional sizes narrows the initial render (default: every size the template defines); they must be sizes that template has. Content fields: headline, copy1, copy2, disclaimer, cta, flash (the sticker TEXT), per-field *_style CSS, custom_css, and template_variant_classes (space-separated layout/color/frame tokens from the template's tag options, e.g. 'fullSurfaceImage teal topSticker' — list_templates shows the valid vocabulary). Images are referenced by STORED FILENAME (upload generated images first via asset_upload): background_images (up to 4 → image1..4), brand_image (logo → image5, template default when omitted), sticker_image (→ image6). Optional brief_link records the Google Slides deck (and slide) this came in on — the Drive file id is what gets stored, so three spellings of one link are one deck, and working_topic records a suggested topic NAME that promotion later resolves to a real topic. All inputs are validated up front — a validation error lists every problem at once and creates nothing. Rendering is ASYNC: this returns immediately with draft_id and the claimed mc_label; poll draft_status for progress. The call is NOT idempotent — before retrying a timeout, check list_drafts to avoid claiming a second number. One write against the rate limit. Then: show_draft_previews to display, draft_promote to give it a cell, draft_archive to shelve it.",
+        "Take work on: stage a draft creative and render it to PNG previews. The draft is OUTSIDE the matrix (no audience, no cell) but it CLAIMS ITS MC NUMBER immediately, and nothing else can take that number while the work is in progress — that is the point of starting here rather than in the matrix. Required: template (an html template from list_templates). Optional sizes narrows the initial render (default: every size the template defines); they must be sizes that template has. Content fields: headline, copy1, copy2, disclaimer, cta, flash (the sticker TEXT), per-field *_style CSS, custom_css, and template_variant_classes (space-separated layout/color/frame tokens from the template's tag options, e.g. 'fullSurfaceImage teal topSticker' — list_templates shows the valid vocabulary). Images are referenced by STORED FILENAME (upload generated images first via asset_upload) and each slot is named by the TEMPLATE, because the slots are roles rather than positions: background_image_1 is the full-bleed background, background_image_2 the cut-out object, background_image_3 the card image, brand_image_1 the logo (template default when omitted) and sticker_image_1 the sticker. Pass only the ones you mean; list_templates shows what a template declares. Optional brief_link records the Google Slides deck (and slide) this came in on — the Drive file id is what gets stored, so three spellings of one link are one deck, and working_topic records a suggested topic NAME that promotion later resolves to a real topic. All inputs are validated up front — a validation error lists every problem at once and creates nothing. Rendering is ASYNC: this returns immediately with draft_id and the claimed mc_label; poll draft_status for progress. The call is NOT idempotent — before retrying a timeout, check list_drafts to avoid claiming a second number. One write against the rate limit. Then: show_draft_previews to display, draft_promote to give it a cell, draft_archive to shelve it.",
       inputSchema: {
         template: z.string(),
         sizes: z.array(z.string()).optional(),
@@ -3075,15 +3090,17 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
         cta_style: z.string().optional(),
         flash_style: z.string().optional(),
         custom_css: z.string().optional(),
-        background_images: z.array(z.string()).max(4).optional(),
-        brand_image: z.string().optional(),
-        sticker_image: z.string().optional(),
+        background_image_1: z.string().optional(),
+        background_image_2: z.string().optional(),
+        background_image_3: z.string().optional(),
+        background_image_4: z.string().optional(),
+        brand_image_1: z.string().optional(),
+        sticker_image_1: z.string().optional(),
       },
     },
     async (args) => {
       const limited = await requireRate(ctx);
       if (limited) return limited;
-      const bg = args.background_images ?? [];
       const input: TestCreativeInput = {
         template: args.template,
         sizes: args.sizes,
@@ -3102,15 +3119,13 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
         ctaStyle: args.cta_style,
         flashStyle: args.flash_style,
         customCss: args.custom_css,
-        image1: bg[0],
-        image2: bg[1],
-        image3: bg[2],
-        image4: bg[3],
-        image5: args.brand_image,
-        image6: args.sticker_image,
       };
       try {
-        const { draft, sizes } = await createTestCreative(ctx.clientId, input);
+        const { draft, sizes } = await createTestCreative(
+          ctx.clientId,
+          input,
+          imageSlotArgs(args),
+        );
         // The brief and the working topic are applied after creation so a bad
         // link fails loudly on its own rather than silently losing the draft.
         let row = draft;
@@ -3160,7 +3175,7 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
     "draft_update",
     {
       description:
-        "Edit a draft's content in place — the iteration step between generate_test_creative and draft_promote. Only the fields you PASS are touched; everything else keeps its value, and an EMPTY STRING clears a field. Content fields are the same vocabulary generate_test_creative uses: headline, copy1, copy2, disclaimer, cta, flash, the per-field *_style CSS, custom_css, template_variant_classes, name, and the images (background_images → image1..4, brand_image → image5, sticker_image → image6) referenced by STORED FILENAME. background_images replaces ALL FOUR background slots, so pass the whole set you want, not just the one that changed. The TEMPLATE cannot be changed here: it decides which sizes and which variant-class tokens are legal, so switching it is a different operation — archive the draft and generate a new one. Validation is all-or-nothing and reports every problem at once, exactly as on create, judging the draft as it will END UP rather than as the patch arrives. Re-rendering is ON by default and fire-and-forget (poll draft_status); pass render=false while making several edits in a row, then a final call with render=true. Optional sizes narrows the re-render; optional version takes the optimistic lock (omitted = current). One write against the rate limit.",
+        "Edit a draft's content in place — the iteration step between generate_test_creative and draft_promote. Only the fields you PASS are touched; everything else keeps its value, and an EMPTY STRING clears a field. Content fields are the same vocabulary generate_test_creative uses: headline, copy1, copy2, disclaimer, cta, flash, the per-field *_style CSS, custom_css, template_variant_classes, name, and the image slots referenced by STORED FILENAME. Each image slot is a ROLE the template names — background_image_1 the full-bleed background, background_image_2 the cut-out object, background_image_3 the card image, brand_image_1 the logo, sticker_image_1 the sticker — and each travels on its own: changing the logo leaves the background where it was, and clearing one means passing that slot an empty string. These live on the VARIANT, not on the MC: a and b can carry different images, unlike the brief, which is shared across the number. The TEMPLATE cannot be changed here: it decides which sizes and which variant-class tokens are legal, so switching it is a different operation — archive the draft and generate a new one. Validation is all-or-nothing and reports every problem at once, exactly as on create, judging the draft as it will END UP rather than as the patch arrives. Re-rendering is ON by default and fire-and-forget (poll draft_status); pass render=false while making several edits in a row, then a final call with render=true. Optional sizes narrows the re-render; optional version takes the optimistic lock (omitted = current). One write against the rate limit.",
       inputSchema: {
         draft_id: z.number().int(),
         render: z.boolean().optional(),
@@ -3181,17 +3196,17 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
         cta_style: z.string().optional(),
         flash_style: z.string().optional(),
         custom_css: z.string().optional(),
-        background_images: z.array(z.string()).max(4).optional(),
-        brand_image: z.string().optional(),
-        sticker_image: z.string().optional(),
+        background_image_1: z.string().optional(),
+        background_image_2: z.string().optional(),
+        background_image_3: z.string().optional(),
+        background_image_4: z.string().optional(),
+        brand_image_1: z.string().optional(),
+        sticker_image_1: z.string().optional(),
       },
     },
     async (args) => {
       const limited = await requireRate(ctx);
       if (limited) return limited;
-      // The array is a whole value: passing it rewrites all four slots, so the
-      // ones it doesn't reach are cleared rather than left behind from before.
-      const bg = args.background_images;
       const patch = {
         name: args.name,
         templateVariantClasses: args.template_variant_classes,
@@ -3208,16 +3223,6 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
         ctaStyle: args.cta_style,
         flashStyle: args.flash_style,
         customCss: args.custom_css,
-        ...(bg
-          ? {
-              image1: bg[0] ?? "",
-              image2: bg[1] ?? "",
-              image3: bg[2] ?? "",
-              image4: bg[3] ?? "",
-            }
-          : {}),
-        image5: args.brand_image,
-        image6: args.sticker_image,
       };
       const before = await getMessage(ctx.clientId, args.draft_id);
       try {
@@ -3225,7 +3230,11 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
           ctx.clientId,
           args.draft_id,
           patch,
-          { sizes: args.sizes, expectedVersion: args.version },
+          {
+            sizes: args.sizes,
+            expectedVersion: args.version,
+            images: imageSlotArgs(args),
+          },
         );
         if (args.render !== false) {
           void startDraftRender(ctx.clientId, draft.id, sizes).catch((e) =>

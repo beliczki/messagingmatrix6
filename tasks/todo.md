@@ -16,7 +16,7 @@
 
 ## Jelen állapot (2026-09-10)
 
-- **Verzió: `6.85.0`** (live a boxon: `6.83.0` — a 6.84/6.85 deploy-ra vár) a Hetzner boxon (`erste.messagingmatrix.ai`, pm2 `mm6-erste`). Working tree tiszta; a 6.82.x munkák commitálva.
+- **Verzió: `6.86.0`** (live a boxon: `6.83.0` — a 6.84–6.86 deploy-ra vár) a Hetzner boxon (`erste.messagingmatrix.ai`, pm2 `mm6-erste`). Working tree tiszta; a 6.82.x munkák commitálva.
 - Phase 0–10 + a 2026-08/09-es epicek mind leszállítva: DCO/Agentic mátrix, Creative Library rebuild, DRAFT-modell (draft = `messages` sor `audience IS NULL`), draft-variánsok, státusz-takarítás (6 státusz), monitoring periódus-tartomány + nap-grain, Drive-linkek, feed diff-alap + „semmi nem tűnik el", dashboard napi áttekintő, Channels-entitás, MCP per-user tokenek.
 - **Átrendezés 2026-09-10:** minden lezárt epic-log és a 2026-09-10 előtti checkpointok szó szerint átkerültek a `todo-archive.md`-be („Archivált 2026-09-10 — todo.md átrendezés" szekció). Itt csak a nyitott munka maradt.
 
@@ -628,8 +628,7 @@ draftot, **szerkeszteni** nem — az `mc_update` pmmid-del címez, a draftnak me
 - [x] **A validáció kiemelve** (`collectContentProblems`) — a create és az update *ugyanazokkal* a
       szabályokkal ítél. Fontos részlet: a patch a draftot **a végállapotában** validálja, nem
       önmagában; különben egy tag-eket nem érintő szerkesztés üres stringre bukna el.
-- [x] **A `background_images` egész érték:** ha megadod, mind a négy slotot felülírja (amit nem ér el,
-      az törlődik). Részleges tömb némán meghagyná a régi slotokat — ez volt a csapda.
+- [x] ~~**A `background_images` egész érték**~~ → **HIBÁS DÖNTÉS VOLT, javítva 6.86.0-ban** (l. lent).
 - [x] **A template NEM cserélhető** itt: az dönti el, mely méretek és tag-tokenek érvényesek, és a
       meglévő preview-sorok árván maradnának. A tool leírása kimondja. ⚠️ **Ára:** rossz sablonnal
       indított draftnál a szám elég (az archive megtartja) — ha ez zavaró lesz, külön szelet.
@@ -641,3 +640,32 @@ fire-and-forget promise-t determinisztikusan bevárni nem tudom. A visszaadott `
 szerződést ellenőrzöm helyette; magát a `startDraftRender`-t a create-ág már fedi.
 
 **Séma-migráció nincs.** Deploy: build + `pm2 restart` (a 6.84.0-val együtt).
+
+### 2026-09-12 — a képslotok szerepek, nem pozíciók — 6.86.0
+
+**User:** „nem jó döntés volt — background_image_1 háttérnek való (de tudod a templateből),
+background_image_2 objectnek, és így tovább, brand_image_1 logónak; tehát nem jó mindent felülírni,
+illetve variánsonként ezt külön kell kezelni."
+
+**Igaza volt, és a sablon tényleg megmondja.** A `template.json` `placeholders`-ében minden slot
+`type: "image"` + `binding-messagingmatrix: Image1..6`; a markupban a szerep is látszik
+(`background_image_1` → `#imageWrapper`, `_2` → `#objectWrapper`, `_3` → `.cardImageWrapper`,
+`brand_image_1` → `.logo`). A 6.85.0-s `background_images` tömb azt állította, hogy a négy slot
+felcserélhető pozíció — emiatt a logó cseréje kitörölte volna a hátteret.
+
+- [x] `imageSlots()` / `resolveImageSlots()` a `drafts.ts`-ben: a slot→oszlop leképezés a **sablon
+      bindingjéből** jön, nem beégetve. Ismeretlen slotnál megmondja, mit deklarál a sablon.
+- [x] Mindkét tool (`generate_test_creative`, `draft_update`) **slotonként egy argumentum**:
+      `background_image_1..4`, `brand_image_1`, `sticker_image_1`. Üres string egyetlen slotot töröl.
+      ⚠️ **Törő argumentum-változás** a `generate_test_creative`-en (a `background_images` /
+      `brand_image` / `sticker_image` megszűnt) — a tool-leírás a szerepeket is kimondja.
+- [x] **A teszt talált egy valódi hibát a 6.85.0-ban:** a végállapot-validáció a **képekre** is
+      vonatkozott, tehát egy időközben eltűnt fájlnév megbénította volna a draft *minden* szerkesztését
+      (headline-javítás sem megy, amíg a képek nincsenek rendben). Most a patch csak az **általa
+      beállított** slotokat validálja; a tag-tokenek maradnak végállapot-alapon (az egy mező, ahol a
+      hiány = „hagyd").
+- [x] **Variánsonként külön — ez már igaz volt, ellenőriztem:** a képek nincsenek benne a
+      `MC_LEVEL_DRAFT_FIELDS`-ben (`draft-intake.ts`), tehát a 6.82.0-s brief-fan-out **nem** viszi át
+      őket a testvér-variánsokra. A `draft_update` a konkrét variáns-sorra hat. A tool-leírás most
+      ezt ki is mondja.
+- [x] 3 integrációs + 6 unit teszt (`tests/unit/draft-image-slots.test.ts`). **926/926.**

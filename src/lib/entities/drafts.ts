@@ -52,6 +52,68 @@ export type TestCreativeInput = { template: string; sizes?: string[] } & Partial
 > &
   Partial<Record<(typeof DRAFT_IMAGE_FIELDS)[number], string>>;
 
+/**
+ * The image slots a template declares, keyed by the name the template uses for
+ * them (`background_image_2`, `brand_image_1`, …) and resolved to the column
+ * that holds the filename.
+ *
+ * The slots are ROLES, not positions: in the html template
+ * `background_image_1` is the full-bleed background, `background_image_2` the
+ * cut-out object, `background_image_3` the card image, `brand_image_1` the logo
+ * and `sticker_image_1` the sticker. Which is why callers address them BY NAME
+ * and one at a time — a list would say "these are interchangeable", and writing
+ * the set would clear the background to change the logo.
+ */
+export function imageSlots(template: {
+  placeholders: { name: string; type: string; binding?: string }[];
+}): Map<string, (typeof DRAFT_IMAGE_FIELDS)[number]> {
+  const out = new Map<string, (typeof DRAFT_IMAGE_FIELDS)[number]>();
+  for (const p of template.placeholders) {
+    if (p.type !== "image") continue;
+    const m = /^Image([1-6])$/i.exec(p.binding ?? "");
+    if (!m) continue;
+    out.set(p.name, `image${m[1]}` as (typeof DRAFT_IMAGE_FIELDS)[number]);
+  }
+  return out;
+}
+
+/**
+ * Turn template slot names into the columns that store them. Unknown names are
+ * reported rather than dropped: a typo'd slot that silently did nothing is the
+ * failure an agent cannot see.
+ */
+export function resolveImageSlots(
+  template: {
+    name: string;
+    placeholders: { name: string; type: string; binding?: string }[];
+  },
+  images: Record<string, string | undefined>,
+): {
+  fields: Partial<Record<(typeof DRAFT_IMAGE_FIELDS)[number], string>>;
+  problems: string[];
+} {
+  const slots = imageSlots(template);
+  const fields: Partial<Record<(typeof DRAFT_IMAGE_FIELDS)[number], string>> =
+    {};
+  const unknown: string[] = [];
+  for (const [slot, value] of Object.entries(images)) {
+    if (value === undefined) continue;
+    const column = slots.get(slot);
+    if (!column) {
+      unknown.push(slot);
+      continue;
+    }
+    fields[column] = value;
+  }
+  const problems =
+    unknown.length > 0
+      ? [
+          `template '${template.name}' has no image slot(s) ${unknown.join(", ")} — it declares: ${[...slots.keys()].join(", ") || "none"}`,
+        ]
+      : [];
+  return { fields, problems };
+}
+
 export type DraftPreviewRow = {
   id: number;
   size: string;
@@ -129,17 +191,24 @@ async function collectContentProblems(
 export async function createTestCreative(
   clientId: number,
   input: TestCreativeInput,
+  images: Record<string, string | undefined> = {},
 ): Promise<{ draft: Message; sizes: string[] }> {
   const template = requireHtmlTemplate(input.template);
   const requested = input.sizes ?? template.sizes;
-  const problems = await collectContentProblems(
-    clientId,
-    input.template,
-    template,
-    input,
-    requested,
-  );
+  const slots = resolveImageSlots(template, images);
+  const withImages = { ...input, ...slots.fields };
+  const problems = [
+    ...slots.problems,
+    ...(await collectContentProblems(
+      clientId,
+      input.template,
+      template,
+      withImages,
+      requested,
+    )),
+  ];
   if (problems.length > 0) throw new DraftError(problems.join("; "));
+  input = withImages;
 
   const draft = await createDraft(clientId, {
     template: input.template,
@@ -161,8 +230,12 @@ export async function createTestCreative(
 export async function updateTestCreative(
   clientId: number,
   draftId: number,
-  patch: Partial<Omit<TestCreativeInput, "template" | "sizes">>,
-  opts: { sizes?: string[]; expectedVersion?: number } = {},
+  patchIn: Partial<Omit<TestCreativeInput, "template" | "sizes">>,
+  opts: {
+    sizes?: string[];
+    expectedVersion?: number;
+    images?: Record<string, string | undefined>;
+  } = {},
 ): Promise<{ draft: Message; sizes: string[] }> {
   const existing = await getMessage(clientId, draftId);
   if (!existing || existing.status !== "DRAFT" || existing.audience !== null) {
@@ -181,28 +254,34 @@ export async function updateTestCreative(
   const templateName = existing.template;
   const template = requireHtmlTemplate(templateName);
 
-  // The tokens are validated as the draft will END UP, not as they arrive: a
-  // patch that leaves them alone must not be judged against an empty string.
+  // Image slots are addressed by the name the TEMPLATE gives them, and each one
+  // travels on its own: touching the logo must not disturb the background.
+  const slots = resolveImageSlots(template, opts.images ?? {});
+  const patch = { ...patchIn, ...slots.fields };
+
+  // The variant classes are ONE field: a patch that leaves them alone must be
+  // judged on the stored value, not on an empty string. The image slots are
+  // separate fields, so only the ones this patch SETS are checked — a filename
+  // that has since left the library is a pre-existing condition, and refusing
+  // to let the agent fix a headline because of it would strand the draft.
   const merged: Partial<TestCreativeInput> = {
-    ...Object.fromEntries(
-      DRAFT_IMAGE_FIELDS.filter((f) => existing[f] != null).map((f) => [
-        f,
-        existing[f],
-      ]),
-    ),
-    templateVariantClasses: existing.templateVariantClasses ?? undefined,
-    ...Object.fromEntries(
-      Object.entries(patch).filter(([, v]) => v !== undefined),
-    ),
+    templateVariantClasses:
+      patch.templateVariantClasses ??
+      existing.templateVariantClasses ??
+      undefined,
+    ...slots.fields,
   };
   const sizes = opts.sizes ?? draftSizes(existing);
-  const problems = await collectContentProblems(
-    clientId,
-    templateName,
-    template,
-    merged,
-    sizes,
-  );
+  const problems = [
+    ...slots.problems,
+    ...(await collectContentProblems(
+      clientId,
+      templateName,
+      template,
+      merged,
+      sizes,
+    )),
+  ];
   if (problems.length > 0) throw new DraftError(problems.join("; "));
 
   // "" clears a column; an absent key leaves it alone.

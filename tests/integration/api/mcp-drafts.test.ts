@@ -11,7 +11,13 @@ vi.mock("@/lib/preview-shooter", async (orig) => {
 
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
-import { clients, audiences, topics, messages } from "@/db/schema";
+import {
+  clients,
+  audiences,
+  topics,
+  messages,
+  uploadedFiles,
+} from "@/db/schema";
 import { buildMcpServer, _resetMcpRateLimitForTests } from "@/lib/mcp";
 import {
   createTestDb,
@@ -116,6 +122,38 @@ describe("generate_test_creative", () => {
     const [row] = await db.select().from(messages);
     expect(row!.briefSlidesFileId).toBe(DECK);
     expect(row!.topic).toBe("társasház (munkacím)");
+  });
+
+  it("puts each image in the slot the template names, not in list order", async () => {
+    await db.insert(uploadedFiles).values([
+      {
+        id: "f-obj",
+        clientId: erste.id,
+        filename: "object.png",
+        originalFilename: "object.png",
+        storagePath: "/tmp/object.png",
+        category: "image",
+      },
+      {
+        id: "f-logo",
+        clientId: erste.id,
+        filename: "logo.svg",
+        originalFilename: "logo.svg",
+        storagePath: "/tmp/logo.svg",
+        category: "image",
+      },
+    ]);
+    const res = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+      background_image_2: "object.png",
+      brand_image_1: "logo.svg",
+    });
+    expect(res.isError).toBe(false);
+
+    const [row] = await db.select().from(messages);
+    expect(row!.image2).toBe("object.png"); // the object slot
+    expect(row!.image5).toBe("logo.svg"); // the logo slot
+    expect(row!.image1).toBeNull(); // the background was never mentioned
   });
 
   it("reports every input problem at once and creates nothing", async () => {
@@ -251,6 +289,18 @@ describe("draft_promote", () => {
 });
 
 describe("draft_update", () => {
+  // An image slot only validates if the filename is really in the library.
+  async function addFile(filename: string) {
+    await db.insert(uploadedFiles).values({
+      id: `f-${filename}`,
+      clientId: erste.id,
+      filename,
+      originalFilename: filename,
+      storagePath: `/tmp/${filename}`,
+      category: "image",
+    });
+  }
+
   async function aDraft(args: Record<string, unknown> = {}) {
     const res = await callTool(erste.id, "generate_test_creative", {
       template: "html",
@@ -308,31 +358,46 @@ describe("draft_update", () => {
     const id = await aDraft();
     const res = await callTool(erste.id, "draft_update", {
       draft_id: id,
-      brand_image: "never-uploaded.png",
+      brand_image_1: "never-uploaded.png",
     });
     expect(res.isError).toBe(true);
     expect(res.text).toMatch(/not found/);
   });
 
-  it("rewrites all four background slots — the array is a whole value", async () => {
+  it("moves one image slot without disturbing the others — they are roles, not positions", async () => {
     const id = await aDraft();
     await db
       .update(messages)
-      .set({ image1: "one.png", image2: "two.png", image3: "three.png" })
+      .set({ image1: "background.png", image2: "object.png", image5: "logo.png" })
       .where(eq(messages.id, id));
+    await addFile("new-logo.png");
 
-    // An empty array clears every slot; validation passes because nothing is
-    // being pointed at a file that has to exist.
     const res = await callTool(erste.id, "draft_update", {
       draft_id: id,
-      background_images: [],
+      brand_image_1: "new-logo.png",
     });
     expect(res.isError).toBe(false);
 
     const [row] = await db.select().from(messages).where(eq(messages.id, id));
-    expect(row!.image1).toBeNull();
+    expect(row!.image5).toBe("new-logo.png"); // the logo moved
+    expect(row!.image1).toBe("background.png"); // the background did not
+    expect(row!.image2).toBe("object.png");
+  });
+
+  it("clears one slot on an empty string and leaves its neighbours alone", async () => {
+    const id = await aDraft();
+    await db
+      .update(messages)
+      .set({ image1: "background.png", image2: "object.png" })
+      .where(eq(messages.id, id));
+
+    await callTool(erste.id, "draft_update", {
+      draft_id: id,
+      background_image_2: "",
+    });
+    const [row] = await db.select().from(messages).where(eq(messages.id, id));
     expect(row!.image2).toBeNull();
-    expect(row!.image3).toBeNull();
+    expect(row!.image1).toBe("background.png");
   });
 
   it("reports the sizes it is re-rendering, and none when render=false", async () => {

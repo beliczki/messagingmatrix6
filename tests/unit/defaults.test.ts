@@ -13,11 +13,8 @@ describe("defaultConfigSeed", () => {
     for (const required of [
       "lookAndFeel",
       "patterns",
-      "audienceStructure",
-      "topicStructure",
-      "messagesStructure",
-      "creativeStructure",
       "feedStructure",
+      "treeStructure",
       "creativeParsingRules",
       "visibleTemplates",
     ]) {

@@ -993,3 +993,6 @@ A lap gyökere `dashboard`. Meglévő névből vettük: `toolbar-btn` (nap-lépt
 - `styles-tab__selector-row` — egy sor (`Sizes` / `Classes` / `Elements`), `flex flex-wrap gap-1`. A Classes sor a lényegi: a mentett override-ok osztályokra hivatkoznak (`.headline_text_1`), az id-k a konténereken ülnek.
 - `styles-tab__selector-label` — sor-címke, a projekt szokásos `text-[10px] uppercase tracking-wider text-slate-400` szekció-label tokenje.
 - `styles-tab__selector-chip` — kattintható token-chip a globális `tag-chip`-re ülve (`font-mono text-[10px]`, slate keret + hover). Beszúrás a kurzorpozícióba, szóköz-normalizálással.
+
+| **SchemaTab** (Settings › Schema, 6.93.0) | `schema-tab` + `__totals`, `__total`, `__drift`, `__search`, `__tables`; táblánként `schema-table` (`__head`, `__name`, `__scope`, `__orphan`, `__meta`, `__body`, `__columns`, `__missing`, `__refs`), oszloponként `schema-column` (`__pk`, `__drift`) | csak olvasható; az `about-tab` hangja (read-only info), de listás, mert 23 tábla × 323 oszlop |
+| **StructureTab feed-panel** (6.93.0) | `structure-tab__section--feed` | a négy halott CSV-mező helyére; a `feedStructure` önálló szekció, mert **él** (FeedView + referencia-feed validálás) |

@@ -1185,3 +1185,39 @@ agent munkája), box `23270f9`→`c8432cb`, `npm run build` **39.9s**, `pm2 rest
 307 · `/api/templates` 401 · `/mcp` 401; publikus `erste.messagingmatrix.ai/login` **200**. Az
 `error.log`-ban a restart óta nincs új sor (a benne álló utolsó sorok a 19:04-es AWS SDK node>=22
 figyelmeztetés, korábbról).
+
+### 2026-09-12 — a halott Structure-mezők kivezetése + új Schema tab — 6.93.0
+
+**User:** „elemezd le, hogy a Settings › Structure csinál-e még valamit, mi a különbség az itt látszó
+structure és a valódi DB structure között" → majd: „ok kivenni a halott sorokat, legyen külön panelja a
+feed structure-nek, és legyen egy külön tab Schema néven, ahol megmutatjuk hány táblánk van, mi a
+relációjuk és mik a mezőik — read only."
+
+**A felmérés eredménye (kód + élő DB):**
+- **Él:** `feedStructure` (`FeedView.tsx:28,60` + `api/adform-snapshots/route.ts:150`), `treeStructure`
+  (Tree/Sankey nézet), `creativeParsingRules` (`parse-filename.ts`, `mcp.ts`), `patterns` (pmmid + kulcs-
+  generálás), `monitoringProductRules`.
+- **Halott:** `audienceStructure`, `topicStructure`, `messagesStructure`, `creativeStructure` — **nulla
+  olvasó** az egész `src/`-ben (csak a seed, a tab és a defaults-teszt említi), és `git log -S` szerint
+  soha nem is volt. A tab fejléce közben azt állította, hogy „used by exports and the matrix UI": az
+  export oszlopai a `lib/export-xlsx.ts`-ben, a feltöltőé a `CreativeLibrary.tsx:94`-ben vannak kódolva.
+- **Séma-eltérés** (a 4 stringé vs. a valódi tábla, könyvelő-oszlopok nélkül): audiences 10/17 (hiányzik
+  `tag`, `order_index`, 4 kampány/lineitem mező, `channel`), topics 10/12 **+ egy nem létező `strategy`**,
+  messages 14/46, creatives 11/20. Mind a 4 tenantban byte-azonosak a defaulttal — soha senki nem nyúlt
+  hozzájuk.
+
+- [x] A négy mező kivezetve a tabból, a `defaults.ts` seedből és a `DEFAULT_STRUCTURES`-ből; a
+      `defaults.test.ts` listája a valóban fogyasztott kulcsokra állítva (`feedStructure`+`treeStructure`).
+- [x] **Élő DB-takarítás:** `delete from config where key in (…)` → **16 sor** (4 kulcs × 4 tenant),
+      mentés előtte a scratchpadbe. Maradt: 4× `feedStructure`, 1× `treeStructure`.
+- [x] A `feedStructure` saját szekciót kapott, a leírásában azzal, amit tényleg csinál.
+- [x] **Új `Settings › Schema` tab** (`/api/schema`, `withAdmin`): a **DB saját katalógusát** olvassa
+      (`pg_class`, `information_schema.columns`, `pg_constraint`, `pg_indexes`), nem a `schema.ts`-t —
+      ezért meg tudja mondani, ha a kettő elcsúszott (oszlop csak a kódban / csak a DB-ben, tábla a
+      kódban migráció nélkül). Táblánként: oszlopok (típus, null, default, PK, FK-cél + on delete),
+      „referenced by" visszafelé, index-szám, becsült sorszám (`reltuples`, ezért „~"), és hogy
+      tenant-scoped-e (`client_id`). Élesben: **23 tábla · 323 oszlop · 24 FK · 20/23 per-client**,
+      drift nincs.
+
+**Miért nem a `schema.ts`-ből rajzoljuk:** abból csak azt tudnánk meg, amit a kód hisz. A tab értéke
+pont az, hogy a **DB-t** kérdezi — ez az a nézet, ami a mostani kérdést („mi a különbség?") megválaszolja.

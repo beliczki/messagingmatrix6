@@ -5,6 +5,35 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.93.0] — 2026-09-12
+
+### Added
+- **Settings › Schema** — a read-only view of the deploy's own Postgres
+  catalog: every table with its columns, types, nullability, defaults, primary
+  and foreign keys, plus which tables are tenant-scoped (they carry a
+  `client_id`) and a planner-estimate row count. It reads the DATABASE, not
+  `db/schema.ts`, and reports the difference between them: a column the code
+  declares and the database lacks (a migration not applied here) or one the
+  database has and the code cannot see. Admin-only; catalog reads only, no
+  tenant rows are touched.
+
+### Removed
+- **The four dead "CSV column order" fields** in Settings › Structure —
+  `audienceStructure`, `topicStructure`, `messagesStructure`,
+  `creativeStructure`. Nothing has ever read them: the XLSX export names its
+  columns in `lib/export-xlsx.ts`, the upload dialog in `CreativeLibrary.tsx`,
+  the grids in their own components — while the tab claimed they were "used by
+  exports and the matrix UI". They had also drifted out of the schema
+  (`topicStructure` listed a `strategy` column `topics` has never had;
+  `messagesStructure` covered 14 of that row's 46 content columns), and all four
+  were still byte-identical to the defaults in all four tenants. Their config
+  rows were deleted too.
+
+### Changed
+- **Feed structure got its own panel** in Settings › Structure, with what it
+  actually does written next to it: it drives the matrix Feed view and rejects
+  an uploaded reference feed whose columns disagree with it.
+
 ## [6.92.1] — 2026-09-12
 
 ### Fixed

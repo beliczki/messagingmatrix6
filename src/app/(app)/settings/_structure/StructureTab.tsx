@@ -20,13 +20,6 @@ type ConfigRow = { key: string; value: unknown };
 // the row's audience doesn't already resolve a product from the matrix.
 type ProductRule = { keyword: string; product: string };
 
-const STRUCTURE_KEYS = [
-  ["audienceStructure", "Audience structure"],
-  ["topicStructure", "Topic structure"],
-  ["messagesStructure", "Messages structure"],
-  ["creativeStructure", "Creative structure"],
-  ["feedStructure", "Feed structure"],
-] as const;
 
 type Patterns = {
   pmmid?: string;
@@ -38,10 +31,6 @@ type Patterns = {
 };
 
 type Draft = {
-  audienceStructure: string;
-  topicStructure: string;
-  messagesStructure: string;
-  creativeStructure: string;
   feedStructure: string;
   treeStructure: string;
   creativeParsingRules: string;
@@ -57,10 +46,6 @@ const NO_PATTERNS: Patterns = {};
 
 function defaultDraft(): Draft {
   return {
-    audienceStructure: DEFAULT_STRUCTURES.audienceStructure,
-    topicStructure: DEFAULT_STRUCTURES.topicStructure,
-    messagesStructure: DEFAULT_STRUCTURES.messagesStructure,
-    creativeStructure: DEFAULT_STRUCTURES.creativeStructure,
     feedStructure: DEFAULT_STRUCTURES.feedStructure,
     treeStructure: DEFAULT_STRUCTURES.treeStructure,
     creativeParsingRules: JSON.stringify(
@@ -155,10 +140,6 @@ export function StructureTab() {
         value: unknown;
         category: string;
       }> = [
-        { key: "audienceStructure", value: d.audienceStructure, category: "structure" },
-        { key: "topicStructure", value: d.topicStructure, category: "structure" },
-        { key: "messagesStructure", value: d.messagesStructure, category: "structure" },
-        { key: "creativeStructure", value: d.creativeStructure, category: "structure" },
         { key: "feedStructure", value: d.feedStructure, category: "structure" },
         { key: "treeStructure", value: d.treeStructure, category: "structure" },
         { key: "creativeParsingRules", value: parsedRules, category: "structure" },
@@ -304,31 +285,32 @@ export function StructureTab() {
       </SettingsHeaderActions>
       <header className="mb-6">
         <p className="text-sm text-slate-500">
-          Column orderings used by exports and the matrix UI, plus the rules
-          that parse creative filenames into brand / product / type / MC
-          metadata.
+          The shapes this client&rsquo;s data is read and written in: the feed
+          column list, the decision-tree hierarchy, the creative filename rules,
+          the generated keys, and the monitoring product rules. For the
+          database&rsquo;s own tables and columns see the{" "}
+          <strong>Schema</strong> tab.
         </p>
       </header>
 
-      <section className="structure-tab__section mb-6 rounded-lg border border-slate-200 bg-white p-4">
-        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-700">
-          CSV column order
+      <section className="structure-tab__section structure-tab__section--feed mb-6 rounded-lg border border-slate-200 bg-white p-4">
+        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-700">
+          Feed structure
         </h3>
-        <div className="space-y-3">
-          {STRUCTURE_KEYS.map(([key, label]) => (
-            <label key={key} className="form-field block">
-              <span className="form-field__label mb-1 block text-sm font-medium text-slate-700">
-                {label}
-              </span>
-              <input
-                type="text"
-                value={draft[key]}
-                onChange={(e) => setField(key, e.target.value)}
-                className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 font-mono text-xs focus:border-slate-500 focus:outline-none"
-              />
-            </label>
-          ))}
-        </div>
+        <p className="form-field__hint mb-3 text-xs text-slate-500">
+          Column list of the AdForm / DV360 feed, in order. It drives the{" "}
+          <strong>Feed view</strong> in the matrix and validates an uploaded
+          reference feed — an upload whose columns disagree with this is
+          dropped.
+        </p>
+        <label className="form-field block">
+          <input
+            type="text"
+            value={draft.feedStructure}
+            onChange={(e) => setField("feedStructure", e.target.value)}
+            className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 font-mono text-xs focus:border-slate-500 focus:outline-none"
+          />
+        </label>
       </section>
 
       <section className="structure-tab__section structure-tab__section--tree mb-6 rounded-lg border border-slate-200 bg-white p-4">

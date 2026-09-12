@@ -43,15 +43,18 @@ export const DEFAULT_PATTERNS = {
   feed: {},
 };
 
+// The two structures that are actually read: the feed column list (FeedView +
+// the reference-feed upload check) and the decision-tree hierarchy (Tree and
+// Sankey views).
+//
+// Four more used to live here — audience/topic/messages/creativeStructure, a
+// v5-era CSV column order. Nothing ever read them: the XLSX export names its
+// columns in `lib/export-xlsx.ts`, the upload dialog in CreativeLibrary.tsx,
+// the grids in their own components. They had also drifted out of the schema
+// (topicStructure listed a `strategy` column topics has never had, and
+// messagesStructure covered 14 of the row's 46 content columns), so the tab
+// looked like a switch that was wired to nothing. Removed in 6.93.0.
 export const DEFAULT_STRUCTURES = {
-  audienceStructure:
-    "key,name,product,strategy,buying_platform,data_source,targeting_type,device,status,comment",
-  topicStructure:
-    "key,name,product,tag1,tag2,tag3,tag4,strategy,status,comment",
-  messagesStructure:
-    "number,variant,audience,topic,status,template,headline,copy1,copy2,cta,landing_url,start_date,end_date,comment",
-  creativeStructure:
-    "brand,product,type,template,banner_version,mc_number,mc_variant,visual_keyword,copy_keyword,file_name,comment",
   feedStructure: "Text:pmmid",
   treeStructure: "Product → Strategy → Audience → Topic → Messages",
 };
@@ -79,26 +82,6 @@ export function defaultConfigSeed(): ConfigSeed {
   return [
     { key: "lookAndFeel", category: "lookAndFeel", value: DEFAULT_LOOK_AND_FEEL },
     { key: "patterns", category: "patterns", value: DEFAULT_PATTERNS },
-    {
-      key: "audienceStructure",
-      category: "structure",
-      value: DEFAULT_STRUCTURES.audienceStructure,
-    },
-    {
-      key: "topicStructure",
-      category: "structure",
-      value: DEFAULT_STRUCTURES.topicStructure,
-    },
-    {
-      key: "messagesStructure",
-      category: "structure",
-      value: DEFAULT_STRUCTURES.messagesStructure,
-    },
-    {
-      key: "creativeStructure",
-      category: "structure",
-      value: DEFAULT_STRUCTURES.creativeStructure,
-    },
     {
       key: "feedStructure",
       category: "structure",

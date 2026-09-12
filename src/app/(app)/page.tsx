@@ -9,6 +9,7 @@ import {
   gte,
   inArray,
   isNull,
+  lt,
   lte,
   sql,
 } from "drizzle-orm";
@@ -46,7 +47,7 @@ import {
   type StripSort,
 } from "@/lib/dashboard-creatives";
 import { libraryCounts, productInventory } from "@/lib/dashboard-products";
-import { shareItemCount } from "@/lib/share-metadata";
+import { shareItemCount, shareProducts } from "@/lib/share-metadata";
 import { compactNumber, monthlyDelivery } from "@/lib/dashboard-monitoring";
 import {
   DASHBOARD_VIEW_COOKIE,
@@ -97,14 +98,54 @@ function feedsInScope(clientId: number, scope: DayScope, products: string[]) {
 }
 
 /**
+ * The newest export BEFORE the window, product-scoped the same way. An empty
+ * panel that only says "nothing here" cannot be told apart from "the query is
+ * wrong", and the answer to "but I did export one" is one row away — the same
+ * move the Creatives strip already makes with "latest change".
+ */
+async function lastFeedBefore(
+  clientId: number,
+  scope: DayScope,
+  products: string[],
+) {
+  const [row] = await db
+    .select({
+      id: feedExports.id,
+      product: feedExports.product,
+      feedVersion: feedExports.feedVersion,
+      rowCount: feedExports.rowCount,
+      exportedAt: feedExports.exportedAt,
+    })
+    .from(feedExports)
+    .where(
+      and(
+        eq(feedExports.clientId, clientId),
+        lt(feedExports.exportedAt, scope.from),
+        products.length ? inArray(feedExports.product, products) : undefined,
+      ),
+    )
+    .orderBy(desc(feedExports.exportedAt))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
  * Shares opened in the window, plus the comments that landed on ANY share in
  * it — a comment on a share sent last month is this window's news, and the
  * share row alone would not carry it.
  *
+ * The product filter is applied in JS, not in SQL: a share has no product
+ * column, only its frozen snapshot (see `shareProducts`). The row cap above
+ * keeps that honest — 50 rows is the same slice the panel could ever show.
+ *
  * View and download counts are running totals with no per-day history, so they
  * are labelled as such instead of being passed off as window figures.
  */
-async function sharesInScope(clientId: number, scope: DayScope) {
+async function sharesInScope(
+  clientId: number,
+  scope: DayScope,
+  products: string[],
+) {
   const opened = await db
     .select({
       id: shareGalleries.id,
@@ -133,6 +174,7 @@ async function sharesInScope(clientId: number, scope: DayScope) {
       author: shareComments.authorName,
       createdAt: shareComments.createdAt,
       shareTitle: shareGalleries.title,
+      shareMetadata: shareGalleries.metadata,
     })
     .from(shareComments)
     .innerJoin(
@@ -150,11 +192,21 @@ async function sharesInScope(clientId: number, scope: DayScope) {
     .orderBy(desc(shareComments.createdAt))
     .limit(50);
 
+  const inProducts = (metadata: string | null) =>
+    products.length === 0 ||
+    shareProducts(metadata).some((p) => products.includes(p));
+
+  const kept = opened.filter((s) => inProducts(s.metadata));
+  // A comment is only news about a share the filter kept; the comment query
+  // reaches wider on purpose (older shares), so it is filtered by the same
+  // snapshot rule rather than by the shares that happen to be in `kept`.
+  const keptComments = comments.filter((c) => inProducts(c.shareMetadata));
+
   return {
-    opened: opened.map((s) => ({ ...s, items: shareItemCount(s.metadata) })),
-    comments,
-    views: opened.reduce((n, s) => n + s.viewCount, 0),
-    downloads: opened.reduce((n, s) => n + s.downloadCount, 0),
+    opened: kept.map((s) => ({ ...s, items: shareItemCount(s.metadata) })),
+    comments: keptComments,
+    views: kept.reduce((n, s) => n + s.viewCount, 0),
+    downloads: kept.reduce((n, s) => n + s.downloadCount, 0),
   };
 }
 
@@ -218,6 +270,7 @@ export default async function Dashboard({
     delivery,
     digest,
     feeds,
+    lastFeed,
     freshness,
     creativeStrip,
     shares,
@@ -230,9 +283,10 @@ export default async function Dashboard({
     monthlyDelivery(client.id, 6, products, scope.date.slice(0, 7)),
     activityDigest(client.id, scope, products),
     feedsInScope(client.id, scope, products),
+    lastFeedBefore(client.id, scope, products),
     reportFreshness(client.id),
     listStripCreatives(client.id, scope, 0, STRIP_PAGE, products, creativeSort),
-    sharesInScope(client.id, scope),
+    sharesInScope(client.id, scope, products),
     productInventory(client.id),
     db
       .select({ id: users.id, email: users.email })
@@ -350,7 +404,20 @@ export default async function Dashboard({
             >
               {feeds.length === 0 ? (
                 <EmptyLine scope={scope} products={products}>
-                  No feed was exported in this window.
+                  No feed was exported in this window
+                  {lastFeed ? (
+                    <>
+                      {" — last export "}
+                      <Link
+                        href={`/feeds/${lastFeed.id}`}
+                        className="empty-state__link text-slate-600 underline hover:text-slate-900"
+                      >
+                        {lastFeed.exportedAt.slice(0, 10)} · {lastFeed.product} v
+                        {lastFeed.feedVersion} · {lastFeed.rowCount} rows
+                      </Link>
+                    </>
+                  ) : null}
+                  .
                 </EmptyLine>
               ) : (
                 <ul className="feed-digest divide-y divide-slate-100 text-sm">

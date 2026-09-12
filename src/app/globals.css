@@ -84,6 +84,17 @@ html.dark {
     padding: 1px;
   }
 
+  /* Core Pop is the one family that is not currentColor: a fixed navy plus
+     four accent fills. The navy is generated as var(--icon-ink) so it can be
+     lifted off a dark surface — the accents keep their own palette, which is
+     why a Pop icon does not take the app's rose/emerald status colouring. */
+  .icon--pop {
+    --icon-ink: #0c098c;
+  }
+  html.dark .icon--pop {
+    --icon-ink: #e6e6ff;
+  }
+
   /* The heavier "selected" check. lucide takes strokeWidth={3} as a prop; a
      Core icon carries stroke-width on its paths, so it needs the override. */
   .icon--bold.icon--core :is(path, circle, rect, line, polyline) {

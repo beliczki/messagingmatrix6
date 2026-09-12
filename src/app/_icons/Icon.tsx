@@ -4,6 +4,9 @@ import { createContext, useContext, type ReactNode, type SVGProps } from "react"
 import clsx from "clsx";
 import { LUCIDE_ICONS } from "./families/lucide";
 import { CORE_LINE_ICONS } from "./families/core-line";
+import { CORE_SOLID_ICONS } from "./families/core-solid";
+import { CORE_REMIX_ICONS } from "./families/core-remix";
+import { CORE_POP_ICONS } from "./families/core-pop";
 import type { IconComponent, IconSet } from "./types";
 
 export { ICON_SETS, asIconSet, type IconSet } from "./types";
@@ -18,6 +21,9 @@ export type IconFamily = Partial<Record<IconName, IconComponent>>;
 const FAMILIES: Record<IconSet, IconFamily> = {
   lucide: LUCIDE_ICONS,
   "core-line": CORE_LINE_ICONS,
+  "core-solid": CORE_SOLID_ICONS,
+  "core-remix": CORE_REMIX_ICONS,
+  "core-pop": CORE_POP_ICONS,
 };
 
 const IconSetContext = createContext<IconSet>("lucide");

@@ -17,6 +17,16 @@ import type { IconName } from "./Icon";
 export type CoreEntry = {
   /** Icon name in the `streamline` Iconify set (Core Line). */
   line: string;
+  /**
+   * Remix name, when it is not `<line>-remix`. 936 of Core's 1000 icons follow
+   * the suffix rule; 64 take a prefix instead (`line-`, `triangle-`, …) or a
+   * different number, so the generator tries those and this field settles the
+   * rest. `null` means Core ships no Remix variant at all — that name keeps
+   * rendering lucide in the Remix family.
+   *
+   * Solid needs no such field: all 75 mapped icons resolve as `<line>-solid`.
+   */
+  remix?: string | null;
   /** Degrees to rotate the glyph, when Core ships only one orientation. */
   rotate?: 45 | 90 | 180 | -90;
 };
@@ -37,7 +47,7 @@ export const CORE_MAP: Partial<Record<IconName, CoreEntry>> = {
   save: { line: "floppy-disk" },
   filter: { line: "filter-2" },
   more: { line: "horizontal-menu-circle" },
-  settings: { line: "cog" },
+  settings: { line: "cog", remix: "cog-1-remix" },
   lock: { line: "padlock-square-1" },
   hidden: { line: "invisible-1" },
   info: { line: "information-circle" },
@@ -51,9 +61,12 @@ export const CORE_MAP: Partial<Record<IconName, CoreEntry>> = {
   "arrow-left": { line: "arrow-up-1", rotate: -90 },
   "arrow-up-right": { line: "arrow-up-1", rotate: 45 },
   swap: { line: "arrow-reload-horizontal-1" },
-  "external-link": { line: "expand-window-2" },
+  "external-link": {
+    line: "expand-window-2",
+    remix: "line-arrow-expand-window-1-remix",
+  },
   refresh: { line: "arrow-reload-horizontal-2" },
-  undo: { line: "arrow-round-left" },
+  undo: { line: "arrow-round-left", remix: null },
   history: { line: "circle-clock" },
   logout: { line: "logout-1" },
   expand: { line: "expand" },

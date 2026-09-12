@@ -10,7 +10,13 @@ import type { ComponentType, SVGProps } from "react";
 export type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
 /** Icon families a tenant can pick. Stored in lookAndFeel.iconSet. */
-export const ICON_SETS = ["lucide", "core-line"] as const;
+export const ICON_SETS = [
+  "lucide",
+  "core-line",
+  "core-solid",
+  "core-remix",
+  "core-pop",
+] as const;
 export type IconSet = (typeof ICON_SETS)[number];
 
 /** Unknown stored values (a hand-edited config, a family we removed) fall back

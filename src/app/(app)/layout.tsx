@@ -42,12 +42,10 @@ export default async function AppLayout({
   // The cobranding logo replaces the client name in every page toolbar. It is
   // resolved here, server-side, for the same reason the brand CSS variables
   // are: a client-side fetch would paint the name first and swap it under the
-  // user on every navigation.
+  // user on every navigation. An empty URL means no logo — there is no
+  // separate on/off flag.
   const laf = await getActiveLookAndFeel();
-  const cobrandLogoUrl =
-    laf.cobranding.enabled && laf.cobranding.logoUrl
-      ? laf.cobranding.logoUrl
-      : null;
+  const cobrandLogoUrl = laf.cobranding.logoUrl.trim() || null;
 
   const aboutInfo = {
     activeClient: {

@@ -8,7 +8,7 @@ type LookAndFeel = {
   headerColor?: string;
   buttonColor?: string;
   fontFamily?: string;
-  cobranding?: { enabled?: boolean; logoUrl?: string };
+  cobranding?: { logoUrl?: string };
 };
 
 type PublicConfig = {
@@ -60,7 +60,7 @@ export default function LoginPage() {
     <main className="login flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-100 to-slate-200 p-6">
       <div className="login__card w-full max-w-sm rounded-2xl border border-white/40 bg-white/70 p-8 shadow-xl backdrop-blur">
         <div className="login__brand mb-6 text-center">
-          {config?.lookAndFeel.cobranding?.enabled && config.lookAndFeel.cobranding.logoUrl ? (
+          {config?.lookAndFeel.cobranding?.logoUrl ? (
             // The shipped cobranding marks are white-filled SVGs, so they get
             // inverted to black here. Unconditionally, not dark:invert-0 like
             // the toolbar tag: the login card is light in both themes.

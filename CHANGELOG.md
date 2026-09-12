@@ -5,6 +5,34 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.89.0] — 2026-09-12
+
+### Added
+- **Three more icon families**: Streamline Core Solid, Core Remix and Core Pop
+  join Core Line in the Icon set dropdown. Solid and Remix come from the same
+  Iconify package; Pop only exists in Streamline's GitHub repo and is not
+  `currentColor`, so its fixed navy is rewritten to `var(--icon-ink)` — dark
+  mode lifts it, while the four accent fills keep their own palette. Names a
+  family does not ship keep rendering lucide (no Remix for one icon, no Pop for
+  five).
+- **The cobranding logo shows in the Design tab preview row**, at the head of
+  the icon line, inverted the way the toolbars will draw it.
+
+### Changed
+- **Cobranding moved into Identity, next to the page title, and lost its
+  checkbox.** An empty URL is off. The stored `enabled` flag could disagree
+  with the URL — a logo configured and silently not shown — and the checkbox
+  was the only place that difference was visible. Font family and Icon set now
+  share a row.
+- **The shipped logo paths became a click-to-fill info popover** instead of a
+  paragraph of hint text under the input: they are things to pick, not things
+  to read. Dismisses on outside click or Escape, like every other popover here.
+
+### Fixed
+- Icon ids from Streamline's editor are stripped from the generated Pop family:
+  duplicated `id` attributes across icons on one page are invalid HTML, and
+  they were a fifth of the file.
+
 ## [6.88.0] — 2026-09-12
 
 ### Added

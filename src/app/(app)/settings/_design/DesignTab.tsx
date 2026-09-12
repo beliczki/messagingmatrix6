@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_LOOK_AND_FEEL } from "@/db/defaults";
@@ -206,6 +206,10 @@ export function DesignTab() {
           value={draft.pageTitle}
           onChange={(v) => setField("pageTitle", v)}
         />
+        <LogoField
+          value={draft.cobranding.logoUrl}
+          onChange={(v) => setField("cobranding", { logoUrl: v })}
+        />
         <SelectField
           label="Font family"
           value={draft.fontFamily}
@@ -218,24 +222,10 @@ export function DesignTab() {
           options={ICON_SETS.map((v) => ({ value: v, label: ICON_SET_LABELS[v] }))}
           onChange={(v) => setField("iconSet", asIconSet(v))}
         />
-        <IdentityPreview title={draft.pageTitle} iconSet={draft.iconSet} />
-      </Section>
-
-      <Section title="Cobranding">
-        <CheckboxField
-          label="Enable cobranding logo"
-          checked={draft.cobranding.enabled}
-          onChange={(v) =>
-            setField("cobranding", { ...draft.cobranding, enabled: v })
-          }
-        />
-        <TextField
-          label="Logo URL"
-          hint="Shipped with the app: /erste.svg, /telekom.svg. A white-filled SVG — light mode inverts it to black, dark mode shows it as is."
-          value={draft.cobranding.logoUrl}
-          onChange={(v) =>
-            setField("cobranding", { ...draft.cobranding, logoUrl: v })
-          }
+        <IdentityPreview
+          title={draft.pageTitle}
+          iconSet={draft.iconSet}
+          logoUrl={draft.cobranding.logoUrl}
         />
       </Section>
 
@@ -259,6 +249,9 @@ export function DesignTab() {
 const ICON_SET_LABELS: Record<IconSet, string> = {
   lucide: "Lucide (default)",
   "core-line": "Streamline Core Line",
+  "core-solid": "Streamline Core Solid",
+  "core-remix": "Streamline Core Remix",
+  "core-pop": "Streamline Core Pop (coloured)",
 };
 
 const PREVIEW_ICONS: IconName[] = [
@@ -287,9 +280,11 @@ const PREVIEW_ICONS: IconName[] = [
 function IdentityPreview({
   title,
   iconSet,
+  logoUrl,
 }: {
   title: string;
   iconSet: IconSet;
+  logoUrl: string;
 }) {
   return (
     <div className="design-tab__preview md:col-span-2 rounded-md border border-slate-200 bg-slate-50 p-4">
@@ -308,6 +303,23 @@ function IdentityPreview({
           follows on save (router.refresh re-runs the server layout). */}
       <IconSetProvider value={iconSet}>
         <div className="design-tab__preview-icons mt-3 flex flex-wrap items-center gap-3 text-slate-500">
+          {logoUrl.trim() ? (
+            <>
+              {/* The mark as the toolbars will draw it: inverted for the light
+                  surface, same as the brand tag. */}
+              <img
+                src={logoUrl}
+                alt=""
+                className="design-tab__preview-logo h-4 w-auto max-w-24 object-contain invert"
+              />
+              <span
+                aria-hidden
+                className="design-tab__preview-divider text-slate-300"
+              >
+                |
+              </span>
+            </>
+          ) : null}
           {PREVIEW_ICONS.map((name) => (
             <Icon
               key={name}
@@ -400,6 +412,96 @@ function TextField({
   );
 }
 
+// The marks this deploy ships. Hand-kept rather than read from public/: it is
+// two files, and a build-time directory listing would be a lot of machinery to
+// avoid typing a path.
+const SHIPPED_LOGOS = ["/erste.svg", "/telekom.svg"];
+
+/**
+ * Cobranding logo, next to the page title because that is what it stands in
+ * for. There is no on/off switch: an empty field IS off, which removes the
+ * state where a logo is configured and silently not shown.
+ *
+ * The shipped paths live behind an info button rather than in a paragraph of
+ * hint text under the input — they are things to pick, not things to read, so
+ * clicking one writes it into the field.
+ */
+function LogoField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Same dismissal contract as MultiPill and the draft card menu: a click
+  // anywhere outside closes, and so does Escape.
+  useEffect(() => {
+    if (!open) return;
+    function onDocMouseDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div className="form-field logo-field block" ref={ref}>
+      <span className="form-field__label mb-1 flex items-center gap-1 text-sm font-medium text-slate-700">
+        Cobranding logo
+        <span className="logo-field__info relative inline-flex">
+          <button
+            type="button"
+            onClick={() => setOpen((o) => !o)}
+            aria-label="Where the shipped logos live"
+            aria-expanded={open}
+            className="logo-field__info-btn rounded-full p-0.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+          >
+            <Icon name="info" className="size-3.5" />
+          </button>
+          {open ? (
+            <div className="logo-field__popover absolute left-0 top-6 z-20 w-64 rounded-md border border-slate-200 bg-white p-2 text-xs font-normal shadow-lg">
+              <p className="logo-field__popover-text mb-1.5 text-slate-500">
+                Shipped with the app — click to use. A white-filled SVG: light
+                mode inverts it to black, dark mode shows it as is.
+              </p>
+              {SHIPPED_LOGOS.map((url) => (
+                <button
+                  key={url}
+                  type="button"
+                  onClick={() => {
+                    onChange(url);
+                    setOpen(false);
+                  }}
+                  className="logo-field__popover-option block w-full rounded px-1.5 py-1 text-left font-mono text-slate-700 hover:bg-slate-100"
+                >
+                  {url}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </span>
+      </span>
+      <input
+        type="text"
+        value={value}
+        placeholder="Empty = no logo, the client name shows"
+        onChange={(e) => onChange(e.target.value)}
+        className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+      />
+    </div>
+  );
+}
+
 function SelectField({
   label,
   value,
@@ -431,26 +533,3 @@ function SelectField({
   );
 }
 
-function CheckboxField({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    <label className="form-field flex items-center gap-2">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="form-field__checkbox size-4"
-      />
-      <span className="form-field__label text-sm font-medium text-slate-700">
-        {label}
-      </span>
-    </label>
-  );
-}

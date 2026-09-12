@@ -16,7 +16,10 @@ export const DEFAULT_LOOK_AND_FEEL = {
   secondaryColor2: "#e5e7eb",
   secondaryColor3: "#d1d5db",
   secondaryColor4: "#9ca3af",
-  cobranding: { enabled: false, logoUrl: "" },
+  // No on/off flag: an empty URL is off. A stored `enabled` that disagreed
+  // with the URL was a state where a logo was configured and silently not
+  // shown, and the checkbox was the only place that difference was visible.
+  cobranding: { logoUrl: "" },
   // From @/lib/mc-status so the Design tab, the branding CSS vars and this
   // default cannot disagree about which statuses exist.
   statusColors: { ...DEFAULT_STATUS_COLORS },

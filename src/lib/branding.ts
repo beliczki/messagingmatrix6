@@ -4,6 +4,7 @@ import { config } from "@/db/schema";
 import { activeClientId } from "@/lib/active-client";
 import { DEFAULT_LOOK_AND_FEEL } from "@/db/defaults";
 import { MC_STATUSES, statusSlug } from "@/lib/mc-status";
+import { fontStack } from "@/lib/fonts";
 
 export type LookAndFeel = typeof DEFAULT_LOOK_AND_FEEL;
 
@@ -51,7 +52,7 @@ export function lookAndFeelToCssVars(laf: LookAndFeel): Record<string, string> {
     "--brand-secondary-2": laf.secondaryColor2,
     "--brand-secondary-3": laf.secondaryColor3,
     "--brand-secondary-4": laf.secondaryColor4,
-    "--font-base": `"${laf.fontFamily}", system-ui, sans-serif`,
+    "--font-base": fontStack(laf.fontFamily),
     // Derived from the canonical status list rather than written out again —
     // a hand-kept copy here is how --status-planned never came to exist while
     // PLANNED rows did.

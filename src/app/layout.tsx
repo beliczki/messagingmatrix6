@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { CSSProperties } from "react";
 import "./globals.css";
+import "./fonts.css";
 import { getActiveLookAndFeel, lookAndFeelToCssVars } from "@/lib/branding";
 
 export const metadata: Metadata = {

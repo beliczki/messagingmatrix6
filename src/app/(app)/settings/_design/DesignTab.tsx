@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_LOOK_AND_FEEL } from "@/db/defaults";
 import { MC_STATUSES, statusSlug, type McStatus } from "@/lib/mc-status";
+import { FONT_OPTIONS, fontStack } from "@/lib/fonts";
 import { SettingsHeaderActions } from "../SettingsView";
 
 type LookAndFeel = typeof DEFAULT_LOOK_AND_FEEL;
@@ -40,10 +41,7 @@ function applyLive(laf: LookAndFeel) {
   root.style.setProperty("--brand-secondary-2", laf.secondaryColor2);
   root.style.setProperty("--brand-secondary-3", laf.secondaryColor3);
   root.style.setProperty("--brand-secondary-4", laf.secondaryColor4);
-  root.style.setProperty(
-    "--font-base",
-    `"${laf.fontFamily}", system-ui, sans-serif`,
-  );
+  root.style.setProperty("--font-base", fontStack(laf.fontFamily));
   for (const k of STATUS_KEYS) {
     root.style.setProperty(STATUS_VAR[k], laf.statusColors[k]);
   }
@@ -115,6 +113,16 @@ export function DesignTab() {
   if (!draft) {
     return <p className="text-sm text-slate-500">Loading…</p>;
   }
+
+  // A face typed into the old free-text field stays selectable instead of
+  // vanishing from its own dropdown — the same rule the filter pills follow
+  // for a selected value that left the option list.
+  const fontOptions = FONT_OPTIONS.some((f) => f.value === draft.fontFamily)
+    ? FONT_OPTIONS
+    : [
+        ...FONT_OPTIONS,
+        { value: draft.fontFamily, label: `${draft.fontFamily} (not shipped)`, stack: "" },
+      ];
 
   return (
     <div className="design-tab max-w-3xl">
@@ -190,9 +198,10 @@ export function DesignTab() {
           value={draft.pageTitle}
           onChange={(v) => setField("pageTitle", v)}
         />
-        <TextField
+        <SelectField
           label="Font family"
           value={draft.fontFamily}
+          options={fontOptions}
           onChange={(v) => setField("fontFamily", v)}
         />
       </Section>
@@ -297,6 +306,37 @@ function TextField({
         onChange={(e) => onChange(e.target.value)}
         className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
       />
+    </label>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: ReadonlyArray<{ value: string; label: string }>;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <label className="form-field block">
+      <span className="form-field__label mb-1 block text-sm font-medium text-slate-700">
+        {label}
+      </span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }

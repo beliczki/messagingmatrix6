@@ -46,6 +46,140 @@ Az edit-mode panel Delete gombja archivál vagy töröl (M10 dialog), tehát az 
 - [x] **M4.1 (✅ KÉSZ, 6.24.0, 2026-08-25)** Él-rail crosshair, NEM state-alapú. Imperatív (`GridView.paintCrosshair` + delegált `onMouseOver`/`onMouseLeave` a `<table>`-ön, ref) → hoverkor nincs grid-újrarajzolás. `data-col-key`/`data-row-key` a 2 header-`<th>`-re + mindkét cella-`<td>`-re; a `c`+`c-1` oszlop `border-right`-ja és a `r`+`r-1` sor `border-bottom`-ja kap `--mx-cross` színt (`matrix-grid__x--edge-r`/`--edge-b`, unlayered CSS). Csak meglévő border SZÍNE vált → **0 layout-shift**, `transition: border-color 140ms` → nem villódzik. Edit módban is megy (border-color ≠ ring box-shadow). Header-hover = csak az az oszlop/sor. Korlát: legszélső bal oszlop / legfelső sor külső élét a sticky header adja (nincs `c-1`/`r-1`).
 - [ ] **M4.2** Click-to-pin: kattintásra pinnel escape/újraklikkig; a chip-open klikket nem nyeli el. ⚠️ OPEN Q: pin+hover mindkettő.
 
+### D — Design tab kör: capsule-takarítás · valódi fontok · ikonkészlet-választó · cobrand (user, 2026-09-12) — TERV, JÓVÁHAGYÁSRA VÁR
+
+**User:** „a capsule design most nem csinál semmit, ne is csináljon, vegyük ki, takarítsunk ki utána; mm5-ból
+vegyük át a TeleNeo font családot és tegyük lehullóssá a font választót, és vegyük be még választhatónak a
+Poppins családot; nézzük meg hogy a co brand most működik-e, tettem hozzá fehér és fekete Erste és fehér és
+fekete Telekom logót; az icon választót pedig tehetjük lehullóssá mint a font választót és kéne rá rögtön
+preview sor úgy hogy a page title-lel megmutatjuk a font választót és mellé teszünk pár ikont amit a menüben
+/ dialógusokban használunk."
+
+**Felmérés (2026-09-12, kód + élő DB) — három meglepetés:**
+
+1. **A `capsuleDesign` tényleg halott, de nem csak „nem csinál semmit": be is van kapcsolva.**
+   Az élő `erste` tenant `lookAndFeel`-jében `capsuleDesign: true`, és **egyetlen olvasója sincs** —
+   a `grep` az egész `src/`-ben csak a `DesignTab.tsx:199` checkboxot és a `defaults.ts:10` alapértéket
+   adja, nulla CSS, nulla komponens. **Ugyanígy halott a `laf.logo` mező is** (`defaults.ts:7`): sehol
+   nem olvassa senki, a login a `cobranding.logoUrl`-t használja. Két mező megy, nem egy.
+
+2. **A font-választó ma egy szabadszöveges mező egy olyan fonthoz, amit soha nem töltünk le.**
+   A `--font-base` (`globals.css:13`) `"Inter", system-ui, sans-serif`, a Tailwind `font-sans`-a erre
+   mutat (`tailwind.config.ts:52`) — de **`@font-face` nincs, `next/font` nincs, `public/fonts/` nincs**.
+   Vagyis az egész app ma a rendszer-betűvel megy (macOS-en a system-ui), és a mezőbe bármit be lehet írni,
+   a képernyőn semmi nem történik. A „tegyük lehullóssá" tehát nem kozmetika: **a lenyílónak előbb kell,
+   hogy legyen mit betöltenie**, különben ugyanaz a placebo marad, csak kevesebb opcióval.
+
+3. **A cobrand plumbing él, de három ponton nem ér földet.**
+   - Mind a 4 tenantban `cobranding: {enabled:false, logoUrl:""}` — sehol nincs bekapcsolva, sehol nincs URL.
+   - **Egyetlen renderelő hely a login oldal** (`login/page.tsx:63`). A sidebar és a share-oldal a
+     `mmatrix.svg`-t viszi, a cobrand logó oda nem jut el.
+   - **Nincs feltöltés:** a mező egy URL-string, és az appban nincs hely, ahová a logót fel lehetne tenni
+     (a `public/` a boxon is csak `mmatrix*.svg` + a drive-ikon). **A hozzáadott fehér/fekete Erste és
+     Telekom logókat nem találom** — se a repóban, se a `storage/`-ban, se az `assets` / `uploaded_files`
+     táblában, se a box `public/`-jában. ⚠️ **Kérdés a userhez: hova kerültek?**
+   - A fehér+fekete pár eleve azt mondja, hogy **világos/sötét változat kell** (`logoUrl` + `logoUrlDark`),
+     nem egy mező.
+
+4. **Az ikon-váltó ára változatlanul a `ICON_SET_STUDY.md` 1. lépése:** ma nincs indirekció, **66 fájl**
+   importál közvetlenül `lucide-react`-ből (87 ikon). A lenyíló + preview sor **önmagában 2 óra**, de amíg
+   a 66 fájl nem megy át a regiszteren, a kapcsoló **csak a preview sort** váltja — az app többi része
+   lucide marad. Ez a szelet fő döntése (l. lent, Q1).
+
+**Szeletek — mindegyik külön commit, `tsc` + vitest utána, a végén egy bump + CHANGELOG:**
+
+- [ ] **D1 — capsule + halott `logo` mező kivezetése (patch).** `defaults.ts`: `capsuleDesign` és `logo`
+      törlése; `DesignTab.tsx`: a checkbox + a `CheckboxField` használat törlése (a komponens marad, a
+      Cobranding szekció használja). A DB-ben maradó kulcsok ártalmatlanok (a merge a defaultra épít, és
+      senki nem olvassa őket) — **opcionális** egy `UPDATE config SET value = value::jsonb - 'capsuleDesign'
+      - 'logo'` takarítás mind a 4 tenanton. Teszt: nincs mit, `tsc` elég.
+
+- [ ] **D2 — valódi, self-hosted fontok + font-lenyíló (minor).**
+      - `public/fonts/` + `src/app/fonts.css` (`globals.css`-ből importálva): **woff2-only**, súlyonként
+        egy fájl, `font-display: swap`.
+      - **TeleNeo**: mm5 `src/styles/Fonts/TeleNeoWeb-{Regular,Medium,Bold}.woff2` átemelve (400/500/700,
+        ~160 KB). Dőlt nem kell az UI-nak; ha később kiderül hogy kell, 3 fájl hozzáadása.
+      - **Poppins + Inter**: `latin` + **`latin-ext`** subset (a magyar `ő`/`ű` csak abban van), a Google
+        Fonts CSS-ből a woff2-k letöltve és **beemelve** — futásidejű `fonts.googleapis.com` link nincs
+        (a login oldal a bejelentkezés ELŐTT renderel, és a box nem hív ki hálózatra).
+      - `src/lib/fonts.ts` — **egy** forrás: `FONT_OPTIONS = [{ value, label, stack }]` (System / Inter /
+        TeleNeo / Poppins). A `branding.ts` és a `DesignTab.applyLive` innen veszi a **stacket**, nem
+        `"${fontFamily}", system-ui, sans-serif`-et fűz össze (ma az a sor a `defaults.ts`-szel kettőzve él).
+      - A `TextField` „Font family" → `SelectField` az opciókkal. Ismeretlen, kézzel beírt régi érték nem
+        vész el: ha a tárolt érték nincs a listában, saját opcióként megjelenik (a `MultiPill`
+        „eltűnt, de kijelölt érték" mintája).
+      - ⚠️ **Jogi lábjegyzet, nem blokkoló:** a TeleNeo a Deutsche Telekom céges betűje; a saját termékünk
+        UI-jában használni Telekom-demóhoz szürke zóna. Az mm5 évek óta így szállítja — jelzem, a döntés a
+        useré.
+      - Teszt: unit a `fonts.ts` stack-feloldására (ismert érték · ismeretlen érték → fallback).
+
+- [ ] **D3 — Identity preview sor (minor).** `design-tab__preview` blokk az Identity szekció alatt:
+      a **page title** a kiválasztott fonttal, alatta egy súly-minta (400/500/700) és egy **ikon-sor**
+      abból, amit a menü és a dialógusok tényleg használnak (Matrix `Table2`, Creative Library `Image`,
+      Drafts `FlaskConical`, Settings `Cog`, mentés `Check`, törlés `Trash2`, bezárás `X`, `ChevronDown`).
+      Élő: a font- és ikon-lenyíló változtatására azonnal átrajzol (az `applyLive` már ezt csinálja a
+      színekkel). Új név a `component-inventory.md`-be.
+
+- [ ] **D4 — cobrand földet ér (minor).** ⚠️ **Blokkolva a Q2 válaszáig.** Terv, ha a válasz „töltsük fel
+      az appból": `cobranding` → `{ enabled, logoUrl, logoUrlDark }`, feltöltés a meglévő asset-útón
+      (MinIO), render a **login** + a **sidebar** fejlécében (világos/sötét pár a `dark:hidden` /
+      `hidden dark:block` mintával, ahogy a `mmatrix.svg` is megy), és a Design tab preview sorában is
+      látszik. Ha a válasz „elég a `public/`": akkor csak a két URL-mező + a sidebar-render.
+
+- [ ] **D5 — ikonkészlet-váltó.** Hatóköre a Q1 döntésétől függ. A `ICON_SET_STUDY.md` §5.7 1–3. lépése
+      a teljes változat; a lenyíló + preview sor a 2. lépés vége.
+
+
+### D6–D8 — a második kör (user, 2026-09-12): fejléc-product-tag · navigáció + brand-hely · mátrix Type-szűrő
+
+- [ ] **D6 = a már nyitott M12.2** (product tag a topic/audience fejlécekre, ha több product van kijelölve).
+      Nem írom le kétszer — a tétel az „Apróság-kör" szekcióban él. **Amit a felmérés hozzátesz:**
+      a fejléc **generikus** (`GridView.tsx:358` `colKind`/`rowKind`), tehát egy helyen megírva
+      transzponált nézetben is jó. A `tag-chip drafts-tile__product` vizuál (sötét `bg-slate-800
+      text-white`, `text-[10px]`) reuse. ⚠️ **A `dense` a nehéz eset:** ott az oszlopfejléc 28 px széles,
+      a név függőlegesen fut (`[writing-mode:vertical-rl]`) — oda nem fér chip. Javaslat: dense-ben a
+      product **kétbetűs rövidítése** a függőleges név fölé, ugyanabban a sötét chipben; ha az is sok,
+      csak egy 3 px-es színsáv. Döntés a vizuális körben.
+
+- [ ] **D7 — Dashboard a menü tetejére, a kliensnév a lap-toolbarba (minor).**
+      - `Sidebar.ITEMS` elejére `{ href: "/", label: "Dashboard" }`. ⚠️ **Az aktív-jelölés ma
+        `pathname.startsWith(it.href + "/")`** (`Sidebar.tsx:106`) — `"/"`-re ez **minden oldalt**
+        aktívnak jelölne; a `/` pontos egyezést kap.
+      - A kliensnév (`app-sidebar__client-name`, `Sidebar.tsx:93`) **kikerül a brand-sávból**. A mai
+        kommentje kimondja, hogy „a kliensnév a visszaút a dashboardra — nem kell neki saját nav-item
+        (user döntése)"; ez most **megfordul**, a komment is cserélődik.
+      - Új `AppBrandTag` komponens a lap-toolbarokba, a cím ELÉ. **10 toolbar** viseli ma a
+        `toolbar__title`-t (matrix, creative-library, assets, drafts, feeds, shares, monitoring,
+        dashboard, dimension-grid, right-toolbar) — egy-egy soros beszúrás, nem közös layout-sáv,
+        mert közös felső sáv ma nincs (az `AppShell` csak sidebar + `<main>`).
+      - **Cobrand-csere:** ha `cobranding.enabled` és van logó, a kliensnév helyett a logó megy oda
+        (világos/sötét pár). Ez **a D4-re épül** — addig a tag a nevet mutatja. A laf-ot a toolbarnak
+        kliens-oldalon kell látnia: a `AppShell` már megkapja a `client`-et, a `lookAndFeel`-t viszont
+        nem — vagy az `(app)/layout.tsx` adja tovább (SSR, nincs villanás), vagy a meglévő
+        `["config","lookAndFeel"]` query. **Az SSR-út a helyes**, a Design tab `applyLive`-ja pedig
+        ugyanúgy él marad.
+
+- [ ] **D8 — Mátrix „Type" szűrő a Creative Library mintájára. ⚠️ DÖNTÉS KELL (l. Q3).**
+      **Ami ma van:** a mátrixban `matrix-axis-toggle` — **kizárólagos** DCO | Agentic kapcsoló
+      (`MatrixToolbar.tsx:47`); a Creative Libraryben `MultiPill label="Type"` — **többszörös**
+      választás ugyanazon a két értéken (`CreativeLibrary.tsx:927`).
+      **Miért nem egysoros a csere:** a CL-ben a Type egy lapos lista szűrője; a mátrixban az axis a
+      **rács két tengelyét particionálja** (`MatrixGrid.tsx:852-870`): az audience-oszlopok
+      `channel != null` vs `== null` szerint válnak szét, a topic-sorok pedig két külön forrásból jönnek
+      (`agenticTopics` vs `topics`). „Mindkettő" tehát **egy rácsot jelent mindkét tengely soraival és
+      oszlopaival** — a partíció maga 3 sor, de négy dolog utána is igaz marad:
+      1. **Edit mód:** ma az egész Agentic tengelyen tiltott (`isAgentic`, `:540`), mert az Agentic MC-t
+         soha nem kézzel adják hozzá. Vegyes rácsban ez **cellánkénti** (oszlop szerinti) szabállyá válik,
+         vagy: ha az Agentic be van kapcsolva, az edit mód kikapcsol. **Ez a szelet igazi kérdése.**
+      2. **Product-szűrő szemantika:** az Agentic oszlopok product-függetlenek, ezért ott a product-szűrő
+         ma **nem** vág oszlopot (`:866`). Vegyesen ez audience-enkénti szabály lesz.
+      3. **Szám-egyediség:** `(number, variant)` **csak tengelyen belül** azonosít (`:937`) — vegyes
+         rácsban két `MC404a` csempe lehet egyszerre a képernyőn.
+      4. **Perzisztált nézet:** `mm6_matrix_state_v1` ma `axis: "dco"|"nondco"` skalárt tárol; halmazra
+         váltva a régi mentett nézeteket migrálni kell (ismeretlen → DCO, ahogy ma is).
+
+**Nyitott kérdések (Q1–Q3) a user elé — l. a beszélgetést.**
+
 ---
 
 ## 🟡 NEXT — green-light után, alacsony blokk

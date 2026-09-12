@@ -1011,3 +1011,45 @@ is bármikor kinyomhatta volna.
 
 **Tanulság a jövőnek:** ez a DB **közös az éles `mm6-erste`-vel**. Bármi, ami lokálisan sok kapcsolatot
 nyit (dev szerver, párhuzamos build, script), az **éles kiesés** kockázata, nem kényelmi kérdés.
+
+### 2026-09-12 — user-kör: dialóg-fejléc, CL health-panelek, dashboard-drill-down, share brief+history
+
+**User (8 pont, képernyőképekkel):** close gomb nincs egy vonalban a fejléc gombjaival · a Creative
+Library Drive-check és preview-panel kerüljön a VIEW alá, a részletek Export-dialog-szerű dialogba ·
+dashboard: SZA szűrőnél MARKET share látszik · „a feed export megvolt az elmúlt 30 napban, az nem
+látszik" · az Activity 28 művelete legyen kibontható dialogban · share oldal: brief esetén Slides gomb
+a Drive mellé (rövid feliratok), a creative nézetben is · a Comments fejléc legyen két tab
+(Comments / History).
+
+Döntések (user, AskUserQuestion): CL-panel = stat + fekete futtató gomb + körvonalas „Details" →
+dialog · a History tab az **audit-változásnaplót** mutatja · a feed-export üres állapot **nevezze meg
+a legutóbbi exportot** (a 30d ablak a DB szerint helyesen tartalmazza a 2026-08-31-i SZA feedet, tehát
+ez nem query-bug, hanem hiányzó „mi volt legutóbb" jelzés — ugyanaz a minta, mint a Creatives panelé).
+
+- [ ] **U1 — dialóg close-gomb egy vonalban (patch).** `AppDialog` abszolút close gombja ma `top-3`
+      (közép 28px), a `settings__header` viszont `h-12` (közép 24px) → 4px csúszás. A close a
+      fejlécsáv közepére kerül, és a `FeedExportDialog` fejléce is a ház `h-12` toolbar-magasságára áll.
+- [ ] **U2 — Creative Library: health-panelek a VIEW alá + Details dialog (minor).** Sorrend:
+      View → Drive links → Previews → (mt-auto) Archived → Upload. A panelekben csak **stat + fekete
+      futtató gomb + körvonalas Details**; a hosszú offender-lista a panelből a dialogba költözik.
+      A dialog `AppDialog`, a `FeedExportDialog` fejléc-mintájával (cím + elsődleges gomb, body = tábla).
+- [ ] **U3 — dashboard Shares: product-szűrés (patch).** A `sharesInScope` ma **egyáltalán nem**
+      szűr productra, ezért SZA-szűrőnél is jön a MARKET share. A share snapshot `creatives[].product`
+      (és a matrixItems üzenetei) hordozzák a terméket → a metadatából számolt product-halmaz szűr,
+      a kommentek pedig csak a megmaradt share-ekre.
+- [ ] **U4 — dashboard Feed exports: üres állapot nevezze meg a legutóbbi exportot (patch).**
+      A Creatives panel nyelvén: „none in this window — last export 2026-08-31 · SZA v1", kattintható.
+      Product-szűrővel a legutóbbi is product-szűrt.
+- [ ] **U5 — dashboard Activity drill-down (minor).** A digest-sor kattintható → dialog, ami az adott
+      entity+action (+user) mögötti audit-sorokat listázza a nyitott ablakban: idő, action, entity,
+      entity-azonosító/címke, user. Az `/api/audit-log` kap `products` + `entity`+`actions`+`since/until`
+      szűrést (a `productScoped` újrahasználva, hogy a dialog ugyanazt a halmazt lássa, mint a digest).
+      Lapozás a meglévő `limit/offset`-tel (1000-es cap ellen).
+- [ ] **U6 — share oldal: Slides gomb a brief mellé (minor).** A share page szerver-oldalon feloldja a
+      snapshot MC-ihez tartozó `messages.brief_slides_file_id`-t (+ `brief_slide_id`), és ha van,
+      a fejlécben a Drive mellé kerül egy **Slides** gomb; a gombfeliratok **Drive** / **Slides**.
+      Ugyanez a `ShareDetailDialog` fejlécében, a megnyitott creative saját briefjével.
+- [ ] **U7 — share oldal: Comments / History tab (minor).** A `share-detail-dialog__side-tabs` két
+      tabot kap; a History a tétel audit-naplóját mutatja egy **publikus, csak a share tételeire
+      szűrt** route-ból (`/share/[id]/history`), user-e-mail nélkül (megjelenítő név).
+- [ ] **U8 — bump + CHANGELOG + commit + deploy** (user: „ha végeztél mehet egy full commit and deploy").

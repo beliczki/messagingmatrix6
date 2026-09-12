@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { db } from "@/db";
 import { auditLog } from "@/db/schema";
+import { productScoped } from "@/lib/dashboard-activity";
 import { withAdmin } from "@/lib/scoped";
 
 const VALID_ACTIONS = new Set([
@@ -48,6 +49,14 @@ export const GET = withAdmin(async ({ req, claims }) => {
   if (userId) conds.push(eq(auditLog.userId, userId));
   if (since) conds.push(gte(auditLog.createdAt, since));
   if (until) conds.push(lte(auditLog.createdAt, until));
+  // Same product scoping the dashboard digest counts with, so the drill-down
+  // lists exactly the rows the number on the panel was built from — a second,
+  // looser rule here would show a count of 28 opening onto 31 rows.
+  const products = (url.searchParams.get("products") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (products.length > 0) conds.push(productScoped(claims.cid, products));
 
   const rows = await db
     .select()

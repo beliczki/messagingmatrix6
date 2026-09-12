@@ -56,6 +56,7 @@ import {
   isDefaultView,
   viewHref,
 } from "@/lib/dashboard-view";
+import ActivityDigest from "./_dashboard/ActivityDigest";
 import CoverageTile from "./_dashboard/CoverageTile";
 import CreativeStrip from "./_dashboard/CreativeStrip";
 import DeliveryTrend from "./_dashboard/DeliveryTrend";
@@ -365,30 +366,13 @@ export default async function Dashboard({
                 Nothing was written in this window.
               </EmptyLine>
             ) : (
-              <ul className="activity-digest divide-y divide-slate-100 text-sm">
-                {grouped.slice(0, DIGEST_ROWS).map((g) => (
-                  <li
-                    key={`${g.entityType}:${g.action}`}
-                    className="activity-digest__row flex items-baseline gap-3 py-2"
-                  >
-                    <ActionBadge action={g.action} />
-                    <span className="activity-digest__entity text-slate-700">
-                      {g.entityType}
-                    </span>
-                    <span className="activity-digest__actors truncate text-xs text-slate-400">
-                      {g.actors.join(", ")}
-                    </span>
-                    <span className="activity-digest__count ml-auto font-mono text-sm text-slate-900">
-                      {g.n}
-                    </span>
-                  </li>
-                ))}
-                {grouped.length > DIGEST_ROWS ? (
-                  <li className="activity-digest__more py-2 text-xs text-slate-400">
-                    +{grouped.length - DIGEST_ROWS} more kinds of change
-                  </li>
-                ) : null}
-              </ul>
+              <ActivityDigest
+                groups={grouped.slice(0, DIGEST_ROWS)}
+                more={Math.max(grouped.length - DIGEST_ROWS, 0)}
+                scope={{ from: scope.from, to: scope.to, label: scope.label }}
+                products={products}
+                canDrillDown={claims.role === "admin"}
+              />
             )}
           </Panel>
 
@@ -954,25 +938,3 @@ function periodDay(v: string): string {
   return v.split(" ")[0];
 }
 
-const ACTION_TONE: Record<string, string> = {
-  create: "bg-emerald-100 text-emerald-800",
-  bulk_create: "bg-emerald-100 text-emerald-800",
-  update: "bg-blue-100 text-blue-800",
-  bulk_update: "bg-blue-100 text-blue-800",
-  delete: "bg-rose-100 text-rose-800",
-  bulk_delete: "bg-rose-100 text-rose-800",
-  archive: "bg-amber-100 text-amber-800",
-  bulk_archive: "bg-amber-100 text-amber-800",
-};
-
-function ActionBadge({ action }: { action: string }) {
-  return (
-    <span
-      className={`status-badge activity-digest__action rounded px-1.5 py-0.5 text-xs font-medium ${
-        ACTION_TONE[action] ?? "bg-slate-100 text-slate-700"
-      }`}
-    >
-      {action}
-    </span>
-  );
-}

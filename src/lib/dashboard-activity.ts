@@ -65,7 +65,7 @@ export function activityDigest(
  * expression — the DCO/Agentic rule is correctness-critical and must not drift
  * between here and the library counts.
  */
-function productScoped(clientId: number, products: string[]) {
+export function productScoped(clientId: number, products: string[]) {
   const wanted = sql.join(
     products.map((p) => sql`${p}`),
     sql`, `,

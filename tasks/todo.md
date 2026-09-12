@@ -1163,3 +1163,7 @@ képezte le. Minden más light-mode fényerőn maradt a sötét felületen. Amit
 világos pereme. A dev szerver nem rendereli a bannereket (`</>` placeholder), az élesen viszont látszik;
 a saját keretünk (`thumb-checker`, `creative-strip__mc bg-slate-100 dark:bg-black`, `border-slate-200`)
 mind témafüggő, tehát a perem gyanúm szerint **a banner saját fehér vászna**. Kérdés a userhez.
+
+**DEPLOYOLVA 6.92.0 (2026-09-12):** commit `1a37c0c`, build 43s, `pm2 restart mm6-erste --update-env`
+→ Ready 1327ms, box `package.json` **6.92.0**. Séma-migráció nincs. Health: `/login` 200 · `/matrix`
+307 · `/creative-library` 307 · `/templates` 307 · `/feeds` 307.

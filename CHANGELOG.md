@@ -34,6 +34,11 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
   actually does written next to it: it drives the matrix Feed view and rejects
   an uploaded reference feed whose columns disagree with it.
 
+## [6.93.0] — 2026-09-12
+
+### Added
+- Template editor previews against **drafts**, not only matrix cards. A draft is a `messages` row with no audience, so it renders through the same path — and a template is most often edited exactly when the work is still a draft, before it has a cell. The picker groups the two under `Matrix` and `Drafts`; the stepper arrows walk both.
+
 ## [6.92.1] — 2026-09-12
 
 ### Fixed

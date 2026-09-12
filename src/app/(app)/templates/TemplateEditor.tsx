@@ -274,6 +274,21 @@ export default function TemplateEditor() {
     queryFn: () => fetchJSON<{ messages: Message[] }>("/api/messages"),
   });
 
+  // Drafts preview here too: a draft IS a `messages` row (it just has no
+  // audience), so it renders through the same path — and a template is most
+  // often edited exactly when the work is still a draft, before it has a cell.
+  //
+  // Same key AND same shape as DraftsView's query. Two useQuery on one key with
+  // different shapes is an order-dependent crash that a reload hides, so the
+  // `matches` sibling is declared here even though this screen ignores it.
+  const draftsQ = useQuery({
+    queryKey: ["drafts"],
+    queryFn: () =>
+      fetchJSON<{ drafts: Message[]; matches?: Record<string, unknown> }>(
+        "/api/drafts",
+      ),
+  });
+
   const lookAndFeelQ = useQuery({
     queryKey: ["config-public"],
     queryFn: () =>
@@ -322,17 +337,29 @@ export default function TemplateEditor() {
       (a, b) => a.number - b.number || a.variant.localeCompare(b.variant),
     );
   })();
-  const selectedCard = uniqueCards.find((c) => c.id === selectedMcId) ?? null;
+
+  // Kept as its OWN list rather than merged into uniqueCards: that dedupe keys
+  // on `number+variant`, and a draft can legitimately carry the same pair as a
+  // placed card (the soft link between them is the whole point of promotion).
+  // Merged, one of the two would silently disappear from the picker.
+  const draftCards: Message[] = [...(draftsQ.data?.drafts ?? [])].sort(
+    (a, b) => a.number - b.number || a.variant.localeCompare(b.variant),
+  );
+
+  // What the stepper walks and the selection resolves against. Selection is by
+  // row id, which is unique across both lists — they are the same table.
+  const previewCards: Message[] = [...uniqueCards, ...draftCards];
+  const selectedCard = previewCards.find((c) => c.id === selectedMcId) ?? null;
 
   function stepMc(delta: 1 | -1) {
-    if (uniqueCards.length === 0) return;
-    const idx = uniqueCards.findIndex((c) => c.id === selectedMcId);
+    if (previewCards.length === 0) return;
+    const idx = previewCards.findIndex((c) => c.id === selectedMcId);
     if (idx === -1) {
-      setSelectedMcId(uniqueCards[0].id);
+      setSelectedMcId(previewCards[0].id);
       return;
     }
-    const next = (idx + delta + uniqueCards.length) % uniqueCards.length;
-    setSelectedMcId(uniqueCards[next].id);
+    const next = (idx + delta + previewCards.length) % previewCards.length;
+    setSelectedMcId(previewCards[next].id);
   }
 
   useEffect(() => {
@@ -677,7 +704,7 @@ export default function TemplateEditor() {
           <span className="nav-stepper__label text-xs text-slate-500">Preview with:</span>
           <button
             onClick={() => stepMc(-1)}
-            disabled={uniqueCards.length === 0}
+            disabled={previewCards.length === 0}
             className="nav-stepper__btn nav-stepper__btn--prev rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             title="Previous MC"
           >
@@ -699,21 +726,36 @@ export default function TemplateEditor() {
                 setSelectedMcId(v === "" ? null : Number(v));
               }}
               className="custom-dropdown bg-transparent font-mono text-xs outline-none"
-              disabled={uniqueCards.length === 0}
+              disabled={previewCards.length === 0}
             >
               <option value="">— sample data —</option>
-              {uniqueCards.map((c) => (
-                <option key={c.id} value={c.id}>
-                  MC{c.number}
-                  {c.variant}
-                  {c.status ? ` · ${c.status}` : ""}
-                </option>
-              ))}
+              {uniqueCards.length > 0 ? (
+                <optgroup label="Matrix">
+                  {uniqueCards.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      MC{c.number}
+                      {c.variant}
+                      {c.status ? ` · ${c.status}` : ""}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {draftCards.length > 0 ? (
+                <optgroup label="Drafts">
+                  {draftCards.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      MC{c.number}
+                      {c.variant}
+                      {c.name ? ` · ${c.name}` : ""}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
             </select>
           </div>
           <button
             onClick={() => stepMc(1)}
-            disabled={uniqueCards.length === 0}
+            disabled={previewCards.length === 0}
             className="nav-stepper__btn nav-stepper__btn--next rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             title="Next MC"
           >

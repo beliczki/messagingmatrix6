@@ -142,14 +142,16 @@ export default function DriveHealthCheck({
   const problems = results.filter((r) => BAD.includes(r.outcome));
 
   return (
-    <div className="drive-health">
-      <div className="right-toolbar__section-title pb-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+    // Boxed like the matrix's Edit mode and Export panels — same rule, same
+    // padding, same uppercase title, and the primary action at the bottom.
+    <div className="drive-health rounded-md border border-slate-200 bg-white p-3">
+      <div className="drive-health__title text-[10px] font-medium uppercase tracking-wider text-slate-500">
         Drive links
       </div>
 
       <div
         className={clsx(
-          "drive-health__stat flex items-center gap-1 text-[11px]",
+          "drive-health__stat mt-1 flex items-center gap-1 text-[11px]",
           unresolved.length > 0 ? "text-amber-700" : "text-slate-500",
         )}
         title={title}
@@ -165,26 +167,26 @@ export default function DriveHealthCheck({
 
       <button
         type="button"
-        onClick={run}
-        disabled={running || creativeIds.length === 0}
-        className="drive-health__run toolbar-btn--primary mt-1.5 flex w-full items-center justify-center gap-1 rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
-        title={title}
+        onClick={() => setDetailsOpen(true)}
+        className="drive-health__details toolbar-btn mt-2 flex w-full items-center justify-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 transition hover:bg-slate-100"
       >
-        {running ? (
-          <Icon name="spinner" className="size-3.5 animate-spin" />
-        ) : (
-          <Icon name="google-drive" className="size-3.5" />
-        )}
-        Run check
+        <Icon name="list" className="size-3" />
+        Details
       </button>
 
       <button
         type="button"
-        onClick={() => setDetailsOpen(true)}
-        className="drive-health__details toolbar-btn mt-1 flex w-full items-center justify-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 transition hover:bg-slate-50"
+        onClick={run}
+        disabled={running || creativeIds.length === 0}
+        className="drive-health__run toolbar-btn--primary mt-1.5 flex w-full items-center justify-center gap-1.5 rounded bg-slate-900 px-2 py-1 text-xs font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+        title={title}
       >
-        <Icon name="list" className="size-3.5" />
-        Details
+        {running ? (
+          <Icon name="spinner" className="size-3 animate-spin" />
+        ) : (
+          <Icon name="google-drive" className="size-3" />
+        )}
+        Run check
       </button>
 
       {error ? (

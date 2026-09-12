@@ -127,14 +127,16 @@ export default function PreviewHealth({
   }
 
   return (
-    <div className="preview-health">
-      <div className="right-toolbar__section-title pb-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+    // Boxed like the matrix's Edit mode and Export panels — same rule, same
+    // padding, same uppercase title, and the primary action at the bottom.
+    <div className="preview-health rounded-md border border-slate-200 bg-white p-3">
+      <div className="preview-health__title text-[10px] font-medium uppercase tracking-wider text-slate-500">
         Previews
       </div>
 
       <div
         className={clsx(
-          "preview-health__stat flex items-center gap-1 text-[11px]",
+          "preview-health__stat mt-1 flex items-center gap-1 text-[11px]",
           missing > 0 ? "text-amber-700" : "text-slate-500",
         )}
         title={title}
@@ -150,26 +152,26 @@ export default function PreviewHealth({
 
       <button
         type="button"
-        onClick={run}
-        disabled={running || scope === 0}
-        className="preview-health__run toolbar-btn--primary mt-1.5 flex w-full items-center justify-center gap-1 rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
-        title={title}
+        onClick={() => setDetailsOpen(true)}
+        className="preview-health__details toolbar-btn mt-2 flex w-full items-center justify-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 transition hover:bg-slate-100"
       >
-        {running ? (
-          <Icon name="spinner" className="size-3.5 animate-spin" />
-        ) : (
-          <Icon name="images" className="size-3.5" />
-        )}
-        Generate previews
+        <Icon name="list" className="size-3" />
+        Details
       </button>
 
       <button
         type="button"
-        onClick={() => setDetailsOpen(true)}
-        className="preview-health__details toolbar-btn mt-1 flex w-full items-center justify-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 transition hover:bg-slate-50"
+        onClick={run}
+        disabled={running || scope === 0}
+        className="preview-health__run toolbar-btn--primary mt-1.5 flex w-full items-center justify-center gap-1.5 rounded bg-slate-900 px-2 py-1 text-xs font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
+        title={title}
       >
-        <Icon name="list" className="size-3.5" />
-        Details
+        {running ? (
+          <Icon name="spinner" className="size-3 animate-spin" />
+        ) : (
+          <Icon name="images" className="size-3" />
+        )}
+        Generate previews
       </button>
 
       {running || progress ? (

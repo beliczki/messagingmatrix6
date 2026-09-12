@@ -5,6 +5,18 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.91.1] — 2026-09-12
+
+### Changed
+- **The Creative Library health panels are boxed** like the matrix's Edit mode
+  and Export panels — same rule, padding and uppercase title — and the Details
+  button moved above the black primary action, so the primary sits at the
+  bottom of the box the way Export does.
+- **The Design tab's identity preview draws the cobranding logo as the
+  toolbars do**: 1.7rem, and inverted in light mode only. The shipped marks are
+  white-filled SVGs, so the old fixed `invert` showed a black logo on the dark
+  surface — a logo the app never actually renders.
+
 ## [6.91.0] — 2026-09-12
 
 ### Changed

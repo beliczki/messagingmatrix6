@@ -26,20 +26,21 @@
 
 ## 🟢 NOW — indulásra kész (nincs blokkoló külső input)
 
-### Telekom mm6 instance a boxra — `telekom.messagingmatrix.ai` (user, 2026-09-12)
-Tanulmány: `docs/TELEKOM_DEMO_STUDY.md`. Előfeltételek élőben ellenőrizve: DNS ✅ (→46.224.60.159),
-certbot cert ✅ (2026-11-30-ig), 6002-es port szabad ✅, disk 6.8G szabad, RAM 2.4G elérhető.
-A régi v5 telekom (`mm-server-telekom`, 3004) **ma is 502** — nem élő szolgáltatást kapcsolunk le.
-- [ ] **T1** Backup: `/var/www/messagingmatrix-telekom` → `/var/backups/mm5-legacy/` (tartalmaz **valódi v5 SQLite adatot**: `messaging-matrix.db` 1.1M + 4.5M WAL) + a régi nginx vhost mentése
-- [ ] **T2** `pm2 delete mm-server-telekom` + `pm2 save` (a v5 erste:3003 és proficio:3005 **marad** — külön döntés)
-- [ ] **T3** `/var/www/mm6-telekom` checkout az origin HEAD-ről (box `6.90.0`)
-- [ ] **T4** `.env`: `ACTIVE_CLIENT_KEY=telekom`, `PORT=6002`, saját `JWT_SECRET`, **közös** `DATABASE_URL` + MinIO bucket, `TEMPLATES_ROOT` a checkouton **kívülre** (a tanulmány R2 kockázata)
-- [ ] **T5** `npm ci` + `npm run build`
-- [ ] **T6** telekom kliens + admin user seed (csak telekom, nem a seed-multi mind a 4 kulcsa)
-- [ ] **T7** `ecosystem.config.cjs` + `pm2 start` 6002 + `pm2 save`
-- [ ] **T8** nginx vhost átírása (erste mintájára: `/mcp` blokk + 200M body) → `nginx -t` → reload
-- [ ] **T9** Health: `/`→307, `/login`→200, `/mcp`→401 lokálisan és publikusan; Erste-regresszió-check (6001 sértetlen)
+### ~~Telekom mm6 instance a boxra — `telekom.messagingmatrix.ai`~~ — **✅ ÉL (2026-09-12)**
+Tanulmány: `docs/TELEKOM_DEMO_STUDY.md`. A tanulmány A-csomagja (infra) **leszállítva ~1,5 óra alatt**.
+- [x] **T1** Backup: `/var/www/messagingmatrix-telekom` → `/var/backups/mm5-legacy/messagingmatrix-telekom-20260912` (a **v5 SQLite adat megvan**: `messaging-matrix.db` 1.1M + 4.5M WAL + a `.before-v5.1.0` backup). Mentve a régi nginx vhost és a v5 ecosystem is ugyanide.
+- [x] **T2** `pm2 delete mm-server-telekom` + `pm2 save`. **A v5 `mm-server-erste` (3003) és `mm-server-proficio` (3005) FUT TOVÁBB** — külön döntés kell rájuk (lásd Nyitott döntések).
+- [x] **T3** `/var/www/mm6-telekom` — lokális klón az `mm6-erste`-ből, majd `git remote` → GitHub és ff az `origin/main` tipjére: **`a12e47c` (6.90.0)**.
+- [x] **T4** `.env`: `ACTIVE_CLIENT_KEY=telekom`, `PORT=6002`, **saját** `JWT_SECRET` + `MCP_BEARER_TOKEN` (nem az Erste-é), **közös** `DATABASE_URL` és MinIO bucket (a scope `client_id`-n / `telekom/...` prefixen van). `TEMPLATES_ROOT=/var/www/mm6-telekom-templates` — **a checkouton kívül**, a tanulmány R2 kockázata miatt; a repo sablonjaival feltöltve.
+- [x] **T5** `npm ci` (702 csomag, 30s) + `npm run build` — hiba nélkül.
+- [x] **T6** Kliens **id=9 `telekom`** + admin user (`beliczki.robert@gmail.com`) létrehozva. ⚠️ A `scripts/seed-multi.ts` **nem használható**: benne az ismert unawaited `getActiveClient()` hiba (tech-adósság szekció) — egyszeri saját scripttel ment, ami utána törölve lett.
+- [x] **T7** `ecosystem.config.cjs` (`mm6-telekom`, 6002, `max_memory_restart: 700M`) + `pm2 start` + `pm2 save`.
+- [x] **T8** nginx vhost átírva az Erste mintájára (`/mcp` no-buffering blokk + `client_max_body_size 200M`, proxy→6002; a v5 `/assets` alias kivezetve). Certbot cert **változatlan**, 2026-11-30-ig érvényes. `nginx -t` OK → reload.
+- [x] **T9** Health publikusan: `/`→307 · `/login`→200 · `/matrix|/drafts|/creative-library|/shares|/feeds|/monitoring`→307 · `/mcp`→401 · `/api/templates`→401 · http→https 301. **Valódi login 200** (token `cid:9`, role admin), rossz jelszó 401. **Erste-regresszió: nincs** (`/` 307, `/login` 200, `/matrix` 307, `/mcp` 401).
 
+**Megfigyelés (nem hiba, de figyelni kell):** az `mm6-erste` egyszer újraindult a build ablakában (18:57, restart 145→146) — `unstable restarts 0`, 1252ms alatt felállt, a logban csak a régi AWS-SDK node>=22 figyelmeztetés, OOM-kill nincs. Ma amúgy is 4× indult újra (14:19, 14:29, 17:16 = a 6.90.0 deploy, 18:57). **Viszont a box most két Next appot futtat 3,7G RAM-on** (erste 287M + telekom 273M), és az Erste `max_memory_restart`-ja 900M — a következő nagy buildnél érdemes a telekomot `pm2 stop`-olni.
+
+**Állapot:** a site **üres, de működik** — nincs benne audience/topic/MC, a branding default (szürke), a sablonok az Erste-ék. A tanulmány B–E csomagja (arculat, sablonok, adat, dramaturgia) jön.
 
 ### ~~Box deploy — 6.83.0~~ — **✅ DEPLOYOLVA (2026-09-11)**
 commit `c49d391`, box `0c6bce0`→`c49d391`, `npm run build` OK, `pm2 restart mm6-erste --update-env` → **Ready 1310ms**, box `package.json` **6.83.0**. **Séma-migráció nincs** (`git diff --name-only 0c6bce0..c49d391 -- db/migrations` üres). `error.log` a restart óta üres. Health: `/` 307 · `/login` 200 · `/matrix` 307 · `/drafts` 307 · `/creative-library` 307 · `/api/templates` 401 · `/mcp` 401; publikus `erste.messagingmatrix.ai/login` **200**.
@@ -1106,3 +1107,18 @@ szekcióban mindkettőt mutassuk meg."
 - [x] A panel `share-detail-dialog__history-section` + `__history-label` (szürke sávfejléc), a
       szekciók közt vonal. Üres szekció ki sem íródik.
 - [x] +2 integrációs teszt (kártya-szekció összefésülése két cellából; mátrix-cella → kártya + fájlok).
+
+### 2026-09-12 — toolbar-dobozok + a preview-logó a toolbar szabálya szerint — 6.91.1
+
+**User:** „a preview boxba is 1.7rem legyen a logó és váltson dark/light között" + „a Details gomb legyen
+az action gomb felett" + „ezeknek a paneleknek nincs dobozuk, mint a matrix edit mode / export
+doboznak — legyen".
+
+- [x] `design-tab__preview-logo`: `h-4 invert` → `h-[1.7rem] invert dark:invert-0`, azaz pontosan az
+      `AppBrandTag` szabálya. A szállított márkajel **fehér kitöltésű SVG**, ezért a fix `invert` sötét
+      módban fekete logót mutatott — olyat, amit az app soha nem rajzol.
+- [x] `drive-health` és `preview-health`: doboz (`rounded-md border border-slate-200 bg-white p-3`) +
+      saját `__title` a dobozon belül — ugyanaz, amit az `edit-mode-panel` és az export-panel használ.
+      A VIEW/DENSITY szekciók a mátrixban sem dobozosak, ezért a `LibraryViewSwitcher` változatlan.
+- [x] A Details a fekete akció **fölé** került: így az elsődleges gomb a doboz alján van, mint az
+      Exportnál.

@@ -305,12 +305,15 @@ function IdentityPreview({
         <div className="design-tab__preview-icons mt-3 flex flex-wrap items-center gap-3 text-slate-500">
           {logoUrl.trim() ? (
             <>
-              {/* The mark as the toolbars will draw it: inverted for the light
-                  surface, same as the brand tag. */}
+              {/* The mark exactly as the toolbars draw it: 1.7rem, and the
+                  same light/dark rule — the shipped SVG is white-filled, so
+                  light mode inverts it and dark mode takes it as it is. A
+                  preview that skipped either would be showing a logo this app
+                  never renders. */}
               <img
                 src={logoUrl}
                 alt=""
-                className="design-tab__preview-logo h-4 w-auto max-w-24 object-contain invert"
+                className="design-tab__preview-logo h-[1.7rem] w-auto max-w-40 object-contain invert dark:invert-0"
               />
               <span
                 aria-hidden

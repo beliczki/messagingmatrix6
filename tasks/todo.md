@@ -16,7 +16,7 @@
 
 ## Jelen állapot (2026-09-10)
 
-- **Verzió: `6.87.0`** (live a boxon: `6.83.0` — a 6.84–6.87 deploy-ra vár) a Hetzner boxon (`erste.messagingmatrix.ai`, pm2 `mm6-erste`). Working tree tiszta; a 6.82.x munkák commitálva.
+- **Verzió: `6.87.0`**, **live** a Hetzner boxon (`erste.messagingmatrix.ai`, pm2 `mm6-erste`). a Hetzner boxon (`erste.messagingmatrix.ai`, pm2 `mm6-erste`). Working tree tiszta; a 6.82.x munkák commitálva.
 - Phase 0–10 + a 2026-08/09-es epicek mind leszállítva: DCO/Agentic mátrix, Creative Library rebuild, DRAFT-modell (draft = `messages` sor `audience IS NULL`), draft-variánsok, státusz-takarítás (6 státusz), monitoring periódus-tartomány + nap-grain, Drive-linkek, feed diff-alap + „semmi nem tűnik el", dashboard napi áttekintő, Channels-entitás, MCP per-user tokenek.
 - **Átrendezés 2026-09-10:** minden lezárt epic-log és a 2026-09-10 előtti checkpointok szó szerint átkerültek a `todo-archive.md`-be („Archivált 2026-09-10 — todo.md átrendezés" szekció). Itt csak a nyitott munka maradt.
 
@@ -738,3 +738,27 @@ azért kiemelni egy helperbe, hogy tesztelhető legyen, épp az a fajta absztrak
 A böngészős ellenőrzés (a toolbar-blokk kinézete, az élő sor futás közben) a useré.
 
 **Séma-migráció nincs.**
+
+### 2026-09-12 — platform struktúra-fájlok kutatás: DV360 SDF · Google Ads bulk · Meta bulk (DÖNTÉSRE VÁR)
+- Doksi: `docs/PLATFORM_STRUCTURE_FILES.md`. Publikus dokumentációból: SDF v10.1 teljes oszloplista (7 fájltípus), Google Ads UI bulk-sablonok szó szerinti fejlécei (48 sablon letöltve) + Editor CSV-oszlopok, Meta import/export hivatalos (elavult) + valós-export oszlopok.
+- Verdikt: DV360 bétázható most (Erste 68 DV360 LI id-vel bent → valós SDF-fel diffelhető); Google Display igen (Demand Gen/PMax nem publikált); **Meta csak egy valós „Export all" xlsx-szel**.
+- Javasolt modell: `platform_specs` sidecar (audience × platform, spec a platform saját oszlopnevein, external_ids visszaimportból) + per-platform structure naming-pattern. W4.2/W4.4/W4.5 ezzel átfogalmazódik feedről struktúrára.
+- Tőled: DV360 SDF-letöltés (Erste), Meta Export all xlsx, Google „Editable columns" riport; döntés B1 DV360 vs B4 Meta sorrend. Kód nem változott.
+
+### 2026-09-12 — deploy 6.87.0 (a 6.84–6.87 egy passzban)
+
+commit `d5d23ed`, box `c49d391`→`d5d23ed` (**rollback pont: `c49d391` = 6.83.0**), `npm run build` OK,
+`pm2 restart mm6-erste --update-env` → **Ready 1332ms**, box `package.json` **6.87.0**.
+**Séma-migráció nincs** (`git diff --name-only c49d391..d5d23ed -- db/migrations` üres), a
+`package-lock.json` sem változott → `npm install` nem kellett.
+
+Health: `/login` 200 · `/` 307 · `/matrix` 307 · `/drafts` 307 · `/creative-library` 307 ·
+`/api/templates` 401 · `/api/previews/status` 401 · `/mcp` 401; publikus
+`erste.messagingmatrix.ai/login` **200**. `error.log` a restart óta üres. Chromium a boxon indul
+(`chromium OK`) — ez a 6.87.0 preview-gombjának előfeltétele.
+
+**Ami kiment:** 6.84.0 MCP `draft` token-scope · 6.85.0 `draft_update` · 6.86.0 képslot-szerepek
+javítása · 6.87.0 preview-generálás a Library jobb toolbarjából.
+
+**Böngészőben még nem ellenőrizve** (belépést igényel): a Settings › MCP `draft` opció + amber badge,
+és a Creative Library jobb toolbarjának `preview-health` blokkja élő futás közben.

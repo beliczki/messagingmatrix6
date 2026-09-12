@@ -47,6 +47,36 @@ function audienceEdgeClasses(
   return strat && plat ? `${strat} ${plat}` : null;
 }
 
+/**
+ * Which product a topic row or audience column belongs to. Same chip as the
+ * draft card's `drafts-tile__product` — reused rather than reinvented, so the
+ * two surfaces read as one vocabulary.
+ *
+ * The dense column header writes its label vertically (rotated 180°, so it
+ * reads bottom-to-top); the chip turns with it and sits at the bottom, which
+ * is where "before the name" lands in that reading order.
+ */
+function ProductTag({
+  product,
+  vertical = false,
+}: {
+  product: string;
+  vertical?: boolean;
+}) {
+  return (
+    <span
+      className={clsx(
+        "tag-chip matrix-grid__header-product shrink-0 rounded bg-slate-800 font-semibold leading-none text-white",
+        vertical
+          ? "matrix-grid__header-product--vertical px-0.5 py-1 text-[9px] [writing-mode:vertical-rl] [transform:rotate(180deg)]"
+          : "px-1 py-0.5 text-[9px]",
+      )}
+    >
+      {product}
+    </span>
+  );
+}
+
 export default function GridView({
   audiences,
   topics,
@@ -206,6 +236,18 @@ export default function GridView({
   // below: a filter that prunes an axis to zero rows/cols re-renders this same
   // instance down the early-return path, and any hook declared *after* the
   // return would change the hook count → React #300 ("rendered fewer hooks").
+  // Product tag on the headers. Only when the visible grid actually spans more
+  // than one product: with a single product on screen the tag repeats the same
+  // word on every header and says nothing. Reading the data rather than the
+  // filter also covers the unfiltered grid, where several products are visible
+  // and nobody picked anything.
+  const productTagged = useMemo(() => {
+    const seen = new Set<string>();
+    for (const a of audiences) if (a.product) seen.add(a.product);
+    for (const t of topics) if (t.product) seen.add(t.product);
+    return seen.size > 1;
+  }, [audiences, topics]);
+
   const tableRef = useRef<HTMLTableElement>(null);
   const crossRef = useRef<{ col: string | null; row: string | null }>({
     col: null,
@@ -388,7 +430,7 @@ export default function GridView({
                     aria-label={`Open ${colKind} ${c.name}`}
                   >
                     {density === "dense" ? (
-                      <div className="matrix-grid__col-header-label--vertical flex h-full items-end justify-center">
+                      <div className="matrix-grid__col-header-label--vertical flex h-full flex-col items-center justify-end gap-1">
                         <span
                           className={clsx(
                             "font-semibold text-[10px] [writing-mode:vertical-rl] [transform:rotate(180deg)] truncate max-h-full",
@@ -399,18 +441,24 @@ export default function GridView({
                         >
                           {c.name}
                         </span>
+                        {productTagged && c.product ? (
+                          <ProductTag product={c.product} vertical />
+                        ) : null}
                       </div>
                     ) : (
                       <>
                         <div
                           className={clsx(
-                            "matrix-grid__col-header-label font-semibold",
+                            "matrix-grid__col-header-label flex items-baseline gap-1 font-semibold",
                             density === "compact" ? "text-[10px]" : "text-xs",
                             colInactive &&
                               "matrix-grid__col-header-label--inactive text-text-disabled",
                           )}
                         >
-                          {c.name}
+                          {productTagged && c.product ? (
+                            <ProductTag product={c.product} />
+                          ) : null}
+                          <span className="min-w-0">{c.name}</span>
                         </div>
                         {density === "detailed" ? (
                           <div className="matrix-grid__col-header-key truncate font-mono text-[10px] text-text-tertiary">
@@ -493,13 +541,16 @@ export default function GridView({
                 >
                   <div
                     className={clsx(
-                      "matrix-grid__row-header-label font-semibold",
+                      "matrix-grid__row-header-label flex items-baseline gap-1 font-semibold",
                       density === "detailed" ? "text-xs" : "text-[10px]",
                       r.status === "INACTIVE" &&
                         "matrix-grid__row-header-label--inactive text-text-disabled",
                     )}
                   >
-                    {r.name}
+                    {productTagged && r.product ? (
+                      <ProductTag product={r.product} />
+                    ) : null}
+                    <span className="min-w-0">{r.name}</span>
                   </div>
                   {density === "detailed" ? (
                     <div className="matrix-grid__row-header-key font-mono text-[10px] text-text-tertiary">

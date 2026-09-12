@@ -981,3 +981,33 @@ nem zárja. 10 modul-példány × max 10 = 100. **Ez a DB közös az éles `mm6-
 dev szerver el tudja venni a kapcsolatokat az éles app elől. A dev szerver újraindítása után
 `pg_stat_activity` 100 → 6. Bevett javítás: a klienst `globalThis`-re tenni (Next dev singleton minta),
 de ez a DB-réteget érinti minden lekérdezés útján — **saját szelet, teszttel**.
+
+### 2026-09-12 — cobrand-lockup a share oldalon + a DB-kapcsolat szivárgás javítva — 6.89.1
+
+**User:** „legyen nagyobb a cobranding logo a top toolbarban 1.7 rem de úgy hogy az utána jövő dolgok
+ugyanúgy vertikálisan középen legyenek" + „nem kell a `/` utána" + „a share oldalon is: ha nincs
+cobranding akkor tenant neve, ha van cobranding akkor itt `×` és a logó".
+
+- [x] **1,7rem logó, `/` elvéve.** A méret miatt a tag **ki is került a cím `items-baseline`
+      csoportjából**: egy baseline-csoport a legmagasabb tagjával nő, tehát a lap neve a sor tetejére
+      csúszott volna. Most közvetlen toolbar-gyerek → a toolbar `items-center`-je tartja középen.
+      Két wrapper (drafts, monitoring) egygyerekes maradványként megszűnt.
+- [x] **Share fejléc = lockup:** `[mmatrix] × [kliens logó]`, ha van cobrand; különben a kliens neve.
+      A `×` azért ott jó és a lap-toolbarokban nem, mert a share fejlécében a **termék jele is** ott van.
+
+**⚠️ Menet közben elszállt a share oldal 500-zal: `FATAL: sorry, too many clients already`.**
+A tegnapi jegyzetben még „megfigyelt kockázat" volt — ma **blokkolt**, és a mérés szerint az éles appot
+is bármikor kinyomhatta volna.
+
+- **Gyökérok (mérve, nem feltételezve):** a `src/db/index.ts` a Postgres-klienst **modul-lokálisban**
+  tartotta. A Next **dev** ezt a modult **szerver-bundle-önként** (RSC-réteg, route-handler-réteg)
+  és **minden HMR-passzban** újra kiértékeli — minden kiértékelés **saját, 10-es poolt** nyitott, a
+  régit nem zárta. Mérés: **1 dev szerver = 100 kapcsolat**, a box `max_connections` = **100**.
+- **Javítás:** a kliens `globalThis` slotra került (`Symbol.for("mm6.db.slot")`), így minden
+  modul-példány **egy** poolt oszt. **Utána ugyanaz a három útvonal** (RSC lap + kliens lap + API
+  route) **2 kapcsolatot** tart, nem 100-at. Produkcióban a modul egyszer értékelődik ki → ott no-op.
+- A teszt-helperek változatlanul `_resetDbForTests`-tel inicializálnak újra, a vitest fájlonként külön
+  processzt ad → a globális slot nem ragad be teszt-fájlok között. `npm test` **937/937**.
+
+**Tanulság a jövőnek:** ez a DB **közös az éles `mm6-erste`-vel**. Bármi, ami lokálisan sok kapcsolatot
+nyit (dev szerver, párhuzamos build, script), az **éles kiesés** kockázata, nem kényelmi kérdés.

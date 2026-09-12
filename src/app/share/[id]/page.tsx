@@ -1,6 +1,9 @@
 import type { CSSProperties } from "react";
 import { eq, sql } from "drizzle-orm";
 import { notFound } from "next/navigation";
+import { IconSetProvider } from "@/app/_icons/Icon";
+import { IconCredit } from "@/app/_icons/IconCredit";
+import { asIconSet } from "@/app/_icons/types";
 import pkg from "../../../../package.json";
 import { db } from "@/db";
 import { clients, creatives, messages, shareGalleries } from "@/db/schema";
@@ -78,27 +81,31 @@ export default async function SharePage({
 
   const laf = await getLookAndFeelByClientId(client.id);
   const style = lookAndFeelToCssVars(laf) as CSSProperties;
+  const iconSet = asIconSet(laf.iconSet);
 
   const generated = meta.generatedAt
     ? new Date(meta.generatedAt).toISOString().slice(0, 10)
     : null;
 
   return (
-    <div className="share-gallery min-h-screen bg-slate-50" style={style}>
-      <ShareGallery
-        shareId={share.id}
-        clientName={client.name}
-        shareTitle={share.title}
-        shareDescription={share.description}
-        generatedAt={generated}
-        matrixItems={matrixItems}
-        creatives={creativeRows}
-        files={fileRows}
-      />
-      <footer className="share-gallery__footer mx-auto max-w-6xl px-6 py-4 text-center text-[11px] text-slate-400">
-        Shared from {client.name} · MessagingMatrix{" "}
-        <span className="share-gallery__version font-mono">v{pkg.version}</span>
-      </footer>
-    </div>
+    <IconSetProvider value={iconSet}>
+      <div className="share-gallery min-h-screen bg-slate-50" style={style}>
+        <ShareGallery
+          shareId={share.id}
+          clientName={client.name}
+          shareTitle={share.title}
+          shareDescription={share.description}
+          generatedAt={generated}
+          matrixItems={matrixItems}
+          creatives={creativeRows}
+          files={fileRows}
+        />
+        <footer className="share-gallery__footer mx-auto max-w-6xl px-6 py-4 text-center text-[11px] text-slate-400">
+          Shared from {client.name} · MessagingMatrix{" "}
+          <span className="share-gallery__version font-mono">v{pkg.version}</span>
+          <IconCredit iconSet={iconSet} />
+        </footer>
+      </div>
+    </IconSetProvider>
   );
 }

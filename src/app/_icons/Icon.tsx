@@ -3,20 +3,21 @@
 import { createContext, useContext, type ReactNode, type SVGProps } from "react";
 import clsx from "clsx";
 import { LUCIDE_ICONS } from "./families/lucide";
-import type { IconComponent } from "./types";
+import { CORE_LINE_ICONS } from "./families/core-line";
+import type { IconComponent, IconSet } from "./types";
+
+export { ICON_SETS, asIconSet, type IconSet } from "./types";
 
 /** Every semantic name the app can draw. Derived from the default family, so
  *  the two can never disagree about which names exist. */
 export type IconName = keyof typeof LUCIDE_ICONS;
-
-/** Families the tenant can pick. Grows as generated Core families land. */
-export type IconSet = "lucide";
 
 /** A non-default family covers what it covers; the rest falls back to lucide. */
 export type IconFamily = Partial<Record<IconName, IconComponent>>;
 
 const FAMILIES: Record<IconSet, IconFamily> = {
   lucide: LUCIDE_ICONS,
+  "core-line": CORE_LINE_ICONS,
 };
 
 const IconSetContext = createContext<IconSet>("lucide");

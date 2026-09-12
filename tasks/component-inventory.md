@@ -82,6 +82,12 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `app-brand-tag__logo` | A cobrand logó, ha a tenant bekapcsolta. Fehérre festett SVG (`public/erste.svg`, `public/telekom.svg`) — light módban `invert`, dark módban `dark:invert-0`. | AppBrandTag.tsx | csak monokróm jelre igaz; többszínű logóhoz külön light/dark pár kellene |
 | `app-brand-tag__name` | A kliens neve, ha nincs cobrand logó | AppBrandTag.tsx | – |
 | `app-brand-tag__sep` | A `/` elválasztó a tag és a lap neve között | AppBrandTag.tsx | – |
+| `icon` | Minden ikon ezt viseli — a `<Icon name="…">` regiszteren át (`src/app/_icons/`). A 68 fájl közvetlen `lucide-react` importja megszűnt; a család tenantonként vált (`lookAndFeel.iconSet`). | `_icons/Icon.tsx` | a név szemantikus (`close`, `delete`, `spinner`), nem a lucide-é |
+| `icon--core` | Streamline Core ikon jelölője. A Core 14-es gridje kitölti a dobozt, a lucide 24-esében ~2px belső margó van → `padding:1px` a kiegyenlítés (`globals.css`). | generált `families/core-line.tsx` | csak Core családon |
+| `icon--bold` | A „kiválasztva" pipa vastagabb vonala. lucide-on `strokeWidth={3}` prop, Core-on CSS. | `<Icon bold />` | 10 helyen |
+| `icon-credit` | Streamline CC BY 4.0 forrásmegjelölés. Csak akkor renderel, ha a tenant Core családon van. | `_icons/IconCredit.tsx` | Settings › About + publikus share lábléc |
+| `design-tab__preview` (+ `__preview-title` / `__preview-weights` / `__preview-icons` / `__preview-icon`) | Élő minta az Identity szekcióban: page title a választott fonttal, a három súly, és a menü/dialógus ikonjai a választott készlettel. | `settings/_design/DesignTab.tsx` | a font a `--font-base`-ből jön (nincs inline font-family); az ikon-sor saját `IconSetProvider`-t kap, hogy mentés előtt is váltson |
+| `matrix-grid__header-product` (+ `--vertical`) | Product-chip a topic-sor és audience-oszlop fejlécén, ha a rács több terméket fog át. Ugyanaz a chip, mint a `drafts-tile__product`. | `matrix/GridView.tsx` | dense oszlopban függőleges, a név alatt |
 | `form-field` | Label + input wrapper | MessageEditor `Field` 610–626, CL `Field` 811–826, login | inline duplikátum, később hoisting |
 | `form-field__label` | A felső label szöveg | – | – |
 | `form-field__hint` | Optional helper text alul | MessageEditor Field | – |

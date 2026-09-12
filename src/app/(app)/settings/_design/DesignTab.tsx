@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_LOOK_AND_FEEL } from "@/db/defaults";
 import { MC_STATUSES, statusSlug, type McStatus } from "@/lib/mc-status";
 import { FONT_OPTIONS, fontStack } from "@/lib/fonts";
-import { Icon, type IconName } from "@/app/_icons/Icon";
+import { Icon, IconSetProvider, type IconName } from "@/app/_icons/Icon";
+import { ICON_SETS, asIconSet, type IconSet } from "@/app/_icons/types";
 import { SettingsHeaderActions } from "../SettingsView";
 
 type LookAndFeel = typeof DEFAULT_LOOK_AND_FEEL;
@@ -53,6 +55,7 @@ function applyLive(laf: LookAndFeel) {
 
 export function DesignTab() {
   const qc = useQueryClient();
+  const router = useRouter();
 
   const q = useQuery({
     queryKey: ["config", "lookAndFeel"],
@@ -85,6 +88,10 @@ export function DesignTab() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["config", "lookAndFeel"] });
+      // The icon family and the cobranding logo are resolved server-side in
+      // the app shell, so an invalidated client query alone would leave the
+      // rest of the screen on the previous choice until a hard reload.
+      router.refresh();
     },
   });
 
@@ -205,7 +212,13 @@ export function DesignTab() {
           options={fontOptions}
           onChange={(v) => setField("fontFamily", v)}
         />
-        <IdentityPreview title={draft.pageTitle} />
+        <SelectField
+          label="Icon set"
+          value={draft.iconSet}
+          options={ICON_SETS.map((v) => ({ value: v, label: ICON_SET_LABELS[v] }))}
+          onChange={(v) => setField("iconSet", asIconSet(v))}
+        />
+        <IdentityPreview title={draft.pageTitle} iconSet={draft.iconSet} />
       </Section>
 
       <Section title="Cobranding">
@@ -243,6 +256,11 @@ export function DesignTab() {
 
 // A cross-section of what the app draws: four nav icons, then the actions every
 // dialog and toolbar is built from.
+const ICON_SET_LABELS: Record<IconSet, string> = {
+  lucide: "Lucide (default)",
+  "core-line": "Streamline Core Line",
+};
+
 const PREVIEW_ICONS: IconName[] = [
   "dashboard",
   "table",
@@ -266,7 +284,13 @@ const PREVIEW_ICONS: IconName[] = [
  * it. The weight samples matter because a family can be picked and then turn
  * out to ship only one usable weight.
  */
-function IdentityPreview({ title }: { title: string }) {
+function IdentityPreview({
+  title,
+  iconSet,
+}: {
+  title: string;
+  iconSet: IconSet;
+}) {
   return (
     <div className="design-tab__preview md:col-span-2 rounded-md border border-slate-200 bg-slate-50 p-4">
       <p className="design-tab__preview-title truncate text-xl font-semibold text-slate-900">
@@ -279,11 +303,20 @@ function IdentityPreview({ title }: { title: string }) {
         <span className="mx-1.5 text-slate-300">·</span>
         <span className="font-bold">Bold 700</span>
       </p>
-      <div className="design-tab__preview-icons mt-3 flex flex-wrap items-center gap-3 text-slate-500">
-        {PREVIEW_ICONS.map((name) => (
-          <Icon key={name} name={name} className="design-tab__preview-icon size-4" />
-        ))}
-      </div>
+      {/* The chosen family, not the saved one — the provider around this row
+          is what makes the dropdown answer immediately. The rest of the app
+          follows on save (router.refresh re-runs the server layout). */}
+      <IconSetProvider value={iconSet}>
+        <div className="design-tab__preview-icons mt-3 flex flex-wrap items-center gap-3 text-slate-500">
+          {PREVIEW_ICONS.map((name) => (
+            <Icon
+              key={name}
+              name={name}
+              className="design-tab__preview-icon size-4"
+            />
+          ))}
+        </div>
+      </IconSetProvider>
     </div>
   );
 }

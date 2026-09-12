@@ -3,6 +3,8 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
 import { BrandProvider } from "./AppBrandTag";
+import { IconSetProvider } from "@/app/_icons/Icon";
+import type { IconSet } from "@/app/_icons/types";
 import { usePresenceConnection } from "./usePresenceConnection";
 import UsersDialog from "../(app)/_components/UsersDialog";
 import SettingsDialog from "../(app)/_components/SettingsDialog";
@@ -22,6 +24,8 @@ type Props = {
   client: { key: string; name: string };
   /** Tenant cobranding logo, already gated on cobranding.enabled. */
   cobrandLogoUrl: string | null;
+  /** Tenant icon family, resolved server-side so there is no swap on first paint. */
+  iconSet: IconSet;
   aboutInfo: AboutInfo;
   children: ReactNode;
 };
@@ -30,6 +34,7 @@ export default function AppShell({
   user,
   client,
   cobrandLogoUrl,
+  iconSet,
   aboutInfo,
   children,
 }: Props) {
@@ -55,36 +60,38 @@ export default function AppShell({
   const isAdmin = user.role === "admin";
 
   return (
-    <AlertDialogProvider>
-      <Sidebar
-        user={{ email: user.email, role: user.role }}
-        version={aboutInfo.appVersion}
-        onOpenUsers={isAdmin ? () => setUsersOpen(true) : undefined}
-        onOpenSettings={isAdmin ? () => setSettingsOpen(true) : undefined}
-      />
-      <main className="flex-1 overflow-auto">
-        <BrandProvider
-          value={{ clientName: client.name, logoUrl: cobrandLogoUrl }}
-        >
-          {children}
-        </BrandProvider>
-      </main>
+    <IconSetProvider value={iconSet}>
+      <AlertDialogProvider>
+        <Sidebar
+          user={{ email: user.email, role: user.role }}
+          version={aboutInfo.appVersion}
+          onOpenUsers={isAdmin ? () => setUsersOpen(true) : undefined}
+          onOpenSettings={isAdmin ? () => setSettingsOpen(true) : undefined}
+        />
+        <main className="flex-1 overflow-auto">
+          <BrandProvider
+            value={{ clientName: client.name, logoUrl: cobrandLogoUrl }}
+          >
+            {children}
+          </BrandProvider>
+        </main>
 
-      {isAdmin ? (
-        <UsersDialog
-          open={usersOpen}
-          onClose={() => setUsersOpen(false)}
-          currentUserId={user.id}
-        />
-      ) : null}
-      {isAdmin ? (
-        <SettingsDialog
-          open={settingsOpen}
-          onClose={() => setSettingsOpen(false)}
-          activeClient={{ key: client.key, name: client.name }}
-          aboutInfo={aboutInfo}
-        />
-      ) : null}
-    </AlertDialogProvider>
+        {isAdmin ? (
+          <UsersDialog
+            open={usersOpen}
+            onClose={() => setUsersOpen(false)}
+            currentUserId={user.id}
+          />
+        ) : null}
+        {isAdmin ? (
+          <SettingsDialog
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            activeClient={{ key: client.key, name: client.name }}
+            aboutInfo={aboutInfo}
+          />
+        ) : null}
+      </AlertDialogProvider>
+    </IconSetProvider>
   );
 }

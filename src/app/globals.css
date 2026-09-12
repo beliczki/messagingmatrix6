@@ -75,6 +75,22 @@ html.dark {
   }
 }
 
+@layer components {
+  /* Streamline Core draws on a 14 grid that uses the whole box; lucide's 24
+     grid keeps ~2px of inner margin. Without this, a Core icon reads 15-20%
+     larger than the lucide one at the same size-* class, and a mixed row (the
+     twelve glyphs Core free does not ship stay lucide) looks ragged. */
+  .icon--core {
+    padding: 1px;
+  }
+
+  /* The heavier "selected" check. lucide takes strokeWidth={3} as a prop; a
+     Core icon carries stroke-width on its paths, so it needs the override. */
+  .icon--bold.icon--core :is(path, circle, rect, line, polyline) {
+    stroke-width: 1.5;
+  }
+}
+
 @layer utilities {
   /* Dark-mode shim: re-map the most common hardcoded Tailwind utility classes
      to themed CSS vars when html.dark is set. Specificity (0,0,2,0) beats

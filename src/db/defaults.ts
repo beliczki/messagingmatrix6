@@ -1,4 +1,5 @@
 import { DEFAULT_STATUS_COLORS } from "@/lib/mc-status";
+import type { IconSet } from "@/app/_icons/types";
 // Default config values written for a freshly-created client (Spec §17.6).
 // A new Telekom or Proficio deploy boots with these so Settings has something
 // to render and login branding works on first paint.
@@ -7,6 +8,7 @@ export const DEFAULT_LOOK_AND_FEEL = {
   logo: "",
   pageTitle: "MessagingMatrix",
   fontFamily: "Inter",
+  iconSet: "lucide" as IconSet,
   colorMode: "system" as "light" | "dark" | "system",
   headerColor: "#1f2937",
   buttonColor: "#2563eb",

@@ -1,5 +1,8 @@
 "use client";
 
+import { useIconSet } from "@/app/_icons/Icon";
+import { IconCredit } from "@/app/_icons/IconCredit";
+
 type AboutInfo = {
   activeClient: { key: string; name: string; status: string };
   user: { email: string; role: string };
@@ -10,6 +13,7 @@ type AboutInfo = {
 };
 
 export function AboutTab({ info }: { info: AboutInfo }) {
+  const iconSet = useIconSet();
   const rows: Array<[string, string]> = [
     ["App version", info.appVersion],
     ["NODE_ENV", info.env.nodeEnv],
@@ -44,6 +48,12 @@ export function AboutTab({ info }: { info: AboutInfo }) {
           </div>
         ))}
       </dl>
+
+      {/* Streamline Core is CC BY 4.0 and the licence wants the credit visible.
+          Renders nothing while the tenant is on lucide (ISC, no attribution). */}
+      <p className="about-tab__credits mt-4 text-xs text-slate-500">
+        <IconCredit iconSet={iconSet} className="icon-credit" />
+      </p>
     </div>
   );
 }

@@ -412,7 +412,6 @@ Persisted localStorage kulcsok:
 | Search box | `input-box input-box--with-icon` | 494–503 |
 | Product / Type / Size MultiPill | `multi-pill` | – |
 | Clear gomb | `toolbar-btn` | – |
-| Missing-preview warning pill + offender dropdown | `creative-library__preview-warning` (`-btn`, `-menu`, `-row`) | – |
 | Upload gomb | `toolbar-btn--primary` | – |
 | Scroll area (wrapping a grid/masonry/list) | `creative-library__scroll` | – |
 | Drop overlay | `drop-overlay` (globalis) | 307–313 |
@@ -438,6 +437,7 @@ Persisted localStorage kulcsok:
 | **QueueItemForm** | `upload-queue__item-form` + `form-grid` | 777–809 |
 | **DriveFolderBatchField** (batch-szintű Drive mappalink a queue fejlécében) | `drive-folder-field` + `form-field` / `form-field__label` / `form-field__hint` | – |
 | **DriveHealthCheck** (jobb-toolbar akció) | `drive-health` (`--collapsed`), belül `drive-health__run` (`toolbar-btn`), `__scope`, `__error`, `__report`, `__line` | – |
+| **PreviewHealth** (jobb-toolbar akció) | `preview-health` (`--collapsed`), belül `preview-health__run` (`toolbar-btn`), `__scope`, `__dot`, `__progress`, `__current`, `__failed`, `__error`, `__missing` (`-head`, `-list`, `-row`) | a `drive-health` mintája; a 6.87.0 előtt `creative-library__preview-warning*` volt a *header* toolbarban, listázás-only |
 | Drive-linkek a kreatív-detailben | `drive-links` + `drive-links__link` / `drive-links__pending` | – |
 | **ViewControls** (right toolbar nyitva) | `creative-library-view-controls` | 400–428 |
 | ToggleBtn (grid/list/masonry) | `toggle-btn` (globalis) | 430–451 |

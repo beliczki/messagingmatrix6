@@ -3,6 +3,8 @@ import type { NextRequest } from "next/server";
 import { db } from "@/db";
 import { clients, messages, messagePreviews, users } from "@/db/schema";
 import { signSession, hashPassword } from "@/lib/auth";
+import { subscribe, _resetSubscribersForTests } from "@/lib/events";
+import type { BroadcastEvent } from "@/lib/events";
 import type { StalePreview } from "@/lib/previews";
 import {
   createTestDb,
@@ -13,13 +15,24 @@ import {
 // The chromium shoot itself is not vitest-testable (needs a browser and a
 // running server) — the route contract is tested with the shooter mocked.
 vi.mock("@/lib/preview-shooter", () => ({
-  shootPreviews: vi.fn(async (_clientId: number, items: StalePreview[]) =>
-    items.map((it) => ({
-      messageId: it.message.id,
-      size: it.size,
-      ok: true as const,
-      previewId: it.existing?.id ?? 999,
-    })),
+  shootPreviews: vi.fn(
+    async (
+      _clientId: number,
+      items: StalePreview[],
+      opts?: { onShot?: (r: unknown) => void },
+    ) =>
+      items.map((it) => {
+        const r = {
+          messageId: it.message.id,
+          size: it.size,
+          ok: true as const,
+          previewId: it.existing?.id ?? 999,
+        };
+        // The real shooter reports each shot as it lands; the route turns that
+        // into an SSE frame, so the mock has to call it too.
+        opts?.onShot?.(r);
+        return r;
+      }),
   ),
 }));
 
@@ -351,5 +364,63 @@ describe("GET /api/previews/status?message_id=", () => {
       {},
     );
     expect(res.status).toBe(404);
+  });
+});
+
+describe("preview render progress (SSE)", () => {
+  it("reports every shot with the MC and size it just took", async () => {
+    const token = await seedUser("admin", "u-progress");
+    const m = await seedHtmlMessage(21);
+
+    const frames: BroadcastEvent[] = [];
+    const unsub = subscribe(erste.id, (e) => frames.push(e));
+    try {
+      await generatePOST(
+        authedReq(token, "http://localhost/api/previews/generate", {
+          message_ids: [m.id],
+        }),
+        {},
+      );
+    } finally {
+      unsub();
+      _resetSubscribersForTests();
+    }
+
+    // The html template has four sizes, none shot yet.
+    expect(frames).toHaveLength(4);
+    const detail = frames[0]!.detail as {
+      mcLabel: string;
+      size: string;
+      ok: boolean;
+    };
+    expect(detail.mcLabel).toBe("MC21a");
+    expect(detail.ok).toBe(true);
+    expect(new Set(frames.map((f) => (f.detail as { size: string }).size))).toEqual(
+      new Set(["300x250", "300x600", "640x360", "970x250"]),
+    );
+  });
+
+  it("does NOT broadcast under the 'previews' entity — that key is queried, and one frame per shot would be one refetch per shot", async () => {
+    const token = await seedUser("admin", "u-entity");
+    const m = await seedHtmlMessage(22);
+
+    const frames: BroadcastEvent[] = [];
+    const unsub = subscribe(erste.id, (e) => frames.push(e));
+    try {
+      await generatePOST(
+        authedReq(token, "http://localhost/api/previews/generate", {
+          message_ids: [m.id],
+        }),
+        {},
+      );
+    } finally {
+      unsub();
+      _resetSubscribersForTests();
+    }
+
+    expect(frames.length).toBeGreaterThan(0);
+    for (const f of frames) {
+      expect(f.entity).toBe("preview_progress");
+    }
   });
 });

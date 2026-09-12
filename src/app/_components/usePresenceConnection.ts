@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { publishBroadcast } from "./broadcast-bus";
+import type { BroadcastEvent } from "@/lib/events";
 
 // Mounted once in AppShell. Owns a single EventSource('/api/events') for the
 // tab. The connection serves two purposes (spec §4.11):
@@ -35,9 +37,12 @@ export function usePresenceConnection(): void {
       // The `hello` frame carries an explicit `event:` line so it dispatches
       // as a typed event — only broadcast frames reach `onmessage`.
       esRef.current.onmessage = (ev) => {
-        const data = JSON.parse(ev.data) as { entity?: string };
+        const data = JSON.parse(ev.data) as Partial<BroadcastEvent>;
         if (data.entity) {
           qc.invalidateQueries({ queryKey: [data.entity] });
+          // Components that need the frame itself, not just a refetch (preview
+          // render progress names the MC and size it is shooting right now).
+          publishBroadcast(data as BroadcastEvent);
         }
       };
       // Re-opening after the tab was hidden / went offline: peer writes that

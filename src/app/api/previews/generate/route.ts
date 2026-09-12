@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import { denyDemo, withSession } from "@/lib/scoped";
 import { collectStalePreviews } from "@/lib/previews";
 import { shootPreviews } from "@/lib/preview-shooter";
+import { broadcast } from "@/lib/events";
+import { mcLabelFor } from "@/lib/mc-label";
+
+// Progress rides the SSE feed under its OWN entity name. Not "previews": the
+// client hook invalidates [entity] on every frame, and a few hundred shots
+// would mean a few hundred refetches of ["previews","status"]. Nothing queries
+// this key, so the invalidation is a no-op and the detail is what matters.
+const PROGRESS_ENTITY = "preview_progress";
 
 const MAX_MESSAGES = 20;
 
@@ -35,7 +43,30 @@ export const POST = withSession(async ({ req, claims }) => {
     force,
     messageIds: ids as number[],
   });
-  const results = await shootPreviews(claims.cid, stale);
+
+  // Which MC each shot belongs to, so the toolbar can name what it is doing
+  // right now rather than only counting.
+  const labelByMessage = new Map<number, string>();
+  for (const item of stale) {
+    labelByMessage.set(item.message.id, mcLabelFor(item.message));
+  }
+
+  const results = await shootPreviews(claims.cid, stale, {
+    onShot: (r) => {
+      broadcast(claims.cid, {
+        entity: PROGRESS_ENTITY,
+        ids: [r.messageId],
+        action: "shot",
+        byUser: claims.sub,
+        detail: {
+          mcLabel: labelByMessage.get(r.messageId) ?? "",
+          size: r.size,
+          ok: r.ok,
+          ...(r.ok ? {} : { error: r.error }),
+        },
+      });
+    },
+  });
 
   return NextResponse.json({ results, freshSkipped: fresh });
 });

@@ -19,7 +19,6 @@ import {
   Check,
   CheckCheck,
   Share2,
-  AlertTriangle,
 } from "lucide-react";
 import clsx from "clsx";import { trimEmptyCountSegments } from "@/lib/count-segments";
 
@@ -51,6 +50,7 @@ const SIZE_QUICK_SELECT: { presets: QuickPreset[] } = {
 };
 import ArchiveToggle from "../_components/ArchiveToggle";
 import RightToolbar from "../_components/RightToolbar";
+import PreviewHealth, { type PreviewStatus } from "./PreviewHealth";
 import CreativeDetailDialog from "./CreativeDetailDialog";
 import DriveHealthCheck from "./DriveHealthCheck";
 import MatrixDetailDialog from "./MatrixDetailDialog";
@@ -184,13 +184,6 @@ type UploadedFile = {
 };
 
 // GET /api/previews/status — html MCs with absent/stale generated previews.
-type PreviewStatus = {
-  staleCount: number;
-  freshCount: number;
-  mcCount: number;
-  offenders: { mcLabel: string; sizes: string[] }[];
-};
-
 async function fetchJSON<T>(url: string): Promise<T> {
   const r = await fetch(url, { credentials: "include" });
   if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
@@ -559,6 +552,17 @@ export default function CreativeLibrary() {
     });
   }, [items, products, axes, sizes, predicate, audienceMap, topicMap]);
 
+  // The view lists one item per MC x size; the generator takes message ids, so
+  // the same card must not be sent four times.
+  const previewScopeIds = useMemo(
+    () => [
+      ...new Set(
+        filtered.flatMap((c) => (c.kind === "matrix" ? [c.message.id] : [])),
+      ),
+    ],
+    [filtered],
+  );
+
   const sorted = useMemo(() => sortListRows(filtered, sort), [filtered, sort]);
 
   useEffect(() => {
@@ -630,7 +634,6 @@ export default function CreativeLibrary() {
           setSizes={setSizes}
           total={items.length}
           visible={filtered.length}
-          previewStatus={previewStatusQ.data}
         />
 
         <div
@@ -862,6 +865,11 @@ export default function CreativeLibrary() {
                   c.kind === "uploaded" ? [c.id] : [],
                 )}
               />
+              <PreviewHealth
+                collapsed={collapsed}
+                status={previewStatusQ.data}
+                messageIds={previewScopeIds}
+              />
               <ToolbarUpload
                 collapsed={collapsed}
                 help="Drop creatives to queue them straight away, or click to open the batch dialog."
@@ -892,7 +900,6 @@ function Toolbar({
   setSizes,
   total,
   visible,
-  previewStatus,
 }: {
   search: string;
   setSearch: (s: string) => void;
@@ -909,7 +916,6 @@ function Toolbar({
   setSizes: (s: Set<string>) => void;
   total: number;
   visible: number;
-  previewStatus: PreviewStatus | undefined;
 }) {
   const activeFilters = products.size + axes.size + sizes.size + (search ? 1 : 0);
   return (
@@ -963,67 +969,9 @@ function Toolbar({
         </button>
       ) : null}
 
-      {previewStatus && previewStatus.mcCount > 0 ? (
-        <PreviewWarning status={previewStatus} />
-      ) : null}
-
       <div className="toolbar__count ml-auto text-[11px] text-slate-500">
         {visible}/{total} creatives
       </div>
-    </div>
-  );
-}
-
-// Amber pill + offender dropdown: html MCs whose generated preview PNGs are
-// absent or stale (edited since the last `npm run gen:previews`).
-function PreviewWarning({ status }: { status: PreviewStatus }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onDocMouseDown(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onDocMouseDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDocMouseDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  return (
-    <div ref={ref} className="creative-library__preview-warning relative text-xs">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        title={`${status.staleCount} size preview(s) across ${status.mcCount} MC(s) are missing or outdated — run \`npm run gen:previews\` to refresh. Click for the list.`}
-        className="creative-library__preview-warning-btn inline-flex cursor-pointer items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700 hover:bg-amber-100"
-      >
-        <AlertTriangle className="size-3" />
-        {status.mcCount} MC{status.mcCount === 1 ? "" : "s"} missing previews
-      </button>
-      {open ? (
-        <div className="creative-library__preview-warning-menu absolute left-0 top-full z-50 mt-1 max-h-72 w-72 overflow-auto rounded-md border border-slate-200 bg-white p-1.5 shadow-lg">
-          {status.offenders.map((o) => (
-            <div
-              key={o.mcLabel}
-              className="creative-library__preview-warning-row flex items-baseline justify-between gap-2 rounded px-2 py-1 hover:bg-slate-100"
-            >
-              <span className="truncate font-mono">{o.mcLabel}</span>
-              <span className="shrink-0 text-[10px] text-slate-500">
-                {o.sizes.join(", ")}
-              </span>
-            </div>
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }

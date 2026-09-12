@@ -5,6 +5,28 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.87.0] — 2026-09-12
+
+### Added
+- **Generate missing previews from the Creative Library toolbar.** The missing-
+  preview warning moves out of the header toolbar into the right toolbar, next
+  to the Drive link check, and gains the button that actually fixes it: the
+  server shoots the PNGs in its own headless Chromium. Previously the warning
+  only counted the problem and advised running `npm run gen:previews` on a
+  laptop — advice that made no sense for a deployment that can shoot for itself.
+- **Live progress, naming what it is shooting.** Each shot is broadcast on the
+  existing SSE feed, so the toolbar shows the MC and size currently in Chromium
+  plus a running count, instead of a spinner that could mean anything.
+  `BroadcastEvent` gained an optional `detail` for events whose payload is the
+  point; progress rides its own entity name so it cannot trigger a refetch per
+  shot.
+
+### Changed
+- The run is scoped to the MCs in the current filtered view — the same scoping
+  the Drive link check uses — and chunked, so closing the tab stops it between
+  chunks. The count next to the button says how many MCs are in scope; the
+  warning underneath still reports the client-wide total.
+
 ## [6.86.0] — 2026-09-12
 
 ### Changed

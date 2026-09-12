@@ -6,6 +6,10 @@ export type BroadcastEvent = {
   ids: Array<number | string>;
   action: string;
   byUser: string | null;
+  /** Optional payload for events that carry more than "this entity changed" —
+   *  e.g. preview-render progress, where the point IS the detail. Clients that
+   *  only invalidate on `entity` ignore it. */
+  detail?: unknown;
 };
 
 type Listener = (e: BroadcastEvent) => void;

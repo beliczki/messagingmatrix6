@@ -16,7 +16,7 @@
 
 ## Jelen állapot (2026-09-10)
 
-- **Verzió: `6.86.0`** (live a boxon: `6.83.0` — a 6.84–6.86 deploy-ra vár) a Hetzner boxon (`erste.messagingmatrix.ai`, pm2 `mm6-erste`). Working tree tiszta; a 6.82.x munkák commitálva.
+- **Verzió: `6.87.0`** (live a boxon: `6.83.0` — a 6.84–6.87 deploy-ra vár) a Hetzner boxon (`erste.messagingmatrix.ai`, pm2 `mm6-erste`). Working tree tiszta; a 6.82.x munkák commitálva.
 - Phase 0–10 + a 2026-08/09-es epicek mind leszállítva: DCO/Agentic mátrix, Creative Library rebuild, DRAFT-modell (draft = `messages` sor `audience IS NULL`), draft-variánsok, státusz-takarítás (6 státusz), monitoring periódus-tartomány + nap-grain, Drive-linkek, feed diff-alap + „semmi nem tűnik el", dashboard napi áttekintő, Channels-entitás, MCP per-user tokenek.
 - **Átrendezés 2026-09-10:** minden lezárt epic-log és a 2026-09-10 előtti checkpointok szó szerint átkerültek a `todo-archive.md`-be („Archivált 2026-09-10 — todo.md átrendezés" szekció). Itt csak a nyitott munka maradt.
 
@@ -50,7 +50,7 @@ Az edit-mode panel Delete gombja archivál vagy töröl (M10 dialog), tehát az 
 
 ## 🟡 NEXT — green-light után, alacsony blokk
 
-### P — Preview-generálás a Creative Library jobb toolbarjából (TERV, jóváhagyásra vár, 2026-09-12)
+### ~~P — Preview-generálás a Creative Library jobb toolbarjából~~ — **✅ KÉSZ (6.87.0, 2026-09-12)**
 
 **User:** „jó lenne a hetzner boxra is feltenni a chromiumot és ott is képesnek lenni preview képet
 generálni… a header toolbarból a »nincs preview x MC-hez« warningot ki kéne hozni a side toolbarba és
@@ -74,17 +74,17 @@ progress, infóval hogy éppen mit csinál a háttérscript."
 
 **User-döntések (2026-09-12):** hatókör = **a szűrt nézet**; progress = **élő SSE sor**.
 
-- [ ] **P1 (szerver)** `BroadcastEvent` opcionális `detail` mezővel (additív). A generate-route
+- [x] **P1 (szerver)** `BroadcastEvent` opcionális `detail` mezővel (additív). A generate-route
       `onShot`-ot ad a `shootPreviews`-nak, és felvételenként broadcastol:
       `{entity:"previews", action:"shot", ids:[messageId], detail:{mcLabel, size, ok, done, total}}`.
       ⚠️ Ellenőrizendő: a kliens event-fogyasztója ne invalidáljon query-t erre az entityre.
-- [ ] **P2 (kliens)** `PreviewWarning` → **`PreviewHealth`**, a `RightToolbar`-ba, a `DriveHealthCheck`
+- [x] **P2 (kliens)** `PreviewWarning` → **`PreviewHealth`**, a `RightToolbar`-ba, a `DriveHealthCheck`
       collapsed/expanded mintájával (collapsed = ikongomb, nyitva = gomb + offender-lista).
       A futtatás hatóköre a **szűrt nézet `kind:"matrix"` elemeinek `message.id`-ja**, dedupe-olva,
       20-asával chunkolva (a route cap-je). A gomb a hatókör számát viszi, 0-nál tiltott.
       A blokk a kliens-szintű warningot is mutatja (mint ma), hogy látszódjon: a szűrőn kívül
       mennyi maradt.
-- [ ] **P3** Copy-javítás (a „run `npm run gen:previews`" tanács helyett a gomb), az élő sor
+- [x] **P3** Copy-javítás (a „run `npm run gen:previews`" tanács helyett a gomb), az élő sor
       („MC404a 300×250 · 12/290"), `component-inventory.md` (`preview-health*`, a
       `creative-library__preview-warning*` nevek nyugdíjazása), tesztek (route broadcastol;
       hatókör-helper unit), CHANGELOG + minor bump.
@@ -714,3 +714,27 @@ felcserélhető pozíció — emiatt a logó cseréje kitörölte volna a hátte
       őket a testvér-variánsokra. A `draft_update` a konkrét variáns-sorra hat. A tool-leírás most
       ezt ki is mondja.
 - [x] 3 integrációs + 6 unit teszt (`tests/unit/draft-image-slots.test.ts`). **926/926.**
+
+### 2026-09-12 — preview-generálás a Library toolbarjából — 6.87.0
+
+A P1–P3 leszállítva a terv szerint. **A kérés fele nem igényelt munkát:** a chromium már fent volt a
+boxon (smoke-teszt: 1164 ms alatt indult és lőtt), a `/api/previews/generate` route is élt — csak a UI
+nem kínálta fel sehol, és a warning tooltipje még az `npm run gen:previews`-t tanácsolta.
+
+- [x] **P1** `BroadcastEvent.detail` (opcionális, additív) + a route felvételenként broadcastol.
+      **Az entity szándékosan `preview_progress`, NEM `previews`:** a kliens hook minden frame-re
+      `invalidateQueries([entity])`-t hív, és a `["previews","status"]` kulcs létezik — ~290 felvétel
+      ~290 refetch lett volna. Külön teszt őrzi ezt a nevet, indoklással.
+- [x] **P2** `PreviewHealth` komponens a jobb toolbarban (a `DriveHealthCheck` collapsed/expanded
+      mintája). Új `broadcast-bus.ts`: a tabnak **egy** EventSource-a van (a második presence-
+      kapcsolatot is jelentene), így a hook továbbadja a frame-eket a feliratkozó komponenseknek.
+      Hatókör = a szűrt nézet `kind:"matrix"` elemeinek **dedupált** message id-ja (a nézet
+      MC×méretenként ad egy elemet, a route message id-t vár).
+- [x] **P3** A régi `creative-library__preview-warning*` nyugdíjazva, `preview-health*` az inventoryban.
+      2 új teszt (progress-frame MC+mérettel; az entity-név őrzése). **928/928.**
+
+**Amit NEM teszteltem:** a hatókör-dedupe unit tesztje elmaradt — 5 soros inline `useMemo`, és csak
+azért kiemelni egy helperbe, hogy tesztelhető legyen, épp az a fajta absztrakció, amit a szabály tilt.
+A böngészős ellenőrzés (a toolbar-blokk kinézete, az élő sor futás közben) a useré.
+
+**Séma-migráció nincs.**

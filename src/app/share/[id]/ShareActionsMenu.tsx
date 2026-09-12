@@ -11,6 +11,7 @@ import { useThemeSwitch } from "@/app/_components/useThemeSwitch";
 
 export type ViewMode = "grid" | "list" | "masonry";
 export type DriveFolder = { id: string; name: string; mcs: string[] };
+export type BriefDeck = { id: string; url: string; mcs: string[] };
 
 const VIEWS: Array<{ k: ViewMode; label: string; icon: React.ReactNode }> = [
   { k: "grid", label: "Grid", icon: <Icon name="grid-tiles" className="size-4" /> },
@@ -32,6 +33,7 @@ export default function ShareActionsMenu({
   zipProgress,
   onDownloadAll,
   driveFolders,
+  briefDecks,
 }: {
   className?: string;
   view: ViewMode;
@@ -46,6 +48,7 @@ export default function ShareActionsMenu({
   zipProgress: number;
   onDownloadAll: () => void;
   driveFolders: DriveFolder[];
+  briefDecks: BriefDeck[];
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -117,11 +120,38 @@ export default function ShareActionsMenu({
                   <Icon name="google-drive" className="mt-0.5 size-4 shrink-0" />
                   <span className="min-w-0">
                     <span className="block truncate">
-                      {driveFolders.length > 1 ? f.name : "Google Drive"}
+                      {driveFolders.length > 1 ? f.name : "Drive"}
                     </span>
                     {driveFolders.length > 1 && f.mcs.length > 0 ? (
                       <span className="block truncate text-[11px] text-slate-500">
                         {f.mcs.join(" · ")}
+                      </span>
+                    ) : null}
+                  </span>
+                </a>
+              ))}
+            </Section>
+          ) : null}
+
+          {briefDecks.length > 0 ? (
+            <Section label={briefDecks.length > 1 ? "Brief decks" : "Slides"}>
+              {briefDecks.map((d) => (
+                <a
+                  key={d.id}
+                  href={d.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={() => setOpen(false)}
+                  className="share-actions-menu__row flex items-start gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  <Icon name="slides" className="mt-0.5 size-4 shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block truncate">
+                      {briefDecks.length > 1 ? "Brief deck" : "Slides"}
+                    </span>
+                    {briefDecks.length > 1 && d.mcs.length > 0 ? (
+                      <span className="block truncate text-[11px] text-slate-500">
+                        {d.mcs.join(" · ")}
                       </span>
                     ) : null}
                   </span>

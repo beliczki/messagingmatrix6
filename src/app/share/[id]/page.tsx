@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { IconSetProvider } from "@/app/_icons/Icon";
 import { IconCredit } from "@/app/_icons/IconCredit";
@@ -11,6 +11,11 @@ import {
   getLookAndFeelByClientId,
   lookAndFeelToCssVars,
 } from "@/lib/branding";
+import {
+  briefKey,
+  briefUrl,
+  type ShareBriefs,
+} from "@/lib/share-briefs";
 import ShareGallery, {
   type SnapshotCreative,
   type SnapshotFile,
@@ -79,6 +84,8 @@ export default async function SharePage({
   const creativeRows = (meta.creatives ?? []) as SnapshotCreative[];
   const fileRows = (meta.files ?? []) as SnapshotFile[];
 
+  const briefs = await resolveBriefs(client.id, creativeRows, matrixItems);
+
   const laf = await getLookAndFeelByClientId(client.id);
   const style = lookAndFeelToCssVars(laf) as CSSProperties;
   const iconSet = asIconSet(laf.iconSet);
@@ -101,6 +108,7 @@ export default async function SharePage({
           matrixItems={matrixItems}
           creatives={creativeRows}
           files={fileRows}
+          briefs={briefs}
         />
         <footer className="share-gallery__footer mx-auto max-w-6xl px-6 py-4 text-center text-[11px] text-slate-400">
           Shared from {client.name} · MessagingMatrix{" "}
@@ -110,4 +118,53 @@ export default async function SharePage({
       </div>
     </IconSetProvider>
   );
+}
+
+/**
+ * The brief decks behind the cards in this share, resolved live.
+ *
+ * Scoped by the MC numbers the share actually holds, so the query stays small
+ * on a growing table — and by the client, so a public page can never reach a
+ * neighbouring tenant's briefs. A card with no brief simply has no key in the
+ * map, and the Slides button does not render.
+ */
+async function resolveBriefs(
+  clientId: number,
+  creativeRows: SnapshotCreative[],
+  matrixItems: Array<{ message: SnapshotMessage }>,
+): Promise<ShareBriefs> {
+  const numbers = new Set<number>();
+  for (const c of creativeRows) {
+    if (typeof c.mcNumber === "number") numbers.add(c.mcNumber);
+  }
+  for (const it of matrixItems) {
+    if (typeof it.message.number === "number") numbers.add(it.message.number);
+  }
+  if (numbers.size === 0) return {};
+
+  const rows = await db
+    .select({
+      number: messages.number,
+      variant: messages.variant,
+      fileId: messages.briefSlidesFileId,
+      slideId: messages.briefSlideId,
+    })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.clientId, clientId),
+        isNotNull(messages.briefSlidesFileId),
+        inArray(messages.number, [...numbers]),
+      ),
+    );
+
+  const out: ShareBriefs = {};
+  for (const r of rows) {
+    const key = briefKey(r.number, r.variant);
+    // One card can exist as several rows (one per cell); they share the brief,
+    // so the first one that names a deck answers for the card.
+    if (!key || !r.fileId || out[key]) continue;
+    out[key] = { fileId: r.fileId, url: briefUrl(r.fileId, r.slideId) };
+  }
+  return out;
 }

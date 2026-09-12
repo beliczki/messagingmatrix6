@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/app/_icons/Icon";
+import { briefKey, type ShareBriefs } from "@/lib/share-briefs";
 import clsx from "clsx";
 import ImagePreviewToggle from "./ImagePreviewToggle";
 import { bgClassFor, type PreviewBg } from "./preview-bg";
@@ -93,6 +94,8 @@ type Props = {
   authorName: string;
   setAuthorName: (s: string) => void;
   onCommentPosted: () => void;
+  /** Brief decks behind the shared cards, keyed by MC (see share-briefs.ts). */
+  briefs: ShareBriefs;
 };
 
 function parseSize(size: string): { w: number; h: number; landscape: boolean } {
@@ -146,6 +149,7 @@ export default function ShareDetailDialog({
   authorName,
   setAuthorName,
   onCommentPosted,
+  briefs,
 }: Props) {
   const [bg, setBg] = useState<PreviewBg>("checker");
   const [annotationMode, setAnnotationMode] = useState<AnnotationMode>("off");
@@ -158,6 +162,16 @@ export default function ShareDetailDialog({
     setPending(null);
     setHighlightId(null);
   }, [item.key]);
+
+  // The card this item belongs to — a creative names its MC, a matrix cell IS
+  // one — and the deck it was briefed on, when there is one.
+  const brief = (() => {
+    const key =
+      item.kind === "creative"
+        ? briefKey(item.creative.mcNumber, item.creative.mcVariant)
+        : briefKey(item.message.number, item.message.variant);
+    return key ? (briefs[key] ?? null) : null;
+  })();
 
   const itemComments = useMemo(
     () => comments.filter((c) => c.itemKey === item.itemKey),
@@ -270,7 +284,19 @@ export default function ShareDetailDialog({
                 className="share-detail-dialog__drive toolbar-btn inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
               >
                 <Icon name="google-drive" className="size-3" />
-                Google Drive
+                Drive
+              </a>
+            ) : null}
+            {brief ? (
+              <a
+                href={brief.url}
+                target="_blank"
+                rel="noreferrer"
+                title="Open the brief deck on Google Slides"
+                className="share-detail-dialog__slides toolbar-btn inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
+              >
+                <Icon name="slides" className="size-3" />
+                Slides
               </a>
             ) : null}
             <button

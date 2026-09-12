@@ -8,6 +8,7 @@ import {
   useState,
 } from "react";
 import { Icon } from "@/app/_icons/Icon";
+import { briefKey, type ShareBriefs } from "@/lib/share-briefs";
 import clsx from "clsx";
 import PublicMatrixPreview from "./PublicMatrixPreview";
 import ImagePreviewToggle from "./ImagePreviewToggle";
@@ -92,6 +93,8 @@ type Props = {
   matrixItems: Array<{ messageId: number; size: string; message: SnapshotMessage }>;
   creatives: SnapshotCreative[];
   files: SnapshotFile[];
+  /** Brief decks behind the shared cards, resolved live (see share-briefs.ts). */
+  briefs: ShareBriefs;
 };
 
 const AUTHOR_NAME_KEY = "mm6_share_author_name";
@@ -106,6 +109,7 @@ export default function ShareGallery({
   matrixItems,
   creatives,
   files,
+  briefs,
 }: Props) {
   const filesById = useMemo(() => new Map(files.map((f) => [f.id, f])), [files]);
 
@@ -158,6 +162,37 @@ export default function ShareGallery({
       ),
     }));
   }, [creatives]);
+
+  // The brief decks behind these cards. Grouped like the delivery folders and
+  // for the same reason: one deck is a link, several raise the question of
+  // which card came from where.
+  const briefDecks = useMemo(() => {
+    const byId = new Map<string, { url: string; mcs: Set<string> }>();
+    const add = (
+      number: number | null | undefined,
+      variant: string | null | undefined,
+    ) => {
+      const key = briefKey(number, variant);
+      if (!key) return;
+      const brief = briefs[key];
+      if (!brief) return;
+      const entry = byId.get(brief.fileId) ?? {
+        url: brief.url,
+        mcs: new Set<string>(),
+      };
+      entry.mcs.add(key);
+      byId.set(brief.fileId, entry);
+    };
+    for (const c of creatives) add(c.mcNumber, c.mcVariant);
+    for (const p of matrixItems) add(p.message.number, p.message.variant);
+    return [...byId].map(([id, v]) => ({
+      id,
+      url: v.url,
+      mcs: [...v.mcs].sort((a, b) =>
+        a.localeCompare(b, undefined, { numeric: true }),
+      ),
+    }));
+  }, [briefs, creatives, matrixItems]);
 
   // The image-preview switch swaps a live render for a stored PNG. When every
   // item in the share is already a delivered image there is nothing to swap, so
@@ -499,6 +534,7 @@ export default function ShareGallery({
             zipProgress={zipProgress}
             onDownloadAll={downloadAll}
             driveFolders={driveFolders}
+            briefDecks={briefDecks}
           />
           <div className="share-gallery__control-actions ml-auto hidden flex-wrap items-center gap-2 sm:flex">
             <ThemeToggle />
@@ -532,6 +568,7 @@ export default function ShareGallery({
                 : `Download all (${downloadTargets.length})`}
             </button>
             <DriveFolderButton folders={driveFolders} />
+            <BriefDeckButton decks={briefDecks} />
           </div>
         </div>
       </header>
@@ -628,6 +665,7 @@ export default function ShareGallery({
           authorName={authorName}
           setAuthorName={setAuthorName}
           onCommentPosted={fetchComments}
+          briefs={briefs}
         />
       ) : null}
     </>
@@ -719,7 +757,7 @@ function DriveFolderButton({ folders }: { folders: DriveFolder[] }) {
         className={btnCls}
       >
         <Icon name="google-drive" className="size-3.5" />
-        Google Drive
+        Drive
       </a>
     );
   }
@@ -733,7 +771,7 @@ function DriveFolderButton({ folders }: { folders: DriveFolder[] }) {
         className={btnCls}
       >
         <Icon name="google-drive" className="size-3.5" />
-        Google Drive
+        Drive
         <span className="share-gallery__drive-count rounded-full bg-slate-100 px-1.5 text-[10px] font-medium text-slate-600">
           {folders.length}
         </span>
@@ -755,6 +793,93 @@ function DriveFolderButton({ folders }: { folders: DriveFolder[] }) {
               </span>
               <span className="text-[10px] text-slate-500">
                 {f.mcs.length > 0 ? f.mcs.join(" · ") : "no MC number on these files"}
+              </span>
+            </a>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** The brief deck(s) the shared cards came from, next to the Drive folders and
+ *  built the same way — one deck is a plain link, several become a menu that
+ *  says which card came from where. Deliberately short labels ("Drive",
+ *  "Slides"): a reviewer reads them as a pair, and the icons carry the brand. */
+function BriefDeckButton({
+  decks,
+}: {
+  decks: { id: string; url: string; mcs: string[] }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDocMouseDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  if (decks.length === 0) return null;
+
+  const btnCls =
+    "share-gallery__slides-btn inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50";
+
+  if (decks.length === 1) {
+    return (
+      <a
+        href={decks[0].url}
+        target="_blank"
+        rel="noreferrer"
+        title="Open the brief deck on Google Slides"
+        className={btnCls}
+      >
+        <Icon name="slides" className="size-3.5" />
+        Slides
+      </a>
+    );
+  }
+
+  return (
+    <div ref={ref} className="share-gallery__slides relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        title="Open a brief deck on Google Slides"
+        className={btnCls}
+      >
+        <Icon name="slides" className="size-3.5" />
+        Slides
+        <span className="share-gallery__slides-count rounded-full bg-slate-100 px-1.5 text-[10px] font-medium text-slate-600">
+          {decks.length}
+        </span>
+        <Icon name="chevron-down" className="size-3.5 text-slate-400" />
+      </button>
+      {open ? (
+        <div className="share-gallery__slides-menu absolute right-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-md border border-slate-200 bg-white p-1 shadow-lg">
+          {decks.map((d) => (
+            <a
+              key={d.id}
+              href={d.url}
+              target="_blank"
+              rel="noreferrer"
+              className="share-gallery__slides-menu-item flex flex-col gap-0.5 rounded px-2 py-1.5 hover:bg-slate-50"
+            >
+              <span className="flex items-center gap-1.5 text-xs font-medium text-slate-800">
+                <Icon name="slides" className="size-3" />
+                Brief deck
+              </span>
+              <span className="text-[10px] text-slate-500">
+                {d.mcs.join(" · ")}
               </span>
             </a>
           ))}

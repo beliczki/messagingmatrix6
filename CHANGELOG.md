@@ -5,7 +5,7 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
-## [6.93.0] — 2026-09-12
+## [6.94.0] — 2026-09-12
 
 ### Added
 - **Settings › Schema** — a read-only view of the deploy's own Postgres

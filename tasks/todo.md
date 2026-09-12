@@ -1221,3 +1221,8 @@ relációjuk és mik a mezőik — read only."
 
 **Miért nem a `schema.ts`-ből rajzoljuk:** abból csak azt tudnánk meg, amit a kód hisz. A tab értéke
 pont az, hogy a **DB-t** kérdezi — ez az a nézet, ami a mostani kérdést („mi a különbség?") megválaszolja.
+
+**DEPLOYOLVA 6.93.0 (2026-09-12):** commit `5a637a4`, build 43s, `pm2 restart mm6-erste --update-env`
+→ Ready 1300ms, box `package.json` **6.93.0**. **Séma-migráció nincs** (a config-sorok törlése SQL volt,
+a deploy előtt, a közös DB-n — a régi kód sem olvasta őket, tehát nem volt átmeneti törés). Health:
+`/login` 200 · `/matrix` 307 · `/feeds` 307 · `/api/schema` **401** (admin-only, ahogy kell) · `/mcp` 401.

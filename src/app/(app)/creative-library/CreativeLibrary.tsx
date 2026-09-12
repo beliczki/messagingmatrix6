@@ -845,22 +845,31 @@ export default function CreativeLibrary() {
             <>
               {selectionBlock}
               <LibraryViewSwitcher view={view} setView={setView} collapsed={collapsed} />
-              <ArchiveToggle
-                showArchived={showArchived}
-                onChange={setShowArchived}
-                collapsed={collapsed}
-                className="mt-auto"
-              />
               <DriveHealthCheck
                 collapsed={collapsed}
-                creativeIds={filtered.flatMap((c) =>
-                  c.kind === "uploaded" ? [c.id] : [],
+                creatives={filtered.flatMap((c) =>
+                  c.kind === "uploaded"
+                    ? [
+                        {
+                          id: c.id,
+                          fileName: c.fileName,
+                          driveFolderId: c.driveFolderId,
+                          driveFileId: c.driveFileId,
+                        },
+                      ]
+                    : [],
                 )}
               />
               <PreviewHealth
                 collapsed={collapsed}
                 status={previewStatusQ.data}
                 messageIds={previewScopeIds}
+              />
+              <ArchiveToggle
+                showArchived={showArchived}
+                onChange={setShowArchived}
+                collapsed={collapsed}
+                className="mt-auto"
               />
               <ToolbarUpload
                 collapsed={collapsed}

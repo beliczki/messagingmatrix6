@@ -5,6 +5,7 @@ import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBroadcastEvents } from "@/app/_components/broadcast-bus";
+import AppDialog from "../_components/AppDialog";
 
 // The route caps a call at 20 message ids, and one call shoots serially in the
 // server's single Chromium — so a chunk is also the unit the run can be stopped
@@ -29,6 +30,9 @@ type Progress = { done: number; failed: number; current: string | null };
  * missing), but the RUN is scoped to the MCs in the current filtered view, the
  * way the Drive link check is scoped to the creatives in view. Clearing the
  * filters is what widens it to everything.
+ *
+ * The panel carries the state and the two buttons only; WHICH MCs are missing
+ * is a table, and a table belongs in a dialog, not in a 256px rail.
  */
 export default function PreviewHealth({
   status,
@@ -43,6 +47,7 @@ export default function PreviewHealth({
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const runningRef = useRef(false);
   const qc = useQueryClient();
 
@@ -123,14 +128,31 @@ export default function PreviewHealth({
 
   return (
     <div className="preview-health">
+      <div className="right-toolbar__section-title pb-1 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+        Previews
+      </div>
+
+      <div
+        className={clsx(
+          "preview-health__stat flex items-center gap-1 text-[11px]",
+          missing > 0 ? "text-amber-700" : "text-slate-500",
+        )}
+        title={title}
+      >
+        {missing > 0 ? <Icon name="warning" className="size-3" /> : null}
+        {missing > 0
+          ? `${missing} MC${missing === 1 ? "" : "s"} missing`
+          : "all up to date"}
+        <span className="preview-health__scope ml-auto text-[10px] text-slate-400">
+          {scope} in view
+        </span>
+      </div>
+
       <button
         type="button"
         onClick={run}
         disabled={running || scope === 0}
-        className={clsx(
-          "preview-health__run toolbar-btn flex w-full items-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 transition hover:bg-slate-50",
-          (running || scope === 0) && "opacity-50",
-        )}
+        className="preview-health__run toolbar-btn--primary mt-1.5 flex w-full items-center justify-center gap-1 rounded-md bg-slate-900 px-2 py-1 text-xs font-medium text-white transition hover:bg-slate-800 disabled:opacity-50"
         title={title}
       >
         {running ? (
@@ -139,9 +161,15 @@ export default function PreviewHealth({
           <Icon name="images" className="size-3.5" />
         )}
         Generate previews
-        <span className="preview-health__scope ml-auto text-[10px] text-slate-400">
-          {scope}
-        </span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => setDetailsOpen(true)}
+        className="preview-health__details toolbar-btn mt-1 flex w-full items-center justify-center gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-600 transition hover:bg-slate-50"
+      >
+        <Icon name="list" className="size-3.5" />
+        Details
       </button>
 
       {running || progress ? (
@@ -168,29 +196,101 @@ export default function PreviewHealth({
         </div>
       ) : null}
 
-      {missing > 0 ? (
-        <div className="preview-health__missing mt-1.5">
-          <div className="preview-health__missing-head flex items-center gap-1 text-[10px] font-medium text-amber-700">
-            <Icon name="warning" className="size-3" />
-            {missing} MC{missing === 1 ? "" : "s"} missing previews
-          </div>
-          <div className="preview-health__missing-list mt-1 max-h-40 overflow-auto">
-            {status!.offenders.map((o) => (
-              <div
-                key={o.mcLabel}
-                className="preview-health__missing-row flex items-baseline justify-between gap-2 rounded px-1 py-0.5 text-[10px] hover:bg-slate-100"
-              >
-                <span className="truncate font-mono text-slate-600">
-                  {o.mcLabel}
-                </span>
-                <span className="shrink-0 text-slate-400">
-                  {o.sizes.join(", ")}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
+      <PreviewHealthDialog
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+        status={status}
+        scope={scope}
+        running={running}
+        onRun={run}
+      />
     </div>
+  );
+}
+
+/** The missing-preview table, in the Feed export dialog's shape: the primary
+ *  action in the header, the list in the body. */
+function PreviewHealthDialog({
+  open,
+  onClose,
+  status,
+  scope,
+  running,
+  onRun,
+}: {
+  open: boolean;
+  onClose: () => void;
+  status: PreviewStatus | undefined;
+  scope: number;
+  running: boolean;
+  onRun: () => void;
+}) {
+  const offenders = status?.offenders ?? [];
+  return (
+    <AppDialog open={open} onClose={onClose} ariaLabel="Preview health">
+      <div className="preview-health-dialog flex h-full flex-col overflow-hidden">
+        <header className="preview-health-dialog__header toolbar flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-6 pr-14">
+          <h2 className="text-base font-semibold text-slate-900">
+            Previews ·{" "}
+            <span className="font-mono text-sm">
+              {status?.mcCount ?? 0} MC missing
+            </span>
+          </h2>
+          <button
+            type="button"
+            onClick={onRun}
+            disabled={running || scope === 0}
+            className="toolbar-btn--primary flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          >
+            {running ? (
+              <Icon name="spinner" className="size-4 animate-spin" />
+            ) : (
+              <Icon name="images" className="size-4" />
+            )}
+            {running ? "Generating…" : `Generate previews (${scope})`}
+          </button>
+        </header>
+
+        <div className="preview-health-dialog__body flex-1 overflow-auto px-6 py-4">
+          <p className="preview-health-dialog__hint mb-3 text-xs text-slate-500">
+            The count is client-wide; Generate shoots the {scope} MC
+            {scope === 1 ? "" : "s"} in the current filtered view. Clear the
+            filters to widen the run.{" "}
+            {status
+              ? `${status.freshCount} size preview${status.freshCount === 1 ? "" : "s"} are up to date, ${status.staleCount} missing or outdated.`
+              : null}
+          </p>
+          {offenders.length === 0 ? (
+            <div className="empty-state rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500">
+              Every html MC has an up-to-date preview.
+            </div>
+          ) : (
+            <table className="preview-health-dialog__table w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-[10px] uppercase tracking-wider text-slate-500">
+                  <th className="py-1.5 pr-3 font-medium">MC</th>
+                  <th className="py-1.5 font-medium">Missing sizes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {offenders.map((o) => (
+                  <tr
+                    key={o.mcLabel}
+                    className="preview-health-dialog__row border-b border-slate-100"
+                  >
+                    <td className="py-1.5 pr-3 font-mono text-xs text-slate-700">
+                      {o.mcLabel}
+                    </td>
+                    <td className="py-1.5 text-xs text-slate-500">
+                      {o.sizes.join(", ")}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </AppDialog>
   );
 }

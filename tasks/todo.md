@@ -1122,3 +1122,9 @@ doboznak — legyen".
       A VIEW/DENSITY szekciók a mátrixban sem dobozosak, ezért a `LibraryViewSwitcher` változatlan.
 - [x] A Details a fekete akció **fölé** került: így az elsődleges gomb a doboz alján van, mint az
       Exportnál.
+
+**DEPLOYOLVA 6.91.0 + 6.91.1 (2026-09-12):** `e359160`→`0f30ea9`, build 55s / 36.7s,
+`pm2 restart mm6-erste --update-env` → Ready 1252ms / 1316ms, box `package.json` **6.91.1**.
+Séma-migráció nincs. Health: `/login` 200 · `/creative-library` 307 · `/matrix` 307.
+Lokálisan (6001) ellenőrizve: a két health-panel dobozos, a Details a fekete gomb fölött; a Design
+preview-logó light módban fekete, dark módban fehér, 1.7rem.

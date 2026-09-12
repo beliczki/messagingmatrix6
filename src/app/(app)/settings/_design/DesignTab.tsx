@@ -5,6 +5,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_LOOK_AND_FEEL } from "@/db/defaults";
 import { MC_STATUSES, statusSlug, type McStatus } from "@/lib/mc-status";
 import { FONT_OPTIONS, fontStack } from "@/lib/fonts";
+import {
+  Check,
+  ChevronDown,
+  FlaskConical,
+  Image as ImageIcon,
+  LayoutDashboard,
+  Plus,
+  Settings as SettingsIcon,
+  Table2,
+  Trash2,
+  X,
+} from "lucide-react";
 import { SettingsHeaderActions } from "../SettingsView";
 
 type LookAndFeel = typeof DEFAULT_LOOK_AND_FEEL;
@@ -204,6 +216,7 @@ export function DesignTab() {
           options={fontOptions}
           onChange={(v) => setField("fontFamily", v)}
         />
+        <IdentityPreview title={draft.pageTitle} />
       </Section>
 
       <Section title="Cobranding">
@@ -235,6 +248,49 @@ export function DesignTab() {
         ))}
       </Section>
 
+    </div>
+  );
+}
+
+/**
+ * What the two Identity settings actually produce, side by side: the page
+ * title set in the chosen face, the weights that face ships, and the icons the
+ * nav and the dialogs are built from.
+ *
+ * No inline font-family here on purpose — applyLive already moved --font-base
+ * on <html>, so this row is rendering the real thing rather than a mock-up of
+ * it. The weight samples matter because a family can be picked and then turn
+ * out to ship only one usable weight.
+ */
+function IdentityPreview({ title }: { title: string }) {
+  return (
+    <div className="design-tab__preview md:col-span-2 rounded-md border border-slate-200 bg-slate-50 p-4">
+      <p className="design-tab__preview-title truncate text-xl font-semibold text-slate-900">
+        {title || "MessagingMatrix"}
+      </p>
+      <p className="design-tab__preview-weights mt-1 text-sm text-slate-600">
+        <span className="font-normal">Regular 400</span>
+        <span className="mx-1.5 text-slate-300">·</span>
+        <span className="font-medium">Medium 500</span>
+        <span className="mx-1.5 text-slate-300">·</span>
+        <span className="font-bold">Bold 700</span>
+      </p>
+      <div className="design-tab__preview-icons mt-3 flex flex-wrap items-center gap-3 text-slate-500">
+        {[
+          LayoutDashboard,
+          Table2,
+          ImageIcon,
+          FlaskConical,
+          SettingsIcon,
+          Plus,
+          Check,
+          Trash2,
+          X,
+          ChevronDown,
+        ].map((Icon, i) => (
+          <Icon key={i} className="design-tab__preview-icon size-4" />
+        ))}
+      </div>
     </div>
   );
 }

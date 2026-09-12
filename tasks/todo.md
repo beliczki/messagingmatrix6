@@ -50,6 +50,51 @@ Az edit-mode panel Delete gombja archivál vagy töröl (M10 dialog), tehát az 
 
 ## 🟡 NEXT — green-light után, alacsony blokk
 
+### P — Preview-generálás a Creative Library jobb toolbarjából (TERV, jóváhagyásra vár, 2026-09-12)
+
+**User:** „jó lenne a hetzner boxra is feltenni a chromiumot és ott is képesnek lenni preview képet
+generálni… a header toolbarból a »nincs preview x MC-hez« warningot ki kéne hozni a side toolbarba és
+oda tenni a generate preview for missing, valami aszinkron kapcsolttal hogy látszódjon a preview gen
+progress, infóval hogy éppen mit csinál a háttérscript."
+
+**Felmérés (2026-09-12) — a fele már kész:**
+- **Chromium MÁR fent van a boxon és megy:** smoke-teszt a `/var/www/mm6-erste`-ből → playwright
+  chromium **1164 ms** alatt indult, PNG-t lőtt. Telepíteni nincs mit.
+- **A szerveroldali lövés is kész:** `POST /api/previews/generate` (`withSession` + `denyDemo`,
+  max 20 message id/hívás, `collectStalePreviews` → `shootPreviews`). A `preview-shooter`
+  `defaultBaseUrl()`-je `127.0.0.1:$PORT`, tehát a boxon a saját appjára néz — jó.
+- **Ami hiányzik: a UI sosem kínálja fel.** A `PreviewWarning` a *header* toolbarban ül
+  (`CreativeLibrary.tsx:966`), csak listáz, és a tooltipje még mindig azt tanácsolja:
+  „run `npm run gen:previews`" — a boxon ez félrevezető.
+- **Mennyi a hátralék (élő DB):** 2068 html MC · 8208 preview sor · **228 elavult** + ~64 hiányzó
+  ≈ **~290 felvétel ≈ 10–20 perc** serializált chromiummal. Tehát ez hosszan futó munka.
+- **Két kész minta, amit újra kell használni:** a `DriveHealthCheck` (ugyanabban a jobb toolbarban,
+  chunkolt futás + élő riport) és az SSE (`/api/events` + `lib/events.ts` `broadcast/subscribe`,
+  minden belépett kliens már hallgatja). A `shootPreviews`-nak **van `onShot` callbackje**.
+
+**User-döntések (2026-09-12):** hatókör = **a szűrt nézet**; progress = **élő SSE sor**.
+
+- [ ] **P1 (szerver)** `BroadcastEvent` opcionális `detail` mezővel (additív). A generate-route
+      `onShot`-ot ad a `shootPreviews`-nak, és felvételenként broadcastol:
+      `{entity:"previews", action:"shot", ids:[messageId], detail:{mcLabel, size, ok, done, total}}`.
+      ⚠️ Ellenőrizendő: a kliens event-fogyasztója ne invalidáljon query-t erre az entityre.
+- [ ] **P2 (kliens)** `PreviewWarning` → **`PreviewHealth`**, a `RightToolbar`-ba, a `DriveHealthCheck`
+      collapsed/expanded mintájával (collapsed = ikongomb, nyitva = gomb + offender-lista).
+      A futtatás hatóköre a **szűrt nézet `kind:"matrix"` elemeinek `message.id`-ja**, dedupe-olva,
+      20-asával chunkolva (a route cap-je). A gomb a hatókör számát viszi, 0-nál tiltott.
+      A blokk a kliens-szintű warningot is mutatja (mint ma), hogy látszódjon: a szűrőn kívül
+      mennyi maradt.
+- [ ] **P3** Copy-javítás (a „run `npm run gen:previews`" tanács helyett a gomb), az élő sor
+      („MC404a 300×250 · 12/290"), `component-inventory.md` (`preview-health*`, a
+      `creative-library__preview-warning*` nevek nyugdíjazása), tesztek (route broadcastol;
+      hatókör-helper unit), CHANGELOG + minor bump.
+
+**Amit ez NEM csinál:** nem lesz szerveroldali job-tábla/worker. A futást a kliens hajtja chunkonként,
+tehát a fül bezárása két chunk között **leállítja** — cserébe nincs árva job, és nincs új tárolási
+réteg. Ha később kell „fusson tovább, ha elmegyek", az külön szelet, saját push-backkel.
+
+
+
 ### UI-apróságok (mátrix + editor + library)
 
 ### ~~M1 — Matrix „Color by"~~ — **KIVEZETVE (user, 2026-09-10)**

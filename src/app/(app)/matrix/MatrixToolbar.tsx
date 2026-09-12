@@ -40,8 +40,8 @@ export default function MatrixToolbar(p: Props) {
 
   return (
     <div className="toolbar matrix-toolbar sticky top-0 z-40 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
+      <AppBrandTag />
       <div className="matrix-toolbar__brand flex items-baseline gap-2">
-        <AppBrandTag />
         <div className="matrix-toolbar__title text-sm font-semibold text-slate-900">Matrix</div>
       </div>
 

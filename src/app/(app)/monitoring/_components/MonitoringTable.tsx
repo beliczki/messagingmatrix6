@@ -363,11 +363,9 @@ export default function MonitoringTable({
     <div className="monitoring-table flex h-full flex-col overflow-hidden">
       {/* header toolbar: title + filters + count (mirrors creative-library) */}
       <div className="toolbar monitoring-table__toolbar sticky top-0 z-10 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
-        <div className="flex items-baseline gap-2">
-          <AppBrandTag />
-          <div className="toolbar__title text-sm font-semibold text-slate-900">
-            Monitoring
-          </div>
+        <AppBrandTag />
+        <div className="toolbar__title text-sm font-semibold text-slate-900">
+          Monitoring
         </div>
 
         {data && data.periods.length > 0 ? (

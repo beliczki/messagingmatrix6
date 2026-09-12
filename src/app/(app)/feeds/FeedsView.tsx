@@ -329,8 +329,8 @@ export function FeedsView() {
     <div className="feeds-view flex h-full">
       <div className="feeds-view__content flex flex-1 flex-col overflow-hidden">
         <header className="feeds-view__toolbar toolbar sticky top-0 z-40 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
+          <AppBrandTag />
           <div className="flex items-baseline gap-2">
-            <AppBrandTag />
             <h1 className="toolbar__title text-sm font-semibold text-slate-900">
               Feeds
             </h1>

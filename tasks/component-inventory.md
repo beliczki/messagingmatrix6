@@ -78,10 +78,9 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `input-box__icon` | A bal-oldali ikon az input-box belsejében | – | – |
 | `input-box__field` | A tényleges `<input>` elem a wrapper-ben | – | – |
 | `toolbar__count` | Számláló a toolbar-ban (visible/total) | CL toolbar, Assets toolbar | – |
-| `app-brand-tag` | A tenant azonosítója minden lap-toolbar elején, a lap neve ELŐTT („Erste / Matrix"). Korábban a sidebar brand-sávjában ült és a dashboardra vitt vissza; a dashboard azóta saját nav-itemet kapott, ez már csak identitás, nem link. | `_components/AppBrandTag.tsx`, 10 toolbar | az értéket a `BrandProvider` adja az `AppShell`-ből (SSR) |
+| `app-brand-tag` | A tenant azonosítója minden lap-toolbar elején, a lap neve ELŐTT. **Közvetlen toolbar-gyerek**, nem a cím `items-baseline` csoportjában: a logó 1,7rem, magasabb a szövegnél, és egy baseline-csoport a legmagasabb tagjával nő — a lap neve a sor tetejére került volna. Korábban a sidebar brand-sávjában ült és a dashboardra vitt vissza; a dashboard azóta saját nav-itemet kapott, ez már csak identitás, nem link. | `_components/AppBrandTag.tsx`, 10 toolbar | az értéket a `BrandProvider` adja az `AppShell`-ből (SSR) |
 | `app-brand-tag__logo` | A cobrand logó, ha a tenant bekapcsolta. Fehérre festett SVG (`public/erste.svg`, `public/telekom.svg`) — light módban `invert`, dark módban `dark:invert-0`. | AppBrandTag.tsx | csak monokróm jelre igaz; többszínű logóhoz külön light/dark pár kellene |
 | `app-brand-tag__name` | A kliens neve, ha nincs cobrand logó | AppBrandTag.tsx | – |
-| `app-brand-tag__sep` | A `/` elválasztó a tag és a lap neve között | AppBrandTag.tsx | – |
 | `icon` | Minden ikon ezt viseli — a `<Icon name="…">` regiszteren át (`src/app/_icons/`). A 68 fájl közvetlen `lucide-react` importja megszűnt; a család tenantonként vált (`lookAndFeel.iconSet`). | `_icons/Icon.tsx` | a név szemantikus (`close`, `delete`, `spinner`), nem a lucide-é |
 | `icon--core` | Streamline Core ikon jelölője. A Core 14-es gridje kitölti a dobozt, a lucide 24-esében ~2px belső margó van → `padding:1px` a kiegyenlítés (`globals.css`). | generált `families/core-line.tsx` | csak Core családon |
 | `icon--bold` | A „kiválasztva" pipa vastagabb vonala. lucide-on `strokeWidth={3}` prop, Core-on CSS. | `<Icon bold />` | 10 helyen |

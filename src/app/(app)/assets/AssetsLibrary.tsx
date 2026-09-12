@@ -195,8 +195,8 @@ export default function AssetsLibrary() {
     <div className="assets-library flex h-full">
       <div className="assets-library__content flex flex-1 flex-col overflow-hidden">
       <div className="toolbar assets-library__toolbar sticky top-0 z-10 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
+        <AppBrandTag />
         <div className="flex items-baseline gap-2">
-          <AppBrandTag />
           <div className="toolbar__title text-sm font-semibold text-slate-900">Assets</div>
         </div>
 

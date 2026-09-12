@@ -279,8 +279,8 @@ export default function DimensionGrid<T extends Versioned>({
     <div className="dimension-page flex h-full">
       <div className="dimension-grid flex flex-1 flex-col overflow-hidden">
       <div className="dimension-grid__toolbar toolbar sticky top-0 z-40 flex min-h-12 shrink-0 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
+        <AppBrandTag />
         <div className="dimension-grid__brand flex items-baseline gap-2">
-          <AppBrandTag />
           <div className="dimension-grid__title toolbar__title text-sm font-semibold text-slate-900">
             {title}
           </div>

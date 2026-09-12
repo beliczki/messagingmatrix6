@@ -1352,15 +1352,11 @@ function EmptyState() {
         <h2 className="empty-state__title text-base font-semibold text-slate-900">Empty matrix</h2>
         <p className="empty-state__hint mt-1 text-sm text-slate-500">
           Add an audience and a topic to start. The matrix renders audiences as
-          rows and topics as columns; each MC lives at the intersection.
+          columns and topics as rows; each MC lives at the intersection.
         </p>
         <p className="empty-state__hint mt-3 text-xs text-slate-500">
-          For a quick fill from the real Erste data, run:
+          Turn on edit mode to add the first ones.
         </p>
-        <pre className="matrix-empty-state__hint mt-1 rounded-md bg-slate-50 p-2 text-left font-mono text-[11px] text-slate-700">
-{`ACTIVE_CLIENT_KEY=erste npx tsx \\
-  scripts/import-erste-sample.ts`}
-        </pre>
       </div>
     </div>
   );

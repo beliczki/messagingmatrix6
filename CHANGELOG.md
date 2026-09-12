@@ -5,6 +5,12 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.92.1] — 2026-09-12
+
+### Fixed
+- Matrix empty state no longer tells every tenant to seed **Erste** data — the hint hardcoded `ACTIVE_CLIENT_KEY=erste npx tsx scripts/import-erste-sample.ts`, which is exactly the tenant-name leak the fork study's canary watches for. It surfaced on the fresh `telekom` deploy, where it was also unrunnable advice.
+- Same paragraph had the axes backwards: the matrix renders audiences as **columns** and topics as **rows** (`MatrixGrid.tsx:863,875`), not the other way round.
+
 ## [6.92.0] — 2026-09-12
 
 ### Fixed

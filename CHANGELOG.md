@@ -5,6 +5,46 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.88.0] — 2026-09-12
+
+### Added
+- **The fonts the font setting names.** `--font-base` said "Inter" and nothing
+  ever loaded Inter: no `@font-face`, no `next/font`, no `public/fonts`. Every
+  screen had been falling through to the system face, and the Design tab's
+  font field was a free-text box for something the app did not ship. Inter,
+  Poppins and TeleNeo (carried over from mm5) are now self-hosted — 356 KB,
+  latin + latin-ext, because the Hungarian ő and ű live only in latin-ext —
+  and the field is a dropdown of what actually exists.
+- **Tenant-switchable icon set** (Settings › Design). Lucide stays the default;
+  Streamline Core Line is the first alternative, generated at build time from
+  `@iconify-json/streamline` and committed, so the box builds without network.
+  Twelve glyphs Core free does not ship — the chevrons, the spinner, the grip
+  dots, the 3×3 grid — keep rendering lucide by design.
+- **Live Identity preview** in the Design tab: the page title in the chosen
+  face, the three weights it ships, and the icons the nav and dialogs are built
+  from — switching either dropdown answers immediately, before saving.
+- **Dashboard is a nav item**, first in the sidebar.
+- **Product tag on the matrix row and column headers** when the grid spans more
+  than one product, so a topic row or audience column says which product it
+  belongs to. Same chip as the draft card's.
+
+### Changed
+- **The tenant's name moved from the sidebar to the page toolbars**, in front
+  of the page name ("Erste / Matrix"), and it is where the cobranding logo now
+  appears when one is configured. Cobranding had been reaching exactly one
+  screen (the login page) with no way to upload or point at a logo; the shipped
+  marks are single white-filled SVGs per tenant, inverted to black in light
+  mode.
+- **68 files no longer import `lucide-react`.** Every icon goes through a
+  semantic registry (`<Icon name="delete" />`), which is what makes the family
+  switchable at all; `lucide-react` is imported in exactly one file now.
+  Bumped 1.11.0 → 1.45.0 in the same pass.
+
+### Removed
+- **The "Capsule (rounded) UI" setting.** Nothing had ever read the flag — and
+  the erste tenant had it switched on. The stale key was stripped from all four
+  live `lookAndFeel` rows.
+
 ## [6.87.0] — 2026-09-12
 
 ### Added

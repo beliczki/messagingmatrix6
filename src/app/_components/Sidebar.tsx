@@ -2,44 +2,29 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  Table2,
-  Image as ImageIcon,
-  Package,
-  BarChart3,
-  FileCode,
-  FlaskConical,
-  Users as UsersIcon,
-  ListTree,
-  Settings as SettingsIcon,
-  Share2,
-  Rss,
-  Type,
-  LogOut,
-  Sun,
-  Moon,
-} from "lucide-react";
-import { useState, type ComponentType, type SVGProps } from "react";
+import { Icon, type IconName } from "@/app/_icons/Icon";
+import { useState } from "react";
 import clsx from "clsx";
 import { useThemeSwitch } from "./useThemeSwitch";
 
 type NavUser = { email: string; role: string };
-type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 
-const ITEMS: Array<{ href: string; label: string; Icon: IconType }> = [
-  { href: "/", label: "Dashboard", Icon: LayoutDashboard },
-  { href: "/matrix", label: "Matrix", Icon: Table2 },
-  { href: "/creative-library", label: "Creative Library", Icon: ImageIcon },
-  { href: "/drafts", label: "Drafts", Icon: FlaskConical },
-  { href: "/assets", label: "Assets", Icon: Package },
-  { href: "/texts", label: "Texts", Icon: Type },
-  { href: "/audiences", label: "Audiences", Icon: UsersIcon },
-  { href: "/topics", label: "Topics", Icon: ListTree },
-  { href: "/templates", label: "Templates", Icon: FileCode },
-  { href: "/shares", label: "Shares", Icon: Share2 },
-  { href: "/feeds", label: "Feeds", Icon: Rss },
-  { href: "/monitoring", label: "Monitoring", Icon: BarChart3 },
+// The nav carries icon NAMES, not components: the family is chosen at render
+// time by the icon registry, so a list of components here would pin every nav
+// item to lucide for good.
+const ITEMS: Array<{ href: string; label: string; icon: IconName }> = [
+  { href: "/", label: "Dashboard", icon: "dashboard" },
+  { href: "/matrix", label: "Matrix", icon: "table" },
+  { href: "/creative-library", label: "Creative Library", icon: "image" },
+  { href: "/drafts", label: "Drafts", icon: "flask" },
+  { href: "/assets", label: "Assets", icon: "package" },
+  { href: "/texts", label: "Texts", icon: "text" },
+  { href: "/audiences", label: "Audiences", icon: "users" },
+  { href: "/topics", label: "Topics", icon: "tree" },
+  { href: "/templates", label: "Templates", icon: "file-code" },
+  { href: "/shares", label: "Shares", icon: "share" },
+  { href: "/feeds", label: "Feeds", icon: "rss" },
+  { href: "/monitoring", label: "Monitoring", icon: "chart" },
 ];
 
 type Props = {
@@ -114,7 +99,7 @@ export function Sidebar({ user, version, onOpenUsers, onOpenSettings }: Props) {
                   : "text-slate-700 hover:bg-slate-100",
               )}
             >
-              <it.Icon className="app-sidebar__nav-icon size-4 shrink-0" />
+              <Icon name={it.icon} className="app-sidebar__nav-icon size-4 shrink-0" />
               {!collapsed ? <span className="app-sidebar__nav-label">{it.label}</span> : null}
             </Link>
           );
@@ -148,7 +133,7 @@ export function Sidebar({ user, version, onOpenUsers, onOpenSettings }: Props) {
                 aria-label={dark ? "Switch to light mode" : "Switch to dark mode"}
                 className="app-sidebar__theme-round flex size-8 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition-colors hover:text-slate-900 dark:bg-slate-800 dark:text-slate-300 dark:hover:text-white"
               >
-                {dark ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
+                {dark ? <Icon name="sun" className="size-3.5" /> : <Icon name="moon" className="size-3.5" />}
               </button>
             </div>
           ) : (
@@ -171,7 +156,7 @@ export function Sidebar({ user, version, onOpenUsers, onOpenSettings }: Props) {
                       : "text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700",
                   )}
                 >
-                  <Sun className="size-3.5" />
+                  <Icon name="sun" className="size-3.5" />
                 </button>
                 <button
                   type="button"
@@ -186,7 +171,7 @@ export function Sidebar({ user, version, onOpenUsers, onOpenSettings }: Props) {
                       : "text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700",
                   )}
                 >
-                  <Moon className="size-3.5" />
+                  <Icon name="moon" className="size-3.5" />
                 </button>
               </div>
               <span
@@ -213,7 +198,7 @@ export function Sidebar({ user, version, onOpenUsers, onOpenSettings }: Props) {
             title="Users"
             aria-label="Open Users"
           >
-            <UsersIcon className="size-4" />
+            <Icon name="users" className="size-4" />
             {!collapsed ? <span>Users</span> : null}
           </button>
         ) : null}
@@ -225,7 +210,7 @@ export function Sidebar({ user, version, onOpenUsers, onOpenSettings }: Props) {
             title="Settings"
             aria-label="Open Settings"
           >
-            <SettingsIcon className="size-4" />
+            <Icon name="settings" className="size-4" />
             {!collapsed ? <span>Settings</span> : null}
           </button>
         ) : null}
@@ -235,7 +220,7 @@ export function Sidebar({ user, version, onOpenUsers, onOpenSettings }: Props) {
           title="Sign out"
           aria-label="Sign out"
         >
-          <LogOut className="size-4" />
+          <Icon name="logout" className="size-4" />
           {!collapsed ? <span>Sign out</span> : null}
         </button>
       </div>

@@ -2,26 +2,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  X,
-  Tag,
-  FileText,
-  FileCode,
-  Rocket,
-  PencilRuler,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-  Check,
-  CircleAlert,
-  Type,
-  Trash2,
-  ChevronDown,
-  History,
-  Globe,
-  Users,
-  BookOpen,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import {
   type Audience,
@@ -684,7 +665,7 @@ export default function MessageEditor({
             aria-label="Previous"
             className="message-editor__nav-prev rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
           >
-            <ChevronLeft className="size-4" />
+            <Icon name="chevron-left" className="size-4" />
           </button>
           <span
             className={clsx(
@@ -703,7 +684,7 @@ export default function MessageEditor({
             aria-label="Next"
             className="message-editor__nav-next rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
           >
-            <ChevronRight className="size-4" />
+            <Icon name="chevron-right" className="size-4" />
           </button>
           {uniqueMcs.length > 0 ? (
             <span className="message-editor__nav-counter text-xs text-slate-500">
@@ -729,7 +710,7 @@ export default function MessageEditor({
               className="message-editor__global-warning inline-flex items-center gap-1 rounded border border-amber-200 bg-amber-50 px-1.5 py-0.5 text-[11px] font-medium text-amber-700"
               title={`Global edit is on — all changes (creative, status, flight dates) also update ${siblingCount} other audience copy(ies) of this card (MC${message?.number}${message?.variant ?? ""}). Other variants of the number are left untouched.`}
             >
-              <Users className="size-3" />
+              <Icon name="users" className="size-3" />
               updates {siblingCount} other audience
               {siblingCount === 1 ? "" : "s"}
             </span>
@@ -742,7 +723,7 @@ export default function MessageEditor({
               title="View revision history"
               className="message-editor__history-btn toolbar-btn flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-50"
             >
-              <History className="size-3.5" />
+              <Icon name="history" className="size-3.5" />
               History
             </button>
             <button
@@ -759,7 +740,7 @@ export default function MessageEditor({
                   : "Local: edits apply only to this audience copy"
               }
             >
-              <Globe className="size-3.5" />
+              <Icon name="globe" className="size-3.5" />
               {globalEdit ? "Global" : "Local"}
             </button>
             <button
@@ -780,7 +761,7 @@ export default function MessageEditor({
                     : "border-slate-400",
                 )}
               >
-                {autoSave && <Check className="size-2.5" strokeWidth={3} />}
+                {autoSave && <Icon name="check" className="size-2.5" bold />}
               </span>
               Autosave
             </button>
@@ -814,14 +795,14 @@ export default function MessageEditor({
               aria-label="Close"
               className="modal__close rounded p-1 text-slate-500 hover:bg-slate-100"
             >
-              <X className="size-5" />
+              <Icon name="close" className="size-5" />
             </button>
           </div>
         </header>
 
         {saveState.kind === "conflict" ? (
           <div className="conflict-bar flex shrink-0 items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-            <CircleAlert className="conflict-bar__icon size-4 shrink-0" />
+            <Icon name="alert" className="conflict-bar__icon size-4 shrink-0" />
             <span className="conflict-bar__msg flex-1">
               Someone else saved changes to this MC while you had it open. Your
               unsaved edits can&apos;t be applied on top — reload to get the
@@ -859,21 +840,21 @@ export default function MessageEditor({
                   goes (Promote). A placed card is already placed, so it opens
                   on its identity and keeps Brief at the back. */}
               {isDraft ? (
-                <TabBtn active={tab === "brief"} onClick={() => setTab("brief")} icon={<BookOpen className="size-3.5" />}>
+                <TabBtn active={tab === "brief"} onClick={() => setTab("brief")} icon={<Icon name="book" className="size-3.5" />}>
                   Brief
                 </TabBtn>
               ) : (
-                <TabBtn active={tab === "naming"} onClick={() => setTab("naming")} icon={<Tag className="size-3.5" />}>
+                <TabBtn active={tab === "naming"} onClick={() => setTab("naming")} icon={<Icon name="tag" className="size-3.5" />}>
                   Naming
                 </TabBtn>
               )}
-              <TabBtn active={tab === "template"} onClick={() => setTab("template")} icon={<FileCode className="size-3.5" />}>
+              <TabBtn active={tab === "template"} onClick={() => setTab("template")} icon={<Icon name="file-code" className="size-3.5" />}>
                 Template
               </TabBtn>
-              <TabBtn active={tab === "content"} onClick={() => setTab("content")} icon={<FileText className="size-3.5" />}>
+              <TabBtn active={tab === "content"} onClick={() => setTab("content")} icon={<Icon name="file-text" className="size-3.5" />}>
                 Content
               </TabBtn>
-              <TabBtn active={tab === "styles"} onClick={() => setTab("styles")} icon={<PencilRuler className="size-3.5" />}>
+              <TabBtn active={tab === "styles"} onClick={() => setTab("styles")} icon={<Icon name="design" className="size-3.5" />}>
                 Styles
               </TabBtn>
               {/* Trafficking is derived from the CELL (audience/topic patterns),
@@ -884,10 +865,10 @@ export default function MessageEditor({
                   once, from the card's actions menu on the drafts wall. */}
               {isDraft ? null : (
                 <>
-                  <TabBtn active={tab === "trafficking"} onClick={() => setTab("trafficking")} icon={<Rocket className="size-3.5" />}>
+                  <TabBtn active={tab === "trafficking"} onClick={() => setTab("trafficking")} icon={<Icon name="rocket" className="size-3.5" />}>
                     Trafficking
                   </TabBtn>
-                  <TabBtn active={tab === "brief"} onClick={() => setTab("brief")} icon={<BookOpen className="size-3.5" />}>
+                  <TabBtn active={tab === "brief"} onClick={() => setTab("brief")} icon={<Icon name="book" className="size-3.5" />}>
                     Brief
                   </TabBtn>
                 </>
@@ -1033,7 +1014,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
   if (state.kind === "saving") {
     return (
       <span className="save-indicator save-indicator--saving inline-flex items-center gap-1 text-xs text-slate-500">
-        <Loader2 className="size-3 animate-spin" />
+        <Icon name="spinner" className="size-3 animate-spin" />
         Saving…
       </span>
     );
@@ -1041,7 +1022,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
   if (state.kind === "saved") {
     return (
       <span className="save-indicator save-indicator--saved inline-flex items-center gap-1 text-xs text-emerald-700">
-        <Check className="size-3" />
+        <Icon name="check" className="size-3" />
         Saved
       </span>
     );
@@ -1049,7 +1030,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
   if (state.kind === "conflict") {
     return (
       <span className="save-indicator save-indicator--conflict inline-flex items-center gap-1 text-xs text-amber-700">
-        <CircleAlert className="size-3" />
+        <Icon name="alert" className="size-3" />
         Conflict — reload needed
       </span>
     );
@@ -1059,7 +1040,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
       className="save-indicator save-indicator--error inline-flex items-center gap-1 text-xs text-rose-700"
       title={state.message}
     >
-      <CircleAlert className="size-3" />
+      <Icon name="alert" className="size-3" />
       Save failed
     </span>
   );
@@ -1419,7 +1400,7 @@ function TextFieldWithFormatting({
           title={value ? "Add a formatting rule for this text" : "Type something first"}
           className="link-button inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <Type className="size-3" />
+          <Icon name="text" className="size-3" />
           add text formatting
         </button>
       </div>
@@ -1631,7 +1612,7 @@ function FormattingRow({
         aria-label="Remove formatting rule"
         className="text-format-rule__delete row-delete-btn rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-rose-600"
       >
-        <Trash2 className="size-4" />
+        <Icon name="delete" className="size-4" />
       </button>
     </div>
   );
@@ -1686,7 +1667,7 @@ function ScopeMultiSelect({
         className="dropdown-trigger inline-flex min-w-[96px] items-center justify-between gap-1 rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50"
       >
         <span>{label}</span>
-        <ChevronDown className="size-3" />
+        <Icon name="chevron-down" className="size-3" />
       </button>
       {open ? (
         <div className="dropdown-menu absolute right-0 top-full z-30 mt-1 min-w-[160px] rounded-md border border-slate-200 bg-white py-1 shadow-md">
@@ -1704,7 +1685,7 @@ function ScopeMultiSelect({
                 allSelected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-400",
               )}
             >
-              {allSelected ? <Check className="size-2.5" strokeWidth={3} /> : null}
+              {allSelected ? <Icon name="check" className="size-2.5" bold /> : null}
             </span>
             All sizes
           </button>
@@ -1723,7 +1704,7 @@ function ScopeMultiSelect({
                     selected ? "border-slate-900 bg-slate-900 text-white" : "border-slate-400",
                   )}
                 >
-                  {selected ? <Check className="size-2.5" strokeWidth={3} /> : null}
+                  {selected ? <Icon name="check" className="size-2.5" bold /> : null}
                 </span>
                 {s}
               </button>
@@ -1874,7 +1855,7 @@ function MediaField({
               aria-label={`Clear ${label}`}
               className="media-field__clear absolute inset-y-0 right-1 my-auto flex h-5 w-5 items-center justify-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
             >
-              <X className="size-3" />
+              <Icon name="close" className="size-3" />
             </button>
           ) : null}
           {open && matches.length > 0 ? (

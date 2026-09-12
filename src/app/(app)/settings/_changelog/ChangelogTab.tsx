@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 
 type AuditRow = {
@@ -205,7 +205,7 @@ export function ChangelogTab() {
       <section className="changelog-tab__list">
         {q.isLoading ? (
           <p className="flex items-center gap-2 text-sm text-slate-500">
-            <Loader2 className="size-4 animate-spin" />
+            <Icon name="spinner" className="size-4 animate-spin" />
             Loading…
           </p>
         ) : q.isError ? (
@@ -265,9 +265,9 @@ function ChangelogRow({ row }: { row: AuditRow }) {
         className="changelog-row__head flex w-full items-center gap-3 px-3 py-2 text-left text-xs hover:bg-slate-50"
       >
         {open ? (
-          <ChevronDown className="size-3.5 text-slate-400" />
+          <Icon name="chevron-down" className="size-3.5 text-slate-400" />
         ) : (
-          <ChevronRight className="size-3.5 text-slate-400" />
+          <Icon name="chevron-right" className="size-3.5 text-slate-400" />
         )}
         <span className="changelog-row__ts w-36 shrink-0 font-mono text-[10px] text-slate-500">
           {ts}

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArchiveRestore, EyeOff, Loader2, Plus, Check, X } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import type { Channel } from "@/db/schema";
 
@@ -134,9 +134,9 @@ export function ChannelsTab() {
           className="toolbar-btn--primary inline-flex items-center gap-1 rounded bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-40"
         >
           {addMut.isPending ? (
-            <Loader2 className="size-3.5 animate-spin" />
+            <Icon name="spinner" className="size-3.5 animate-spin" />
           ) : (
-            <Plus className="size-3.5" />
+            <Icon name="add" className="size-3.5" />
           )}
           Add
         </button>
@@ -198,7 +198,7 @@ export function ChannelsTab() {
                   className="toolbar-btn rounded border border-slate-300 p-1 text-slate-700 hover:bg-slate-50"
                   title="Save"
                 >
-                  <Check className="size-3.5" />
+                  <Icon name="check" className="size-3.5" />
                 </button>
               ) : null}
               {editing?.id === c.id ? (
@@ -208,7 +208,7 @@ export function ChannelsTab() {
                   className="toolbar-btn rounded border border-slate-300 p-1 text-slate-700 hover:bg-slate-50"
                   title="Cancel"
                 >
-                  <X className="size-3.5" />
+                  <Icon name="close" className="size-3.5" />
                 </button>
               ) : c.archivedAt != null ? (
                 <button
@@ -217,7 +217,7 @@ export function ChannelsTab() {
                   className="toolbar-btn rounded border border-slate-300 p-1 text-slate-700 hover:bg-slate-50"
                   title="Restore"
                 >
-                  <ArchiveRestore className="size-3.5" />
+                  <Icon name="archive-restore" className="size-3.5" />
                 </button>
               ) : (
                 <button
@@ -226,7 +226,7 @@ export function ChannelsTab() {
                   className="toolbar-btn rounded border border-slate-300 p-1 text-slate-700 hover:bg-slate-50"
                   title="Archive"
                 >
-                  <EyeOff className="size-3.5" />
+                  <Icon name="hidden" className="size-3.5" />
                 </button>
               )}
             </li>

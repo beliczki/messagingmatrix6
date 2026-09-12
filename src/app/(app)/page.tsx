@@ -12,7 +12,7 @@ import {
   lte,
   sql,
 } from "drizzle-orm";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import { db } from "@/db";
 import {
@@ -622,11 +622,11 @@ function DayScopePicker({
         aria-label="Previous day"
         className="day-scope__step toolbar-btn flex size-7 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50"
       >
-        <ChevronLeft className="size-4" />
+        <Icon name="chevron-left" className="size-4" />
       </Link>
       {atToday ? (
         <span className="day-scope__step day-scope__step--disabled flex size-7 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-300">
-          <ChevronRight className="size-4" />
+          <Icon name="chevron-right" className="size-4" />
         </span>
       ) : (
         <Link
@@ -634,7 +634,7 @@ function DayScopePicker({
           aria-label="Next day"
           className="day-scope__step toolbar-btn flex size-7 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-600 transition hover:bg-slate-50"
         >
-          <ChevronRight className="size-4" />
+          <Icon name="chevron-right" className="size-4" />
         </Link>
       )}
       <ScopePill

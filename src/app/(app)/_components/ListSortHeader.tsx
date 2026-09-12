@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import type { Codec } from "./usePersistent";
 
@@ -103,9 +103,9 @@ export function ListSortHeader({
             <span className="truncate">{c.label}</span>
             {active ? (
               sort.dir === "asc" ? (
-                <ArrowUp className="size-3 shrink-0" />
+                <Icon name="arrow-up" className="size-3 shrink-0" />
               ) : (
-                <ArrowDown className="size-3 shrink-0" />
+                <Icon name="arrow-down" className="size-3 shrink-0" />
               )
             ) : null}
           </button>

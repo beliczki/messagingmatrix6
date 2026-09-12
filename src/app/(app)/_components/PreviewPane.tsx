@@ -1,13 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  Check,
-  Sun,
-  Moon,
-  Grid as GridIcon,
-  RefreshCw,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { mediaKindFromFilename } from "@/lib/parse-filename";
 import { TemplatePreviewImage } from "./TemplatePreviewImage";
@@ -196,7 +190,7 @@ export default function PreviewPane({
                     : "border-border-subtle",
                 )}
               >
-                {skipAnim && <Check className="size-2.5" strokeWidth={3} />}
+                {skipAnim && <Icon name="check" className="size-2.5" bold />}
               </span>
               Skip animation
             </button>
@@ -220,7 +214,7 @@ export default function PreviewPane({
                     : "border-border-subtle",
                 )}
               >
-                {imagePreview && <Check className="size-2.5" strokeWidth={3} />}
+                {imagePreview && <Icon name="check" className="size-2.5" bold />}
               </span>
               Image preview
             </button>
@@ -229,13 +223,13 @@ export default function PreviewPane({
         <div className="flex items-center gap-1">
           <div className="preview-pane__bg-group flex overflow-hidden rounded border border-border">
             <BgBtn active={bg === "light"} onClick={() => onBgChange("light")} title="Light background">
-              <Sun className="size-3.5" />
+              <Icon name="sun" className="size-3.5" />
             </BgBtn>
             <BgBtn active={bg === "checker"} onClick={() => onBgChange("checker")} title="Checker background">
-              <GridIcon className="size-3.5" />
+              <Icon name="grid" className="size-3.5" />
             </BgBtn>
             <BgBtn active={bg === "dark"} onClick={() => onBgChange("dark")} title="Dark background">
-              <Moon className="size-3.5" />
+              <Icon name="moon" className="size-3.5" />
             </BgBtn>
           </div>
           {onRefresh ? (
@@ -244,7 +238,7 @@ export default function PreviewPane({
               className="preview-pane__refresh rounded border border-border bg-surface p-1 text-text-primary hover:bg-surface-alt"
               title="Refresh preview"
             >
-              <RefreshCw className="size-3.5" />
+              <Icon name="refresh" className="size-3.5" />
             </button>
           ) : null}
           {rightExtras}

@@ -15,7 +15,7 @@
 // to the leftovers. A form would need a hidden field or a submitter check to
 // tell them apart, and Enter would pick one of them silently.
 import { useMemo, useState } from "react";
-import { Archive, ArrowUpRight, Loader2 } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import ModalBackdrop from "../_components/ModalBackdrop";
 import { MATRIX_STATUSES, BIRTH_STATUS } from "@/lib/mc-status";
@@ -128,7 +128,7 @@ export default function PromoteDraftDialog({
     <ModalBackdrop onClose={onClose} className="z-50 items-stretch">
       <div className="promote-dialog modal m-auto flex max-h-[85vh] w-[90vw] max-w-md flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
         <header className="promote-dialog__header modal__header flex shrink-0 items-center gap-2 border-b border-slate-100 px-4 py-3">
-          <ArrowUpRight className="size-4 text-slate-500" />
+          <Icon name="arrow-up-right" className="size-4 text-slate-500" />
           <span className="text-sm font-semibold text-slate-900">
             Promote MC{number}
           </span>
@@ -254,7 +254,7 @@ export default function PromoteDraftDialog({
               title={`Promote the selected variants and shelve the ${staying.length} that stay — MC${number} keeps its number either way`}
               className="toolbar-btn flex items-center gap-1.5 rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
             >
-              <Archive className="size-3.5" />
+              <Icon name="archive" className="size-3.5" />
               Promote and archive {staying.length}
             </button>
           ) : null}
@@ -267,9 +267,9 @@ export default function PromoteDraftDialog({
             )}
           >
             {busy ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Icon name="spinner" className="size-3.5 animate-spin" />
             ) : (
-              <ArrowUpRight className="size-3.5" />
+              <Icon name="arrow-up-right" className="size-3.5" />
             )}
             Promote {selected.size}
           </button>

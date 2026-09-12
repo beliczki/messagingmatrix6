@@ -11,7 +11,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import { parseTreeStructure } from "../_tree/parseTreeStructure";
 import { buildTree, type TreeNode } from "../_tree/buildTree";
 import { platformToken, type Audience, type Message, type Topic } from "../types";
@@ -294,9 +294,9 @@ export default function TreeView({
                       }}
                     >
                       {isExpanded ? (
-                        <ChevronDown className="size-3" />
+                        <Icon name="chevron-down" className="size-3" />
                       ) : (
-                        <ChevronRight className="size-3" />
+                        <Icon name="chevron-right" className="size-3" />
                       )}
                     </button>
                   ) : null}

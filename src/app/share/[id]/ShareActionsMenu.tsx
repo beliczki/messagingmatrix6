@@ -1,20 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  Check,
-  ChevronDown,
-  Columns3,
-  Download,
-  Image as ImageIcon,
-  LayoutGrid,
-  List as ListIcon,
-  Loader2,
-  Moon,
-  Sun,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
-import GoogleDriveIcon from "@/app/_components/GoogleDriveIcon";
 import { useThemeSwitch } from "@/app/_components/useThemeSwitch";
 
 // On a phone the action row wraps into three cramped lines of icon buttons with
@@ -25,9 +13,9 @@ export type ViewMode = "grid" | "list" | "masonry";
 export type DriveFolder = { id: string; name: string; mcs: string[] };
 
 const VIEWS: Array<{ k: ViewMode; label: string; icon: React.ReactNode }> = [
-  { k: "grid", label: "Grid", icon: <LayoutGrid className="size-4" /> },
-  { k: "list", label: "List", icon: <ListIcon className="size-4" /> },
-  { k: "masonry", label: "Masonry", icon: <Columns3 className="size-4" /> },
+  { k: "grid", label: "Grid", icon: <Icon name="grid-tiles" className="size-4" /> },
+  { k: "list", label: "List", icon: <Icon name="list" className="size-4" /> },
+  { k: "masonry", label: "Masonry", icon: <Icon name="columns" className="size-4" /> },
 ];
 
 export default function ShareActionsMenu({
@@ -88,7 +76,7 @@ export default function ShareActionsMenu({
         className="share-actions-menu__trigger inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
       >
         Actions
-        <ChevronDown
+        <Icon name="chevron-down"
           className={clsx("size-4 text-slate-400 transition", open && "rotate-180")}
         />
       </button>
@@ -103,9 +91,9 @@ export default function ShareActionsMenu({
               disabled={zipping || downloadCount === 0}
               icon={
                 zipping ? (
-                  <Loader2 className="size-4 animate-spin" />
+                  <Icon name="spinner" className="size-4 animate-spin" />
                 ) : (
-                  <Download className="size-4" />
+                  <Icon name="download" className="size-4" />
                 )
               }
             >
@@ -126,7 +114,7 @@ export default function ShareActionsMenu({
                   onClick={() => setOpen(false)}
                   className="share-actions-menu__row flex items-start gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
                 >
-                  <GoogleDriveIcon className="mt-0.5 size-4 shrink-0" />
+                  <Icon name="google-drive" className="mt-0.5 size-4 shrink-0" />
                   <span className="min-w-0">
                     <span className="block truncate">
                       {driveFolders.length > 1 ? f.name : "Google Drive"}
@@ -162,7 +150,7 @@ export default function ShareActionsMenu({
             <Section label="Preview">
               <Row
                 onClick={() => setImagePreview(!imagePreview)}
-                icon={<ImageIcon className="size-4" />}
+                icon={<Icon name="image" className="size-4" />}
                 active={imagePreview}
               >
                 Image preview
@@ -176,14 +164,14 @@ export default function ShareActionsMenu({
           <Section label="Theme">
             <Row
               onClick={(e) => setTheme(false, e)}
-              icon={<Sun className="size-4" />}
+              icon={<Icon name="sun" className="size-4" />}
               active={!dark}
             >
               Light
             </Row>
             <Row
               onClick={(e) => setTheme(true, e)}
-              icon={<Moon className="size-4" />}
+              icon={<Icon name="moon" className="size-4" />}
               active={dark}
             >
               Dark
@@ -238,7 +226,7 @@ function Row({
     >
       {icon}
       {children}
-      {active ? <Check className="ml-auto size-4 text-slate-900" /> : null}
+      {active ? <Icon name="check" className="ml-auto size-4 text-slate-900" /> : null}
     </button>
   );
 }

@@ -14,7 +14,7 @@
 // uses. Folding variants into them would have meant rebuilding that tab
 // handling for one surface.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CopyPlus, FilePlus2, Plus, Trash2 } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 
 export type DraftVariant = { id: number; variant: string };
@@ -126,7 +126,7 @@ export default function DraftVariantSwitcher({
         onClick={() => setOpen((o) => !o)}
         className="draft-variants__add rounded border border-slate-300 p-1 text-slate-500 hover:bg-slate-50 disabled:opacity-50"
       >
-        <Plus className="size-3.5" />
+        <Icon name="add" className="size-3.5" />
       </button>
 
       {/* Delete the variant that is open. Two clicks, and the label says which
@@ -155,7 +155,7 @@ export default function DraftVariantSwitcher({
             : "border-slate-300 text-slate-500 hover:bg-slate-50",
         )}
       >
-        <Trash2 className="size-3.5" />
+        <Icon name="delete" className="size-3.5" />
         {confirming ? `Delete ${activeVariant?.toUpperCase() ?? ""}?` : null}
       </button>
 
@@ -167,7 +167,7 @@ export default function DraftVariantSwitcher({
             onClick={() => add("duplicate")}
             className="draft-variants__menu-item flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
           >
-            <CopyPlus className="size-3.5 shrink-0" />
+            <Icon name="copy-add" className="size-3.5 shrink-0" />
             Duplicate this variant
           </button>
           <button
@@ -176,7 +176,7 @@ export default function DraftVariantSwitcher({
             onClick={() => add("empty")}
             className="draft-variants__menu-item flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
           >
-            <FilePlus2 className="size-3.5 shrink-0" />
+            <Icon name="file-add" className="size-3.5 shrink-0" />
             New empty variant
           </button>
         </div>

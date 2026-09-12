@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { X } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import {
   MatrixIframePreview,
   templateMetaFor,
@@ -146,7 +146,7 @@ export default function MonitoringDetailDialog({
             aria-label="Close"
             className="ml-auto rounded p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
           >
-            <X className="size-4" />
+            <Icon name="close" className="size-4" />
           </button>
         </header>
 

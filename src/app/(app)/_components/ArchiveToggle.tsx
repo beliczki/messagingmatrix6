@@ -1,6 +1,6 @@
 "use client";
 
-import { Archive, ArchiveRestore } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 
 type Props = {
@@ -26,7 +26,7 @@ export default function ArchiveToggle({
   className,
 }: Props) {
   const title = showArchived ? "Hide archived" : "Show archived";
-  const Icon = showArchived ? ArchiveRestore : Archive;
+  const icon = showArchived ? "archive-restore" : "archive";
 
   if (collapsed) {
     return (
@@ -44,7 +44,7 @@ export default function ArchiveToggle({
           className,
         )}
       >
-        <Icon className="size-4" />
+        <Icon name={icon} className="size-4" />
       </button>
     );
   }
@@ -62,7 +62,7 @@ export default function ArchiveToggle({
       )}
       title={title}
     >
-      <Icon className="size-3.5" />
+      <Icon name={icon} className="size-3.5" />
       {title}
       {!showArchived && archivedCount && archivedCount > 0 ? (
         <span className="archive-toggle__count rounded bg-slate-200 px-1 text-[10px] text-slate-700">

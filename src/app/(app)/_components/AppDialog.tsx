@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import { X } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import ModalBackdrop from "./ModalBackdrop";
 
 type Props = {
@@ -33,7 +33,7 @@ export default function AppDialog({ open, onClose, ariaLabel, children }: Props)
           aria-label={`Close ${ariaLabel}`}
           className="modal__close absolute right-3 top-3 z-10 rounded p-1.5 text-slate-500 hover:bg-slate-100"
         >
-          <X className="size-5" />
+          <Icon name="close" className="size-5" />
         </button>
         {children}
       </div>

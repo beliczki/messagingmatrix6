@@ -10,16 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Upload as UploadIcon,
-  Filter as FilterIcon,
-  X,
-  Image as ImageIcon,
-  Loader2,
-  Check,
-  CheckCheck,
-  Share2,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";import { trimEmptyCountSegments } from "@/lib/count-segments";
 
 import { parseDriveFolderId } from "@/lib/drive-link";
@@ -655,7 +646,7 @@ export default function CreativeLibrary() {
           ) : null}
           {creativesQ.isLoading || messagesQ.isLoading || templatesQ.isLoading ? (
             <div className="flex h-full items-center justify-center text-sm text-slate-500">
-              <Loader2 className="mr-2 size-4 animate-spin" />
+              <Icon name="spinner" className="mr-2 size-4 animate-spin" />
               Loading…
             </div>
           ) : filtered.length === 0 ? (
@@ -934,7 +925,7 @@ function Toolbar({
       />
 
       <div className="input-box input-box--with-icon relative">
-        <FilterIcon className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+        <Icon name="filter" className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
         <input
           type="search"
           placeholder="Filter… a: t: s: p: mc: OR …"
@@ -966,7 +957,7 @@ function Toolbar({
           }}
           className="toolbar-btn flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
         >
-          <X className="size-3" />
+          <Icon name="close" className="size-3" />
           Clear
         </button>
       ) : null}
@@ -1022,7 +1013,7 @@ function Card({
           />
         ) : (
           <div className="flex size-full items-center justify-center bg-slate-50 text-slate-300">
-            <ImageIcon className="size-8" />
+            <Icon name="image" className="size-8" />
           </div>
         )}
       </div>
@@ -1085,7 +1076,7 @@ function ImageTile({
         />
       ) : (
         <div className="media-tile__placeholder flex aspect-[4/3] items-center justify-center bg-slate-50 text-slate-300">
-          <ImageIcon className="size-8" />
+          <Icon name="image" className="size-8" />
         </div>
       )}
     </button>
@@ -1139,7 +1130,7 @@ function ListRow({
           />
         ) : (
           <div className="flex size-full items-center justify-center bg-slate-50 text-slate-300">
-            <ImageIcon className="size-5" />
+            <Icon name="image" className="size-5" />
           </div>
         )}
       </div>
@@ -1323,7 +1314,7 @@ function SelectionActions({
           aria-label={`Select all ${filteredCount} filtered`}
           className="toolbar-btn flex size-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
         >
-          <CheckCheck className="size-4" />
+          <Icon name="check-double" className="size-4" />
         </button>
         <button
           type="button"
@@ -1332,7 +1323,7 @@ function SelectionActions({
           aria-label="Share selected"
           className="toolbar-btn--primary flex size-9 items-center justify-center rounded-md bg-slate-900 text-white hover:bg-slate-800"
         >
-          <Share2 className="size-4" />
+          <Icon name="share" className="size-4" />
         </button>
         <button
           type="button"
@@ -1341,7 +1332,7 @@ function SelectionActions({
           aria-label="Cancel selection"
           className="toolbar-btn flex size-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
         >
-          <X className="size-4" />
+          <Icon name="close" className="size-4" />
         </button>
       </div>
     );
@@ -1358,7 +1349,7 @@ function SelectionActions({
         title={`Select every creative the current filters match (${filteredCount})`}
         className="toolbar-btn inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
       >
-        <CheckCheck className="size-3.5" />
+        <Icon name="check-double" className="size-3.5" />
         Select all filtered ({filteredCount})
       </button>
       <button
@@ -1366,7 +1357,7 @@ function SelectionActions({
         onClick={onShare}
         className="toolbar-btn--primary inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
       >
-        <Share2 className="size-3.5" />
+        <Icon name="share" className="size-3.5" />
         Share
       </button>
       <button
@@ -1374,7 +1365,7 @@ function SelectionActions({
         onClick={onCancel}
         className="toolbar-btn inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
       >
-        <X className="size-3" />
+        <Icon name="close" className="size-3" />
         Cancel
       </button>
     </div>
@@ -1435,7 +1426,7 @@ function SelectableItem({
               : "border-slate-400 bg-white/80 text-transparent",
           )}
         >
-          <Check className="size-3" strokeWidth={3} />
+          <Icon name="check" className="size-3" bold />
         </span>
       ) : null}
       {selected ? (
@@ -1458,7 +1449,7 @@ function EmptyState({
   return (
     <div className="flex h-full items-center justify-center">
       <div className="empty-state creative-library__empty max-w-md rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-        <ImageIcon className="empty-state__icon mx-auto mb-2 size-8 text-slate-400" />
+        <Icon name="image" className="empty-state__icon mx-auto mb-2 size-8 text-slate-400" />
         <h2 className="empty-state__title text-sm font-semibold text-slate-900">
           {empty ? "No creatives yet" : "No creatives match the filters"}
         </h2>
@@ -1472,7 +1463,7 @@ function EmptyState({
             onClick={onUpload}
             className="toolbar-btn--primary mt-4 inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
           >
-            <UploadIcon className="size-3.5" />
+            <Icon name="upload" className="size-3.5" />
             Upload first creative
           </button>
         ) : null}

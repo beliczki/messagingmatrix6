@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Plus, SquarePlus, X } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import ModalBackdrop from "../_components/ModalBackdrop";
 
 // Occupied-cell "+ new" chooser: a cell may hold multiple MC numbers
@@ -44,7 +44,7 @@ export default function CreateMcDialog({
     <ModalBackdrop onClose={onClose} className="z-50 items-center justify-center">
       <div className="create-mc-dialog modal m-auto flex w-full max-w-xs flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
         <header className="modal__header flex shrink-0 items-center gap-2 border-b border-slate-100 px-5 py-3">
-          <Plus className="size-4 text-slate-700" />
+          <Icon name="add" className="size-4 text-slate-700" />
           <h2 className="modal__title text-sm font-semibold text-slate-900">
             New MC in this cell
           </h2>
@@ -54,7 +54,7 @@ export default function CreateMcDialog({
             aria-label="Close"
             className="modal__close ml-auto rounded p-1 text-slate-500 hover:bg-slate-100"
           >
-            <X className="size-4" />
+            <Icon name="close" className="size-4" />
           </button>
         </header>
 
@@ -71,7 +71,7 @@ export default function CreateMcDialog({
                 onClick={() => onPick(n)}
                 className="create-mc-dialog__option toolbar-btn inline-flex items-center justify-center gap-1.5 rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Plus className="size-3" />
+                <Icon name="add" className="size-3" />
                 New variant of MC{n}
               </button>
             ))}
@@ -82,7 +82,7 @@ export default function CreateMcDialog({
               onClick={() => onPick("new")}
               className="create-mc-dialog__option create-mc-dialog__option--new toolbar-btn--primary inline-flex items-center justify-center gap-1.5 rounded bg-slate-900 px-2 py-1.5 text-xs text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <SquarePlus className="size-3" />
+              <Icon name="add-square" className="size-3" />
               New MC number
             </button>
           </div>

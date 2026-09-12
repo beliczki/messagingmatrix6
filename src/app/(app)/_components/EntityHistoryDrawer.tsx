@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { History, RotateCcw, X } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import ModalBackdrop from "./ModalBackdrop";
 
@@ -161,7 +161,7 @@ export default function EntityHistoryDrawer({
     <ModalBackdrop onClose={onClose} className="z-[60] justify-end">
       <div className="entity-history modal flex h-full w-[460px] max-w-[92vw] flex-col overflow-hidden border-l border-slate-200 bg-white shadow-2xl">
         <header className="entity-history__header modal__header flex shrink-0 items-center gap-2 border-b border-slate-100 px-4 py-3">
-          <History className="entity-history__icon size-4 text-slate-500" />
+          <Icon name="history" className="entity-history__icon size-4 text-slate-500" />
           <span className="entity-history__title text-sm font-semibold text-slate-900">
             History
           </span>
@@ -173,7 +173,7 @@ export default function EntityHistoryDrawer({
             aria-label="Close history"
             className="modal__close ml-auto rounded p-1 text-slate-500 hover:bg-slate-100"
           >
-            <X className="size-5" />
+            <Icon name="close" className="size-5" />
           </button>
         </header>
 
@@ -260,7 +260,7 @@ export default function EntityHistoryDrawer({
                         disabled={restoringId !== null || currentVersion === null}
                         className="entity-history__restore toolbar-btn mt-2 inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                       >
-                        <RotateCcw className="size-3" />
+                        <Icon name="undo" className="size-3" />
                         {restoringId === entry.id
                           ? "Restoring…"
                           : "Restore this version"}

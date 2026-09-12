@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { Copy, GripHorizontal, GripVertical, Plus } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import {
   DndContext,
   DragOverlay,
@@ -292,7 +292,7 @@ export default function GridView({
       </div>
     ) : editMode && reorderState ? (
       <div className="matrix-grid__reorder-overlay pointer-events-none flex items-center gap-1 rounded border-2 border-dashed border-sky-500 bg-white/90 px-2 py-1 text-xs font-semibold text-text-primary shadow dark:bg-slate-800/90">
-        <GripHorizontal className="size-3 text-text-tertiary" />
+        <Icon name="grip-horizontal" className="size-3 text-text-tertiary" />
         {reorderState.label || "Reorder"}
       </div>
     ) : null;
@@ -479,7 +479,7 @@ export default function GridView({
                       }}
                       className="matrix-grid__header-dup-btn absolute right-0.5 top-0.5 z-10 hidden rounded border border-slate-300 bg-surface-alt p-0.5 text-text-tertiary shadow-sm hover:border-slate-500 hover:text-text-primary group-hover:inline-flex focus-visible:inline-flex"
                     >
-                      <Copy className="size-3" />
+                      <Icon name="copy" className="size-3" />
                     </button>
                   ) : null}
                   {editMode && colReorderable ? (
@@ -511,7 +511,7 @@ export default function GridView({
                   onClick={() => onAddHeader(colKind)}
                   className="matrix-grid__header-add-btn flex size-full min-h-20 items-center justify-center p-2 text-text-tertiary transition hover:bg-black/5 hover:text-text-primary dark:hover:bg-white/10"
                 >
-                  <Plus className="size-5" />
+                  <Icon name="add" className="size-5" />
                 </button>
               </th>
             ) : null}
@@ -569,7 +569,7 @@ export default function GridView({
                     }}
                     className="matrix-grid__header-dup-btn absolute right-0.5 top-0.5 z-10 hidden rounded border border-slate-300 bg-surface-alt p-0.5 text-text-tertiary shadow-sm hover:border-slate-500 hover:text-text-primary group-hover:inline-flex focus-visible:inline-flex"
                   >
-                    <Copy className="size-3" />
+                    <Icon name="copy" className="size-3" />
                   </button>
                 ) : null}
                 {editMode && rowReorderable ? (
@@ -656,7 +656,7 @@ export default function GridView({
                   onClick={() => onAddHeader(rowKind)}
                   className="matrix-grid__header-add-btn flex size-full min-h-16 items-center justify-center p-2 text-text-tertiary transition hover:bg-black/5 hover:text-text-primary dark:hover:bg-white/10"
                 >
-                  <Plus className="size-5" />
+                  <Icon name="add" className="size-5" />
                 </button>
               </th>
               <td
@@ -719,9 +719,9 @@ function HeaderReorderHandle({
       )}
     >
       {orientation === "row" ? (
-        <GripVertical className="size-3" />
+        <Icon name="grip-vertical" className="size-3" />
       ) : (
-        <GripHorizontal className="size-3" />
+        <Icon name="grip-horizontal" className="size-3" />
       )}
     </div>
   );
@@ -912,7 +912,7 @@ function EditableCell({
             onClick={() => onCreateInCell(audience, topic)}
             className="cell-add-btn hidden items-center gap-1 rounded border border-dashed border-slate-300 px-1.5 py-0.5 text-[10px] text-slate-500 hover:border-slate-500 hover:text-slate-700 group-hover:inline-flex focus-visible:inline-flex"
           >
-            <Plus className="size-3" />
+            <Icon name="add" className="size-3" />
             new
           </button>
         ) : (
@@ -925,7 +925,7 @@ function EditableCell({
             onClick={() => onCreateInCell(audience, topic)}
             className="cell-add-btn cell-add-btn--dense hidden size-4 items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-500 hover:border-slate-500 hover:text-slate-700 group-hover:inline-flex focus-visible:inline-flex"
           >
-            <Plus className="size-2.5" />
+            <Icon name="add" className="size-2.5" />
           </button>
         )}
       </div>

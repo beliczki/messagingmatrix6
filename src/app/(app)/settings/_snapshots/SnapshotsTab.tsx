@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, History, Loader2, Trash2 } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 
 type SnapshotMeta = {
   id: number;
@@ -123,9 +123,9 @@ export function SnapshotsTab() {
             className="toolbar-btn--primary inline-flex items-center gap-1.5 rounded bg-brand-button px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
           >
             {createM.isPending ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Icon name="spinner" className="size-3.5 animate-spin" />
             ) : (
-              <Camera className="size-3.5" />
+              <Icon name="camera" className="size-3.5" />
             )}
             Snapshot
           </button>
@@ -185,7 +185,7 @@ export function SnapshotsTab() {
                     onClick={() => setRestoreTarget(s)}
                     className="toolbar-btn rounded border border-amber-300 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
                   >
-                    <History className="mr-1 inline size-3.5" />
+                    <Icon name="history" className="mr-1 inline size-3.5" />
                     Restore
                   </button>
                   <button
@@ -199,7 +199,7 @@ export function SnapshotsTab() {
                     title="Delete snapshot"
                     className="rounded border border-rose-200 bg-white p-1.5 text-rose-600 hover:bg-rose-50 disabled:opacity-40"
                   >
-                    <Trash2 className="size-3.5" />
+                    <Icon name="delete" className="size-3.5" />
                   </button>
                 </li>
               );
@@ -278,7 +278,7 @@ function RestoreConfirmModal({
             disabled={pending}
             className="toolbar-btn--primary inline-flex items-center gap-1.5 rounded bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-40"
           >
-            {pending ? <Loader2 className="size-3.5 animate-spin" /> : null}
+            {pending ? <Icon name="spinner" className="size-3.5 animate-spin" /> : null}
             Restore
           </button>
         </div>

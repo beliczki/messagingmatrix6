@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import clsx from "clsx";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import { evaluatePattern, FORMATTING_CTX_KEYS } from "@/lib/patterns";
 import {
   parseFeedColumns,
@@ -319,9 +319,9 @@ function Th({
         {children}
         {active ? (
           dir === "asc" ? (
-            <ChevronUp className="matrix-feed__sort-icon size-3" />
+            <Icon name="chevron-up" className="matrix-feed__sort-icon size-3" />
           ) : (
-            <ChevronDown className="matrix-feed__sort-icon size-3" />
+            <Icon name="chevron-down" className="matrix-feed__sort-icon size-3" />
           )
         ) : null}
       </div>

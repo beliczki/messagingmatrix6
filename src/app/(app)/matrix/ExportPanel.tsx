@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Rss, Table2 } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import ToggleBtn from "../_components/ToggleBtn";
 import MatrixExportPanel from "./MatrixExportPanel";
 import FeedExportPanel from "./FeedExportPanel";
@@ -51,11 +51,11 @@ export default function ExportPanel({
 
       <div className="toggle-group export-panel__switch mt-2 flex rounded-md border border-slate-200 bg-white p-0.5 text-xs">
         <ToggleBtn active={mode === "matrix"} onClick={() => choose("matrix")}>
-          <Table2 className="size-3.5" />
+          <Icon name="table" className="size-3.5" />
           Matrix
         </ToggleBtn>
         <ToggleBtn active={mode === "feed"} onClick={() => choose("feed")}>
-          <Rss className="size-3.5" />
+          <Icon name="rss" className="size-3.5" />
           Feed
         </ToggleBtn>
       </div>

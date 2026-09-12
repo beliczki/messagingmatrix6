@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
-import { Check, ChevronDown } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 
 export type BaselineChoice = {
   id: number;
@@ -91,7 +91,7 @@ export default function BaselinePicker({
             </span>
           ) : null}
         </span>
-        <ChevronDown className="size-3.5 shrink-0 text-slate-400" />
+        <Icon name="chevron-down" className="size-3.5 shrink-0 text-slate-400" />
       </button>
 
       {open ? (
@@ -116,7 +116,7 @@ export default function BaselinePicker({
                   active ? "bg-slate-100" : "hover:bg-slate-50",
                 )}
               >
-                <Check
+                <Icon name="check"
                   className={clsx(
                     "mt-0.5 size-3 shrink-0",
                     active ? "text-slate-900" : "invisible",

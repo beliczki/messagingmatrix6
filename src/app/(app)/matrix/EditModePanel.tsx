@@ -1,13 +1,6 @@
 "use client";
 
-import {
-  X,
-  Pencil,
-  Copy,
-  ArrowRightLeft,
-  Trash2,
-  Check,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { type Topic } from "./types";
 import { type EditApi } from "./MatrixGrid";
@@ -52,7 +45,7 @@ export default function EditModePanel({
             : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-100",
         )}
       >
-        <Pencil className="size-3" />
+        <Icon name="edit" className="size-3" />
         {editApi.editMode ? "Exit edit mode" : "Enter edit mode"}
       </button>
 
@@ -74,7 +67,7 @@ export default function EditModePanel({
                 onClick={() => editApi.beginPending("copy")}
                 className="selection-actions__btn selection-actions__btn--copy inline-flex items-center justify-center gap-1 rounded bg-slate-900 px-2 py-1 text-xs text-white hover:bg-slate-800"
               >
-                <Copy className="size-3" />
+                <Icon name="copy" className="size-3" />
                 Copy
               </button>
               <button
@@ -82,7 +75,7 @@ export default function EditModePanel({
                 onClick={() => editApi.beginPending("move")}
                 className="selection-actions__btn selection-actions__btn--move inline-flex items-center justify-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
               >
-                <ArrowRightLeft className="size-3" />
+                <Icon name="swap" className="size-3" />
                 Move
               </button>
               <button
@@ -91,7 +84,7 @@ export default function EditModePanel({
                 title="Archive or delete the selected cards"
                 className="selection-actions__btn selection-actions__btn--delete inline-flex items-center justify-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-rose-700 hover:bg-rose-50"
               >
-                <Trash2 className="size-3" />
+                <Icon name="delete" className="size-3" />
                 Delete
               </button>
               <button
@@ -99,7 +92,7 @@ export default function EditModePanel({
                 onClick={editApi.clearSelection}
                 className="selection-actions__btn selection-actions__btn--cancel inline-flex items-center justify-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
               >
-                <X className="size-3" />
+                <Icon name="close" className="size-3" />
                 Cancel
               </button>
             </div>
@@ -122,7 +115,7 @@ export default function EditModePanel({
                     : "cursor-not-allowed bg-slate-300",
                 )}
               >
-                <Check className="size-3" />
+                <Icon name="check" className="size-3" />
                 Apply ({pending.targetAudienceKeys.size})
               </button>
               <button
@@ -130,7 +123,7 @@ export default function EditModePanel({
                 onClick={editApi.cancelPending}
                 className="selection-actions__btn selection-actions__btn--cancel inline-flex items-center justify-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
               >
-                <X className="size-3" />
+                <Icon name="close" className="size-3" />
                 Cancel
               </button>
             </div>

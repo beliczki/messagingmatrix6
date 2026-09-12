@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import Link from "next/link";
-import { Download, AlertTriangle, Check } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import { useQuery } from "@tanstack/react-query";
 import { type Filters, type Message } from "./types";
 import FeedExportDialog from "./FeedExportDialog";
@@ -85,7 +85,7 @@ export default function FeedExportPanel({
     return (
       <div className="feed-export-panel feed-export-panel--gated rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
         <div className="flex items-start gap-2">
-          <AlertTriangle className="mt-0.5 size-3.5 flex-shrink-0" />
+          <Icon name="warning" className="mt-0.5 size-3.5 flex-shrink-0" />
           <div>
             <div className="feed-export-panel__title font-medium">
               Feed export
@@ -185,7 +185,7 @@ export default function FeedExportPanel({
                 : "border-border-subtle",
             )}
           >
-            {feedPreview && <Check className="size-2.5" strokeWidth={3} />}
+            {feedPreview && <Icon name="check" className="size-2.5" bold />}
           </span>
           Preview feed rows
         </button>
@@ -196,7 +196,7 @@ export default function FeedExportPanel({
           disabled={filteredMessages.length === 0}
           className="toolbar-btn--primary mt-2 flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
         >
-          <Download className="size-4" />
+          <Icon name="download" className="size-4" />
           Export
         </button>
 

@@ -5,7 +5,7 @@ import clsx from "clsx";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import AppDialog from "../_components/AppDialog";
 import BaselinePicker from "./BaselinePicker";
 import { type Message } from "./types";
@@ -342,7 +342,7 @@ export default function FeedExportDialog({
               }
               className="toolbar-btn--primary flex items-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
             >
-              <Download className="size-4" />
+              <Icon name="download" className="size-4" />
               {createM.isPending ? "Building…" : "Build & Download XLSX"}
             </button>
           ) : null}
@@ -664,9 +664,9 @@ function PreviewBlock({
       >
         <div className="flex items-center gap-2 font-medium">
           {action.tone === "ok" ? (
-            <CheckCircle2 className="size-4" />
+            <Icon name="check-circle" className="size-4" />
           ) : (
-            <AlertTriangle className="size-4" />
+            <Icon name="warning" className="size-4" />
           )}
           {action.label}
         </div>
@@ -777,9 +777,9 @@ function PostEmitView({
       >
         <div className="flex items-center gap-2 font-medium">
           {action.tone === "ok" ? (
-            <CheckCircle2 className="size-4" />
+            <Icon name="check-circle" className="size-4" />
           ) : (
-            <AlertTriangle className="size-4" />
+            <Icon name="warning" className="size-4" />
           )}
           {action.label}
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { Download } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import type { Filters } from "./types";
 
 // Matrix XLSX export: per-product matrix tabs + Audiences/Topics/MCs sheets,
@@ -45,7 +45,7 @@ export default function MatrixExportPanel({ filters }: { filters: Filters }) {
         onClick={download}
         className="toolbar-btn--primary mt-3 flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
       >
-        <Download className="size-4" />
+        <Icon name="download" className="size-4" />
         Download XLSX
       </button>
     </div>

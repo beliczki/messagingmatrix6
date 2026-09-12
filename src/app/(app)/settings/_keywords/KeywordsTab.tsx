@@ -2,15 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ArchiveRestore,
-  ArrowDown,
-  ArrowUp,
-  EyeOff,
-  Loader2,
-  Plus,
-  X,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import type { Keyword } from "@/db/schema";
 import {
@@ -255,9 +247,9 @@ export function KeywordsTab() {
             className="toolbar-btn toolbar-btn--primary inline-flex items-center gap-1 rounded-md bg-brand-primary px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50"
           >
             {createM.isPending ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Icon name="spinner" className="size-3.5 animate-spin" />
             ) : (
-              <Plus className="size-3.5" />
+              <Icon name="add" className="size-3.5" />
             )}
             Add
           </button>
@@ -298,7 +290,7 @@ export function KeywordsTab() {
                       title="Move up"
                       className="keywords-tab__row-up text-slate-400 hover:text-slate-700 disabled:opacity-30"
                     >
-                      <ArrowUp className="size-3" />
+                      <Icon name="arrow-up" className="size-3" />
                     </button>
                     <button
                       type="button"
@@ -307,7 +299,7 @@ export function KeywordsTab() {
                       title="Move down"
                       className="keywords-tab__row-down text-slate-400 hover:text-slate-700 disabled:opacity-30"
                     >
-                      <ArrowDown className="size-3" />
+                      <Icon name="arrow-down" className="size-3" />
                     </button>
                   </div>
 
@@ -328,7 +320,7 @@ export function KeywordsTab() {
                       title="Restore"
                       className="keywords-tab__row-restore text-slate-500 hover:text-emerald-600"
                     >
-                      <ArchiveRestore className="size-3.5" />
+                      <Icon name="archive-restore" className="size-3.5" />
                     </button>
                   ) : (
                     <button
@@ -337,7 +329,7 @@ export function KeywordsTab() {
                       title="Archive"
                       className="keywords-tab__row-archive text-slate-400 hover:text-rose-600"
                     >
-                      <EyeOff className="size-3.5" />
+                      <Icon name="hidden" className="size-3.5" />
                     </button>
                   )}
                 </li>
@@ -412,7 +404,7 @@ function InlineValue({
         title="Cancel"
         className="keywords-tab__row-edit-cancel text-slate-400 hover:text-slate-700"
       >
-        <X className="size-3.5" />
+        <Icon name="close" className="size-3.5" />
       </button>
     </div>
   );

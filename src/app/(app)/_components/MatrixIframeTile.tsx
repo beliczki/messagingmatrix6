@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Code2 } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import type { Message } from "../matrix/types";
 import { LIST_GRID_TEMPLATE_VERSIONS, formatListDate } from "./ListSortHeader";
 import {
@@ -314,7 +314,7 @@ function MatrixIframeRender({
         </button>
       ) : (
         <div className="matrix-iframe-preview__placeholder flex size-full items-center justify-center text-slate-300">
-          <Code2 className="size-6" />
+          <Icon name="code" className="size-6" />
         </div>
       )}
     </div>

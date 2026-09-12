@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { MiniMap, useReactFlow, useStore } from "@xyflow/react";
-import { Maximize, Minus, Plus } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { useIsDarkMode } from "./useIsDarkMode";
 
@@ -99,21 +99,21 @@ export function TreeViewNavigatorControls({
         title="Zoom in"
         ariaLabel="Zoom in"
       >
-        <Plus className="size-4" />
+        <Icon name="add" className="size-4" />
       </NavBtn>
       <NavBtn
         onClick={() => rf.zoomOut({ duration: 150 })}
         title="Zoom out"
         ariaLabel="Zoom out"
       >
-        <Minus className="size-4" />
+        <Icon name="subtract" className="size-4" />
       </NavBtn>
       <NavBtn
         onClick={() => rf.fitView({ duration: 200 })}
         title="Fit view"
         ariaLabel="Fit view"
       >
-        <Maximize className="size-4" />
+        <Icon name="expand" className="size-4" />
       </NavBtn>
     </div>
   );

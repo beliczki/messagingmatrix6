@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
-import GoogleDriveIcon from "@/app/_components/GoogleDriveIcon";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -96,9 +95,9 @@ export default function DriveHealthCheck({
         className="drive-health drive-health--collapsed flex size-9 items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100 disabled:opacity-40"
       >
         {running ? (
-          <Loader2 className="size-4 animate-spin" />
+          <Icon name="spinner" className="size-4 animate-spin" />
         ) : (
-          <GoogleDriveIcon className="size-4" />
+          <Icon name="google-drive" className="size-4" />
         )}
       </button>
     );
@@ -117,9 +116,9 @@ export default function DriveHealthCheck({
         title={title}
       >
         {running ? (
-          <Loader2 className="size-3.5 animate-spin" />
+          <Icon name="spinner" className="size-3.5 animate-spin" />
         ) : (
-          <GoogleDriveIcon className="size-3.5" />
+          <Icon name="google-drive" className="size-3.5" />
         )}
         Drive link check
         <span className="drive-health__scope ml-auto text-[10px] text-slate-400">

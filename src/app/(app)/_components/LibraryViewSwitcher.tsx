@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutGrid, List as ListIcon, Columns3, type LucideIcon } from "lucide-react";
+import { Icon, type IconName } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import CycleIconButton from "./CycleIconButton";
 
@@ -9,13 +9,13 @@ export type LibraryViewMode = "grid" | "list" | "masonry";
 type ViewDef = {
   value: LibraryViewMode;
   label: string;
-  Icon: LucideIcon;
+  icon: IconName;
 };
 
 const VIEW_DEFS: ViewDef[] = [
-  { value: "grid", label: "Grid", Icon: LayoutGrid },
-  { value: "list", label: "List", Icon: ListIcon },
-  { value: "masonry", label: "Masonry", Icon: Columns3 },
+  { value: "grid", label: "Grid", icon: "grid-tiles" },
+  { value: "list", label: "List", icon: "list" },
+  { value: "masonry", label: "Masonry", icon: "columns" },
 ];
 
 export const LIBRARY_VIEW_CODEC = {
@@ -40,10 +40,10 @@ export function LibraryViewSwitcher({
     return (
       <>
         <CycleIconButton
-          options={VIEW_DEFS.map(({ value, label, Icon }) => ({
+          options={VIEW_DEFS.map(({ value, label, icon }) => ({
             value,
             label: `${label} view`,
-            icon: <Icon className="size-4" />,
+            icon: <Icon name={icon} className="size-4" />,
           }))}
           value={view}
           onChange={setView}
@@ -58,13 +58,13 @@ export function LibraryViewSwitcher({
         View
       </div>
       <div className="toggle-group flex rounded-md border border-slate-200 bg-white p-0.5 text-xs">
-        {VIEW_DEFS.map(({ value, label, Icon }) => (
+        {VIEW_DEFS.map(({ value, label, icon }) => (
           <ToggleBtn
             key={value}
             active={view === value}
             onClick={() => setView(value)}
           >
-            <Icon className="size-3.5" />
+            <Icon name={icon} className="size-3.5" />
             {label}
           </ToggleBtn>
         ))}

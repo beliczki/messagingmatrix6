@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import ToggleBtn from "../../_components/ToggleBtn";
 import type { SankeyMetric } from "../_tree/buildSankey";
 import { formatMetric, periodLabel, useMessageMetrics } from "./useMessageMetrics";
@@ -106,7 +106,7 @@ export default function SankeyMetricPanel({
             >
               <div className="flex items-start gap-1.5">
                 {share < 70 ? (
-                  <AlertTriangle className="mt-0.5 size-3 flex-shrink-0" />
+                  <Icon name="warning" className="mt-0.5 size-3 flex-shrink-0" />
                 ) : null}
                 <span>
                   <strong>{share}%</strong> of this period&apos;s{" "}

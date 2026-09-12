@@ -1,6 +1,6 @@
 "use client";
 
-import { X, Filter as FilterIcon, Users, ListTree } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import { type Filters, type MatrixAxis, STATUS_COLOR } from "./types";
 import MultiPill, { ALL_NONE_QUICK_SELECT } from "../_components/MultiPill";
 import { AppBrandTag } from "@/app/_components/AppBrandTag";
@@ -68,7 +68,7 @@ export default function MatrixToolbar(p: Props) {
       </div>
 
       <div className="input-box input-box--with-icon relative ml-2">
-        <FilterIcon className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+        <Icon name="filter" className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
         <input
           type="search"
           placeholder="Filter… a: t: s: p: mc: OR …"
@@ -112,7 +112,7 @@ export default function MatrixToolbar(p: Props) {
           }
           className="toolbar-btn flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
         >
-          <X className="size-3" />
+          <Icon name="close" className="size-3" />
           Clear
         </button>
       ) : null}
@@ -125,11 +125,11 @@ export default function MatrixToolbar(p: Props) {
           mc: {p.counts.visible}/{p.counts.messages}
         </span>
         <span className="matrix-toolbar__count-item inline-flex items-center gap-1" title="Audiences">
-          <Users className="size-3" aria-label="Audiences" />
+          <Icon name="users" className="size-3" aria-label="Audiences" />
           {p.counts.visibleAudiences}/{p.counts.audiences}
         </span>
         <span className="matrix-toolbar__count-item inline-flex items-center gap-1" title="Topics">
-          <ListTree className="size-3" aria-label="Topics" />
+          <Icon name="tree" className="size-3" aria-label="Topics" />
           {p.counts.visibleTopics}/{p.counts.topics}
         </span>
       </div>

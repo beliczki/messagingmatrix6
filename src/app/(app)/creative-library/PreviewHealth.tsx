@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { AlertTriangle, Images, Loader2 } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { useQueryClient } from "@tanstack/react-query";
 import { useBroadcastEvents } from "@/app/_components/broadcast-bus";
@@ -110,9 +110,9 @@ export default function PreviewHealth({
         className="preview-health preview-health--collapsed relative flex size-9 items-center justify-center rounded-md text-slate-700 transition hover:bg-slate-100 disabled:opacity-40"
       >
         {running ? (
-          <Loader2 className="size-4 animate-spin" />
+          <Icon name="spinner" className="size-4 animate-spin" />
         ) : (
-          <Images className="size-4" />
+          <Icon name="images" className="size-4" />
         )}
         {missing > 0 && !running ? (
           <span className="preview-health__dot absolute right-1.5 top-1.5 size-1.5 rounded-full bg-amber-500" />
@@ -134,9 +134,9 @@ export default function PreviewHealth({
         title={title}
       >
         {running ? (
-          <Loader2 className="size-3.5 animate-spin" />
+          <Icon name="spinner" className="size-3.5 animate-spin" />
         ) : (
-          <Images className="size-3.5" />
+          <Icon name="images" className="size-3.5" />
         )}
         Generate previews
         <span className="preview-health__scope ml-auto text-[10px] text-slate-400">
@@ -171,7 +171,7 @@ export default function PreviewHealth({
       {missing > 0 ? (
         <div className="preview-health__missing mt-1.5">
           <div className="preview-health__missing-head flex items-center gap-1 text-[10px] font-medium text-amber-700">
-            <AlertTriangle className="size-3" />
+            <Icon name="warning" className="size-3" />
             {missing} MC{missing === 1 ? "" : "s"} missing previews
           </div>
           <div className="preview-health__missing-list mt-1 max-h-40 overflow-auto">

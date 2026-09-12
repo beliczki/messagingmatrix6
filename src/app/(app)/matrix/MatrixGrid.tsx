@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { LayoutList, List, Grip, Table2, Waypoints, Pencil, GitFork } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";import { trimEmptyCountSegments } from "@/lib/count-segments";
 
 import { ReactFlowProvider } from "@xyflow/react";
@@ -1104,9 +1104,9 @@ export default function MatrixWorkspace() {
             <>
               <CycleIconButton
                 options={[
-                  { value: "grid", icon: <Table2 className="size-4" />, label: "Grid view" },
-                  { value: "sankey", icon: <Waypoints className="size-4" />, label: "Sankey view" },
-                  { value: "tree", icon: <GitFork className="size-4" />, label: "Decision tree view" },
+                  { value: "grid", icon: <Icon name="table" className="size-4" />, label: "Grid view" },
+                  { value: "sankey", icon: <Icon name="waypoints" className="size-4" />, label: "Sankey view" },
+                  { value: "tree", icon: <Icon name="fork" className="size-4" />, label: "Decision tree view" },
                 ]}
                 value={view}
                 onChange={(v) => {
@@ -1117,9 +1117,9 @@ export default function MatrixWorkspace() {
               {view === "grid" ? (
                 <CycleIconButton
                   options={[
-                    { value: "detailed", icon: <LayoutList className="size-4" />, label: "Detailed" },
-                    { value: "compact", icon: <List className="size-4" />, label: "Compact" },
-                    { value: "dense", icon: <Grip className="size-4" />, label: "Dense" },
+                    { value: "detailed", icon: <Icon name="list-task" className="size-4" />, label: "Detailed" },
+                    { value: "compact", icon: <Icon name="list" className="size-4" />, label: "Compact" },
+                    { value: "dense", icon: <Icon name="grip" className="size-4" />, label: "Dense" },
                   ]}
                   value={density}
                   onChange={setDensity}
@@ -1138,7 +1138,7 @@ export default function MatrixWorkspace() {
                       : "text-slate-700 hover:bg-slate-100",
                   )}
                 >
-                  <Pencil className="size-4" />
+                  <Icon name="edit" className="size-4" />
                 </button>
               ) : null}
               {view === "tree" || view === "sankey" ? (
@@ -1294,15 +1294,15 @@ function ViewControls({
         </div>
         <div className="toggle-group flex rounded-md border border-slate-200 bg-white p-0.5 text-xs">
           <ToggleBtn active={view === "grid"} onClick={() => setView("grid")}>
-            <Table2 className="size-3.5" />
+            <Icon name="table" className="size-3.5" />
             Grid
           </ToggleBtn>
           <ToggleBtn active={view === "sankey"} onClick={() => setView("sankey")}>
-            <Waypoints className="size-3.5" />
+            <Icon name="waypoints" className="size-3.5" />
             Sankey
           </ToggleBtn>
           <ToggleBtn active={view === "tree"} onClick={() => setView("tree")}>
-            <GitFork className="size-3.5" />
+            <Icon name="fork" className="size-3.5" />
             Tree
           </ToggleBtn>
         </div>
@@ -1320,7 +1320,7 @@ function ViewControls({
               title="Detailed"
               ariaLabel="Detailed density"
             >
-              <LayoutList className="size-4" />
+              <Icon name="list-task" className="size-4" />
             </ToggleBtn>
             <ToggleBtn
               active={density === "compact"}
@@ -1328,7 +1328,7 @@ function ViewControls({
               title="Compact"
               ariaLabel="Compact density"
             >
-              <List className="size-4" />
+              <Icon name="list" className="size-4" />
             </ToggleBtn>
             <ToggleBtn
               active={density === "dense"}
@@ -1336,7 +1336,7 @@ function ViewControls({
               title="Dense"
               ariaLabel="Dense density"
             >
-              <Grip className="size-4" />
+              <Icon name="grip" className="size-4" />
             </ToggleBtn>
           </div>
         </div>

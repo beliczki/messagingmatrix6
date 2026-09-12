@@ -20,7 +20,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { parseTreeStructure } from "../_tree/parseTreeStructure";
 import {
@@ -217,7 +217,7 @@ function SankeyNodeBox({ id, data }: NodeProps) {
       >
         {expandTarget !== undefined ? (
           <span className="sankey-view__chevron" aria-hidden>
-            <ChevronRight className="size-3" />
+            <Icon name="chevron-right" className="size-3" />
           </span>
         ) : null}
         <span className="sankey-view__label">{d.label}</span>

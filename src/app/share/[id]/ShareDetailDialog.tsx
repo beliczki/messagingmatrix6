@@ -1,22 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Download,
-  Grid as GridIcon,
-  Loader2,
-  MapPin,
-  Moon,
-  Square,
-  Sun,
-  X,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import ImagePreviewToggle from "./ImagePreviewToggle";
 import { bgClassFor, type PreviewBg } from "./preview-bg";
-import GoogleDriveIcon from "@/app/_components/GoogleDriveIcon";
 import AnnotationLayer, {
   type Annotation,
   type AnnotationMode,
@@ -235,7 +223,7 @@ export default function ShareDetailDialog({
             aria-label="Previous"
             className="share-detail-dialog__nav-prev rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
           >
-            <ChevronLeft className="size-4" />
+            <Icon name="chevron-left" className="size-4" />
           </button>
           <div className="share-detail-dialog__title-block flex min-w-0 items-baseline gap-2">
             <span className="share-detail-dialog__title font-mono text-sm font-semibold text-slate-900">
@@ -258,7 +246,7 @@ export default function ShareDetailDialog({
             aria-label="Next"
             className="share-detail-dialog__nav-next rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
           >
-            <ChevronRight className="size-4" />
+            <Icon name="chevron-right" className="size-4" />
           </button>
           <span className="share-detail-dialog__nav-counter text-xs text-slate-500">
             {navIndex + 1}/{navItems.length}
@@ -281,7 +269,7 @@ export default function ShareDetailDialog({
                 title={`Open ${item.creative.driveFolderName ?? "the delivery folder"} on Google Drive`}
                 className="share-detail-dialog__drive toolbar-btn inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
               >
-                <GoogleDriveIcon className="size-3" />
+                <Icon name="google-drive" className="size-3" />
                 Google Drive
               </a>
             ) : null}
@@ -290,7 +278,7 @@ export default function ShareDetailDialog({
               aria-label="Close"
               className="modal__close rounded p-1 text-slate-500 hover:bg-slate-100"
             >
-              <X className="size-5" />
+              <Icon name="close" className="size-5" />
             </button>
           </div>
         </header>
@@ -499,7 +487,7 @@ function MatrixPreviewStage({
     <div ref={stageRef} className="relative flex size-full items-center justify-center">
       {!useImage && html === null ? (
         <div className="flex items-center gap-1 text-xs text-slate-400">
-          <Loader2 className="size-3 animate-spin" />
+          <Icon name="spinner" className="size-3 animate-spin" />
           loading…
         </div>
       ) : !useImage && html === "" ? (
@@ -769,7 +757,7 @@ function CommentForm({
               : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
           )}
         >
-          <MapPin className="size-3" />
+          <Icon name="pin" className="size-3" />
           Pin
         </button>
         <button
@@ -783,7 +771,7 @@ function CommentForm({
               : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
           )}
         >
-          <Square className="size-3" />
+          <Icon name="square" className="size-3" />
           Box
         </button>
         {pending ? (
@@ -795,7 +783,7 @@ function CommentForm({
               className="annotation-pending__clear rounded p-0.5 hover:bg-amber-100"
               aria-label="Remove annotation"
             >
-              <X className="size-3" />
+              <Icon name="close" className="size-3" />
             </button>
           </span>
         ) : annotationMode !== "off" ? (
@@ -833,7 +821,7 @@ function CommentForm({
         disabled={submitting || !authorName.trim() || !body.trim()}
         className="toolbar-btn--primary inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1 text-[11px] font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {submitting ? <Loader2 className="size-3 animate-spin" /> : null}
+        {submitting ? <Icon name="spinner" className="size-3 animate-spin" /> : null}
         {submitting ? "Posting…" : "Post comment"}
       </button>
     </form>
@@ -848,9 +836,9 @@ function BgToggle({
   setBg: (b: PreviewBg) => void;
 }) {
   const opts: Array<{ k: PreviewBg; title: string; icon: React.ReactNode }> = [
-    { k: "light", title: "Light", icon: <Sun className="size-3.5" /> },
-    { k: "checker", title: "Checker", icon: <GridIcon className="size-3.5" /> },
-    { k: "dark", title: "Dark", icon: <Moon className="size-3.5" /> },
+    { k: "light", title: "Light", icon: <Icon name="sun" className="size-3.5" /> },
+    { k: "checker", title: "Checker", icon: <Icon name="grid" className="size-3.5" /> },
+    { k: "dark", title: "Dark", icon: <Icon name="moon" className="size-3.5" /> },
   ];
   return (
     <div className="bg-toggle flex overflow-hidden rounded-md border border-slate-200 bg-white">
@@ -896,7 +884,7 @@ function CreativeDownload({
       download={item.creative.fileName ?? item.file.filename}
       className="toolbar-btn inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
     >
-      <Download className="size-3" />
+      <Icon name="download" className="size-3" />
       Download
     </a>
   );
@@ -937,7 +925,7 @@ function MatrixDownload({
       onClick={go}
       className="toolbar-btn inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
     >
-      <Download className="size-3" />
+      <Icon name="download" className="size-3" />
       Download
     </button>
   );

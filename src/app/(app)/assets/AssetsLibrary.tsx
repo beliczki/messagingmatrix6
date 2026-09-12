@@ -2,14 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Upload as UploadIcon,
-  Filter as FilterIcon,
-  X,
-  Image as ImageIcon,
-  Loader2,
-  Package,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import { Masonry } from "../_components/Masonry";
@@ -208,7 +201,7 @@ export default function AssetsLibrary() {
         </div>
 
         <div className="input-box input-box--with-icon relative ml-2">
-          <FilterIcon className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+          <Icon name="filter" className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
           <input
             type="search"
             placeholder="Filter… filename, brand, keyword OR …"
@@ -238,7 +231,7 @@ export default function AssetsLibrary() {
             }}
             className="toolbar-btn flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
           >
-            <X className="size-3" />
+            <Icon name="close" className="size-3" />
             Clear
           </button>
         ) : null}
@@ -265,13 +258,13 @@ export default function AssetsLibrary() {
         ) : null}
         {assetsQ.isLoading ? (
           <div className="flex h-full items-center justify-center text-sm text-slate-500">
-            <Loader2 className="mr-2 size-4 animate-spin" />
+            <Icon name="spinner" className="mr-2 size-4 animate-spin" />
             Loading…
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <div className="empty-state assets-library__empty max-w-md rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-              <Package className="empty-state__icon mx-auto mb-2 size-8 text-slate-400" />
+              <Icon name="package" className="empty-state__icon mx-auto mb-2 size-8 text-slate-400" />
               <h2 className="empty-state__title text-sm font-semibold text-slate-900">
                 {assets.length === 0 ? "No assets yet" : "Nothing matches the filters"}
               </h2>
@@ -288,7 +281,7 @@ export default function AssetsLibrary() {
                   }}
                   className="toolbar-btn--primary mt-4 inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
                 >
-                  <UploadIcon className="size-3.5" />
+                  <Icon name="upload" className="size-3.5" />
                   Upload first asset
                 </button>
               ) : null}
@@ -442,7 +435,7 @@ function Card({
           />
         ) : (
           <div className="flex size-full items-center justify-center bg-slate-50 text-slate-300">
-            <ImageIcon className="size-8" />
+            <Icon name="image" className="size-8" />
           </div>
         )}
       </div>
@@ -503,7 +496,7 @@ function ImageTile({
         />
       ) : (
         <div className="media-tile__placeholder flex aspect-[4/3] items-center justify-center bg-slate-50 text-slate-300">
-          <ImageIcon className="size-8" />
+          <Icon name="image" className="size-8" />
         </div>
       )}
     </button>
@@ -553,7 +546,7 @@ function ListRow({
           />
         ) : (
           <div className="flex size-full items-center justify-center bg-slate-50 text-slate-300">
-            <ImageIcon className="size-5" />
+            <Icon name="image" className="size-5" />
           </div>
         )}
       </div>

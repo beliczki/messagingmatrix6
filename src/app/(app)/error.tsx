@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { RotateCcw, RefreshCw } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 
 // Route-segment error boundary for the authed app. A render throw inside any
 // page under /(app)/ is caught here instead of unmounting the whole tree — the
@@ -38,7 +38,7 @@ export default function AppError({
           onClick={() => reset()}
           className="toolbar-btn--primary inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
         >
-          <RotateCcw className="size-3.5" />
+          <Icon name="undo" className="size-3.5" />
           Try again
         </button>
         <button
@@ -46,7 +46,7 @@ export default function AppError({
           onClick={() => window.location.reload()}
           className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600"
         >
-          <RefreshCw className="size-3.5" />
+          <Icon name="refresh" className="size-3.5" />
           Reload page
         </button>
       </div>

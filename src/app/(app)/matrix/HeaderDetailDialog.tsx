@@ -8,18 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  X,
-  ChevronLeft,
-  ChevronRight,
-  Loader2,
-  Check,
-  CircleAlert,
-  Users,
-  ListTree,
-  Trash2,
-  RefreshCw,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import {
   type Audience,
@@ -757,7 +746,7 @@ export default function HeaderDetailDialog({
   }, [wide, setSplitPercent]);
 
   const heading = kind === "audience" ? "Audience" : "Topic";
-  const HeadingIcon = kind === "audience" ? Users : ListTree;
+  const headingIcon = kind === "audience" ? "users" : "tree";
 
   return (
     <ModalBackdrop onClose={onClose} className="z-50 items-stretch">
@@ -768,7 +757,7 @@ export default function HeaderDetailDialog({
         )}
       >
         <header className="matrix-header-dialog__header modal__header flex shrink-0 items-center gap-3 border-b border-slate-100 px-4 py-3">
-          <HeadingIcon className="size-4 text-slate-500" />
+          <Icon name={headingIcon} className="size-4 text-slate-500" />
           <span className="matrix-header-dialog__kind text-[10px] font-medium uppercase tracking-wider text-slate-500">
             {heading}
           </span>
@@ -798,9 +787,9 @@ export default function HeaderDetailDialog({
                 className="matrix-header-dialog__delete inline-flex items-center gap-1 text-xs text-slate-500 underline-offset-2 hover:text-slate-700 hover:underline disabled:cursor-not-allowed disabled:opacity-40"
               >
                 {deleting ? (
-                  <Loader2 className="size-3 animate-spin" />
+                  <Icon name="spinner" className="size-3 animate-spin" />
                 ) : (
-                  <Trash2 className="size-3" />
+                  <Icon name="delete" className="size-3" />
                 )}
                 Delete
               </button>
@@ -823,7 +812,7 @@ export default function HeaderDetailDialog({
                     : "border-slate-400",
                 )}
               >
-                {autoSave && <Check className="size-2.5" strokeWidth={3} />}
+                {autoSave && <Icon name="check" className="size-2.5" bold />}
               </span>
               Autosave
             </button>
@@ -855,7 +844,7 @@ export default function HeaderDetailDialog({
               aria-label="Close"
               className="modal__close rounded p-1 text-slate-500 hover:bg-slate-100"
             >
-              <X className="size-5" />
+              <Icon name="close" className="size-5" />
             </button>
           </div>
         </header>
@@ -973,7 +962,7 @@ function StepperStrip({
         aria-label="Previous"
         className="matrix-header-dialog__nav-prev rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
       >
-        <ChevronLeft className="size-4" />
+        <Icon name="chevron-left" className="size-4" />
       </button>
       <span className="matrix-header-dialog__mc-label font-mono text-sm font-semibold text-slate-900">
         {mcLabel}
@@ -986,7 +975,7 @@ function StepperStrip({
         aria-label="Next"
         className="matrix-header-dialog__nav-next rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
       >
-        <ChevronRight className="size-4" />
+        <Icon name="chevron-right" className="size-4" />
       </button>
       {steppable.length > 0 ? (
         <span className="matrix-header-dialog__nav-counter text-xs text-slate-500">
@@ -1382,9 +1371,9 @@ function KeyField({
               className="key-field__regenerate inline-flex shrink-0 items-center gap-1 self-start text-[10px] font-medium text-amber-700 underline-offset-2 hover:text-amber-900 hover:underline disabled:cursor-not-allowed disabled:opacity-40 dark:text-amber-300 dark:hover:text-amber-200"
             >
               {keyStatus.busy ? (
-                <Loader2 className="size-3 animate-spin" />
+                <Icon name="spinner" className="size-3 animate-spin" />
               ) : (
-                <RefreshCw className="size-3" />
+                <Icon name="refresh" className="size-3" />
               )}
               Regenerate dependencies
             </button>
@@ -1400,7 +1389,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
   if (state.kind === "saving") {
     return (
       <span className="save-indicator save-indicator--saving inline-flex items-center gap-1 text-xs text-slate-500">
-        <Loader2 className="size-3 animate-spin" />
+        <Icon name="spinner" className="size-3 animate-spin" />
         Saving…
       </span>
     );
@@ -1408,7 +1397,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
   if (state.kind === "saved") {
     return (
       <span className="save-indicator save-indicator--saved inline-flex items-center gap-1 text-xs text-emerald-700">
-        <Check className="size-3" />
+        <Icon name="check" className="size-3" />
         Saved
       </span>
     );
@@ -1416,7 +1405,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
   if (state.kind === "conflict") {
     return (
       <span className="save-indicator save-indicator--conflict inline-flex items-center gap-1 text-xs text-amber-700">
-        <CircleAlert className="size-3" />
+        <Icon name="alert" className="size-3" />
         Refreshed (someone else edited this)
       </span>
     );
@@ -1426,7 +1415,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
       className="save-indicator save-indicator--error inline-flex items-center gap-1 text-xs text-rose-700"
       title={state.message}
     >
-      <CircleAlert className="size-3" />
+      <Icon name="alert" className="size-3" />
       Save failed
     </span>
   );

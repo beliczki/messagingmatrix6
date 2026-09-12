@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { ExternalLink, ImageOff } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 
 // Preview surface for non-html template kinds (adobe / figma / after_effects).
 // Renders the template folder's `preview.{png,jpg,…}` via the existing
@@ -55,7 +55,7 @@ export function TemplatePreviewImage({
     />
   ) : (
     <div className="template-preview-image__empty flex size-full items-center justify-center text-slate-300">
-      <ImageOff className="size-6" />
+      <Icon name="image-off" className="size-6" />
     </div>
   );
 
@@ -81,7 +81,7 @@ export function TemplatePreviewImage({
         )}
       >
         {KIND_LABEL[kind]}
-        {showLink ? <ExternalLink className="size-2.5" /> : null}
+        {showLink ? <Icon name="external-link" className="size-2.5" /> : null}
       </span>
     </div>
   );

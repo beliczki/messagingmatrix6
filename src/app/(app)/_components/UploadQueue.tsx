@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, type ReactNode } from "react";
-import { Loader2, Check, CircleAlert, X, Trash2, Maximize2 } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { parseFilename, type ParseRules } from "@/lib/parse-filename";
 
@@ -331,7 +331,7 @@ export default function UploadQueuePanel({
               title="Open in the big window"
               className="upload-queue__expand rounded p-1 text-slate-500 hover:bg-slate-100"
             >
-              <Maximize2 className="size-4" />
+              <Icon name="expand-corners" className="size-4" />
             </button>
           ) : null}
           <button
@@ -342,7 +342,7 @@ export default function UploadQueuePanel({
             aria-label="Close queue"
             className="rounded p-1 text-slate-500 hover:bg-slate-100"
           >
-            <X className="size-4" />
+            <Icon name="close" className="size-4" />
           </button>
         </header>
         {open && batchForm ? (
@@ -399,7 +399,7 @@ function ItemRow({
           aria-label="Discard"
           className="upload-queue__item-discard rounded p-0.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600"
         >
-          <Trash2 className="size-3" />
+          <Icon name="delete" className="size-3" />
         </button>
       </div>
       {item.warnings.length > 0 && item.status === "metadata" ? (
@@ -421,13 +421,13 @@ function ItemRow({
 
 function StatusIcon({ status }: { status: QueueItem["status"] }) {
   if (status === "uploading" || status === "saving") {
-    return <Loader2 className="size-3 animate-spin text-slate-500" />;
+    return <Icon name="spinner" className="size-3 animate-spin text-slate-500" />;
   }
   if (status === "done") {
-    return <Check className="size-3 text-emerald-600" />;
+    return <Icon name="check" className="size-3 text-emerald-600" />;
   }
   if (status === "error") {
-    return <CircleAlert className="size-3 text-rose-600" />;
+    return <Icon name="alert" className="size-3 text-rose-600" />;
   }
   return <span className="size-3 rounded-full bg-slate-300" />;
 }

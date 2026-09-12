@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PocketKnife } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 
 type Props = {
@@ -61,7 +61,7 @@ export default function RightToolbar({
           title={collapsed ? "Open toolbar" : "Close toolbar"}
           className="right-toolbar__toggle rounded p-1.5 text-slate-500 hover:bg-slate-100"
         >
-          <PocketKnife className="size-5" />
+          <Icon name="toolbar" className="size-5" />
         </button>
       </div>
       <div className="right-toolbar__body flex flex-1 flex-col overflow-y-auto">

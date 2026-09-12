@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import type { StripItem, StripPage } from "@/lib/dashboard-creatives";
 import type { UploadedFile } from "../_components/MediaEntityDialog";
@@ -122,7 +122,7 @@ export default function CreativeStrip({ page, scope }: Props) {
         ))}
         {nextOffset !== null ? (
           <div className="creative-strip__loading flex h-[250px] w-[120px] shrink-0 items-center justify-center text-slate-300">
-            <Loader2 className="size-5 animate-spin" />
+            <Icon name="spinner" className="size-5 animate-spin" />
           </div>
         ) : null}
       </div>
@@ -211,7 +211,7 @@ function UploadedMedia({ item }: { item: Extract<StripItem, { kind: "uploaded" }
   }
   return (
     <div className="media-tile__placeholder flex h-[250px] w-[250px] items-center justify-center bg-slate-50 text-slate-300">
-      <ImageIcon className="size-8" />
+      <Icon name="image" className="size-8" />
     </div>
   );
 }
@@ -249,7 +249,7 @@ function StepButton({
   disabled: boolean;
   onClick: () => void;
 }) {
-  const Icon = side === "left" ? ChevronLeft : ChevronRight;
+  const icon = side === "left" ? "chevron-left" : "chevron-right";
   return (
     <button
       type="button"
@@ -262,7 +262,7 @@ function StepButton({
         disabled && "pointer-events-none opacity-0",
       )}
     >
-      <Icon className="size-4" />
+      <Icon name={icon} className="size-4" />
     </button>
   );
 }

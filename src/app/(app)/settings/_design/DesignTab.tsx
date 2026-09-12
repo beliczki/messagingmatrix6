@@ -5,18 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DEFAULT_LOOK_AND_FEEL } from "@/db/defaults";
 import { MC_STATUSES, statusSlug, type McStatus } from "@/lib/mc-status";
 import { FONT_OPTIONS, fontStack } from "@/lib/fonts";
-import {
-  Check,
-  ChevronDown,
-  FlaskConical,
-  Image as ImageIcon,
-  LayoutDashboard,
-  Plus,
-  Settings as SettingsIcon,
-  Table2,
-  Trash2,
-  X,
-} from "lucide-react";
+import { Icon, type IconName } from "@/app/_icons/Icon";
 import { SettingsHeaderActions } from "../SettingsView";
 
 type LookAndFeel = typeof DEFAULT_LOOK_AND_FEEL;
@@ -252,6 +241,21 @@ export function DesignTab() {
   );
 }
 
+// A cross-section of what the app draws: four nav icons, then the actions every
+// dialog and toolbar is built from.
+const PREVIEW_ICONS: IconName[] = [
+  "dashboard",
+  "table",
+  "image",
+  "flask",
+  "settings",
+  "add",
+  "check",
+  "delete",
+  "close",
+  "chevron-down",
+];
+
 /**
  * What the two Identity settings actually produce, side by side: the page
  * title set in the chosen face, the weights that face ships, and the icons the
@@ -276,19 +280,8 @@ function IdentityPreview({ title }: { title: string }) {
         <span className="font-bold">Bold 700</span>
       </p>
       <div className="design-tab__preview-icons mt-3 flex flex-wrap items-center gap-3 text-slate-500">
-        {[
-          LayoutDashboard,
-          Table2,
-          ImageIcon,
-          FlaskConical,
-          SettingsIcon,
-          Plus,
-          Check,
-          Trash2,
-          X,
-          ChevronDown,
-        ].map((Icon, i) => (
-          <Icon key={i} className="design-tab__preview-icon size-4" />
+        {PREVIEW_ICONS.map((name) => (
+          <Icon key={name} name={name} className="design-tab__preview-icon size-4" />
         ))}
       </div>
     </div>

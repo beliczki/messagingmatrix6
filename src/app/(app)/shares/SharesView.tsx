@@ -3,14 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Archive as ArchiveIcon,
-  ArchiveRestore,
-  ArrowDown,
-  ArrowUp,
-  Copy,
-  ExternalLink,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import ArchiveToggle from "../_components/ArchiveToggle";
@@ -295,9 +288,9 @@ export function SharesView() {
                   const sortIcon =
                     sort?.key === c.key ? (
                       sort.dir === "asc" ? (
-                        <ArrowUp className="size-3" />
+                        <Icon name="arrow-up" className="size-3" />
                       ) : (
-                        <ArrowDown className="size-3" />
+                        <Icon name="arrow-down" className="size-3" />
                       )
                     ) : null;
                   return (
@@ -498,7 +491,7 @@ export function SharesView() {
                     collapsed ? "size-9" : "px-3 py-1.5 text-xs font-medium",
                   )}
                 >
-                  <ArchiveIcon className="size-3.5" />
+                  <Icon name="archive" className="size-3.5" />
                   {!collapsed ? "Archive" : null}
                 </button>
 
@@ -517,7 +510,7 @@ export function SharesView() {
                     collapsed ? "size-9" : "px-3 py-1.5 text-xs font-medium",
                   )}
                 >
-                  <ArchiveRestore className="size-3.5" />
+                  <Icon name="archive-restore" className="size-3.5" />
                   {!collapsed ? "Restore" : null}
                 </button>
               </div>
@@ -540,7 +533,7 @@ export function SharesView() {
                     collapsed ? "size-9" : "flex-1 px-3 py-1.5 text-xs",
                   )}
                 >
-                  <Copy className="size-3.5" />
+                  <Icon name="copy" className="size-3.5" />
                   {!collapsed ? "Copy link" : null}
                 </button>
                 {selectedCount === 1 ? (
@@ -557,7 +550,7 @@ export function SharesView() {
                       collapsed ? "size-9" : "size-9 shrink-0",
                     )}
                   >
-                    <ExternalLink className="size-3.5" />
+                    <Icon name="external-link" className="size-3.5" />
                   </a>
                 ) : null}
               </div>

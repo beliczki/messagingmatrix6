@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { Pencil, Copy, Trash2, Loader2 } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import { type Column } from "./columns";
 import { type BlockingMc } from "@/lib/entities/mc-refs";
 import { type Versioned } from "./useRowAutosave";
@@ -60,7 +60,7 @@ export default function DimensionEditPanel<T extends Versioned>({
         aria-label={`Edit ${selected.length} selected`}
         className="dimension-edit-panel__collapsed-icon relative rounded p-1.5 text-slate-500 hover:bg-slate-100"
       >
-        <Pencil className="size-5" />
+        <Icon name="edit" className="size-5" />
         {selected.length > 0 ? (
           <span className="dimension-edit-panel__collapsed-badge absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-slate-900 px-1 text-[9px] font-medium text-white">
             {selected.length}
@@ -200,21 +200,21 @@ export default function DimensionEditPanel<T extends Versioned>({
           active={mode === "bulk-set"}
           onClick={() => setMode("bulk-set")}
           label="Set"
-          icon={<Pencil className="size-3" />}
+          icon={<Icon name="edit" className="size-3" />}
           modifier="bulk-set"
         />
         <ActionTab
           active={mode === "duplicate"}
           onClick={() => setMode("duplicate")}
           label="Duplicate"
-          icon={<Copy className="size-3" />}
+          icon={<Icon name="copy" className="size-3" />}
           modifier="duplicate"
         />
         <ActionTab
           active={mode === "delete"}
           onClick={() => setMode("delete")}
           label="Delete"
-          icon={<Trash2 className="size-3" />}
+          icon={<Icon name="delete" className="size-3" />}
           modifier="delete"
         />
       </div>
@@ -253,7 +253,7 @@ export default function DimensionEditPanel<T extends Versioned>({
             disabled={running}
             className="dimension-edit-panel__apply toolbar-btn--primary mt-1 inline-flex items-center justify-center gap-1 rounded bg-slate-900 px-2 py-1 text-xs text-white hover:bg-slate-800 disabled:opacity-50"
           >
-            {running ? <Loader2 className="size-3 animate-spin" /> : null}
+            {running ? <Icon name="spinner" className="size-3 animate-spin" /> : null}
             Apply ({selected.length})
           </button>
         </div>
@@ -271,7 +271,7 @@ export default function DimensionEditPanel<T extends Versioned>({
             disabled={running}
             className="dimension-edit-panel__apply toolbar-btn--primary inline-flex items-center justify-center gap-1 rounded bg-slate-900 px-2 py-1 text-xs text-white hover:bg-slate-800 disabled:opacity-50"
           >
-            {running ? <Loader2 className="size-3 animate-spin" /> : null}
+            {running ? <Icon name="spinner" className="size-3 animate-spin" /> : null}
             Duplicate ({selected.length})
           </button>
         </div>
@@ -288,7 +288,7 @@ export default function DimensionEditPanel<T extends Versioned>({
             disabled={running}
             className="dimension-edit-panel__apply dimension-edit-panel__apply--danger inline-flex items-center justify-center gap-1 rounded bg-rose-600 px-2 py-1 text-xs text-white hover:bg-rose-700 disabled:opacity-50"
           >
-            {running ? <Loader2 className="size-3 animate-spin" /> : null}
+            {running ? <Icon name="spinner" className="size-3 animate-spin" /> : null}
             Delete ({selected.length})
           </button>
         </div>

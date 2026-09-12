@@ -8,15 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Sun,
-  Moon,
-  Grid as GridIcon,
-  X,
-  ExternalLink,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { usePersistent, type Codec } from "../_components/usePersistent";
 import ModalBackdrop from "../_components/ModalBackdrop";
@@ -184,7 +176,7 @@ export default function MatrixDetailDialog({
             aria-label="Previous"
             className="media-entity-dialog__nav-prev rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
           >
-            <ChevronLeft className="size-4" />
+            <Icon name="chevron-left" className="size-4" />
           </button>
           <div className="media-entity-dialog__title-block flex min-w-0 items-baseline gap-2">
             <span
@@ -205,7 +197,7 @@ export default function MatrixDetailDialog({
             aria-label="Next"
             className="media-entity-dialog__nav-next rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
           >
-            <ChevronRight className="size-4" />
+            <Icon name="chevron-right" className="size-4" />
           </button>
           {navItems.length > 0 ? (
             <span className="media-entity-dialog__nav-counter text-xs text-slate-500">
@@ -224,7 +216,7 @@ export default function MatrixDetailDialog({
               className="toolbar-btn flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
               title="Open in matrix editor"
             >
-              <ExternalLink className="size-3.5" />
+              <Icon name="external-link" className="size-3.5" />
               Open in matrix
             </Link>
             <button
@@ -232,7 +224,7 @@ export default function MatrixDetailDialog({
               aria-label="Close"
               className="modal__close rounded p-1 text-slate-500 hover:bg-slate-100"
             >
-              <X className="size-5" />
+              <Icon name="close" className="size-5" />
             </button>
           </div>
         </header>
@@ -283,13 +275,13 @@ export default function MatrixDetailDialog({
               <span className="mr-auto text-[11px] text-slate-500">{item.liveSize}</span>
               <div className="bg-toggle flex overflow-hidden rounded border border-slate-300">
                 <BgBtn active={bg === "light"} onClick={() => setBg("light")} title="Light background">
-                  <Sun className="size-3.5" />
+                  <Icon name="sun" className="size-3.5" />
                 </BgBtn>
                 <BgBtn active={bg === "checker"} onClick={() => setBg("checker")} title="Checker background">
-                  <GridIcon className="size-3.5" />
+                  <Icon name="grid" className="size-3.5" />
                 </BgBtn>
                 <BgBtn active={bg === "dark"} onClick={() => setBg("dark")} title="Dark background">
-                  <Moon className="size-3.5" />
+                  <Icon name="moon" className="size-3.5" />
                 </BgBtn>
               </div>
             </div>

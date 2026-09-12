@@ -7,14 +7,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import {
-  Check,
-  Download,
-  Trash2,
-  ArrowUp,
-  ArrowDown,
-  Upload as UploadIcon,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import MultiPill, { ALL_NONE_QUICK_SELECT } from "../_components/MultiPill";
@@ -388,9 +381,9 @@ export function FeedsView() {
                   const sortIcon =
                     sort?.key === c.key ? (
                       sort.dir === "asc" ? (
-                        <ArrowUp className="size-3" />
+                        <Icon name="arrow-up" className="size-3" />
                       ) : (
-                        <ArrowDown className="size-3" />
+                        <Icon name="arrow-down" className="size-3" />
                       )
                     ) : null;
                   return (
@@ -608,7 +601,7 @@ export function FeedsView() {
                     collapsed ? "size-9" : "px-3 py-1.5 text-xs font-medium",
                   )}
                 >
-                  <Check className="size-3.5" />
+                  <Icon name="check" className="size-3.5" />
                   {!collapsed ? "Set as Published" : null}
                 </button>
               </div>
@@ -631,7 +624,7 @@ export function FeedsView() {
                     collapsed ? "size-9" : "flex-1 px-3 py-1.5 text-xs",
                   )}
                 >
-                  <Download className="size-3.5" />
+                  <Icon name="download" className="size-3.5" />
                   {!collapsed ? "Download" : null}
                 </button>
                 <button
@@ -649,7 +642,7 @@ export function FeedsView() {
                     collapsed ? "size-9" : "size-9 shrink-0",
                   )}
                 >
-                  <Trash2 className="size-3.5" />
+                  <Icon name="delete" className="size-3.5" />
                 </button>
               </div>
             ) : null}
@@ -671,7 +664,7 @@ export function FeedsView() {
                   collapsed ? "size-9" : "px-3 py-1.5 text-xs",
                 )}
               >
-                <UploadIcon className="size-3.5" />
+                <Icon name="upload" className="size-3.5" />
                 {!collapsed
                   ? uploadM.isPending
                     ? "Uploading…"

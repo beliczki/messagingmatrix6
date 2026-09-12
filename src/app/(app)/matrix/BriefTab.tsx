@@ -17,7 +17,7 @@
 // (passed in as `intake`, which a placed card simply does not have) because
 // they answer the same question the slide does. Promote is left with WHERE.
 import { useEffect, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import Field from "./EditorField";
 import PlannedTopicField from "./PlannedTopicField";
@@ -251,7 +251,7 @@ export default function BriefTab({
               rel="noreferrer"
               className="inline-flex items-center gap-1 normal-case tracking-normal text-slate-500 hover:text-slate-900"
             >
-              <ExternalLink className="size-3" />
+              <Icon name="external-link" className="size-3" />
               Open in Slides
             </a>
           </div>

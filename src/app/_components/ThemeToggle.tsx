@@ -1,6 +1,6 @@
 "use client";
 
-import { Moon, Sun } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { useThemeSwitch } from "./useThemeSwitch";
 
@@ -29,7 +29,7 @@ export default function ThemeToggle({ className }: { className?: string }) {
         title="Light mode"
         className={clsx(btn, !dark ? "bg-slate-900 text-white" : inactive)}
       >
-        <Sun className="size-3.5" />
+        <Icon name="sun" className="size-3.5" />
       </button>
       <button
         type="button"
@@ -39,7 +39,7 @@ export default function ThemeToggle({ className }: { className?: string }) {
         title="Dark mode"
         className={clsx(btn, dark ? "bg-slate-900 text-white" : inactive)}
       >
-        <Moon className="size-3.5" />
+        <Icon name="moon" className="size-3.5" />
       </button>
     </div>
   );

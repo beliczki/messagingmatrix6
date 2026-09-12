@@ -17,17 +17,7 @@
 // filter habit works on both pages.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  Archive,
-  ArrowUpRight,
-  Filter as FilterIcon,
-  FlaskConical,
-  Loader2,
-  MoreHorizontal,
-  Plus,
-  Trash2,
-  X,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import { Masonry } from "../_components/Masonry";
@@ -387,7 +377,7 @@ export default function DraftsView() {
           </div>
 
           <div className="input-box input-box--with-icon relative ml-2">
-            <FilterIcon className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
+            <Icon name="filter" className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
               placeholder="Filter… t: mc: OR …"
@@ -416,7 +406,7 @@ export default function DraftsView() {
               }}
               className="toolbar-btn flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
             >
-              <X className="size-3" />
+              <Icon name="close" className="size-3" />
               Clear
             </button>
           ) : null}
@@ -429,13 +419,13 @@ export default function DraftsView() {
         <div className="drafts-view__scroll flex-1 overflow-auto p-4">
           {draftsQ.isLoading ? (
             <div className="flex h-full items-center justify-center text-sm text-slate-500">
-              <Loader2 className="mr-2 size-4 animate-spin" />
+              <Icon name="spinner" className="mr-2 size-4 animate-spin" />
               Loading…
             </div>
           ) : drafts.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <div className="empty-state drafts-view__empty max-w-md rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-                <FlaskConical className="empty-state__icon mx-auto mb-2 size-8 text-slate-400" />
+                <Icon name="flask" className="empty-state__icon mx-auto mb-2 size-8 text-slate-400" />
                 <h2 className="empty-state__title text-sm font-semibold text-slate-900">
                   Nothing in progress
                 </h2>
@@ -450,7 +440,7 @@ export default function DraftsView() {
           ) : visible.length === 0 ? (
             <div className="flex h-full items-center justify-center">
               <div className="empty-state drafts-view__empty max-w-md rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
-                <FlaskConical className="empty-state__icon mx-auto mb-2 size-8 text-slate-400" />
+                <Icon name="flask" className="empty-state__icon mx-auto mb-2 size-8 text-slate-400" />
                 <h2 className="empty-state__title text-sm font-semibold text-slate-900">
                   No draft matches the filter
                 </h2>
@@ -489,7 +479,7 @@ export default function DraftsView() {
                 title="New draft"
                 className="drafts-panel__collapsed-icon rounded p-1.5 text-slate-500 hover:bg-slate-100"
               >
-                <Plus className="size-5" />
+                <Icon name="add" className="size-5" />
               </button>
             </>
           ) : (
@@ -504,7 +494,7 @@ export default function DraftsView() {
                 onClick={newDraft}
                 className="toolbar-btn toolbar-btn--primary drafts-panel__new flex items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 py-2 text-xs font-medium text-white hover:bg-slate-800"
               >
-                <Plus className="size-4" />
+                <Icon name="add" className="size-4" />
                 New draft
               </button>
             </div>
@@ -832,7 +822,7 @@ function DraftTileMenu({
           open ? "opacity-100" : "opacity-0 group-hover:opacity-100",
         )}
       >
-        <MoreHorizontal className="size-4" />
+        <Icon name="more" className="size-4" />
       </button>
 
       {/* Drops UP: the button sits at the bottom edge of a card in a masonry
@@ -849,7 +839,7 @@ function DraftTileMenu({
             }}
             className="drafts-tile__menu-item flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
           >
-            <ArrowUpRight className="size-3.5 shrink-0" />
+            <Icon name="arrow-up-right" className="size-3.5 shrink-0" />
             Promote…
           </button>
 
@@ -862,7 +852,7 @@ function DraftTileMenu({
             title={`Shelve ${what} — the number stays retired`}
             className="drafts-tile__menu-item flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
           >
-            <Archive className="size-3.5 shrink-0" />
+            <Icon name="archive" className="size-3.5 shrink-0" />
             Archive{many ? ` all ${rows.length}` : ""}
           </button>
           <button
@@ -873,7 +863,7 @@ function DraftTileMenu({
             }
             className="drafts-tile__menu-item toolbar-btn--danger flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-rose-700 hover:bg-rose-50 disabled:opacity-50"
           >
-            <Trash2 className="size-3.5 shrink-0" />
+            <Icon name="delete" className="size-3.5 shrink-0" />
             {confirming ? `Delete ${what}, free the number?` : "Delete"}
           </button>
 

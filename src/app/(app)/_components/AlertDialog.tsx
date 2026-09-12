@@ -10,13 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Info,
-  ShieldAlert,
-  X,
-} from "lucide-react";
+import { Icon, type IconName } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import ModalBackdrop from "./ModalBackdrop";
 
@@ -113,31 +107,31 @@ export function useAlertDialog(): AlertDialogContextValue {
 const VARIANT_STYLES: Record<
   AlertVariant,
   {
-    Icon: typeof Info;
+    icon: IconName;
     iconWrap: string;
     confirmBtn: string;
   }
 > = {
   info: {
-    Icon: Info,
+    icon: "info",
     iconWrap: "alert-dialog__icon--info bg-blue-50 text-blue-600",
     confirmBtn:
       "toolbar-btn--primary bg-slate-900 text-white hover:bg-slate-800",
   },
   success: {
-    Icon: CheckCircle2,
+    icon: "check-circle",
     iconWrap: "alert-dialog__icon--success bg-emerald-50 text-emerald-600",
     confirmBtn:
       "toolbar-btn--primary bg-slate-900 text-white hover:bg-slate-800",
   },
   warning: {
-    Icon: AlertTriangle,
+    icon: "warning",
     iconWrap: "alert-dialog__icon--warning bg-amber-50 text-amber-600",
     confirmBtn:
       "toolbar-btn--primary bg-amber-600 text-white hover:bg-amber-700",
   },
   danger: {
-    Icon: ShieldAlert,
+    icon: "shield-alert",
     iconWrap: "alert-dialog__icon--danger bg-rose-50 text-rose-600",
     confirmBtn:
       "toolbar-btn--primary bg-rose-600 text-white hover:bg-rose-700",
@@ -175,7 +169,7 @@ function AlertDialog({
 
   const variant = dialog.variant ?? (dialog.kind === "confirm" ? "warning" : "info");
   const styles = VARIANT_STYLES[variant];
-  const { Icon } = styles;
+  const { icon } = styles;
   const confirmLabel = dialog.confirmLabel ?? (dialog.kind === "confirm" ? "Confirm" : "OK");
   const cancelLabel = dialog.cancelLabel ?? "Cancel";
 
@@ -197,7 +191,7 @@ function AlertDialog({
           aria-label="Close dialog"
           className="modal__close absolute right-3 top-3 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
         >
-          <X className="size-4" />
+          <Icon name="close" className="size-4" />
         </button>
 
         <div className="alert-dialog__body flex items-start gap-3">
@@ -208,7 +202,7 @@ function AlertDialog({
             )}
             aria-hidden
           >
-            <Icon className="size-5" />
+            <Icon name={icon} className="size-5" />
           </span>
           <div className="alert-dialog__text min-w-0 flex-1 pt-1">
             <h2

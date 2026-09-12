@@ -8,19 +8,7 @@ import {
   type ReactNode,
 } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  CircleAlert,
-  Loader2,
-  Sun,
-  Moon,
-  Grid as GridIcon,
-  X,
-  Archive as ArchiveIcon,
-  ArchiveRestore,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import ScaledMediaPreview, { parseDimensions } from "./ScaledMediaPreview";
 import { usePersistent, type Codec } from "./usePersistent";
@@ -332,7 +320,7 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
             aria-label="Previous"
             className="media-entity-dialog__nav-prev rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
           >
-            <ChevronLeft className="size-4" />
+            <Icon name="chevron-left" className="size-4" />
           </button>
           <div className="media-entity-dialog__title-block flex min-w-0 items-baseline gap-2">
             <span
@@ -353,7 +341,7 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
             aria-label="Next"
             className="media-entity-dialog__nav-next rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
           >
-            <ChevronRight className="size-4" />
+            <Icon name="chevron-right" className="size-4" />
           </button>
           {entities.length > 0 ? (
             <span className="media-entity-dialog__nav-counter text-xs text-slate-500">
@@ -384,7 +372,7 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
                       aria-label="Previous version"
                       className="nav-stepper__btn nav-stepper__btn--prev rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
                     >
-                      <ChevronLeft className="size-3.5" />
+                      <Icon name="chevron-left" className="size-3.5" />
                     </button>
                     <span className="nav-stepper__counter text-xs text-slate-500">
                       {versionNav.versions[vIdx]?.label} · {vIdx + 1}/{versionNav.versions.length}
@@ -396,7 +384,7 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
                       aria-label="Next version"
                       className="nav-stepper__btn nav-stepper__btn--next rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
                     >
-                      <ChevronRight className="size-3.5" />
+                      <Icon name="chevron-right" className="size-3.5" />
                     </button>
                   </div>
                 );
@@ -412,7 +400,7 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
                 className="toolbar-btn flex items-center gap-1 rounded border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
                 title="Restore from archive"
               >
-                <ArchiveRestore className="size-3.5" />
+                <Icon name="archive-restore" className="size-3.5" />
                 Restore
               </button>
             ) : (
@@ -422,7 +410,7 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
                 className="toolbar-btn flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
                 title="Archive"
               >
-                <ArchiveIcon className="size-3.5" />
+                <Icon name="archive" className="size-3.5" />
                 Archive
               </button>
             )}
@@ -444,7 +432,7 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
                     : "border-slate-400",
                 )}
               >
-                {autoSave && <Check className="size-2.5" strokeWidth={3} />}
+                {autoSave && <Icon name="check" className="size-2.5" bold />}
               </span>
               Autosave
             </button>
@@ -476,7 +464,7 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
               aria-label="Close"
               className="modal__close rounded p-1 text-slate-500 hover:bg-slate-100"
             >
-              <X className="size-5" />
+              <Icon name="close" className="size-5" />
             </button>
           </div>
         </header>
@@ -530,13 +518,13 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
             <div className="media-entity-dialog__preview-toolbar flex h-10 shrink-0 items-center justify-end gap-1 border-b border-slate-200 bg-white px-3">
               <div className="bg-toggle flex overflow-hidden rounded border border-slate-300">
                 <BgBtn active={bg === "light"} onClick={() => setBg("light")} title="Light background">
-                  <Sun className="size-3.5" />
+                  <Icon name="sun" className="size-3.5" />
                 </BgBtn>
                 <BgBtn active={bg === "checker"} onClick={() => setBg("checker")} title="Checker background">
-                  <GridIcon className="size-3.5" />
+                  <Icon name="grid" className="size-3.5" />
                 </BgBtn>
                 <BgBtn active={bg === "dark"} onClick={() => setBg("dark")} title="Dark background">
-                  <Moon className="size-3.5" />
+                  <Icon name="moon" className="size-3.5" />
                 </BgBtn>
               </div>
             </div>
@@ -576,7 +564,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
   if (state.kind === "saving") {
     return (
       <span className="save-indicator save-indicator--saving inline-flex items-center gap-1 text-xs text-slate-500">
-        <Loader2 className="size-3 animate-spin" />
+        <Icon name="spinner" className="size-3 animate-spin" />
         Saving…
       </span>
     );
@@ -584,7 +572,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
   if (state.kind === "saved") {
     return (
       <span className="save-indicator save-indicator--saved inline-flex items-center gap-1 text-xs text-emerald-700">
-        <Check className="size-3" />
+        <Icon name="check" className="size-3" />
         Saved
       </span>
     );
@@ -592,7 +580,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
   if (state.kind === "conflict") {
     return (
       <span className="save-indicator save-indicator--conflict inline-flex items-center gap-1 text-xs text-amber-700">
-        <CircleAlert className="size-3" />
+        <Icon name="alert" className="size-3" />
         Refreshed (someone else edited this)
       </span>
     );
@@ -602,7 +590,7 @@ function SaveIndicator({ state }: { state: SaveState }) {
       className="save-indicator save-indicator--error inline-flex items-center gap-1 text-xs text-rose-700"
       title={state.message}
     >
-      <CircleAlert className="size-3" />
+      <Icon name="alert" className="size-3" />
       Save failed
     </span>
   );

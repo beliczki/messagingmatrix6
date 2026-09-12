@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Code2, Loader2, X } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import {
@@ -350,9 +350,9 @@ export default function MonitoringTable({
         <span className="truncate">{label}</span>
         {active ? (
           sort.dir === "asc" ? (
-            <ArrowUp className="size-3 shrink-0" />
+            <Icon name="arrow-up" className="size-3 shrink-0" />
           ) : (
-            <ArrowDown className="size-3 shrink-0" />
+            <Icon name="arrow-down" className="size-3 shrink-0" />
           )
         ) : null}
       </button>
@@ -440,7 +440,7 @@ export default function MonitoringTable({
             }}
             className="toolbar-btn flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
           >
-            <X className="size-3" />
+            <Icon name="close" className="size-3" />
             Clear
           </button>
         ) : null}
@@ -457,7 +457,7 @@ export default function MonitoringTable({
       <div className="monitoring-table__body flex-1 overflow-auto">
         {loading && !data ? (
           <p className="px-4 py-4 text-sm text-slate-500">
-            <Loader2 className="mr-2 inline size-4 animate-spin" />
+            <Icon name="spinner" className="mr-2 inline size-4 animate-spin" />
             Loading…
           </p>
         ) : error ? (
@@ -528,7 +528,7 @@ export default function MonitoringTable({
                         </div>
                       ) : (
                         <div className="flex h-10 w-14 items-center justify-center rounded border border-dashed border-slate-200 text-slate-300">
-                          <Code2 className="size-4" />
+                          <Icon name="code" className="size-4" />
                         </div>
                       )}
                     </td>

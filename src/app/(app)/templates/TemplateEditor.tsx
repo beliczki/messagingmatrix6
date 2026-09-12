@@ -8,24 +8,7 @@ import { css as cssLang } from "@codemirror/lang-css";
 import { json as jsonLang } from "@codemirror/lang-json";
 import { javascript as jsLang } from "@codemirror/lang-javascript";
 import { oneDark } from "@codemirror/theme-one-dark";
-import {
-  Plus,
-  Save,
-  Check,
-  AlertCircle,
-  AlertTriangle,
-  Loader2,
-  ChevronLeft,
-  ChevronRight,
-  Type,
-  Image as ImageIcon,
-  Video,
-  Link as LinkIcon,
-  Tag as TagIcon,
-  Palette,
-  Filter,
-  Star,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import PreviewPane from "../_components/PreviewPane";
@@ -147,17 +130,17 @@ function TypeIcon({ type, size = 14, color }: { type: string; size?: number; col
   const props = { size, color };
   switch (type) {
     case "image":
-      return <ImageIcon {...props} />;
+      return <Icon name="image" {...props} />;
     case "video":
-      return <Video {...props} />;
+      return <Icon name="video" {...props} />;
     case "url":
-      return <LinkIcon {...props} />;
+      return <Icon name="link" {...props} />;
     case "tag":
-      return <TagIcon {...props} />;
+      return <Icon name="tag" {...props} />;
     case "style":
-      return <Palette {...props} />;
+      return <Icon name="palette" {...props} />;
     default:
-      return <Type {...props} />;
+      return <Icon name="text" {...props} />;
   }
 }
 
@@ -654,7 +637,7 @@ export default function TemplateEditor() {
                   : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
               )}
             >
-              <Star
+              <Icon name="star"
                 className={clsx(
                   "size-3.5",
                   defaultTemplate === activeTemplate && "fill-amber-400",
@@ -682,7 +665,7 @@ export default function TemplateEditor() {
             className="nav-stepper__btn nav-stepper__btn--prev rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             title="Previous MC"
           >
-            <ChevronLeft className="size-3.5" />
+            <Icon name="chevron-left" className="size-3.5" />
           </button>
           <div className="nav-stepper__select-wrap flex items-center gap-1.5 rounded border border-slate-300 bg-white px-2 py-1">
             <span
@@ -718,7 +701,7 @@ export default function TemplateEditor() {
             className="nav-stepper__btn nav-stepper__btn--next rounded border border-slate-300 bg-white p-1 text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
             title="Next MC"
           >
-            <ChevronRight className="size-3.5" />
+            <Icon name="chevron-right" className="size-3.5" />
           </button>
         </div>
       </header>
@@ -784,7 +767,7 @@ export default function TemplateEditor() {
                   title={filesOpen ? "Close files panel" : "Open files panel"}
                   aria-label="Toggle files panel"
                 >
-                  {filesOpen ? <ChevronLeft className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                  {filesOpen ? <Icon name="chevron-left" className="size-3.5" /> : <Icon name="chevron-right" className="size-3.5" />}
                 </button>
                 <span className="template-editor__code-filename font-mono text-slate-700">
                   {activeFile ?? "—"}
@@ -807,9 +790,9 @@ export default function TemplateEditor() {
                   title="Save (⌘/Ctrl+S)"
                 >
                   {saveState === "saving" ? (
-                    <Loader2 className="size-3 animate-spin" />
+                    <Icon name="spinner" className="size-3 animate-spin" />
                   ) : (
-                    <Save className="size-3" />
+                    <Icon name="save" className="size-3" />
                   )}
                   Save
                 </button>
@@ -825,7 +808,7 @@ export default function TemplateEditor() {
               </div>
             ) : fileQ.isLoading ? (
               <div className="template-editor__code-empty flex flex-1 items-center justify-center text-sm text-slate-500">
-                <Loader2 className="mr-2 size-4 animate-spin" />
+                <Icon name="spinner" className="mr-2 size-4 animate-spin" />
                 Loading…
               </div>
             ) : (
@@ -882,7 +865,7 @@ export default function TemplateEditor() {
                   title={bindingsOpen ? "Close bindings panel" : "Open bindings panel"}
                   aria-label="Toggle bindings panel"
                 >
-                  {bindingsOpen ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
+                  {bindingsOpen ? <Icon name="chevron-right" className="size-3.5" /> : <Icon name="chevron-left" className="size-3.5" />}
                 </button>
               }
             />
@@ -921,7 +904,7 @@ function FilesPanel({
             className="template-files-panel__close rounded p-1 text-slate-500 hover:bg-slate-100"
             title="Close"
           >
-            <ChevronLeft className="size-4" />
+            <Icon name="chevron-left" className="size-4" />
           </button>
         </div>
         <div className="template-files-panel__list flex-1 overflow-auto p-2">
@@ -996,11 +979,11 @@ function BindingsPanel({
               className="template-bindings-panel__close rounded p-1 text-slate-500 hover:bg-slate-100"
               title="Close"
             >
-              <ChevronRight className="size-4" />
+              <Icon name="chevron-right" className="size-4" />
             </button>
           </div>
           <div className="template-bindings-panel__type-filter flex flex-wrap items-center gap-1">
-            <Filter className="mr-0.5 size-3.5 text-slate-400" />
+            <Icon name="filter" className="mr-0.5 size-3.5 text-slate-400" />
             {(["text", "image", "video", "url", "tag", "style"] as PHType[]).map((t) => (
               <button
                 key={t}
@@ -1052,7 +1035,7 @@ function BindingsPanel({
                   <span className="binding-card__arrow text-slate-300">←</span>
                   {unknown ? (
                     <span className="binding-card__warning flex items-center gap-1 text-xs font-medium text-rose-700">
-                      <AlertTriangle className="size-3" />
+                      <Icon name="warning" className="size-3" />
                       Unbound
                     </span>
                   ) : (
@@ -1197,21 +1180,21 @@ function SaveIndicator({
   if (state === "saving") {
     return (
       <span className="save-indicator save-indicator--saving flex items-center gap-1 text-xs text-slate-500">
-        <Loader2 className="size-3 animate-spin" /> saving…
+        <Icon name="spinner" className="size-3 animate-spin" /> saving…
       </span>
     );
   }
   if (state === "saved") {
     return (
       <span className="save-indicator save-indicator--saved flex items-center gap-1 text-xs text-emerald-700">
-        <Check className="size-3" /> saved
+        <Icon name="check" className="size-3" /> saved
       </span>
     );
   }
   if (state === "error") {
     return (
       <span className="save-indicator save-indicator--error flex items-center gap-1 text-xs text-rose-700" title={error ?? ""}>
-        <AlertCircle className="size-3" /> {error ?? "error"}
+        <Icon name="alert" className="size-3" /> {error ?? "error"}
       </span>
     );
   }
@@ -1257,7 +1240,7 @@ function NewTemplateButton({ onCreated }: { onCreated: (name: string) => void })
         onClick={() => setOpen(true)}
         className="toolbar-btn--primary flex items-center gap-1 rounded bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
       >
-        <Plus className="size-3.5" /> New
+        <Icon name="add" className="size-3.5" /> New
       </button>
     );
   }
@@ -1278,7 +1261,7 @@ function NewTemplateButton({ onCreated }: { onCreated: (name: string) => void })
         disabled={busy}
         className="toolbar-btn--primary flex items-center gap-1 rounded bg-slate-900 px-2 py-1 text-xs font-medium text-white disabled:opacity-50"
       >
-        {busy ? <Loader2 className="size-3 animate-spin" /> : <Save className="size-3" />}
+        {busy ? <Icon name="spinner" className="size-3 animate-spin" /> : <Icon name="save" className="size-3" />}
         Create
       </button>
       <button

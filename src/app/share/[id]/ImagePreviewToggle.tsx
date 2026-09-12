@@ -1,7 +1,7 @@
 "use client";
 
 import clsx from "clsx";
-import { Check, Image as ImageIcon } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 
 // Shared by the gallery toolbar and the detail dialog header so the two cannot
 // drift apart visually — and, more importantly, so the single piece of state
@@ -50,9 +50,9 @@ export default function ImagePreviewToggle({
           on ? "border-white bg-white text-slate-900" : "border-slate-300",
         )}
       >
-        {on ? <Check className="size-2.5" strokeWidth={3} /> : null}
+        {on ? <Icon name="check" className="size-2.5" bold /> : null}
       </span>
-      <ImageIcon className="size-3.5" />
+      <Icon name="image" className="size-3.5" />
       {compact ? null : "Image preview"}
       {hasCount ? (
       <span

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { Copy, ExternalLink, Loader2, Share2, X } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import ModalBackdrop from "../_components/ModalBackdrop";
 
 type Props = {
@@ -116,7 +116,7 @@ export default function ShareCreateDialog({
     >
       <div className="share-create-dialog modal m-auto flex w-full max-w-md flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
         <header className="modal__header flex shrink-0 items-center gap-2 border-b border-slate-100 px-5 py-3">
-          <Share2 className="size-4 text-slate-700" />
+          <Icon name="share" className="size-4 text-slate-700" />
           <h2 className="modal__title text-sm font-semibold text-slate-900">
             {created ? "Share created" : "Share selected creatives"}
           </h2>
@@ -126,7 +126,7 @@ export default function ShareCreateDialog({
             aria-label="Close"
             className="modal__close ml-auto rounded p-1 text-slate-500 hover:bg-slate-100"
           >
-            <X className="size-4" />
+            <Icon name="close" className="size-4" />
           </button>
         </header>
 
@@ -147,7 +147,7 @@ export default function ShareCreateDialog({
                   onClick={copyUrl}
                   className="toolbar-btn inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
                 >
-                  <Copy className="size-3" />
+                  <Icon name="copy" className="size-3" />
                   {copied ? "Copied" : "Copy"}
                 </button>
                 <a
@@ -156,7 +156,7 @@ export default function ShareCreateDialog({
                   rel="noreferrer"
                   className="toolbar-btn inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 hover:bg-slate-100"
                 >
-                  <ExternalLink className="size-3" />
+                  <Icon name="external-link" className="size-3" />
                   Open
                 </a>
               </div>
@@ -206,7 +206,7 @@ export default function ShareCreateDialog({
                 disabled={submitting || totalCount === 0}
                 className="toolbar-btn--primary inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {submitting ? <Loader2 className="size-3.5 animate-spin" /> : <Share2 className="size-3.5" />}
+                {submitting ? <Icon name="spinner" className="size-3.5 animate-spin" /> : <Icon name="share" className="size-3.5" />}
                 {submitting ? "Creating…" : "Create share"}
               </button>
             </form>

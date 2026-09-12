@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Image as ImageIcon } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 
 // Renders a file thumbnail at its natural pixel size when the container has
 // room, or transform-scales it down to fit. Mirrors PreviewPane's iframe
@@ -54,7 +54,7 @@ export default function ScaledMediaPreview({
     >
       {!hasFile ? (
         <div className="flex size-full items-center justify-center text-slate-400">
-          <ImageIcon className="size-12" />
+          <Icon name="image" className="size-12" />
         </div>
       ) : knownDims ? (
         <div

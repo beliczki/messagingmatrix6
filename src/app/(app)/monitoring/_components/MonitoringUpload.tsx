@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { CheckCircle2 } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import ToolbarUpload from "../../_components/ToolbarUpload";
 
 type ImportResult = {
@@ -88,7 +88,7 @@ export default function MonitoringUpload({
         {result ? (
           <div className="monitoring-upload__result rounded-md border border-emerald-200 bg-emerald-50 p-2 text-[11px] text-emerald-800">
             <div className="flex items-center gap-1.5 font-semibold">
-              <CheckCircle2 className="size-3.5" />
+              <Icon name="check-circle" className="size-3.5" />
               {result.periodFrom.slice(0, 10)} – {result.periodTo.slice(0, 10)}
             </div>
             <div className="mt-0.5 text-emerald-700">

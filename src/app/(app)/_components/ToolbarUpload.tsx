@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import clsx from "clsx";
-import { Loader2, Upload as UploadIcon } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 
 /**
  * The upload affordance at the bottom of a right toolbar.
@@ -64,9 +64,9 @@ export default function ToolbarUpload({
         )}
       >
         {busy ? (
-          <Loader2 className="size-4 animate-spin" />
+          <Icon name="spinner" className="size-4 animate-spin" />
         ) : (
-          <UploadIcon className="size-4" />
+          <Icon name="upload" className="size-4" />
         )}
       </button>
     );
@@ -106,12 +106,12 @@ export default function ToolbarUpload({
       >
         {busy ? (
           <>
-            <Loader2 className="size-5 animate-spin" />
+            <Icon name="spinner" className="size-5 animate-spin" />
             Uploading…
           </>
         ) : (
           <>
-            <UploadIcon className="size-5" />
+            <Icon name="upload" className="size-5" />
             {hint}
           </>
         )}

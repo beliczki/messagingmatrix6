@@ -7,21 +7,10 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  Check,
-  ChevronDown,
-  Columns3,
-  Download,
-  ImageIcon,
-  LayoutGrid,
-  List as ListIcon,
-  Loader2,
-  MessageSquare,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import PublicMatrixPreview from "./PublicMatrixPreview";
 import ImagePreviewToggle from "./ImagePreviewToggle";
-import GoogleDriveIcon from "@/app/_components/GoogleDriveIcon";
 import ThemeToggle from "@/app/_components/ThemeToggle";
 import ShareActionsMenu from "./ShareActionsMenu";
 import { bgClassFor, type PreviewBg } from "./preview-bg";
@@ -435,7 +424,7 @@ export default function ShareGallery({
           <div className="share-gallery__meta flex shrink-0 items-center gap-2 text-[11px] text-slate-500 sm:ml-auto">
             {commentsLoaded ? (
               <span className="inline-flex items-center gap-1">
-                <MessageSquare className="size-3" />
+                <Icon name="comment" className="size-3" />
                 {comments.length} comment{comments.length === 1 ? "" : "s"}
               </span>
             ) : null}
@@ -471,7 +460,7 @@ export default function ShareGallery({
                 : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
             )}
           >
-            <MessageSquare className="size-3.5" />
+            <Icon name="comment" className="size-3.5" />
             Commented only
           </button>
           <ShareActionsMenu
@@ -512,9 +501,9 @@ export default function ShareGallery({
               className="toolbar-btn--primary inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {zipping ? (
-                <Loader2 className="size-3.5 animate-spin" />
+                <Icon name="spinner" className="size-3.5 animate-spin" />
               ) : (
-                <Download className="size-3.5" />
+                <Icon name="download" className="size-3.5" />
               )}
               {zipping
                 ? `Bundling… ${zipProgress}%`
@@ -632,9 +621,9 @@ function ViewSwitcher({
 }) {
   // Matches CreativeLibrary's LibraryViewSwitcher icon set + active style.
   const opts: Array<{ k: ViewMode; label: string; icon: React.ReactNode }> = [
-    { k: "grid", label: "Grid", icon: <LayoutGrid className="size-3.5" /> },
-    { k: "list", label: "List", icon: <ListIcon className="size-3.5" /> },
-    { k: "masonry", label: "Masonry", icon: <Columns3 className="size-3.5" /> },
+    { k: "grid", label: "Grid", icon: <Icon name="grid-tiles" className="size-3.5" /> },
+    { k: "list", label: "List", icon: <Icon name="list" className="size-3.5" /> },
+    { k: "masonry", label: "Masonry", icon: <Icon name="columns" className="size-3.5" /> },
   ];
   return (
     <div className="toggle-group flex rounded-md border border-slate-200 bg-white p-0.5 text-xs">
@@ -707,7 +696,7 @@ function DriveFolderButton({ folders }: { folders: DriveFolder[] }) {
         title={`Open ${f.name} on Google Drive`}
         className={btnCls}
       >
-        <GoogleDriveIcon />
+        <Icon name="google-drive" className="size-3.5" />
         Google Drive
       </a>
     );
@@ -721,12 +710,12 @@ function DriveFolderButton({ folders }: { folders: DriveFolder[] }) {
         title="Open a delivery folder on Google Drive"
         className={btnCls}
       >
-        <GoogleDriveIcon />
+        <Icon name="google-drive" className="size-3.5" />
         Google Drive
         <span className="share-gallery__drive-count rounded-full bg-slate-100 px-1.5 text-[10px] font-medium text-slate-600">
           {folders.length}
         </span>
-        <ChevronDown className="size-3.5 text-slate-400" />
+        <Icon name="chevron-down" className="size-3.5 text-slate-400" />
       </button>
       {open ? (
         <div className="share-gallery__drive-menu absolute right-0 top-full z-50 mt-1 w-72 overflow-hidden rounded-md border border-slate-200 bg-white p-1 shadow-lg">
@@ -739,7 +728,7 @@ function DriveFolderButton({ folders }: { folders: DriveFolder[] }) {
               className="share-gallery__drive-menu-item flex flex-col gap-0.5 rounded px-2 py-1.5 hover:bg-slate-50"
             >
               <span className="flex items-center gap-1.5 text-xs font-medium text-slate-800">
-                <GoogleDriveIcon className="size-3" />
+                <Icon name="google-drive" className="size-3" />
                 {f.name}
               </span>
               <span className="text-[10px] text-slate-500">
@@ -926,7 +915,7 @@ function CommentBadge({
       className="comment-badge inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-1.5 py-0.5 text-[10px] font-medium text-slate-600"
       title={`${count} comment${count === 1 ? "" : "s"}`}
     >
-      <MessageSquare className="size-3" />
+      <Icon name="comment" className="size-3" />
       {count}
     </span>
   );
@@ -954,7 +943,7 @@ function CardDownloadCreative({
       onClick={(e) => e.stopPropagation()}
       className="toolbar-btn inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
     >
-      <Download className="size-3" />
+      <Icon name="download" className="size-3" />
       Download
     </a>
   );
@@ -996,7 +985,7 @@ function CardDownloadMatrix({
       onClick={go}
       className="toolbar-btn inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
     >
-      <Download className="size-3" />
+      <Icon name="download" className="size-3" />
       Download
     </button>
   );

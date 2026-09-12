@@ -8,13 +8,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import {
-  ArrowLeft,
-  Download,
-  CheckCircle2,
-  Trash2,
-  Upload as UploadIcon,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 
 type Payload = {
   columns: string[];
@@ -125,7 +119,7 @@ export function FeedDetailView({ id }: { id: number }) {
             href="/feeds"
             className="toolbar-btn flex items-center gap-1 rounded p-1.5 text-slate-500 hover:bg-slate-100"
           >
-            <ArrowLeft className="size-4" />
+            <Icon name="arrow-left" className="size-4" />
           </Link>
           <div className="flex-1">
             <h1 className="text-lg font-semibold text-slate-900">
@@ -142,7 +136,7 @@ export function FeedDetailView({ id }: { id: number }) {
               href={`/api/feed-exports/${row.id}?download=1`}
               className="toolbar-btn--primary flex items-center gap-1.5 rounded-md bg-brand-button px-3 py-1.5 text-sm font-medium text-white"
             >
-              <Download className="size-4" />
+              <Icon name="download" className="size-4" />
               Download XLSX
             </a>
             {!row.uploadedToAdformAt ? (
@@ -161,7 +155,7 @@ export function FeedDetailView({ id }: { id: number }) {
                   disabled={markUploadedM.isPending}
                   className="flex items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100"
                 >
-                  <UploadIcon className="size-4" />
+                  <Icon name="upload" className="size-4" />
                   Mark uploaded
                 </button>
                 <button
@@ -174,13 +168,13 @@ export function FeedDetailView({ id }: { id: number }) {
                   disabled={deleteM.isPending}
                   className="flex items-center gap-1.5 rounded-md border border-rose-200 bg-rose-50 px-3 py-1.5 text-sm font-medium text-rose-700 hover:bg-rose-100"
                 >
-                  <Trash2 className="size-4" />
+                  <Icon name="delete" className="size-4" />
                   Delete
                 </button>
               </>
             ) : (
               <span className="status-badge status-badge--ok inline-flex items-center gap-1 rounded bg-emerald-100 px-2 py-1 text-xs text-emerald-800">
-                <CheckCircle2 className="size-3.5" />
+                <Icon name="check-circle" className="size-3.5" />
                 Uploaded {new Date(row.uploadedToAdformAt).toLocaleDateString()}
                 {row.uploadedBy ? ` by ${row.uploadedBy}` : ""}
               </span>

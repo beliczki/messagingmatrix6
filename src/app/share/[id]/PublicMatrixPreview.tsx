@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Code2 } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 
 // Module-level cache shared across tile instances so tiles in different view
 // modes (and remounted tiles after a filter toggle) reuse the same render.
@@ -147,7 +147,7 @@ export default function PublicMatrixPreview({
         </div>
       ) : (
         <div className="matrix-iframe-preview__placeholder flex size-full items-center justify-center text-slate-300">
-          <Code2 className="size-6" />
+          <Icon name="code" className="size-6" />
         </div>
       )}
     </div>

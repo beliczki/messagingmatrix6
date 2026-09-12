@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Loader2, Check, CircleAlert, Trash2, Upload, X } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import ModalBackdrop from "./ModalBackdrop";
 import {
@@ -82,7 +82,7 @@ export default function BatchUploadDialog({
         {...drop.handlers}
       >
         <header className={`${block}-dialog__header modal__header flex shrink-0 items-center gap-3 border-b border-slate-100 px-4 py-3`}>
-          <Upload className="size-4 text-slate-500" />
+          <Icon name="upload" className="size-4 text-slate-500" />
           <span className={`${block}-dialog__title text-sm font-semibold text-slate-900`}>
             {title}
           </span>
@@ -106,7 +106,7 @@ export default function BatchUploadDialog({
               className="toolbar-btn--primary rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
             >
               {saving ? (
-                <Loader2 className="mr-1 inline size-3 animate-spin" />
+                <Icon name="spinner" className="mr-1 inline size-3 animate-spin" />
               ) : null}
               Save {ready > 0 ? ready : ""}
             </button>
@@ -115,7 +115,7 @@ export default function BatchUploadDialog({
               aria-label="Close"
               className="modal__close rounded p-1 text-slate-500 hover:bg-slate-100"
             >
-              <X className="size-5" />
+              <Icon name="close" className="size-5" />
             </button>
           </div>
         </header>
@@ -148,7 +148,7 @@ export default function BatchUploadDialog({
                 : "border-slate-300 text-slate-500 hover:bg-slate-50",
             )}
           >
-            <Upload className="size-6" />
+            <Icon name="upload" className="size-6" />
             Drop files here, or click to choose — as many as you like
           </button>
         ) : (
@@ -323,7 +323,7 @@ function Row({
           aria-label={`Discard ${item.file.name}`}
           className={`${block}-table__discard rounded p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600`}
         >
-          <Trash2 className="size-3.5" />
+          <Icon name="delete" className="size-3.5" />
         </button>
       </td>
     </tr>
@@ -332,9 +332,9 @@ function Row({
 
 function StatusIcon({ status }: { status: QueueItem["status"] }) {
   if (status === "uploading" || status === "saving") {
-    return <Loader2 className="size-3.5 shrink-0 animate-spin text-slate-500" />;
+    return <Icon name="spinner" className="size-3.5 shrink-0 animate-spin text-slate-500" />;
   }
-  if (status === "done") return <Check className="size-3.5 shrink-0 text-emerald-600" />;
-  if (status === "error") return <CircleAlert className="size-3.5 shrink-0 text-rose-600" />;
+  if (status === "done") return <Icon name="check" className="size-3.5 shrink-0 text-emerald-600" />;
+  if (status === "error") return <Icon name="alert" className="size-3.5 shrink-0 text-rose-600" />;
   return <span className="size-3.5 shrink-0 rounded-full bg-slate-300" />;
 }

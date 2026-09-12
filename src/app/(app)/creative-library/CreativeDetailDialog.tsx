@@ -6,12 +6,12 @@ import MediaEntityDialog, {
   type UploadedFile,
 } from "../_components/MediaEntityDialog";
 import { parseCreativeFilename } from "@/lib/parse-creative-filename";
+import { Icon } from "@/app/_icons/Icon";
 import {
   driveFileUrl,
   driveFolderUrl,
   parseDriveFolderId,
 } from "@/lib/drive-link";
-import GoogleDriveIcon from "@/app/_components/GoogleDriveIcon";
 
 type Creative = {
   id: number;
@@ -250,7 +250,7 @@ function DriveLinks({ creative }: { creative: Creative }) {
         rel="noreferrer"
         className="drive-links__link inline-flex items-center gap-1 text-slate-600 underline hover:text-slate-900"
       >
-        <GoogleDriveIcon className="size-3" />
+        <Icon name="google-drive" className="size-3" />
         {creative.driveFolderName ?? "Open folder"}
       </a>
       {fileHref ? (

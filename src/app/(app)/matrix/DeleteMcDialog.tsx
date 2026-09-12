@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { Archive, ShieldAlert, Trash2, TriangleAlert, X } from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import ModalBackdrop from "../_components/ModalBackdrop";
 
 // Removal chooser for an edit-mode selection. Two things it has to get right:
@@ -58,7 +58,7 @@ export default function DeleteMcDialog({
     <ModalBackdrop onClose={onClose} className="z-50 items-center justify-center">
       <div className="delete-mc-dialog modal m-auto flex w-full max-w-sm flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
         <header className="modal__header flex shrink-0 items-center gap-2 border-b border-slate-100 px-5 py-3">
-          <Trash2 className="size-4 text-slate-700" />
+          <Icon name="delete" className="size-4 text-slate-700" />
           <h2 className="modal__title text-sm font-semibold text-slate-900">
             Remove {count} audience cop{count === 1 ? "y" : "ies"}
           </h2>
@@ -68,7 +68,7 @@ export default function DeleteMcDialog({
             aria-label="Close"
             className="modal__close ml-auto rounded p-1 text-slate-500 hover:bg-slate-100"
           >
-            <X className="size-4" />
+            <Icon name="close" className="size-4" />
           </button>
         </header>
 
@@ -105,7 +105,7 @@ export default function DeleteMcDialog({
 
           {lastCopies.length > 0 ? (
             <div className="delete-mc-dialog__warning mt-3 flex items-start gap-2 rounded border border-rose-200 bg-rose-50 px-2 py-1.5 text-[10px] leading-relaxed text-rose-700">
-              <TriangleAlert className="mt-px size-3 shrink-0" />
+              <Icon name="warning" className="mt-px size-3 shrink-0" />
               <span>
                 {lastCopies.map((g) => g.label).join(", ")}: the selection holds
                 the last copy, so a permanent delete takes the card&apos;s
@@ -117,7 +117,7 @@ export default function DeleteMcDialog({
 
           {locked.length > 0 ? (
             <div className="delete-mc-dialog__locked mt-3 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] leading-relaxed text-amber-800">
-              <ShieldAlert className="mt-px size-3 shrink-0" />
+              <Icon name="shield-alert" className="mt-px size-3 shrink-0" />
               <span>
                 {locked.length} row{locked.length === 1 ? "" : "s"} can only be
                 archived ({lockedStatuses}) — a measured card&apos;s PMMID still
@@ -133,7 +133,7 @@ export default function DeleteMcDialog({
               onClick={onArchive}
               className="delete-mc-dialog__action delete-mc-dialog__action--archive toolbar-btn--primary inline-flex items-center justify-center gap-1.5 rounded bg-slate-900 px-2 py-1.5 text-xs text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Archive className="size-3" />
+              <Icon name="archive" className="size-3" />
               Archive (restorable)
             </button>
             <button
@@ -147,7 +147,7 @@ export default function DeleteMcDialog({
               onClick={onDelete}
               className="delete-mc-dialog__action delete-mc-dialog__action--delete inline-flex items-center justify-center gap-1.5 rounded bg-rose-600 px-2 py-1.5 text-xs text-white hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              <Trash2 className="size-3" />
+              <Icon name="delete" className="size-3" />
               Delete permanently
             </button>
             <button
@@ -155,7 +155,7 @@ export default function DeleteMcDialog({
               onClick={onClose}
               className="delete-mc-dialog__action delete-mc-dialog__action--cancel toolbar-btn inline-flex items-center justify-center gap-1.5 rounded border border-slate-300 bg-white px-2 py-1.5 text-xs text-slate-700 hover:bg-slate-100"
             >
-              <X className="size-3" />
+              <Icon name="close" className="size-3" />
               Cancel
             </button>
           </div>

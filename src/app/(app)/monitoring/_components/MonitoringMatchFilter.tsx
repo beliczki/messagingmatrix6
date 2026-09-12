@@ -1,13 +1,13 @@
 "use client";
 
 import clsx from "clsx";
-import { Link2, List, Unlink2 } from "lucide-react";
+import { Icon, type IconName } from "@/app/_icons/Icon";
 import type { MatchFilter } from "./MonitoringTable";
 
-const OPTIONS: Array<{ key: MatchFilter; label: string; Icon: typeof List }> = [
-  { key: "all", label: "All", Icon: List },
-  { key: "matched", label: "Matched", Icon: Link2 },
-  { key: "unmatched", label: "Unmatched", Icon: Unlink2 },
+const OPTIONS: Array<{ key: MatchFilter; label: string; icon: IconName }> = [
+  { key: "all", label: "All", icon: "list" },
+  { key: "matched", label: "Matched", icon: "link-alt" },
+  { key: "unmatched", label: "Unmatched", icon: "unlink" },
 ];
 
 /**
@@ -31,7 +31,7 @@ export default function MonitoringMatchFilter({
   if (collapsed) {
     return (
       <div className="monitoring-match-filter monitoring-match-filter--collapsed flex flex-col items-center gap-1">
-        {OPTIONS.map(({ key, label, Icon }) => (
+        {OPTIONS.map(({ key, label, icon }) => (
           <button
             key={key}
             type="button"
@@ -46,7 +46,7 @@ export default function MonitoringMatchFilter({
                 : "toolbar-btn text-slate-500 hover:bg-slate-100",
             )}
           >
-            <Icon className="size-4" />
+            <Icon name={icon} className="size-4" />
           </button>
         ))}
       </div>

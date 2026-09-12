@@ -8,16 +8,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import {
-  ArrowUp,
-  ArrowDown,
-  Loader2,
-  Check,
-  CircleAlert,
-  AlertTriangle,
-  History,
-  Lock,
-} from "lucide-react";
+import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import { type Column } from "./columns";
@@ -363,8 +354,8 @@ export default function DimensionGrid<T extends Versioned>({
               const sortIcon =
                 sort?.key === c.key
                   ? sort.dir === "asc"
-                    ? <ArrowUp className="size-3" />
-                    : <ArrowDown className="size-3" />
+                    ? <Icon name="arrow-up" className="size-3" />
+                    : <Icon name="arrow-down" className="size-3" />
                   : null;
               return (
                 <button
@@ -483,7 +474,7 @@ export default function DimensionGrid<T extends Versioned>({
                   collapsed ? "size-8 justify-center p-0" : "px-2.5 py-1.5",
                 )}
               >
-                <History className="size-3.5" />
+                <Icon name="history" className="size-3.5" />
                 {!collapsed ? "History" : null}
               </button>
             ) : null}
@@ -582,7 +573,7 @@ function Cell<T extends Versioned>({
       title={cellTitle}
     >
       {keyFrozen ? (
-        <Lock className="dimension-grid__cell-lock size-3 shrink-0 text-slate-400" />
+        <Icon name="lock" className="dimension-grid__cell-lock size-3 shrink-0 text-slate-400" />
       ) : null}
       <span className="truncate">{display}</span>
     </div>
@@ -719,10 +710,10 @@ function CellEditor<T extends Versioned>({
 
 function SaveDot({ state }: { state: RowSaveState | undefined }) {
   if (!state || state.kind === "idle") return null;
-  if (state.kind === "saving") return <Loader2 className="size-3 animate-spin text-slate-500" />;
-  if (state.kind === "saved") return <Check className="size-3 text-emerald-600" />;
-  if (state.kind === "conflict") return <AlertTriangle className="size-3 text-amber-600" />;
-  return <CircleAlert className="size-3 text-rose-600" />;
+  if (state.kind === "saving") return <Icon name="spinner" className="size-3 animate-spin text-slate-500" />;
+  if (state.kind === "saved") return <Icon name="check" className="size-3 text-emerald-600" />;
+  if (state.kind === "conflict") return <Icon name="warning" className="size-3 text-amber-600" />;
+  return <Icon name="alert" className="size-3 text-rose-600" />;
 }
 
 function stateTitle(state: RowSaveState | undefined): string {

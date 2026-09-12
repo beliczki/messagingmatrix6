@@ -1167,3 +1167,12 @@ mind témafüggő, tehát a perem gyanúm szerint **a banner saját fehér vász
 **DEPLOYOLVA 6.92.0 (2026-09-12):** commit `1a37c0c`, build 43s, `pm2 restart mm6-erste --update-env`
 → Ready 1327ms, box `package.json` **6.92.0**. Séma-migráció nincs. Health: `/login` 200 · `/matrix`
 307 · `/creative-library` 307 · `/templates` 307 · `/feeds` 307.
+
+**DEPLOYOLVA 6.92.1 (2026-09-12):** commit `c8432cb` (a mátrix üres-állapot tenant-szivárgása, másik
+agent munkája), box `23270f9`→`c8432cb`, `npm run build` **39.9s**, `pm2 restart mm6-erste --update-env`
+→ **Ready 1252ms**, box `package.json` **6.92.1**. **Séma-migráció nincs**
+(`git diff --name-only 4904cd9..c8432cb -- db/migrations` üres). Health: `/` 307 · `/login` 200 ·
+`/matrix` 307 · `/creative-library` 307 · `/drafts` 307 · `/templates` 307 · `/feeds` 307 · `/shares`
+307 · `/api/templates` 401 · `/mcp` 401; publikus `erste.messagingmatrix.ai/login` **200**. Az
+`error.log`-ban a restart óta nincs új sor (a benne álló utolsó sorok a 19:04-es AWS SDK node>=22
+figyelmeztetés, korábbról).

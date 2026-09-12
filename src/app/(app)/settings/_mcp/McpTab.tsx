@@ -126,6 +126,7 @@ export function McpTab() {
           <code className="font-mono text-xs">draft</code> sits between them —
           it reads everything, but the only writes it can make stay inside the
           draft space: <code className="font-mono text-xs">generate_test_creative</code>,{" "}
+          <code className="font-mono text-xs">draft_update</code>,{" "}
           <code className="font-mono text-xs">brief_attach</code>,{" "}
           <code className="font-mono text-xs">draft_archive</code> and{" "}
           <code className="font-mono text-xs">asset_upload</code>. A draft has

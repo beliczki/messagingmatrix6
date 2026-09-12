@@ -9,6 +9,7 @@ vi.mock("@/lib/preview-shooter", async (orig) => {
   return { ...actual, shootPreviews: vi.fn(async () => []) };
 });
 
+import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, audiences, topics, messages } from "@/db/schema";
 import { buildMcpServer, _resetMcpRateLimitForTests } from "@/lib/mcp";
@@ -246,6 +247,139 @@ describe("draft_promote", () => {
     });
     expect(res.isError).toBe(true);
     expect(res.text).toMatch(/create the topic first/);
+  });
+});
+
+describe("draft_update", () => {
+  async function aDraft(args: Record<string, unknown> = {}) {
+    const res = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+      headline: "First cut",
+      template_variant_classes: "teal",
+      ...args,
+    });
+    return res.json.draft_id as number;
+  }
+
+  it("patches the fields it is given and leaves the rest alone", async () => {
+    const id = await aDraft({ copy1: "keep me" });
+    const res = await callTool(erste.id, "draft_update", {
+      draft_id: id,
+      headline: "Second cut",
+    });
+    expect(res.isError).toBe(false);
+
+    const got = await callTool(erste.id, "draft_get", { draft_id: id });
+    expect(got.json).toMatchObject({
+      headline: "Second cut",
+      copy1: "keep me",
+    });
+  });
+
+  it("clears a field on an empty string — an absent key is not the same as a blank one", async () => {
+    const id = await aDraft({ copy1: "goes away" });
+    await callTool(erste.id, "draft_update", { draft_id: id, copy1: "" });
+
+    const [row] = await db.select().from(messages).where(eq(messages.id, id));
+    expect(row!.copy1).toBeNull();
+    expect(row!.headline).toBe("First cut"); // untouched
+  });
+
+  it("validates the draft as it will END UP, not as the patch arrives", async () => {
+    // The patch says nothing about the variant classes, so the draft's stored
+    // 'teal' has to be what gets checked — judging the empty patch would pass
+    // for the wrong reason, and judging it as empty would fail a valid edit.
+    const id = await aDraft();
+    const ok = await callTool(erste.id, "draft_update", {
+      draft_id: id,
+      headline: "still fine",
+    });
+    expect(ok.isError).toBe(false);
+
+    const bad = await callTool(erste.id, "draft_update", {
+      draft_id: id,
+      template_variant_classes: "notAToken",
+    });
+    expect(bad.isError).toBe(true);
+    expect(bad.text).toMatch(/unknown template_variant_classes/);
+  });
+
+  it("refuses an image filename that was never uploaded", async () => {
+    const id = await aDraft();
+    const res = await callTool(erste.id, "draft_update", {
+      draft_id: id,
+      brand_image: "never-uploaded.png",
+    });
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(/not found/);
+  });
+
+  it("rewrites all four background slots — the array is a whole value", async () => {
+    const id = await aDraft();
+    await db
+      .update(messages)
+      .set({ image1: "one.png", image2: "two.png", image3: "three.png" })
+      .where(eq(messages.id, id));
+
+    // An empty array clears every slot; validation passes because nothing is
+    // being pointed at a file that has to exist.
+    const res = await callTool(erste.id, "draft_update", {
+      draft_id: id,
+      background_images: [],
+    });
+    expect(res.isError).toBe(false);
+
+    const [row] = await db.select().from(messages).where(eq(messages.id, id));
+    expect(row!.image1).toBeNull();
+    expect(row!.image2).toBeNull();
+    expect(row!.image3).toBeNull();
+  });
+
+  it("reports the sizes it is re-rendering, and none when render=false", async () => {
+    const id = await aDraft();
+    const rendered = await callTool(erste.id, "draft_update", {
+      draft_id: id,
+      headline: "renders",
+    });
+    expect(rendered.json.rendering).toEqual([
+      "300x250",
+      "300x600",
+      "640x360",
+      "970x250",
+    ]);
+
+    const quiet = await callTool(erste.id, "draft_update", {
+      draft_id: id,
+      headline: "does not render",
+      render: false,
+    });
+    expect(quiet.json.rendering).toEqual([]);
+  });
+
+  it("takes the optimistic lock and hands back the current row on a conflict", async () => {
+    const id = await aDraft();
+    const res = await callTool(erste.id, "draft_update", {
+      draft_id: id,
+      headline: "from a stale read",
+      version: 99,
+    });
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain("version_conflict");
+  });
+
+  it("refuses a card that is no longer a draft", async () => {
+    const id = await aDraft();
+    await callTool(erste.id, "draft_promote", {
+      draft_id: id,
+      audience_key: "SZK_visitors",
+      topic_key: "SZK_brand",
+    });
+    const res = await callTool(erste.id, "draft_update", {
+      draft_id: id,
+      headline: "too late",
+    });
+    expect(res.isError).toBe(true);
+    expect(res.text).toMatch(/not found/);
   });
 });
 

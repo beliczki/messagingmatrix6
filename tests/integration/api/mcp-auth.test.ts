@@ -217,6 +217,7 @@ describe("buildMcpServer scope gating", () => {
     }
     for (const draftWrite of [
       "generate_test_creative",
+      "draft_update",
       "brief_attach",
       "draft_archive",
       "asset_upload",

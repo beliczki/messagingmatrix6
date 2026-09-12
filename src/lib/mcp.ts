@@ -78,10 +78,12 @@ import {
 import {
   DraftError,
   createTestCreative,
+  DraftVersionConflict,
   draftSizes,
   getDraftStatus,
   listDraftPreviews,
   startDraftRender,
+  updateTestCreative,
   type DraftPreviewRow,
   type TestCreativeInput,
 } from "@/lib/entities/drafts";
@@ -3149,6 +3151,107 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
         if (e instanceof DraftError || e instanceof BriefError) {
           return errorResult(e.message);
         }
+        throw e;
+      }
+    },
+  );
+
+  server.registerTool(
+    "draft_update",
+    {
+      description:
+        "Edit a draft's content in place — the iteration step between generate_test_creative and draft_promote. Only the fields you PASS are touched; everything else keeps its value, and an EMPTY STRING clears a field. Content fields are the same vocabulary generate_test_creative uses: headline, copy1, copy2, disclaimer, cta, flash, the per-field *_style CSS, custom_css, template_variant_classes, name, and the images (background_images → image1..4, brand_image → image5, sticker_image → image6) referenced by STORED FILENAME. background_images replaces ALL FOUR background slots, so pass the whole set you want, not just the one that changed. The TEMPLATE cannot be changed here: it decides which sizes and which variant-class tokens are legal, so switching it is a different operation — archive the draft and generate a new one. Validation is all-or-nothing and reports every problem at once, exactly as on create, judging the draft as it will END UP rather than as the patch arrives. Re-rendering is ON by default and fire-and-forget (poll draft_status); pass render=false while making several edits in a row, then a final call with render=true. Optional sizes narrows the re-render; optional version takes the optimistic lock (omitted = current). One write against the rate limit.",
+      inputSchema: {
+        draft_id: z.number().int(),
+        render: z.boolean().optional(),
+        sizes: z.array(z.string()).optional(),
+        version: z.number().int().optional(),
+        name: z.string().optional(),
+        template_variant_classes: z.string().optional(),
+        headline: z.string().optional(),
+        copy1: z.string().optional(),
+        copy2: z.string().optional(),
+        disclaimer: z.string().optional(),
+        cta: z.string().optional(),
+        flash: z.string().optional(),
+        headline_style: z.string().optional(),
+        copy1_style: z.string().optional(),
+        copy2_style: z.string().optional(),
+        disclaimer_style: z.string().optional(),
+        cta_style: z.string().optional(),
+        flash_style: z.string().optional(),
+        custom_css: z.string().optional(),
+        background_images: z.array(z.string()).max(4).optional(),
+        brand_image: z.string().optional(),
+        sticker_image: z.string().optional(),
+      },
+    },
+    async (args) => {
+      const limited = await requireRate(ctx);
+      if (limited) return limited;
+      // The array is a whole value: passing it rewrites all four slots, so the
+      // ones it doesn't reach are cleared rather than left behind from before.
+      const bg = args.background_images;
+      const patch = {
+        name: args.name,
+        templateVariantClasses: args.template_variant_classes,
+        headline: args.headline,
+        copy1: args.copy1,
+        copy2: args.copy2,
+        disclaimer: args.disclaimer,
+        cta: args.cta,
+        flash: args.flash,
+        headlineStyle: args.headline_style,
+        copy1Style: args.copy1_style,
+        copy2Style: args.copy2_style,
+        disclaimerStyle: args.disclaimer_style,
+        ctaStyle: args.cta_style,
+        flashStyle: args.flash_style,
+        customCss: args.custom_css,
+        ...(bg
+          ? {
+              image1: bg[0] ?? "",
+              image2: bg[1] ?? "",
+              image3: bg[2] ?? "",
+              image4: bg[3] ?? "",
+            }
+          : {}),
+        image5: args.brand_image,
+        image6: args.sticker_image,
+      };
+      const before = await getMessage(ctx.clientId, args.draft_id);
+      try {
+        const { draft, sizes } = await updateTestCreative(
+          ctx.clientId,
+          args.draft_id,
+          patch,
+          { sizes: args.sizes, expectedVersion: args.version },
+        );
+        if (args.render !== false) {
+          void startDraftRender(ctx.clientId, draft.id, sizes).catch((e) =>
+            console.error(`[drafts] re-render of draft ${draft.id} failed:`, e),
+          );
+        }
+        await writeAudit({
+          clientId: ctx.clientId,
+          userId: mcpUserId(ctx),
+          entityType: "messages",
+          entityId: draft.id,
+          action: "update",
+          before,
+          after: draft,
+        });
+        return jsonResult({
+          draft_id: draft.id,
+          mc_label: `MC${draft.number}${draft.variant}`,
+          version: draft.version,
+          rendering: args.render !== false ? sizes : [],
+        });
+      } catch (e) {
+        if (e instanceof DraftVersionConflict) {
+          return errorResult("version_conflict", { current: e.current });
+        }
+        if (e instanceof DraftError) return errorResult(e.message);
         throw e;
       }
     },

@@ -5,6 +5,23 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.85.0] — 2026-09-12
+
+### Added
+- **`draft_update` — the iteration step an agent was missing.** Until now an
+  agent could create a draft and archive it, but not edit one: `mc_update`
+  addresses cards by PMMID, and a draft has none. It takes the same field
+  vocabulary as `generate_test_creative`, touches only the fields passed (an
+  empty string clears one), re-renders by default, and takes the optimistic
+  lock. Available to `draft`-scoped tokens.
+- The template stays fixed: it decides which sizes and variant-class tokens are
+  legal, so switching it is a different operation, and the tool says so.
+
+### Changed
+- Draft content validation is now shared between create and update, so an edit
+  is judged by the same rules as a creation — and judged on the draft as it will
+  END UP, not on the patch in isolation.
+
 ## [6.84.0] — 2026-09-12
 
 ### Added

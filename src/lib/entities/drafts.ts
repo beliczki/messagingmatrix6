@@ -12,7 +12,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { messagePreviews, messages, type Message } from "@/db/schema";
-import { createDraft } from "@/lib/entities/messages";
+import { createDraft, getMessage, updateMessage } from "@/lib/entities/messages";
 import { getFileByFilename } from "@/lib/entities/files";
 import { collectStalePreviews } from "@/lib/previews";
 import { shootPreviews } from "@/lib/preview-shooter";
@@ -66,32 +66,40 @@ export function draftSizes(draft: Message): string[] {
   return t && t.kind === "html" ? t.sizes : [];
 }
 
-// All-or-nothing validation: every problem is collected and reported in one
-// error so the calling agent can fix its input in a single round.
-export async function createTestCreative(
-  clientId: number,
-  input: TestCreativeInput,
-): Promise<{ draft: Message; sizes: string[] }> {
-  const template = readTemplate(input.template);
+/** The draft's html template, or a DraftError naming why it isn't usable. */
+function requireHtmlTemplate(name: string) {
+  const template = readTemplate(name);
   if (!template) {
-    throw new DraftError(`template '${input.template}' not found`);
+    throw new DraftError(`template '${name}' not found`);
   }
   if (template.kind !== "html") {
     throw new DraftError(
-      `template '${input.template}' is kind '${template.kind}' — only html templates have sized renders`,
+      `template '${name}' is kind '${template.kind}' — only html templates have sized renders`,
     );
   }
+  return template;
+}
 
+// All-or-nothing validation, shared by create and update: every problem is
+// collected and reported in one error so the calling agent can fix its input in
+// a single round. Only the parts of `input` that are PRESENT are checked — that
+// is what lets an update validate a patch by the same rules as a create.
+async function collectContentProblems(
+  clientId: number,
+  templateName: string,
+  template: { sizes: string[]; tagOptions: string[] },
+  input: Partial<TestCreativeInput>,
+  sizes: string[],
+): Promise<string[]> {
   const problems: string[] = [];
 
-  const requested = input.sizes ?? template.sizes;
-  if (requested.length === 0) {
+  if (sizes.length === 0) {
     problems.push("sizes must name at least one size");
   }
-  const badSizes = requested.filter((s) => !template.sizes.includes(s));
+  const badSizes = sizes.filter((s) => !template.sizes.includes(s));
   if (badSizes.length > 0) {
     problems.push(
-      `unknown size(s) ${badSizes.join(", ")} — template '${input.template}' has: ${template.sizes.join(", ")}`,
+      `unknown size(s) ${badSizes.join(", ")} — template '${templateName}' has: ${template.sizes.join(", ")}`,
     );
   }
 
@@ -99,7 +107,7 @@ export async function createTestCreative(
   const badTags = tags.filter((t) => !template.tagOptions.includes(t));
   if (badTags.length > 0) {
     problems.push(
-      `unknown template_variant_classes token(s) ${badTags.join(", ")} — template '${input.template}' accepts: ${template.tagOptions.join(", ")}`,
+      `unknown template_variant_classes token(s) ${badTags.join(", ")} — template '${templateName}' accepts: ${template.tagOptions.join(", ")}`,
     );
   }
 
@@ -115,6 +123,22 @@ export async function createTestCreative(
     );
   }
 
+  return problems;
+}
+
+export async function createTestCreative(
+  clientId: number,
+  input: TestCreativeInput,
+): Promise<{ draft: Message; sizes: string[] }> {
+  const template = requireHtmlTemplate(input.template);
+  const requested = input.sizes ?? template.sizes;
+  const problems = await collectContentProblems(
+    clientId,
+    input.template,
+    template,
+    input,
+    requested,
+  );
   if (problems.length > 0) throw new DraftError(problems.join("; "));
 
   const draft = await createDraft(clientId, {
@@ -126,6 +150,87 @@ export async function createTestCreative(
     ),
   });
   return { draft, sizes: requested };
+}
+
+/**
+ * Edit a draft's content in place. Only the fields PRESENT in `patch` are
+ * touched; an empty string clears one. The draft's template is NOT changeable
+ * here — it decides which sizes and which variant-class tokens are legal, so
+ * switching it is a different operation from editing what sits inside it.
+ */
+export async function updateTestCreative(
+  clientId: number,
+  draftId: number,
+  patch: Partial<Omit<TestCreativeInput, "template" | "sizes">>,
+  opts: { sizes?: string[]; expectedVersion?: number } = {},
+): Promise<{ draft: Message; sizes: string[] }> {
+  const existing = await getMessage(clientId, draftId);
+  if (!existing || existing.status !== "DRAFT" || existing.audience !== null) {
+    throw new DraftError(`draft ${draftId} not found`);
+  }
+  if (existing.archivedAt !== null) {
+    throw new DraftError(
+      `MC${existing.number}${existing.variant} is archived — restore it before editing`,
+    );
+  }
+  if (!existing.template) {
+    throw new DraftError(
+      `draft ${draftId} has no template — it was not created by generate_test_creative, so there is nothing sized to render`,
+    );
+  }
+  const templateName = existing.template;
+  const template = requireHtmlTemplate(templateName);
+
+  // The tokens are validated as the draft will END UP, not as they arrive: a
+  // patch that leaves them alone must not be judged against an empty string.
+  const merged: Partial<TestCreativeInput> = {
+    ...Object.fromEntries(
+      DRAFT_IMAGE_FIELDS.filter((f) => existing[f] != null).map((f) => [
+        f,
+        existing[f],
+      ]),
+    ),
+    templateVariantClasses: existing.templateVariantClasses ?? undefined,
+    ...Object.fromEntries(
+      Object.entries(patch).filter(([, v]) => v !== undefined),
+    ),
+  };
+  const sizes = opts.sizes ?? draftSizes(existing);
+  const problems = await collectContentProblems(
+    clientId,
+    templateName,
+    template,
+    merged,
+    sizes,
+  );
+  if (problems.length > 0) throw new DraftError(problems.join("; "));
+
+  // "" clears a column; an absent key leaves it alone.
+  const fields = Object.fromEntries(
+    Object.entries(patch)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, v === "" ? null : v]),
+  );
+  if (Object.keys(fields).length === 0) {
+    return { draft: existing, sizes };
+  }
+  const res = await updateMessage(
+    clientId,
+    draftId,
+    opts.expectedVersion ?? existing.version,
+    fields,
+  );
+  if (!res.ok) {
+    throw new DraftVersionConflict(res.current);
+  }
+  return { draft: res.row, sizes };
+}
+
+/** Raised when a draft edit loses the optimistic lock; carries the current row. */
+export class DraftVersionConflict extends Error {
+  constructor(public current: Message | null) {
+    super("version_conflict");
+  }
 }
 
 /**

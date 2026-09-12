@@ -16,7 +16,7 @@
 
 ## Jelen állapot (2026-09-10)
 
-- **Verzió: `6.84.0`** (live a boxon: `6.83.0`) a Hetzner boxon (`erste.messagingmatrix.ai`, pm2 `mm6-erste`). Working tree tiszta; a 6.82.x munkák commitálva.
+- **Verzió: `6.85.0`** (live a boxon: `6.83.0` — a 6.84/6.85 deploy-ra vár) a Hetzner boxon (`erste.messagingmatrix.ai`, pm2 `mm6-erste`). Working tree tiszta; a 6.82.x munkák commitálva.
 - Phase 0–10 + a 2026-08/09-es epicek mind leszállítva: DCO/Agentic mátrix, Creative Library rebuild, DRAFT-modell (draft = `messages` sor `audience IS NULL`), draft-variánsok, státusz-takarítás (6 státusz), monitoring periódus-tartomány + nap-grain, Drive-linkek, feed diff-alap + „semmi nem tűnik el", dashboard napi áttekintő, Channels-entitás, MCP per-user tokenek.
 - **Átrendezés 2026-09-10:** minden lezárt epic-log és a 2026-09-10 előtti checkpointok szó szerint átkerültek a `todo-archive.md`-be („Archivált 2026-09-10 — todo.md átrendezés" szekció). Itt csak a nyitott munka maradt.
 
@@ -95,8 +95,7 @@ Leszállítva: `read | draft | full`. A `draft` mindent olvas, és csak a draft-
 dokumentáltam (teszt + komment). Egy elgépelt kézi SQL így teljes jogot ad. Szűkítés `read`-re +
 check constraint = egy migrációs szelet; a user dönt.
 
-**Következő szelet (NEM ez):** `draft_update` MCP tool (draft_id + content mezők) — enélkül a
-draft-agent csak létrehozni tud, iterálni nem. `mc_update` pmmid-del címez, a draftnak nincs pmmid-je.
+**Következő szelet → ✅ leszállítva `6.85.0`-ban:** `draft_update` MCP tool.
 
 ### I2 — Komment-thread mint **entitás-provenance** (DÖNTÉS LEZÁRVA)
 **User-döntés:** „thread lenne a legjobb, fáj hogy nem látszik ki mikor mit" + **a cél explicit: az agenteknek kontextust adni** arról, hogy mi változott, milyen kérésre, miért, és **egyáltalán miért hívnak úgy egy topicot / audience-t / MC-t, mi van rajtuk, miért jöttek létre.**
@@ -593,10 +592,10 @@ kártyán** (a második kör már az MC402a drafton ment, azt is visszaürített
 - Verdikt: Standard scope ~18–32 gépi óra + 4–7 user-óra, 3–5 munkanap. Kritikus út: `templates/szallashu` review-kör. Meta/Google feed nincs (W4 blokkolt) — csak roadmapként.
 - Nyitott: a tanulmány §7 hét döntése (scope, hostname/DNS, topológia A/B, termékek, képforrás, logó, Meta-üzenet). Kód nem változott.
 
-### 2026-09-12 — Ikonkészlet-tanulmány: lucide → kapcsolható Streamline Core (DÖNTÉSRE VÁR)
+### 2026-09-12 — Ikonkészlet-tanulmány: lucide → kapcsolható Streamline Core (DÖNTVE, feladattá alakítandó)
 - Tanulmány: `docs/ICON_SET_STUDY.md`. Kód-leltár (87 lucide ikon / 66 fájl / 1 custom `GoogleDriveIcon`) + Streamline Core free 8 stílus (Iconify `streamline` = Line+Solid+Remix, Pop csak GitHub) + 87 soros név-megfeleltetés, kirenderelve ellenőrizve.
 - Verdikt: 51 ✅ / 24 🟡 / 12 ❌ — a Core free-ben **nincs chevron, spinner, grip, rács**; ezek 9 saját 14-grid path-tal pótolhatók vagy Pro Core Line ($19/hó/seat). Kapcsolhatósághoz szemantikus ikon-regiszter (`src/app/_icons/`) + build-time generált családok kellenek; a 66 fájl egyesével áll át (~2–3 nap). Pop nem `currentColor` (fix 5 szín), dark módban CSS-var csere kell.
-- Nyitott: a tanulmány §6 négy döntése (runtime váltás kell-e, free vs Pro, Pop bekerül-e, lucide 1.11→1.45 bump). Kód nem változott.
+- Döntve (user, ugyanaznap): tenantenkénti kapcsoló a Settings → Design tabon (`lookAndFeel.iconSet`), lucide+custom a default, a Core csak a lefedett 75 ikont cseréli (12 ❌ lucide marad), Core free, Pop bekerül, lucide 1.45-re. Lépések a tanulmány §5.7-ben — agent-feladattá alakítandó. Kód nem változott.
 
 ### 2026-09-12 — MCP `draft` token-scope — 6.84.0
 
@@ -616,3 +615,29 @@ agent hibája nem ér el élő kártyát; ez a szelet adja hozzá a kulcsot.
   egyben tartotta a négy draft-írót; így a scope-határ a kódban is látszik, nem egy `if`-ben bújik el.
 
 **Nyitva:** az ismeretlen `scope` érték `full`-ra szélesedése (l. a NEXT szekció figyelmeztetését).
+
+### 2026-09-12 — `draft_update`: az agent iterálni is tud — 6.85.0
+
+A 6.84.0 `draft` scope-ja után ez a párja: az agent eddig **létrehozni** és **archiválni** tudott
+draftot, **szerkeszteni** nem — az `mc_update` pmmid-del címez, a draftnak meg nincs pmmid-je.
+
+- [x] `updateTestCreative` (`entities/drafts.ts`): csak a **jelen lévő** mezőket írja, üres string
+      **töröl**, opcionális `expectedVersion`. Nem draft / archivált / sablon nélküli sorra nem megy.
+- [x] `draft_update` MCP tool ugyanazzal a szókinccsel, mint a `generate_test_creative`;
+      `render` (default true) fire-and-forget újrarajzolás, `sizes` szűkíthet.
+- [x] **A validáció kiemelve** (`collectContentProblems`) — a create és az update *ugyanazokkal* a
+      szabályokkal ítél. Fontos részlet: a patch a draftot **a végállapotában** validálja, nem
+      önmagában; különben egy tag-eket nem érintő szerkesztés üres stringre bukna el.
+- [x] **A `background_images` egész érték:** ha megadod, mind a négy slotot felülírja (amit nem ér el,
+      az törlődik). Részleges tömb némán meghagyná a régi slotokat — ez volt a csapda.
+- [x] **A template NEM cserélhető** itt: az dönti el, mely méretek és tag-tokenek érvényesek, és a
+      meglévő preview-sorok árván maradnának. A tool leírása kimondja. ⚠️ **Ára:** rossz sablonnal
+      indított draftnál a szám elég (az archive megtartja) — ha ez zavaró lesz, külön szelet.
+- [x] 8 új teszt (patch · üres string töröl · végállapot-validáció · hiányzó képfájl · 4 slot ·
+      render lista + `render=false` · version_conflict · promotált kártyát elutasít). **919/919.**
+
+**Nem teszteltem:** hogy a `render=false` tényleg nem indít chromiumot — a shooter mockolva van, és a
+fire-and-forget promise-t determinisztikusan bevárni nem tudom. A visszaadott `rendering: []`
+szerződést ellenőrzöm helyette; magát a `startDraftRender`-t a create-ág már fedi.
+
+**Séma-migráció nincs.** Deploy: build + `pm2 restart` (a 6.84.0-val együtt).

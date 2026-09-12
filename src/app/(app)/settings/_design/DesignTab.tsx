@@ -195,11 +195,6 @@ export function DesignTab() {
           value={draft.fontFamily}
           onChange={(v) => setField("fontFamily", v)}
         />
-        <CheckboxField
-          label="Capsule (rounded) UI"
-          checked={draft.capsuleDesign}
-          onChange={(v) => setField("capsuleDesign", v)}
-        />
       </Section>
 
       <Section title="Cobranding">

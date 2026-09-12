@@ -7,7 +7,6 @@ export const DEFAULT_LOOK_AND_FEEL = {
   logo: "",
   pageTitle: "MessagingMatrix",
   fontFamily: "Inter",
-  capsuleDesign: false,
   colorMode: "system" as "light" | "dark" | "system",
   headerColor: "#1f2937",
   buttonColor: "#2563eb",

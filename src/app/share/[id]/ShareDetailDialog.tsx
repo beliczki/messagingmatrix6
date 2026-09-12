@@ -156,6 +156,8 @@ export default function ShareDetailDialog({
   const [pending, setPending] = useState<Annotation | null>(null);
   const [highlightId, setHighlightId] = useState<string | null>(null);
 
+  const [sideTab, setSideTab] = useState<"comments" | "history">("comments");
+
   // Reset transient state when the user navigates to a different item.
   useEffect(() => {
     setAnnotationMode("off");
@@ -333,30 +335,59 @@ export default function ShareDetailDialog({
           </section>
 
           <aside className="share-detail-dialog__pane--side flex w-[340px] shrink-0 flex-col overflow-hidden border-l border-slate-200 bg-white">
-            <div className="share-detail-dialog__side-tabs flex h-10 shrink-0 items-center gap-1 border-b border-slate-200 px-3 text-[11px] font-medium uppercase tracking-wide text-slate-500">
-              Comments · {itemComments.length}
+            <div className="share-detail-dialog__side-tabs tab-bar flex h-10 shrink-0 items-stretch gap-1 border-b border-slate-200 px-3">
+              <button
+                type="button"
+                onClick={() => setSideTab("comments")}
+                className={clsx(
+                  "tab-bar__tab -mb-px flex items-center border-b-2 px-2 text-[11px] font-medium uppercase tracking-wide transition",
+                  sideTab === "comments"
+                    ? "border-slate-900 text-slate-900"
+                    : "border-transparent text-slate-500 hover:text-slate-700",
+                )}
+              >
+                Comments · {itemComments.length}
+              </button>
+              <button
+                type="button"
+                onClick={() => setSideTab("history")}
+                className={clsx(
+                  "tab-bar__tab -mb-px flex items-center border-b-2 px-2 text-[11px] font-medium uppercase tracking-wide transition",
+                  sideTab === "history"
+                    ? "border-slate-900 text-slate-900"
+                    : "border-transparent text-slate-500 hover:text-slate-700",
+                )}
+              >
+                History
+              </button>
             </div>
             <div className="share-detail-dialog__side-body flex flex-1 flex-col overflow-hidden">
-              <CommentList
-                comments={itemComments}
-                overlays={overlays}
-                highlightId={highlightId}
-                setHighlightId={setHighlightId}
-              />
-              <CommentForm
-                shareId={shareId}
-                itemKey={item.itemKey}
-                authorName={authorName}
-                setAuthorName={setAuthorName}
-                onPosted={() => {
-                  setPending(null);
-                  onCommentPosted();
-                }}
-                annotationMode={annotationMode}
-                activateMode={activateMode}
-                pending={pending}
-                clearPending={clearPending}
-              />
+              {sideTab === "comments" ? (
+                <>
+                  <CommentList
+                    comments={itemComments}
+                    overlays={overlays}
+                    highlightId={highlightId}
+                    setHighlightId={setHighlightId}
+                  />
+                  <CommentForm
+                    shareId={shareId}
+                    itemKey={item.itemKey}
+                    authorName={authorName}
+                    setAuthorName={setAuthorName}
+                    onPosted={() => {
+                      setPending(null);
+                      onCommentPosted();
+                    }}
+                    annotationMode={annotationMode}
+                    activateMode={activateMode}
+                    pending={pending}
+                    clearPending={clearPending}
+                  />
+                </>
+              ) : (
+                <HistoryList shareId={shareId} itemKey={item.itemKey} />
+              )}
             </div>
           </aside>
         </div>
@@ -954,5 +985,102 @@ function MatrixDownload({
       <Icon name="download" className="size-3" />
       Download
     </button>
+  );
+}
+
+
+type HistoryEntry = {
+  id: number;
+  action: string;
+  at: string;
+  by: string;
+  fields: string[];
+};
+
+/** What happened to this card, from the audit log the app already keeps. The
+ *  comments say what people want changed; this says what actually changed —
+ *  the question a second reviewer asks a week later. Loaded on demand, because
+ *  most viewers never open the tab. */
+function HistoryList({
+  shareId,
+  itemKey,
+}: {
+  shareId: string;
+  itemKey: string;
+}) {
+  const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setEntries(null);
+    setError(null);
+    fetch(
+      `/share/${shareId}/history?itemKey=${encodeURIComponent(itemKey)}`,
+    )
+      .then(async (r) => {
+        if (!r.ok) throw new Error(await r.text());
+        return r.json() as Promise<{ entries: HistoryEntry[] }>;
+      })
+      .then((body) => {
+        if (!cancelled) setEntries(body.entries);
+      })
+      .catch((e: Error) => {
+        if (!cancelled) setError(e.message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shareId, itemKey]);
+
+  if (error) {
+    return (
+      <div className="share-detail-dialog__history-error p-3 text-xs text-red-600">
+        {error}
+      </div>
+    );
+  }
+  if (entries === null) {
+    return (
+      <div className="share-detail-dialog__history-loading flex items-center gap-2 p-3 text-xs text-slate-500">
+        <Icon name="spinner" className="size-3.5 animate-spin" />
+        Loading history…
+      </div>
+    );
+  }
+  if (entries.length === 0) {
+    return (
+      <div className="share-detail-dialog__history-empty p-3 text-xs text-slate-500">
+        Nothing has changed on this item since it was created.
+      </div>
+    );
+  }
+
+  return (
+    <ul className="share-detail-dialog__history flex-1 divide-y divide-slate-100 overflow-auto">
+      {entries.map((e) => (
+        <li
+          key={e.id}
+          className="share-detail-dialog__history-row px-3 py-2 text-xs"
+        >
+          <div className="flex items-baseline gap-2">
+            <span className="share-detail-dialog__history-action font-medium text-slate-800">
+              {e.action.replace(/_/g, " ")}
+            </span>
+            <span className="share-detail-dialog__history-by text-slate-500">
+              {e.by}
+            </span>
+            <span className="share-detail-dialog__history-at ml-auto shrink-0 font-mono text-[10px] text-slate-400">
+              {e.at.slice(0, 16)}
+            </span>
+          </div>
+          {e.fields.length > 0 ? (
+            <div className="share-detail-dialog__history-fields mt-0.5 truncate text-[11px] text-slate-500">
+              {e.fields.join(", ")}
+            </div>
+          ) : null}
+        </li>
+      ))}
+    </ul>
   );
 }

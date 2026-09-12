@@ -27,6 +27,7 @@ import {
   Star,
 } from "lucide-react";
 import clsx from "clsx";
+import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import PreviewPane from "../_components/PreviewPane";
 import {
   BIRTH_STATUS,
@@ -608,6 +609,7 @@ export default function TemplateEditor() {
     <div className={clsx("template-editor flex h-screen flex-col", wide && "template-editor--landscape")}>
       <header className="template-editor__header flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4">
         <div className="flex items-center gap-2">
+          <AppBrandTag />
           <span className="template-editor__title text-sm font-semibold text-slate-900">
             Templates
           </span>

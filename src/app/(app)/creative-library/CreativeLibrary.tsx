@@ -56,6 +56,7 @@ import DriveHealthCheck from "./DriveHealthCheck";
 import MatrixDetailDialog from "./MatrixDetailDialog";
 import ShareCreateDialog from "./ShareCreateDialog";
 import { useLongPress } from "@/app/_components/useLongPress";
+import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import {
   MatrixIframeTile,
   MatrixIframeCard,
@@ -921,6 +922,7 @@ function Toolbar({
   return (
     <div className="toolbar creative-library__toolbar sticky top-0 z-10 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
       <div className="flex items-baseline gap-2">
+        <AppBrandTag />
         <div className="toolbar__title text-sm font-semibold text-slate-900">Creative Library</div>
       </div>
 

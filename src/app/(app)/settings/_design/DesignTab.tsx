@@ -216,6 +216,7 @@ export function DesignTab() {
         />
         <TextField
           label="Logo URL"
+          hint="Shipped with the app: /erste.svg, /telekom.svg. A white-filled SVG — light mode inverts it to black, dark mode shows it as is."
           value={draft.cobranding.logoUrl}
           onChange={(v) =>
             setField("cobranding", { ...draft.cobranding, logoUrl: v })
@@ -289,10 +290,12 @@ function ColorField({
 function TextField({
   label,
   value,
+  hint,
   onChange,
 }: {
   label: string;
   value: string;
+  hint?: string;
   onChange: (v: string) => void;
 }) {
   return (
@@ -306,6 +309,11 @@ function TextField({
         onChange={(e) => onChange(e.target.value)}
         className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
       />
+      {hint ? (
+        <span className="form-field__hint mt-1 block text-xs text-slate-500">
+          {hint}
+        </span>
+      ) : null}
     </label>
   );
 }

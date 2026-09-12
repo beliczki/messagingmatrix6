@@ -16,6 +16,7 @@ import {
   Upload as UploadIcon,
 } from "lucide-react";
 import clsx from "clsx";
+import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import MultiPill, { ALL_NONE_QUICK_SELECT } from "../_components/MultiPill";
 import RightToolbar from "../_components/RightToolbar";
 import { useAlertDialog } from "../_components/AlertDialog";
@@ -336,6 +337,7 @@ export function FeedsView() {
       <div className="feeds-view__content flex flex-1 flex-col overflow-hidden">
         <header className="feeds-view__toolbar toolbar sticky top-0 z-40 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
           <div className="flex items-baseline gap-2">
+            <AppBrandTag />
             <h1 className="toolbar__title text-sm font-semibold text-slate-900">
               Feeds
             </h1>

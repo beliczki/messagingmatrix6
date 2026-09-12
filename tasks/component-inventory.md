@@ -78,6 +78,10 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `input-box__icon` | A bal-oldali ikon az input-box belsejében | – | – |
 | `input-box__field` | A tényleges `<input>` elem a wrapper-ben | – | – |
 | `toolbar__count` | Számláló a toolbar-ban (visible/total) | CL toolbar, Assets toolbar | – |
+| `app-brand-tag` | A tenant azonosítója minden lap-toolbar elején, a lap neve ELŐTT („Erste / Matrix"). Korábban a sidebar brand-sávjában ült és a dashboardra vitt vissza; a dashboard azóta saját nav-itemet kapott, ez már csak identitás, nem link. | `_components/AppBrandTag.tsx`, 10 toolbar | az értéket a `BrandProvider` adja az `AppShell`-ből (SSR) |
+| `app-brand-tag__logo` | A cobrand logó, ha a tenant bekapcsolta. Fehérre festett SVG (`public/erste.svg`, `public/telekom.svg`) — light módban `invert`, dark módban `dark:invert-0`. | AppBrandTag.tsx | csak monokróm jelre igaz; többszínű logóhoz külön light/dark pár kellene |
+| `app-brand-tag__name` | A kliens neve, ha nincs cobrand logó | AppBrandTag.tsx | – |
+| `app-brand-tag__sep` | A `/` elválasztó a tag és a lap neve között | AppBrandTag.tsx | – |
 | `form-field` | Label + input wrapper | MessageEditor `Field` 610–626, CL `Field` 811–826, login | inline duplikátum, később hoisting |
 | `form-field__label` | A felső label szöveg | – | – |
 | `form-field__hint` | Optional helper text alul | MessageEditor Field | – |

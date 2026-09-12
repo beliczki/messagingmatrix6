@@ -13,6 +13,7 @@ import {
   sql,
 } from "drizzle-orm";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import { db } from "@/db";
 import {
   audiences,
@@ -257,12 +258,11 @@ export default async function Dashboard({
     <div className="dashboard flex h-full flex-col">
       <RememberView value={rememberedView} />
       <DashboardLiveRefresh />
-      {/* Same sticky toolbar every other screen opens with — title, then the
-          filters, then a count on the right. The client is named in the
-          sidebar on every screen, so repeating it here cost a heading's worth
-          of height and said nothing new. */}
+      {/* Same sticky toolbar every other screen opens with — the tenant tag,
+          the title, then the filters, then a count on the right. */}
       <header className="dashboard__toolbar toolbar sticky top-0 z-40 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
         <div className="flex items-baseline gap-2">
+          <AppBrandTag />
           <h1 className="toolbar__title text-sm font-semibold text-slate-900">
             Dashboard
           </h1>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { Sidebar } from "./Sidebar";
+import { BrandProvider } from "./AppBrandTag";
 import { usePresenceConnection } from "./usePresenceConnection";
 import UsersDialog from "../(app)/_components/UsersDialog";
 import SettingsDialog from "../(app)/_components/SettingsDialog";
@@ -19,11 +20,19 @@ type AboutInfo = {
 type Props = {
   user: { id: string; email: string; role: string };
   client: { key: string; name: string };
+  /** Tenant cobranding logo, already gated on cobranding.enabled. */
+  cobrandLogoUrl: string | null;
   aboutInfo: AboutInfo;
   children: ReactNode;
 };
 
-export default function AppShell({ user, client, aboutInfo, children }: Props) {
+export default function AppShell({
+  user,
+  client,
+  cobrandLogoUrl,
+  aboutInfo,
+  children,
+}: Props) {
   const [usersOpen, setUsersOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
@@ -49,12 +58,17 @@ export default function AppShell({ user, client, aboutInfo, children }: Props) {
     <AlertDialogProvider>
       <Sidebar
         user={{ email: user.email, role: user.role }}
-        client={client}
         version={aboutInfo.appVersion}
         onOpenUsers={isAdmin ? () => setUsersOpen(true) : undefined}
         onOpenSettings={isAdmin ? () => setSettingsOpen(true) : undefined}
       />
-      <main className="flex-1 overflow-auto">{children}</main>
+      <main className="flex-1 overflow-auto">
+        <BrandProvider
+          value={{ clientName: client.name, logoUrl: cobrandLogoUrl }}
+        >
+          {children}
+        </BrandProvider>
+      </main>
 
       {isAdmin ? (
         <UsersDialog

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { getActiveClient } from "@/lib/active-client";
+import { getActiveLookAndFeel } from "@/lib/branding";
 import { readSessionFromCookies } from "@/lib/auth-server";
 import { QueryProvider } from "../_components/QueryProvider";
 import AppShell from "../_components/AppShell";
@@ -37,6 +38,15 @@ export default async function AppLayout({
   if (!u) redirect("/login");
 
   const client = await getActiveClient();
+  // The cobranding logo replaces the client name in every page toolbar. It is
+  // resolved here, server-side, for the same reason the brand CSS variables
+  // are: a client-side fetch would paint the name first and swap it under the
+  // user on every navigation.
+  const laf = await getActiveLookAndFeel();
+  const cobrandLogoUrl =
+    laf.cobranding.enabled && laf.cobranding.logoUrl
+      ? laf.cobranding.logoUrl
+      : null;
 
   const aboutInfo = {
     activeClient: {
@@ -60,6 +70,7 @@ export default async function AppLayout({
         <AppShell
           user={{ id: u.id, email: u.email, role: u.role }}
           client={{ key: client.key, name: client.name }}
+          cobrandLogoUrl={cobrandLogoUrl}
           aboutInfo={aboutInfo}
         >
           {children}

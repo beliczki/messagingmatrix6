@@ -12,6 +12,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import clsx from "clsx";
+import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import ArchiveToggle from "../_components/ArchiveToggle";
 import RightToolbar from "../_components/RightToolbar";
 import { useAlertDialog } from "../_components/AlertDialog";
@@ -238,6 +239,7 @@ export function SharesView() {
       <div className="shares__content flex flex-1 flex-col overflow-hidden">
         <header className="shares__toolbar toolbar sticky top-0 z-40 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
           <div className="flex items-baseline gap-2">
+            <AppBrandTag />
             <h1 className="toolbar__title text-sm font-semibold text-slate-900">
               Shares
             </h1>

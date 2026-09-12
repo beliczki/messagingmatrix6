@@ -3,6 +3,7 @@
 import { X, Filter as FilterIcon, Users, ListTree } from "lucide-react";
 import { type Filters, type MatrixAxis, STATUS_COLOR } from "./types";
 import MultiPill, { ALL_NONE_QUICK_SELECT } from "../_components/MultiPill";
+import { AppBrandTag } from "@/app/_components/AppBrandTag";
 
 const AXES: Array<{ key: MatrixAxis; label: string }> = [
   { key: "dco", label: "DCO" },
@@ -40,6 +41,7 @@ export default function MatrixToolbar(p: Props) {
   return (
     <div className="toolbar matrix-toolbar sticky top-0 z-40 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
       <div className="matrix-toolbar__brand flex items-baseline gap-2">
+        <AppBrandTag />
         <div className="matrix-toolbar__title text-sm font-semibold text-slate-900">Matrix</div>
       </div>
 

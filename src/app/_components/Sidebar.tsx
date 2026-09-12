@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  LayoutDashboard,
   Table2,
   Image as ImageIcon,
   Package,
@@ -24,10 +25,10 @@ import clsx from "clsx";
 import { useThemeSwitch } from "./useThemeSwitch";
 
 type NavUser = { email: string; role: string };
-type NavClient = { key: string; name: string };
 type IconType = ComponentType<SVGProps<SVGSVGElement>>;
 
 const ITEMS: Array<{ href: string; label: string; Icon: IconType }> = [
+  { href: "/", label: "Dashboard", Icon: LayoutDashboard },
   { href: "/matrix", label: "Matrix", Icon: Table2 },
   { href: "/creative-library", label: "Creative Library", Icon: ImageIcon },
   { href: "/drafts", label: "Drafts", Icon: FlaskConical },
@@ -43,7 +44,6 @@ const ITEMS: Array<{ href: string; label: string; Icon: IconType }> = [
 
 type Props = {
   user: NavUser;
-  client: NavClient;
   /** App version (package.json), shown dimmed under the last nav item. */
   version: string;
   /** Provided when current user is admin; opens the Users dialog. */
@@ -52,7 +52,7 @@ type Props = {
   onOpenSettings?: () => void;
 };
 
-export function Sidebar({ user, client, version, onOpenUsers, onOpenSettings }: Props) {
+export function Sidebar({ user, version, onOpenUsers, onOpenSettings }: Props) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
 
@@ -90,22 +90,16 @@ export function Sidebar({ user, client, version, onOpenUsers, onOpenSettings }: 
           <img src="/mmatrix.svg" alt="Messaging Matrix" className="app-sidebar__logo size-6 dark:hidden" />
           <img src="/mmatrix-dark.svg" alt="" aria-hidden className="app-sidebar__logo app-sidebar__logo--dark size-6 hidden dark:block" />
         </button>
-        {/* The client name is the way back to the dashboard — it needs no nav
-            item of its own (user's call), and every screen already shows it. */}
-        {!collapsed ? (
-          <Link
-            href="/"
-            title="Dashboard"
-            className="app-sidebar__client-name rounded px-1 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
-          >
-            {client.name}
-          </Link>
-        ) : null}
       </div>
 
       <nav className="app-sidebar__nav flex-1 overflow-y-auto p-2">
         {ITEMS.map((it) => {
-          const active = pathname === it.href || pathname?.startsWith(it.href + "/");
+          // The root is exact-match only: `startsWith("/")` would light the
+          // Dashboard item up on every screen in the app.
+          const active =
+            it.href === "/"
+              ? pathname === "/"
+              : pathname === it.href || pathname?.startsWith(it.href + "/");
           return (
             <Link
               key={it.href}

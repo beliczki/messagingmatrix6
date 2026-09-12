@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Code2, Loader2, X } from "lucide-react";
 import clsx from "clsx";
+import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import {
   MatrixIframePreview,
   templateMetaFor,
@@ -362,8 +363,11 @@ export default function MonitoringTable({
     <div className="monitoring-table flex h-full flex-col overflow-hidden">
       {/* header toolbar: title + filters + count (mirrors creative-library) */}
       <div className="toolbar monitoring-table__toolbar sticky top-0 z-10 flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-200 bg-white px-4">
-        <div className="toolbar__title text-sm font-semibold text-slate-900">
-          Monitoring
+        <div className="flex items-baseline gap-2">
+          <AppBrandTag />
+          <div className="toolbar__title text-sm font-semibold text-slate-900">
+            Monitoring
+          </div>
         </div>
 
         {data && data.periods.length > 0 ? (

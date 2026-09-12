@@ -322,7 +322,7 @@ export default function FeedExportDialog({
   return (
     <AppDialog open={open} onClose={close} ariaLabel="Feed export preview">
       <div className="feed-export-dialog flex h-full flex-col overflow-hidden">
-        <header className="feed-export-dialog__header flex items-center justify-between gap-3 border-b border-slate-200 px-6 py-4 pr-14">
+        <header className="feed-export-dialog__header toolbar flex h-12 shrink-0 items-center justify-between gap-3 border-b border-slate-200 px-6 pr-14">
           <h2 className="text-base font-semibold text-slate-900">
             Feed export ·{" "}
             <span className="font-mono text-sm">

@@ -997,10 +997,20 @@ type HistoryEntry = {
   fields: string[];
 };
 
-/** What happened to this card, from the audit log the app already keeps. The
+type HistorySection = {
+  key: string;
+  label: string;
+  entries: HistoryEntry[];
+};
+
+/** What happened to this item, from the audit log the app already keeps. The
  *  comments say what people want changed; this says what actually changed —
- *  the question a second reviewer asks a week later. Loaded on demand, because
- *  most viewers never open the tab. */
+ *  the question a second reviewer asks a week later.
+ *
+ *  Two lives, two sections with a rule between them: the delivered FILE and the
+ *  CARD it belongs to are logged separately, and "the creative was replaced
+ *  yesterday" is a different answer from "the copy changed last week". Loaded
+ *  on demand, because most viewers never open the tab. */
 function HistoryList({
   shareId,
   itemKey,
@@ -1008,22 +1018,20 @@ function HistoryList({
   shareId: string;
   itemKey: string;
 }) {
-  const [entries, setEntries] = useState<HistoryEntry[] | null>(null);
+  const [sections, setSections] = useState<HistorySection[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    setEntries(null);
+    setSections(null);
     setError(null);
-    fetch(
-      `/share/${shareId}/history?itemKey=${encodeURIComponent(itemKey)}`,
-    )
+    fetch(`/share/${shareId}/history?itemKey=${encodeURIComponent(itemKey)}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(await r.text());
-        return r.json() as Promise<{ entries: HistoryEntry[] }>;
+        return r.json() as Promise<{ sections: HistorySection[] }>;
       })
       .then((body) => {
-        if (!cancelled) setEntries(body.entries);
+        if (!cancelled) setSections(body.sections);
       })
       .catch((e: Error) => {
         if (!cancelled) setError(e.message);
@@ -1040,7 +1048,7 @@ function HistoryList({
       </div>
     );
   }
-  if (entries === null) {
+  if (sections === null) {
     return (
       <div className="share-detail-dialog__history-loading flex items-center gap-2 p-3 text-xs text-slate-500">
         <Icon name="spinner" className="size-3.5 animate-spin" />
@@ -1048,7 +1056,9 @@ function HistoryList({
       </div>
     );
   }
-  if (entries.length === 0) {
+
+  const withEntries = sections.filter((s) => s.entries.length > 0);
+  if (withEntries.length === 0) {
     return (
       <div className="share-detail-dialog__history-empty p-3 text-xs text-slate-500">
         Nothing has changed on this item since it was created.
@@ -1057,30 +1067,42 @@ function HistoryList({
   }
 
   return (
-    <ul className="share-detail-dialog__history flex-1 divide-y divide-slate-100 overflow-auto">
-      {entries.map((e) => (
-        <li
-          key={e.id}
-          className="share-detail-dialog__history-row px-3 py-2 text-xs"
+    <div className="share-detail-dialog__history flex-1 overflow-auto">
+      {withEntries.map((section) => (
+        <section
+          key={section.key}
+          className="share-detail-dialog__history-section border-b border-slate-200 last:border-b-0"
         >
-          <div className="flex items-baseline gap-2">
-            <span className="share-detail-dialog__history-action font-medium text-slate-800">
-              {e.action.replace(/_/g, " ")}
-            </span>
-            <span className="share-detail-dialog__history-by text-slate-500">
-              {e.by}
-            </span>
-            <span className="share-detail-dialog__history-at ml-auto shrink-0 font-mono text-[10px] text-slate-400">
-              {e.at.slice(0, 16)}
-            </span>
-          </div>
-          {e.fields.length > 0 ? (
-            <div className="share-detail-dialog__history-fields mt-0.5 truncate text-[11px] text-slate-500">
-              {e.fields.join(", ")}
-            </div>
-          ) : null}
-        </li>
+          <h3 className="share-detail-dialog__history-label bg-slate-50 px-3 py-1.5 text-[10px] font-medium uppercase tracking-wider text-slate-500">
+            {section.label}
+          </h3>
+          <ul className="divide-y divide-slate-100">
+            {section.entries.map((e) => (
+              <li
+                key={e.id}
+                className="share-detail-dialog__history-row px-3 py-2 text-xs"
+              >
+                <div className="flex items-baseline gap-2">
+                  <span className="share-detail-dialog__history-action font-medium text-slate-800">
+                    {e.action.replace(/_/g, " ")}
+                  </span>
+                  <span className="share-detail-dialog__history-by text-slate-500">
+                    {e.by}
+                  </span>
+                  <span className="share-detail-dialog__history-at ml-auto shrink-0 font-mono text-[10px] text-slate-400">
+                    {e.at.slice(0, 16)}
+                  </span>
+                </div>
+                {e.fields.length > 0 ? (
+                  <div className="share-detail-dialog__history-fields mt-0.5 truncate text-[11px] text-slate-500">
+                    {e.fields.join(", ")}
+                  </div>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
       ))}
-    </ul>
+    </div>
   );
 }

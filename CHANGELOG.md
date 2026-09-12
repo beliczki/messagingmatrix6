@@ -5,6 +5,20 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.91.0] — 2026-09-12
+
+### Changed
+- **The share page's History tab shows the card and the file as separate
+  sections**, divided by a rule. A shared item has two lives and they are
+  logged apart: the messaging card (with the draft it was promoted from — one
+  `messages` row per cell, all of them the same card, merged into one story)
+  and the delivered creative file. "The creative was replaced yesterday" and
+  "the copy changed last week" are different answers, so interleaving them
+  answered neither. Opening a creative shows its file first, then its card;
+  opening a matrix cell shows the card first, then the files for it **that the
+  share holds** — nothing becomes reachable that the viewer could not already
+  see. Two more integration tests.
+
 ## [6.90.0] — 2026-09-12
 
 ### Added

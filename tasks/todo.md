@@ -26,6 +26,21 @@
 
 ## 🟢 NOW — indulásra kész (nincs blokkoló külső input)
 
+### Telekom mm6 instance a boxra — `telekom.messagingmatrix.ai` (user, 2026-09-12)
+Tanulmány: `docs/TELEKOM_DEMO_STUDY.md`. Előfeltételek élőben ellenőrizve: DNS ✅ (→46.224.60.159),
+certbot cert ✅ (2026-11-30-ig), 6002-es port szabad ✅, disk 6.8G szabad, RAM 2.4G elérhető.
+A régi v5 telekom (`mm-server-telekom`, 3004) **ma is 502** — nem élő szolgáltatást kapcsolunk le.
+- [ ] **T1** Backup: `/var/www/messagingmatrix-telekom` → `/var/backups/mm5-legacy/` (tartalmaz **valódi v5 SQLite adatot**: `messaging-matrix.db` 1.1M + 4.5M WAL) + a régi nginx vhost mentése
+- [ ] **T2** `pm2 delete mm-server-telekom` + `pm2 save` (a v5 erste:3003 és proficio:3005 **marad** — külön döntés)
+- [ ] **T3** `/var/www/mm6-telekom` checkout az origin HEAD-ről (box `6.90.0`)
+- [ ] **T4** `.env`: `ACTIVE_CLIENT_KEY=telekom`, `PORT=6002`, saját `JWT_SECRET`, **közös** `DATABASE_URL` + MinIO bucket, `TEMPLATES_ROOT` a checkouton **kívülre** (a tanulmány R2 kockázata)
+- [ ] **T5** `npm ci` + `npm run build`
+- [ ] **T6** telekom kliens + admin user seed (csak telekom, nem a seed-multi mind a 4 kulcsa)
+- [ ] **T7** `ecosystem.config.cjs` + `pm2 start` 6002 + `pm2 save`
+- [ ] **T8** nginx vhost átírása (erste mintájára: `/mcp` blokk + 200M body) → `nginx -t` → reload
+- [ ] **T9** Health: `/`→307, `/login`→200, `/mcp`→401 lokálisan és publikusan; Erste-regresszió-check (6001 sértetlen)
+
+
 ### ~~Box deploy — 6.83.0~~ — **✅ DEPLOYOLVA (2026-09-11)**
 commit `c49d391`, box `0c6bce0`→`c49d391`, `npm run build` OK, `pm2 restart mm6-erste --update-env` → **Ready 1310ms**, box `package.json` **6.83.0**. **Séma-migráció nincs** (`git diff --name-only 0c6bce0..c49d391 -- db/migrations` üres). `error.log` a restart óta üres. Health: `/` 307 · `/login` 200 · `/matrix` 307 · `/drafts` 307 · `/creative-library` 307 · `/api/templates` 401 · `/mcp` 401; publikus `erste.messagingmatrix.ai/login` **200**.
 
@@ -1077,3 +1092,17 @@ Health: `/` 307 · `/login` 200 · `/matrix` 307 · `/creative-library` 307 · `
 Az új publikus route élesben ellenőrizve: `/share/WCuvHqTtflu_/history?itemKey=creative:17393` →
 1 bejegyzés (`create · admin`), `itemKey=creative:1` → **404 `not_in_share`** (a snapshot-ellenőrzés
 tehát tényleg zár). Az `error.log`-ban a restart óta nincs új sor.
+
+### 2026-09-12 — share History: kártya és fájl külön szekcióban — 6.91.0
+
+**User:** „a historyban ha külön van draft history és creative history akkor külön vonallal ellátott
+szekcióban mindkettőt mutassuk meg."
+
+- [x] A `/share/[id]/history` route **szekciókat** ad vissza egyetlen lista helyett. Egy megosztott
+      tételnek két élete van, és külön naplózódnak: a **kártya** (a promotált draft + cellánként egy
+      `messages` sor — mind ugyanaz a kártya, egy történetbe fésülve) és a **leszállított fájl**.
+      Kreatívot nyitva: fájl, majd kártya; mátrix-cellát nyitva: kártya, majd a **share-ben lévő**
+      kreatívok — a snapshot marad a határ, nem lesz elérhető semmi, amit a néző eddig sem látott.
+- [x] A panel `share-detail-dialog__history-section` + `__history-label` (szürke sávfejléc), a
+      szekciók közt vonal. Üres szekció ki sem íródik.
+- [x] +2 integrációs teszt (kártya-szekció összefésülése két cellából; mátrix-cella → kártya + fájlok).

@@ -1068,3 +1068,12 @@ fejlécben Drive + Slides, a lightboxban Comments/History tab.
   materializált segédtábla oldja meg, nem a route.
 - A feed-export panel a 2026-08-31-i SZA exportot **`v0`**-ként írja ki (`feed_version = 0` a sorban).
   Vagy a verziószámozás kezdett 0-ról ennél a soron, vagy egy régi import hagyta így — külön szelet.
+
+**DEPLOYOLVA 6.90.0 (2026-09-12):** commit `e359160`, box `d5d23ed`→`e359160`, `npm run build` OK,
+`pm2 restart mm6-erste --update-env` → **Ready 1299ms**, box `package.json` **6.90.0**.
+**Séma-migráció nincs** (`git diff --name-only 704c930..e359160 -- db/migrations` üres).
+Health: `/` 307 · `/login` 200 · `/matrix` 307 · `/creative-library` 307 · `/shares` 307 ·
+`/api/audit-log` 401 · `/mcp` 401; publikus `erste.messagingmatrix.ai/login` **200**.
+Az új publikus route élesben ellenőrizve: `/share/WCuvHqTtflu_/history?itemKey=creative:17393` →
+1 bejegyzés (`create · admin`), `itemKey=creative:1` → **404 `not_in_share`** (a snapshot-ellenőrzés
+tehát tényleg zár). Az `error.log`-ban a restart óta nincs új sor.

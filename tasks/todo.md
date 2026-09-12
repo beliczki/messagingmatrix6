@@ -16,7 +16,7 @@
 
 ## Jelen állapot (2026-09-10)
 
-- **Verzió: `6.83.0`**, **live** a Hetzner boxon (`erste.messagingmatrix.ai`, pm2 `mm6-erste`). Working tree tiszta; a 6.82.x munkák commitálva.
+- **Verzió: `6.84.0`** (live a boxon: `6.83.0`) a Hetzner boxon (`erste.messagingmatrix.ai`, pm2 `mm6-erste`). Working tree tiszta; a 6.82.x munkák commitálva.
 - Phase 0–10 + a 2026-08/09-es epicek mind leszállítva: DCO/Agentic mátrix, Creative Library rebuild, DRAFT-modell (draft = `messages` sor `audience IS NULL`), draft-variánsok, státusz-takarítás (6 státusz), monitoring periódus-tartomány + nap-grain, Drive-linkek, feed diff-alap + „semmi nem tűnik el", dashboard napi áttekintő, Channels-entitás, MCP per-user tokenek.
 - **Átrendezés 2026-09-10:** minden lezárt epic-log és a 2026-09-10 előtti checkpointok szó szerint átkerültek a `todo-archive.md`-be („Archivált 2026-09-10 — todo.md átrendezés" szekció). Itt csak a nyitott munka maradt.
 
@@ -72,16 +72,31 @@ A legolcsóbb 80% már él: a Size pill `SIZE_QUICK_SELECT` preset-linkjei (`Cre
 
 ### Agent-oldal (MCP + provenance)
 
-### MCP token-scope #3: `draft` — mindent olvas, csak draftot ír (USER KÉRÉS, 2026-09-06)
-A workflow-agent ma vagy `read` (semmit nem tud létrehozni), vagy `full` (a teljes mátrixot írhatja). A munkamódszer viszont pont a közepét kívánja: az agent **lásson mindent** (mátrix, kreatívok, riport, sablonok — hogy tudjon dönteni), de **csak a draft-térbe írhasson**, ahol a hibája nem ér el élő kártyát.
+### ~~MCP token-scope #3: `draft`~~ — **✅ KÉSZ (6.84.0, 2026-09-12)**
+Leszállítva: `read | draft | full`. A `draft` mindent olvas, és csak a draft-térbe ír
+(`generate_test_creative`, `brief_attach`, `draft_archive`, `asset_upload`). **Séma-migráció nincs**
+(`mcp_tokens.scope` sima `text`, check constraint nélkül).
 
-- [ ] `mcp_tokens.scope` harmadik értéke: `read | draft | full` (a check/validáció a `mcp-tokens` route-ban és a Settings › MCP fülön).
-- [ ] A `buildMcpServer` regisztrációs feltétele: `draft` = minden read tool + **a draft-írók** (`generate_test_creative`, `draft_archive`, `brief_attach`, és a draftra korlátozott `mc_update`?) — a `draft_promote` **NEM**, mert az cellát ad, azaz kilép a draft-térből. ⚠️ OPEN Q: a promote tényleg kimarad-e, vagy a scope „draft + promote" legyen.
-- [ ] A ma `full`-höz kötött, draftra is ható tool-oknál a scope nem elég: a **sor** is draft kell legyen (`status='DRAFT'` ⟺ `audience IS NULL`) — a guard az entity-ben, nem a tool-listában, különben egy új tool kifelejtődik.
-- [ ] Tesztek: `draft`-scope-os token nem tud `mc_create`-et / `draft_promote`-ot / dimenzió-írást; ugyanaz a token minden read toolt lát; a `full` és a `read` viselkedése változatlan (regresszió).
-- [ ] `McpTab.tsx` prózája — a tool-lista magától szinkronizál a `mcp.ts`-ből, a **szöveges** szekciók kézzel írtak (l. `feedback_mcp_settings_page_sync`).
+- [x] **S1** `McpScope = "read" | "draft" | "full"`; `resolveBearerClient` a tárolt értéket adja.
+- [x] **S2** `buildMcpServer` `draft` ága; `draft_promote` külön `registerDraftPromoteTool`-ba emelve,
+      csak `full` kapja — a promote cellát ad, azaz kilép a draft-térből.
+- [x] **S3** `outsideDraftScope()` sorszintű őr. Két helyen kellett: `brief_attach` (bármely message
+      id-t elfogad) **és — menet közben derült ki — az `asset_upload` `replace_existing`-je**: a
+      fájlnév-feloldás newest-first, tehát a csere azt írja át, amit egy **már kihelyezett** kártya
+      renderel. Az őr a SORON ül, nem a tool-listán, különben egy később hozzáadott tool kicsúszik.
+- [x] **S4** `mcp-tokens/route.ts` validáció (`read|draft|full`); demo user marad `read`-only.
+- [x] **S5** `McpTab.tsx`: típus, `SCOPE_BADGE` map (amber), select-opció, próza.
+- [x] **S6** 5 új teszt (tool-lista draft scope-ban · bearer-feloldás · `brief_attach` placed kártyán
+      elutasít + full-scope kontroll · `replace_existing` elutasítás + új név megy). 911/911.
+- [x] **S7** CHANGELOG + `6.84.0` minor bump.
 
-Miért ez a helyes gránulátum: a draft már ma is egy `messages` sor `audience IS NULL`-lal, tehát a „mit írhat" kérdésre **létező invariáns** válaszol — nem kell új jogosultsági fogalom, csak a meglévőt kell a token-scope-hoz kötni.
+**⚠️ Nyitva hagyott döntés (user elé):** a `scope` oszlopon **nincs check constraint**, és az ismeretlen
+érték **`full`-ra szélesedik** (`mcp.ts` `resolveBearerClient`) — ez a 6.0 óta így van, én csak
+dokumentáltam (teszt + komment). Egy elgépelt kézi SQL így teljes jogot ad. Szűkítés `read`-re +
+check constraint = egy migrációs szelet; a user dönt.
+
+**Következő szelet (NEM ez):** `draft_update` MCP tool (draft_id + content mezők) — enélkül a
+draft-agent csak létrehozni tud, iterálni nem. `mc_update` pmmid-del címez, a draftnak nincs pmmid-je.
 
 ### I2 — Komment-thread mint **entitás-provenance** (DÖNTÉS LEZÁRVA)
 **User-döntés:** „thread lenne a legjobb, fáj hogy nem látszik ki mikor mit" + **a cél explicit: az agenteknek kontextust adni** arról, hogy mi változott, milyen kérésre, miért, és **egyáltalán miért hívnak úgy egy topicot / audience-t / MC-t, mi van rajtuk, miért jöttek létre.**
@@ -289,9 +304,8 @@ draft_target`. Ellenőrizve élesben: az oszlop és a `messages_draft_target_val
 `/matrix` 307 · `/api/drafts` 401 · `/mcp` 401 · **`/share/fke-60Mn5frC` 200** — ez utóbbi a lényeg,
 mert publikus és `messages`-t olvas az új sémán át, tehát a kód és a DB együtt van.
 
-**Böngészőben NEM ellenőrizve** (a session bejelentkezést igényel): a szaggatott Sep oszlop, a Brief
-fül két új gombja + Target vezérlője, a Promote fül matched-sora és a kártya-cover kinézete.
-Ez a következő session első feladata.
+~~**Böngészőben NEM ellenőrizve**~~ → a 6.74–6.83 iterációk mind ezeken a felületeken mentek, élőben
+használva. Lezárva 2026-09-12.
 
 ### 2026-09-10 — draft-kártya: kétsoros meta + akció-menü — 6.74.0
 
@@ -509,11 +523,8 @@ ment oda-vissza, tehát az input értéke az volt, ami a round-tripet túlélte.
       változott (másik variáns, reload), nem minden leütésnél.
 - [x] 7 unit teszt a `tests/unit/planned-topic.test.ts`-ben, benne a konkrét hibás eset.
 
-**NYITVA — külön feladat:** a user jelezte, hogy a mátrix szerkesztőben időnként „beleakad a saját
-munkájába", és feljön a reload/konfliktus üzenet (409 a saját mentése ellen). Nem reprodukáltam,
-és nem tippelek bele a konfliktus-gépezetbe (soros mentés `saveInFlightRef`-fel + „Phase B"
-stale-tab detektálás a `message.version > committedSnapshot.version` ágon). Külön menetben,
-reprodukcióval kell nekifutni.
+~~**NYITVA — külön feladat:** 409 a saját mentés ellen~~ → **LEZÁRVA 6.82.1-ben** (a fan-out sorok
+elavult `version`-je a kliens-cache-ben volt az ok, l. lent).
 
 ### 2026-09-10 — a brief az MC-hez tartozik, nem a variánshoz — 6.82.0
 
@@ -576,3 +587,32 @@ próbáltam ki; a takarításhoz használt `shift+Home` macOS textareában a **d
 `before` mezőjéből írtam vissza byte-pontosan (`EXACT MATCH` ellenőrizve). A `version` 5→7, az
 `updated_at` 20:56 — tartalmilag ép. **Tanulság a fájlba: UI-t DRAFT-on kell próbálni, nem élő
 kártyán** (a második kör már az MC402a drafton ment, azt is visszaürítettem).
+
+### 2026-09-11 — szallashu demo tenant: megvalósíthatósági tanulmány (DÖNTÉSRE VÁR)
+- Tanulmány: `docs/SZALLASHU_DEMO_STUDY.md`. Meta Ad Library (~32 aktív hirdetés) + 2 Gemius display-kreatív alapján; box + DB + kód ellenőrizve.
+- Verdikt: Standard scope ~18–32 gépi óra + 4–7 user-óra, 3–5 munkanap. Kritikus út: `templates/szallashu` review-kör. Meta/Google feed nincs (W4 blokkolt) — csak roadmapként.
+- Nyitott: a tanulmány §7 hét döntése (scope, hostname/DNS, topológia A/B, termékek, képforrás, logó, Meta-üzenet). Kód nem változott.
+
+### 2026-09-12 — Ikonkészlet-tanulmány: lucide → kapcsolható Streamline Core (DÖNTÉSRE VÁR)
+- Tanulmány: `docs/ICON_SET_STUDY.md`. Kód-leltár (87 lucide ikon / 66 fájl / 1 custom `GoogleDriveIcon`) + Streamline Core free 8 stílus (Iconify `streamline` = Line+Solid+Remix, Pop csak GitHub) + 87 soros név-megfeleltetés, kirenderelve ellenőrizve.
+- Verdikt: 51 ✅ / 24 🟡 / 12 ❌ — a Core free-ben **nincs chevron, spinner, grip, rács**; ezek 9 saját 14-grid path-tal pótolhatók vagy Pro Core Line ($19/hó/seat). Kapcsolhatósághoz szemantikus ikon-regiszter (`src/app/_icons/`) + build-time generált családok kellenek; a 66 fájl egyesével áll át (~2–3 nap). Pop nem `currentColor` (fix 5 szín), dark módban CSS-var csere kell.
+- Nyitott: a tanulmány §6 négy döntése (runtime váltás kell-e, free vs Pro, Pop bekerül-e, lucide 1.11→1.45 bump). Kód nem változott.
+
+### 2026-09-12 — MCP `draft` token-scope — 6.84.0
+
+**User:** „ok gyerünk" / „mehet" — a 6.73–6.83 draft-modell azért épült, hogy legyen egy tér, ahol az
+agent hibája nem ér el élő kártyát; ez a szelet adja hozzá a kulcsot.
+
+- [x] S1–S7 a NEXT szekció szerint. **Séma-migráció nincs**, a deploy sima build + restart.
+- [x] `npm test` **911/911** (95 fájl), `tsc` + `eslint` tiszta (0 error). Lokális build kihagyva.
+- [x] Böngészőben **nem** néztem meg a Settings › MCP fület (belépést igényel) — az új select-opció,
+      az amber badge és a próza vizuális ellenőrzése a useré.
+
+**Két dolog, ami menet közben derült ki:**
+- Az `asset_upload` **nem tisztán additív**: `replace_existing=true` esetén a newest-first
+  fájlnév-feloldás miatt egy **élő kártya** képét cseréli le. A terv „additív, mehet a draft
+  scope-ba" indoklása eddig hiányos volt — ezért kapott saját őrt, nem csak a brief_attach.
+- A `draft_promote` kiemelése külön regisztrációs függvénybe kellett, mert a `registerDraftWriteTools`
+  egyben tartotta a négy draft-írót; így a scope-határ a kódban is látszik, nem egy `if`-ben bújik el.
+
+**Nyitva:** az ismeretlen `scope` érték `full`-ra szélesedése (l. a NEXT szekció figyelmeztetését).

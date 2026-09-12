@@ -19,6 +19,7 @@ let owner: { id: string };
 
 const FULL_TOKEN = "mcp_full_secret";
 const READ_TOKEN = "mcp_read_secret";
+const DRAFT_TOKEN = "mcp_draft_secret";
 
 const READ_TOOLS = [
   "list_audiences",
@@ -65,6 +66,12 @@ beforeEach(async () => {
   await db.insert(mcpTokens).values([
     { clientId: erste.id, userId: owner.id, token: FULL_TOKEN, scope: "full" },
     { clientId: erste.id, userId: owner.id, token: READ_TOKEN, scope: "read" },
+    {
+      clientId: erste.id,
+      userId: owner.id,
+      token: DRAFT_TOKEN,
+      scope: "draft",
+    },
   ]);
 });
 
@@ -99,6 +106,23 @@ describe("resolveBearerClient (mcp_tokens)", () => {
   it("resolves a read token with scope 'read'", async () => {
     const ctx = await resolveBearerClient(bearerReq(READ_TOKEN));
     expect(ctx).toMatchObject({ userId: owner.id, scope: "read" });
+  });
+
+  it("resolves a draft token with scope 'draft'", async () => {
+    const ctx = await resolveBearerClient(bearerReq(DRAFT_TOKEN));
+    expect(ctx).toMatchObject({ userId: owner.id, scope: "draft" });
+  });
+
+  // Pre-existing behaviour, kept deliberately in 6.84.0: the column carries no
+  // check constraint, and an unrecognised value has always widened to 'full'.
+  // Documented here so that narrowing it is a decision, not an accident.
+  it("reads an unknown stored scope as 'full'", async () => {
+    await db
+      .update(mcpTokens)
+      .set({ scope: "wat" })
+      .where(eq(mcpTokens.token, READ_TOKEN));
+    const ctx = await resolveBearerClient(bearerReq(READ_TOKEN));
+    expect(ctx).toMatchObject({ scope: "full" });
   });
 
   it("accepts the ?secret= query-param fallback", async () => {
@@ -154,7 +178,7 @@ describe("resolveBearerClient (mcp_tokens)", () => {
 });
 
 describe("buildMcpServer scope gating", () => {
-  function toolNames(scope: "full" | "read"): string[] {
+  function toolNames(scope: "full" | "draft" | "read"): string[] {
     const server = buildMcpServer({
       clientId: erste.id,
       userId: owner.id,
@@ -182,6 +206,40 @@ describe("buildMcpServer scope gating", () => {
       "draft_promote",
     ]) {
       expect(names).not.toContain(writeTool);
+    }
+  });
+
+  it("draft scope reads everything but writes only inside the draft space", () => {
+    const names = toolNames("draft");
+    // Every read tool a read token has, it still has.
+    for (const readTool of READ_TOOLS) {
+      expect(names).toContain(readTool);
+    }
+    for (const draftWrite of [
+      "generate_test_creative",
+      "brief_attach",
+      "draft_archive",
+      "asset_upload",
+    ]) {
+      expect(names).toContain(draftWrite);
+    }
+    // draft_promote hands the row a cell, which leaves the draft space.
+    expect(names).not.toContain("draft_promote");
+    for (const matrixWrite of [
+      "audience_create",
+      "topic_create",
+      "mc_create",
+      "mc_update",
+      "mc_remove",
+      "preview_generate",
+      "creative_upload",
+      "creative_promote",
+      "prodlist_upsert",
+      "mc_create_batch",
+      "mc_copy_batch",
+      "mc_move_batch",
+    ]) {
+      expect(names).not.toContain(matrixWrite);
     }
   });
 

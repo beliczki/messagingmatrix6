@@ -19,7 +19,7 @@ type McpTokenRow = {
   id: number;
   userId: string;
   userEmail: string;
-  scope: "full" | "read";
+  scope: "full" | "draft" | "read";
   label: string | null;
   tokenMasked: string;
   lastUsedAt: string | null;
@@ -30,6 +30,12 @@ type UserRow = {
   id: string;
   email: string;
   role: string;
+};
+
+const SCOPE_BADGE: Record<McpTokenRow["scope"], string> = {
+  full: "bg-emerald-100 text-emerald-800",
+  draft: "bg-amber-100 text-amber-800",
+  read: "bg-slate-200 text-slate-600",
 };
 
 const GROUP_ORDER: Array<{ key: string; label: string; match: (n: string) => boolean }> = [
@@ -116,8 +122,23 @@ export function McpTab() {
           Each token belongs to one user and carries a scope:{" "}
           <code className="font-mono text-xs">full</code> registers every tool,{" "}
           <code className="font-mono text-xs">read</code> registers only the
-          list/read tools — write tools are not registered at all, so they
-          don&apos;t appear in <code className="font-mono text-xs">tools/list</code>.
+          list/read tools, and{" "}
+          <code className="font-mono text-xs">draft</code> sits between them —
+          it reads everything, but the only writes it can make stay inside the
+          draft space: <code className="font-mono text-xs">generate_test_creative</code>,{" "}
+          <code className="font-mono text-xs">brief_attach</code>,{" "}
+          <code className="font-mono text-xs">draft_archive</code> and{" "}
+          <code className="font-mono text-xs">asset_upload</code>. A draft has
+          no audience and no cell, so no feed export can reach it;{" "}
+          <code className="font-mono text-xs">draft_promote</code> is therefore
+          NOT in this scope — placing a draft in the matrix stays a human
+          decision made in the Promote dialog. Unregistered tools are invisible
+          to <code className="font-mono text-xs">tools/list</code> and rejected
+          at the protocol layer; the two tools that can address a placed card as
+          well as a draft (<code className="font-mono text-xs">brief_attach</code>,{" "}
+          and <code className="font-mono text-xs">asset_upload</code> with{" "}
+          <code className="font-mono text-xs">replace_existing</code>) refuse it
+          row by row.
           The deploy is pinned to one client via{" "}
           <code className="font-mono text-xs">ACTIVE_CLIENT_KEY</code>: a token
           that resolves to a different client returns 401, even if the token is
@@ -396,11 +417,7 @@ function McpTokensSection() {
                 </td>
                 <td className="px-2 py-2">
                   <span
-                    className={
-                      t.scope === "full"
-                        ? "status-badge rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-800"
-                        : "status-badge rounded bg-slate-200 px-1.5 py-0.5 text-xs font-medium text-slate-600"
-                    }
+                    className={`status-badge rounded px-1.5 py-0.5 text-xs font-medium ${SCOPE_BADGE[t.scope]}`}
                   >
                     {t.scope}
                   </span>
@@ -470,7 +487,7 @@ function NewTokenModal({
   onCreated: (userEmail: string, token: string) => void;
 }) {
   const [userId, setUserId] = useState("");
-  const [scope, setScope] = useState<"full" | "read">("read");
+  const [scope, setScope] = useState<"full" | "draft" | "read">("read");
   const [label, setLabel] = useState("");
 
   const usersQ = useQuery({
@@ -551,10 +568,15 @@ function NewTokenModal({
             </span>
             <select
               value={scope}
-              onChange={(e) => setScope(e.target.value as "full" | "read")}
+              onChange={(e) =>
+                setScope(e.target.value as "full" | "draft" | "read")
+              }
               className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm focus:border-slate-500 focus:outline-none"
             >
               <option value="read">read — list/read tools only</option>
+              <option value="draft" disabled={selectedUser?.role === "demo"}>
+                draft — reads everything, writes only drafts
+              </option>
               <option value="full" disabled={selectedUser?.role === "demo"}>
                 full — every tool, including writes
               </option>

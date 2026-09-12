@@ -28,8 +28,12 @@ type Handler = (args: Record<string, unknown>) => Promise<{
   isError?: boolean;
 }>;
 
-function getHandler(clientId: number, toolName: string): Handler {
-  const server = buildMcpServer({ clientId, userId: "test-user", scope: "full" });
+function getHandler(
+  clientId: number,
+  toolName: string,
+  scope: "full" | "draft" | "read" = "full",
+): Handler {
+  const server = buildMcpServer({ clientId, userId: "test-user", scope });
   const registry = (server as unknown as {
     _registeredTools: Record<string, { handler: Handler }>;
   })._registeredTools;
@@ -42,8 +46,9 @@ async function callTool(
   clientId: number,
   toolName: string,
   args: Record<string, unknown>,
+  scope: "full" | "draft" | "read" = "full",
 ) {
-  const res = await getHandler(clientId, toolName)(args);
+  const res = await getHandler(clientId, toolName, scope)(args);
   const text = res.content[0]?.text ?? "";
   return {
     isError: !!res.isError,
@@ -241,6 +246,57 @@ describe("draft_promote", () => {
     });
     expect(res.isError).toBe(true);
     expect(res.text).toMatch(/create the topic first/);
+  });
+});
+
+describe("draft scope — row-level guard", () => {
+  it("lets a draft-scoped token brief a draft", async () => {
+    const draft = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+    });
+    const res = await callTool(
+      erste.id,
+      "brief_attach",
+      {
+        link: `https://docs.google.com/presentation/d/${DECK}/edit`,
+        draft_id: draft.json.draft_id,
+      },
+      "draft",
+    );
+    expect(res.isError).toBe(false);
+    expect(res.json).toMatchObject({ slides_file_id: DECK });
+  });
+
+  it("refuses a placed card — the tool takes any message id, so the scope has to be checked on the ROW", async () => {
+    const draft = await callTool(erste.id, "generate_test_creative", {
+      template: "html",
+    });
+    const placed = await callTool(erste.id, "draft_promote", {
+      draft_id: draft.json.draft_id,
+      audience_key: "SZK_visitors",
+      topic_key: "SZK_brand",
+    });
+    const placedId = placed.json.message.id;
+
+    const denied = await callTool(
+      erste.id,
+      "brief_attach",
+      {
+        link: `https://docs.google.com/presentation/d/${DECK}/edit`,
+        draft_id: placedId,
+      },
+      "draft",
+    );
+    expect(denied.isError).toBe(true);
+    expect(denied.text).toMatch(/placed card/);
+
+    // The same call at full scope is the control: the guard is about the
+    // token, not about the card being unreachable.
+    const allowed = await callTool(erste.id, "brief_attach", {
+      link: `https://docs.google.com/presentation/d/${DECK}/edit`,
+      draft_id: placedId,
+    });
+    expect(allowed.isError).toBe(false);
   });
 });
 

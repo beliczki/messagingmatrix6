@@ -25,16 +25,22 @@ type Handler = (args: Record<string, unknown>) => Promise<{
   isError?: boolean;
 }>;
 
-function getHandler(clientId: number): Handler {
-  const server = buildMcpServer({ clientId, userId: "test-user", scope: "full" });
+function getHandler(
+  clientId: number,
+  scope: "full" | "draft" = "full",
+): Handler {
+  const server = buildMcpServer({ clientId, userId: "test-user", scope });
   const registry = (server as unknown as {
     _registeredTools: Record<string, { handler: Handler }>;
   })._registeredTools;
   return registry.asset_upload!.handler;
 }
 
-async function call(args: Record<string, unknown>) {
-  const res = await getHandler(erste.id)(args);
+async function call(
+  args: Record<string, unknown>,
+  scope: "full" | "draft" = "full",
+) {
+  const res = await getHandler(erste.id, scope)(args);
   return {
     isError: !!res.isError,
     text: res.content[0]?.text ?? "",
@@ -123,6 +129,28 @@ describe("asset_upload via MCP", () => {
     expect(replaced.json.file.deduplicated).toBe(true);
     const resolved = await getFileByFilename(erste.id, "banner.png");
     expect(resolved!.id).toBe(replaced.json.file.id); // newest wins
+  });
+
+  it("refuses replace_existing on a draft-scoped token — resolution is newest-first, so replacing changes what a PLACED card renders", async () => {
+    await call({ filename: "live-banner.png", data_base64: TINY_PNG_B64 });
+
+    const denied = await call(
+      {
+        filename: "live-banner.png",
+        data_base64: TINY_PNG_B64,
+        replace_existing: true,
+      },
+      "draft",
+    );
+    expect(denied.isError).toBe(true);
+    expect(denied.text).toMatch(/may not replace an existing file/);
+
+    // A NEW name is additive, so the same token may upload it.
+    const fresh = await call(
+      { filename: "draft-banner.png", data_base64: TINY_PNG_B64 },
+      "draft",
+    );
+    expect(fresh.isError).toBe(false);
   });
 
   it("rejects truncated image data (header parses, full decode fails)", async () => {

@@ -5,6 +5,29 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.84.0] — 2026-09-12
+
+### Added
+- **A third MCP token scope: `draft`.** An agent token was all-or-nothing — it
+  either created nothing (`read`) or could rewrite the whole matrix (`full`).
+  `draft` reads everything, so the agent can decide, but the only writes it can
+  make stay in the draft space: `generate_test_creative`, `brief_attach`,
+  `draft_archive` and `asset_upload`. A draft carries no audience and no cell,
+  so no feed export can reach it.
+- **Promotion stays a human decision.** `draft_promote` is registered only for
+  `full` tokens: giving a draft a cell is the step that leaves the draft space,
+  and the Promote dialog is where it belongs.
+- **Row-level guards where the tool list isn't enough.** `brief_attach` takes any
+  message id, and `asset_upload` with `replace_existing` changes what an already
+  placed card renders (filename resolution is newest-first). Both refuse a
+  draft-scoped token on a placed card, checked on the row rather than by which
+  tools are registered — so a tool added later can't quietly slip through.
+
+### Changed
+- Settings › MCP: the new scope in the token dialog, an amber badge in the list,
+  and prose saying what `draft` may and may not do. Demo users are still limited
+  to `read`.
+
 ## [6.83.0] — 2026-09-10
 
 ### Added

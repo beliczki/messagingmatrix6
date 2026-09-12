@@ -113,13 +113,18 @@ import {
 } from "@/lib/mcp-widget";
 import { writeAudit } from "@/lib/audit";
 
+/** Token scopes, widest last. Stored verbatim in `mcp_tokens.scope`. */
+export type McpScope = "read" | "draft" | "full";
+
 export type McpContext = {
   clientId: number;
   /** Token owner (users.id) — audit rows are attributed to this user,
    *  identical to writes made in the UI by the same person. */
   userId: string;
-  /** 'read' registers only the read/meta tools; 'full' registers everything. */
-  scope: "full" | "read";
+  /** 'read' registers only the read/meta tools; 'draft' adds the tools that
+   *  work inside the draft space (no cell, no feed); 'full' registers
+   *  everything. */
+  scope: McpScope;
   /** mcp_tokens.id — absent in the tools-inventory route, which only
    *  introspects schemas and never runs handlers. */
   tokenId?: number;
@@ -238,7 +243,10 @@ export async function resolveBearerClient(
   return {
     clientId: row.tok.clientId,
     userId: row.tok.userId,
-    scope: row.tok.scope === "read" ? "read" : "full",
+    scope:
+      row.tok.scope === "read" || row.tok.scope === "draft"
+        ? row.tok.scope
+        : "full",
     tokenId: row.tok.id,
     origin: requestOrigin(req),
   };
@@ -1228,6 +1236,19 @@ function mcpUserId(ctx: McpContext): string {
   return ctx.userId;
 }
 
+// A draft-scoped token may only write rows that are still in the draft space.
+// The check lives here rather than in the tool list because the tools that can
+// address BOTH a draft and a placed card (brief_attach takes any message id)
+// are the ones that need it — a scope decided purely by which tools are
+// registered would let those through.
+function outsideDraftScope(
+  ctx: McpContext,
+  row: { status: string; audience: string | null },
+): boolean {
+  if (ctx.scope !== "draft") return false;
+  return row.status !== "DRAFT" || row.audience !== null;
+}
+
 function errorResult(message: string, extra?: unknown) {
   const text =
     extra === undefined
@@ -1872,6 +1893,14 @@ function registerAssetWriteTools(server: McpServer, ctx: McpContext): void {
 
       const sanitized = sanitizeFilename(args.filename);
       const existing = await getFileByFilename(ctx.clientId, sanitized);
+      if (existing && args.replace_existing === true && ctx.scope === "draft") {
+        // Resolution is newest-first by filename, so replacing changes what an
+        // ALREADY PLACED card renders — outside the draft space, however
+        // additive the row itself looks.
+        return errorResult(
+          `filename_exists: ${sanitized} — this token may not replace an existing file; upload under a new name`,
+        );
+      }
       if (existing && args.replace_existing !== true) {
         return errorResult("filename_exists", {
           existing_file_id: existing.id,
@@ -3143,6 +3172,11 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
         const fileId = trimmed ? briefFileIdFromLink(trimmed) : null;
         const draft = await getMessage(ctx.clientId, draft_id);
         if (!draft) return errorResult(`message ${draft_id} not found`);
+        if (outsideDraftScope(ctx, draft)) {
+          return errorResult(
+            `message ${draft_id} is a placed card — this token may only write drafts`,
+          );
+        }
         const res = await updateMessage(ctx.clientId, draft_id, draft.version, {
           briefSlidesFileId: fileId,
           briefSlideId: trimmed ? parseSlideAnchor(trimmed) : null,
@@ -3208,7 +3242,13 @@ function registerDraftWriteTools(server: McpServer, ctx: McpContext): void {
       return jsonResult({ ok: true, archived: draft_id });
     },
   );
+}
 
+// Promotion leaves the draft space: it hands the row an audience and a cell,
+// after which the feed export can reach it. That is why it lives in its own
+// registration and only `full` gets it — a draft-scoped agent proposes, the
+// human Promote dialog places.
+function registerDraftPromoteTool(server: McpServer, ctx: McpContext): void {
   server.registerTool(
     "draft_promote",
     {
@@ -3262,14 +3302,25 @@ export function buildMcpServer(ctx: McpContext): McpServer {
   registerDraftReadTools(server, ctx);
   // Read-scoped tokens never see the write tools: unregistered tools are
   // invisible to tools/list and rejected at the protocol layer.
+  //
+  // 'draft' sits between the two: everything readable, but the only writes are
+  // the ones that stay inside the draft space — a row with no audience and no
+  // cell, which no feed export can reach. asset_upload comes along because the
+  // images generate_test_creative renders are uploaded through it, and a new
+  // asset is additive: it touches no existing card. draft_promote does NOT,
+  // because promoting hands the row a cell and thereby leaves the draft space;
+  // that decision belongs to the human Promote dialog.
+  if (ctx.scope === "draft" || ctx.scope === "full") {
+    registerAssetWriteTools(server, ctx);
+    registerDraftWriteTools(server, ctx);
+  }
   if (ctx.scope === "full") {
     registerAudienceWriteTools(server, ctx);
     registerTopicWriteTools(server, ctx);
     registerMessageWriteTools(server, ctx);
-    registerAssetWriteTools(server, ctx);
     registerCreativeWriteTools(server, ctx);
     registerProdlistWriteTools(server, ctx);
-    registerDraftWriteTools(server, ctx);
+    registerDraftPromoteTool(server, ctx);
     registerBatchTools(server, ctx);
   }
   return server;

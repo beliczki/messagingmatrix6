@@ -47,9 +47,13 @@ export const POST = withAdmin(async ({ req, claims }) => {
   if (!body || typeof body.userId !== "string") {
     return NextResponse.json({ error: "userId required" }, { status: 400 });
   }
-  if (body.scope !== "full" && body.scope !== "read") {
+  if (
+    body.scope !== "full" &&
+    body.scope !== "draft" &&
+    body.scope !== "read"
+  ) {
     return NextResponse.json(
-      { error: 'scope must be "full" or "read"' },
+      { error: 'scope must be "read", "draft" or "full"' },
       { status: 400 },
     );
   }

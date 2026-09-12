@@ -941,3 +941,43 @@ brand-tagje cobranddal, és a Core Line készlet valós látványa a mátrixon. 
 **Nyitva maradt a körből:** a cobrand **bekapcsolása** (Settings › Design → Enable + `/erste.svg`) —
 szándékosan nem kapcsoltam be, mert a dev a **közös** élő DB-re néz, tehát az `erste` tenanton
 azonnal éles változás lenne.
+
+### 2026-09-12 — Design tab átrendezés + a maradék ikoncsalád — 6.89.0
+
+**User (képernyőképpel):** „legyen Page title mellett a cobranding, nem kell a pipa — ha üres akkor ki
+van kapcsolva; az iconset és a font legyen egy sorban; a »shipped with app« egy info ikon mögött
+kattintásra nyíljon fel, onnan kattintható legyen a URL és íródjon be az inputba, mellé kattintva
+tűnjön el" + „az ikon sor elején jelenítsük meg a branding logót is" + „vegyük fel a többi ikont is
+a dropdownba".
+
+- [x] Cobranding **az Identity szekcióba**, a page title mellé; a `cobranding.enabled` **megszűnt** —
+      üres URL = kikapcsolva. Ez nem kozmetika: a tárolt flag **el tudott térni** az URL-től (beállított,
+      de némán nem mutatott logó), és ezt kizárólag a pipa tette láthatóvá. A `CheckboxField` vele ment
+      (nem maradt hívója). Az élő configokból is kiesett a kulcs.
+- [x] Font + Icon set egy sorban; a preview ikonsor **a logóval kezd**.
+- [x] `LogoField` info-popover: a szállított útvonalak **kattintásra beíródnak** az inputba. Kívülre
+      kattintás / Escape zár (a `MultiPill` szerződése).
+- [x] **Core Solid + Core Remix + Core Pop** a dropdownban. A Remix nevei a rendetlenek (a Core 1000
+      ikonjából 64 prefixet kap a `-remix` suffix helyett) → a generátor végigpróbálja a prefixeket, az
+      utolsó hármat a `core-map.ts` dönti el. **A Pop nevei a Remixéit követik**, ezért a generátor a
+      feloldott Remix-névből vezeti le, nem találgat másodszor.
+- [x] **A Pop nem `currentColor`:** a fix navy `var(--icon-ink)`-re cserélve (dark módban felemelve),
+      a négy kitöltő szín marad literál — tehát a Pop ikon **nem veszi fel a státuszszínezést**
+      (elfogadott kompromisszum a tanulmányból). Az editor `id` attribútumai kiszedve: a lap több
+      ikonján ismétlődő id **érvénytelen HTML**, és a fájl ötöde volt.
+
+**Mért ár, nem becsült:** +47 kB First Load JS minden route-on (`/matrix` 270 → 317 kB), mert mind a
+négy család statikusan importálódik — egy tenant a három nem használtat is leszállítja. A lazy-load
+hidratálás utáni ikoncserét jelentene (rosszabb); ha a súly zavar, a Pop egyedül ~28 kB belőle.
+
+`npm test` **937/937**, `tsc` + `eslint` 0 error, `next build` ✅.
+
+**⚠️ Külön talált probléma, NEM ebben a körben javítva — a dev szerver kimeríti az éles DB-t.**
+Build közben `FATAL: sorry, too many clients already`, és a psql sem jutott be. Mérés: a **dev szerver
+egyetlen processze 100 Postgres-kapcsolatot tartott** (`lsof -nP -i :5433` → `node <pid>` 100 sor),
+miközben a `src/db/index.ts` `postgres(url, { max: 10 })`-zel indul. Ok: Next **dev**-ben a modul-gráf
+többször értékelődik ki (route handler / RSC / HMR), és **minden kiértékelés új klienst nyit** — a régit
+nem zárja. 10 modul-példány × max 10 = 100. **Ez a DB közös az éles `mm6-erste`-vel**, tehát egy lokális
+dev szerver el tudja venni a kapcsolatokat az éles app elől. A dev szerver újraindítása után
+`pg_stat_activity` 100 → 6. Bevett javítás: a klienst `globalThis`-re tenni (Next dev singleton minta),
+de ez a DB-réteget érinti minden lekérdezés útján — **saját szelet, teszttel**.

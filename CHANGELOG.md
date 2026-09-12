@@ -5,6 +5,30 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.89.1] — 2026-09-12
+
+### Fixed
+- **A dev server could exhaust the live database.** `src/db/index.ts` held the
+  Postgres client in a module local, and Next dev evaluates that module once
+  per server bundle and again on every HMR pass — each evaluation opened its
+  own pool and left the previous one open. One dev server was measured holding
+  **100 of the database's 100 connections**, against a database shared with the
+  live deploy, which then refused everyone with `sorry, too many clients
+  already` (it failed a build and a share page mid-session). The client now
+  lives on `globalThis`, so every module instance shares one pool: the same
+  three routes exercised afterwards hold **2** connections. Production
+  evaluates the module once, so nothing changes there.
+
+### Changed
+- **The cobranding logo is 1.7rem in the page toolbars** and the `/` separator
+  is gone. The tag also moved out of the title's `items-baseline` wrapper: a
+  baseline group grows with its tallest member, so at that size the page name
+  would have been pushed to the top of the row.
+- **The share page header shows the cobranding lockup**: MessagingMatrix `×`
+  the client's logo when one is set, the client's name when not. The product
+  mark is already in that row, which is what makes a lockup the right shape
+  there and not in the app toolbars.
+
 ## [6.89.0] — 2026-09-12
 
 ### Added

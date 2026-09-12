@@ -6,8 +6,23 @@ import * as schema from "./schema";
 type Drizzled = ReturnType<typeof drizzle<typeof schema>>;
 type Client = ReturnType<typeof postgres>;
 
-let _client: Client | null = null;
-let _db: Drizzled | null = null;
+// The connection lives on globalThis, not in a module local.
+//
+// Next dev evaluates this module once per server bundle (the RSC layer and the
+// route-handler layer are separate) and again on every HMR pass. With the
+// client in a module local, each of those evaluations opened its OWN pool of
+// `max` connections and left the previous one open: one dev server was
+// measured holding 100 connections (2026-09-12), against a database shared
+// with the live deploy, which then refused everyone with "sorry, too many
+// clients already" — the local dev server could take the live app down.
+// A global slot makes every instance share one pool. Production evaluates the
+// module once, so this changes nothing there.
+type DbSlot = { client: Client | null; db: Drizzled | null };
+const SLOT_KEY = Symbol.for("mm6.db.slot");
+const slot: DbSlot = ((globalThis as Record<symbol, unknown>)[SLOT_KEY] ??= {
+  client: null,
+  db: null,
+} satisfies DbSlot) as DbSlot;
 
 // Active transaction handle for the current async context. When set (inside a
 // `db.transaction(...)` callback), every query issued through the `db` proxy is
@@ -25,15 +40,15 @@ function resolveUrl(): string {
 }
 
 function init(url: string) {
-  if (_client) void _client.end();
+  if (slot.client) void slot.client.end();
   // prepare: false keeps us compatible with Supabase's transaction-mode pooler
   // (Supavisor / pgBouncer), which does not support prepared statements.
-  _client = postgres(url, { max: 10, prepare: false });
-  _db = drizzle(_client, { schema });
+  slot.client = postgres(url, { max: 10, prepare: false });
+  slot.db = drizzle(slot.client, { schema });
 }
 
 function ensureInit() {
-  if (_db) return;
+  if (slot.db) return;
   init(resolveUrl());
 }
 
@@ -44,7 +59,7 @@ export const db = new Proxy({} as Drizzled, {
   get(_target, prop, receiver) {
     ensureInit();
     const active = txStore.getStore() as Drizzled | undefined;
-    const target = (active ?? _db) as object;
+    const target = (active ?? slot.db) as object;
 
     if (prop === "transaction") {
       // Wrap the callback so its transaction handle becomes the ambient one for
@@ -65,7 +80,7 @@ export const db = new Proxy({} as Drizzled, {
 
 export function getClient(): Client {
   ensureInit();
-  return _client as Client;
+  return slot.client as Client;
 }
 
 // Test-only: re-open the DB at the given connection URL.
@@ -75,9 +90,9 @@ export function _resetDbForTests(url: string) {
 
 // Test-only: close the active connection pool.
 export async function _closeDbForTests() {
-  if (_client) {
-    await _client.end();
-    _client = null;
-    _db = null;
+  if (slot.client) {
+    await slot.client.end();
+    slot.client = null;
+    slot.db = null;
   }
 }

@@ -82,6 +82,7 @@ export default async function SharePage({
   const laf = await getLookAndFeelByClientId(client.id);
   const style = lookAndFeelToCssVars(laf) as CSSProperties;
   const iconSet = asIconSet(laf.iconSet);
+  const cobrandLogoUrl = laf.cobranding.logoUrl.trim() || null;
 
   const generated = meta.generatedAt
     ? new Date(meta.generatedAt).toISOString().slice(0, 10)
@@ -93,6 +94,7 @@ export default async function SharePage({
         <ShareGallery
           shareId={share.id}
           clientName={client.name}
+          cobrandLogoUrl={cobrandLogoUrl}
           shareTitle={share.title}
           shareDescription={share.description}
           generatedAt={generated}

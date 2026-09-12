@@ -84,6 +84,8 @@ type Item = DialogItem & { size: string | null };
 type Props = {
   shareId: string;
   clientName: string;
+  /** Tenant cobranding logo, already gated on being non-empty. */
+  cobrandLogoUrl: string | null;
   shareTitle: string | null;
   shareDescription: string | null;
   generatedAt: string | null;
@@ -97,6 +99,7 @@ const AUTHOR_NAME_KEY = "mm6_share_author_name";
 export default function ShareGallery({
   shareId,
   clientName,
+  cobrandLogoUrl,
   shareTitle,
   shareDescription,
   generatedAt,
@@ -403,9 +406,28 @@ export default function ShareGallery({
               aria-hidden
               className="share-gallery__logo share-gallery__logo--dark hidden size-8 dark:block sm:size-6"
             />
-            <span className="share-gallery__client-name text-base font-semibold text-slate-900 sm:text-sm">
-              {clientName}
-            </span>
+            {/* Cobranding reads as a lockup here, because the product mark is
+                already in the row: MessagingMatrix × the client's own logo.
+                Without a logo the client is named instead, as before. */}
+            {cobrandLogoUrl ? (
+              <>
+                <span
+                  aria-hidden
+                  className="share-gallery__lockup-x text-sm font-medium text-slate-400"
+                >
+                  ×
+                </span>
+                <img
+                  src={cobrandLogoUrl}
+                  alt={clientName}
+                  className="share-gallery__cobrand-logo h-[1.7rem] w-auto max-w-40 object-contain invert dark:invert-0"
+                />
+              </>
+            ) : (
+              <span className="share-gallery__client-name text-base font-semibold text-slate-900 sm:text-sm">
+                {clientName}
+              </span>
+            )}
           </div>
           {/* On a phone the title gets its own line and its own size; the
               "/ Shared Creatives /" crumbs are chrome the small screen can do

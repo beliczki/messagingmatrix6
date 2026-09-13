@@ -668,7 +668,13 @@ function DraftTile({
           // taking the click — these only steer which variant that click lands
           // on. Nothing is drawn here; what says which variant you are looking
           // at is the LETTER on the MC label below, which changes as you move.
-          <div className="drafts-tile__scrub absolute inset-0 flex">
+          // z-20 because the media is an IFRAME preview, and that component
+          // lays a click-shield over its iframe at z-10
+          // (MatrixIframeTile.tsx:302). Without a z-index of its own the scrub
+          // sits UNDER that shield, no zone ever sees the pointer, and the
+          // scrub silently does nothing on every DCO draft. Clicks are
+          // unaffected either way: both layers are inside the card's button.
+          <div className="drafts-tile__scrub absolute inset-0 z-20 flex">
             {rows.map((r, i) => (
               <div
                 key={r.id}

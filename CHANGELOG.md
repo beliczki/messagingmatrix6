@@ -5,6 +5,11 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.94.2] — 2026-09-13
+
+### Fixed
+- The Drafts wall's **variant scrub** works again. Running the mouse across a card is supposed to walk its variants, but the media is an iframe preview and that component lays a click-shield over the iframe at `z-10` (`MatrixIframeTile.tsx:302`); the scrub zones carried no z-index of their own, so they sat under the shield and never saw the pointer. Silent on every DCO draft — the card looked interactive and simply was not.
+
 ## [6.94.1] — 2026-09-13
 
 ### Fixed

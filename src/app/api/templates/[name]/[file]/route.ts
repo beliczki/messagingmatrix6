@@ -16,6 +16,13 @@ const MIME: Record<string, string> = {
   ".webp": "image/webp",
   ".svg": "image/svg+xml",
   ".mp4": "video/mp4",
+  // Self-hosted webfonts. A template that ships its own faces serves them from
+  // here, and octet-stream works only because the @font-face format() hint
+  // carries the type — name it properly instead of relying on that.
+  ".woff2": "font/woff2",
+  ".woff": "font/woff",
+  ".otf": "font/otf",
+  ".ttf": "font/ttf",
 };
 
 export const GET = withSession<Params>(async ({ params }) => {

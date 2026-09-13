@@ -5,6 +5,11 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.94.1] — 2026-09-13
+
+### Fixed
+- Template files are served with a **font mime type** (`font/woff2`, `woff`, `otf`, `ttf`) instead of `application/octet-stream`. A template that self-hosts its faces loaded them only because the `@font-face` `format()` hint carries the type.
+
 ## [6.94.0] — 2026-09-12
 
 ### Added

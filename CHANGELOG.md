@@ -5,6 +5,13 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.97.0] — 2026-09-15
+
+### Changed
+- The scrub's badge reads **`now / total`** (`0:00 / 0:10`) — which moment is in the box, over the clip's length — instead of showing only one of the two depending on whether the pointer was down.
+- **Leaving the preview no longer rewinds it.** The frame you stopped on stays, and the badge keeps its time; the strip's layers now survive the pointer leaving instead of unmounting and letting the poster show through.
+- The still manifest is fetched once the poster is up rather than on hover, so the total is on screen at rest. Serving that poster already cut the strip, so it is a small JSON read and never an ffmpeg run. The frames themselves still preload only on hover — eager would pull tens of megabytes of stills nobody asked for.
+
 ## [6.96.0] — 2026-09-15
 
 ### Changed

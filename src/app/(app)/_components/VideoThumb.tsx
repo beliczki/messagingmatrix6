@@ -56,11 +56,13 @@ export default function VideoThumb({
     compact ? "size-full" : "aspect-[4/3] w-full",
   );
 
-  // The strip is only worth knowing about once the pointer is on the box —
-  // asking for every tile in the wall would generate stills nobody looks at.
+  // Fetched once the POSTER is up, not on hover: serving that poster already
+  // cut the strip server-side, so this is a small JSON read off disk and never
+  // an ffmpeg run. It has to be here rather than behind the pointer because the
+  // badge reads "now / total" at rest, and the total comes from the manifest.
   const stillsQ = useQuery<StillManifest>({
     queryKey: ["file-stills", fileId],
-    enabled: scrub && hovering,
+    enabled: scrub && loaded,
     staleTime: Infinity,
     retry: false,
     queryFn: async () => {
@@ -72,23 +74,24 @@ export default function VideoThumb({
   const manifest = stillsQ.data;
   const count = manifest?.count ?? 0;
 
+  // The FRAMES, unlike the manifest, stay behind the pointer: pulling every
+  // still of every tile on page load would be tens of megabytes unasked for.
   useEffect(() => {
-    if (count < 2 || preloaded.current) return;
+    if (!hovering || count < 2 || preloaded.current) return;
     preloaded.current = true;
     for (let i = 1; i < count; i += 1) {
       const img = new Image();
       img.src = `/api/files/${fileId}/still?i=${i}&w=${width}`;
     }
-  }, [count, fileId, width]);
+  }, [hovering, count, fileId, width]);
 
   return (
     <div
       className={clsx("video-thumb relative", wrapperClassName)}
       onMouseEnter={() => setHovering(true)}
-      onMouseLeave={() => {
-        setHovering(false);
-        setIndex(0);
-      }}
+      // Leaving does NOT rewind: the frame you stopped on is the one you wanted
+      // to look at, so the box keeps it and the badge keeps its time.
+      onMouseLeave={() => setHovering(false)}
     >
       {/* The poster is the base layer — it is what gives the masonry tile its
           height, so it stays mounted and keeps the box from collapsing. */}
@@ -108,7 +111,7 @@ export default function VideoThumb({
           every frame is already in the browser cache by then (preloaded above),
           so each fade starts from a decoded image and never flashes. Index 0
           fades them all out, which uncovers the poster underneath. */}
-      {scrub && loaded && count > 1 && hovering
+      {scrub && loaded && count > 1 && (hovering || index > 0)
         ? Array.from({ length: count - 1 }, (_, n) => {
             const i = n + 1;
             return (
@@ -152,19 +155,15 @@ export default function VideoThumb({
         </div>
       ) : null}
 
-      {/* The badge says "this is a video" at rest — the clip's length once the
-          strip is known, and the scrub position while the pointer moves. The
-          duration only arrives with the manifest, which is a hover away, so
-          before that it is the icon alone rather than a made-up 0:00. */}
+      {/* The badge says WHICH MOMENT is in the box, over the clip's length —
+          "0:00 / 0:10" at rest, following the pointer while scrubbing, and
+          holding wherever it was left. Until the manifest lands there is no
+          honest total to show, so it is the icon alone rather than a made-up one. */}
       {loaded && !compact ? (
         <span className="video-thumb__time pointer-events-none absolute bottom-1 right-1 flex items-center gap-1 rounded bg-slate-900/70 px-1 py-0.5 text-[10px] font-medium tabular-nums text-white">
           <Icon name="video" className="size-3" />
           {manifest
-            ? formatClock(
-                hovering && count > 1
-                  ? stillTimestamp(index, manifest)
-                  : manifest.durationSec,
-              )
+            ? `${formatClock(stillTimestamp(index, manifest))} / ${formatClock(manifest.durationSec)}`
             : null}
         </span>
       ) : null}

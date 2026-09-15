@@ -1,5 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { Readable } from "node:stream";
 import crypto from "node:crypto";
 import {
   S3Client,
@@ -150,6 +152,49 @@ export async function readFileBytes(rel: string): Promise<Buffer> {
     return Buffer.from(bytes);
   }
   return fs.readFile(resolveStoragePath(rel));
+}
+
+// A byte range, inclusive on both ends — the same convention as HTTP `Range`.
+export type ByteRange = { start: number; end: number };
+
+export type FileStream = {
+  body: ReadableStream<Uint8Array>;
+  /** Bytes in THIS response (the range length, or the whole object). */
+  contentLength: number;
+};
+
+// Stream bytes without buffering the whole object in memory. This is what makes
+// a <video> usable: with a Range the browser fetches the moov atom and the first
+// frames only, instead of waiting for the entire clip to arrive.
+export async function readFileStream(
+  rel: string,
+  range?: ByteRange,
+): Promise<FileStream> {
+  if (s3Enabled()) {
+    const res = await s3().send(
+      new GetObjectCommand({
+        Bucket: bucket(),
+        Key: toKey(rel),
+        Range: range ? `bytes=${range.start}-${range.end}` : undefined,
+      }),
+    );
+    const node = res.Body as unknown as Readable;
+    return {
+      body: Readable.toWeb(node) as ReadableStream<Uint8Array>,
+      contentLength: res.ContentLength ?? 0,
+    };
+  }
+
+  const abs = resolveStoragePath(rel);
+  const stat = await fs.stat(abs);
+  const node = createReadStream(
+    abs,
+    range ? { start: range.start, end: range.end } : undefined,
+  );
+  return {
+    body: Readable.toWeb(node) as ReadableStream<Uint8Array>,
+    contentLength: range ? range.end - range.start + 1 : stat.size,
+  };
 }
 
 export async function deleteStorageFile(rel: string): Promise<void> {

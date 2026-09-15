@@ -1645,3 +1645,37 @@ akkor is nyer, ha nincs nála közelebbi. A 0. kocka már csak akkor jöhet szó
 
 **DEPLOYOLVA 6.101.0 — mindkét tenant.** Élesben: manifest `v5`, poszter `400` tier, `etag s5-…-0-400`,
 63 553 B. Health zöld.
+
+## 2026-09-15 — 6.102.x: a share megosztáskor vágja a stripet, nem megnyitáskor
+
+**User:** „új embernek generating preview jelenik meg a share-en, ez nem jó, nem kéne újragenerálni
+emberenként ez marhaság, és megosztáskor le kéne generálódjon mindenképp egy server cache-be."
+
+**Pontosítás a diagnózishoz:** **nem generálódik újra emberenként** — a strip lemezen közös cache
+(`{STORAGE_ROOT}/{clientKey}/.thumbs/`), és csak akkor készül, ha még soha nem készült el, vagy a
+`STILLS_CACHE_VERSION` lépett. Amit az „új ember" látott, az az **első** generálás volt, és azért esett
+rá, mert a link elküldése után ő ért oda elsőként. A javasolt megoldás viszont pontosan a helyes.
+
+- **`warmStills` a share létrehozásakor** (`POST /api/share-galleries`). **Nem await-elve**: sok klipes
+  share addig tartaná nyitva a választ, ameddig az ffmpeg tart, a link elküldése és a megnyitás közti rés
+  pedig nagyságrendekkel hosszabb a bemelegítésnél. A kétszálas ffmpeg-kapu tartja kordában.
+- A `storagePath` **külön lekérdezésből** jön és **nem kerül a snapshotba** — azt a metadatát
+  hitelesítetlen néző kapja meg, belső tárolókulcsnak nincs benne helye.
+- **6.102.2:** a warm-blokk `db.select`-je await-elt volt a request-útvonalon, tehát egy adatbázis-hiba
+  ott **a már megírt share létrehozását buktatta volna el**. Az egész blokk bekerítve — egy cache
+  előtöltése soha nem kerülhet a user share-jébe.
+- **`scripts/warm-share-stills.ts`**: azt az egy esetet fedi, amit a megosztáskori melegítés nem tud —
+  egy `STILLS_CACHE_VERSION` bump **egyszerre** érvényteleníti az összes meglévő stripet. Verzióbumpot
+  tartalmazó deploy után futtatandó a boxon. (**6.102.1:** először env nélkül futott, tehát semmilyen
+  DB-hez nem ért el — `dotenv` + relatív importok, a `scripts/` házi mintája szerint.)
+
+**Lefuttatva a boxon:** telekom 1 share / 1 videó → meleg (3 ms, manifest-olvasás); erste 6 share /
+40 fájl / **0 videó**. **Egy vadonatúj néző mérve** (cache és auth nélkül, élesben): share oldal 200 /
+0,45 s · poszter 200 / 63 553 B / **0,14 s** · manifest 0,11 s · 7. kocka 88 336 B / 0,13 s.
+Nincs többé „preparing the video preview".
+
+**DEPLOYOLVA 6.102.2 — mindkét tenant.** Health zöld.
+
+**Amit NEM ellenőriztem:** a megosztáskori melegítést élő POST-tal nem futtattam — ahhoz session kell,
+jelszót pedig nem írok be, és nem akartam éles adatba teszt-share-t létrehozni. Ugyanazt az
+`ensureStills` útvonalat hívja, amit a script bizonyítottan végigfuttat.

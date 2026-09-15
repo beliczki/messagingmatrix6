@@ -52,11 +52,6 @@ export default function VideoThumb({
   // poster through it while the badge already claimed the new time.
   const [index, setIndex] = useState(0);
   const [shown, setShown] = useState(0);
-  // The frame the box was on before this one. It stays fully opaque UNDER the
-  // incoming frame while that fades in — fading it out instead let the poster
-  // show through the overlap, so every step of the scrub dissolved through
-  // frame 0 on its way to the next one.
-  const [under, setUnder] = useState(0);
   // Index 0 needs no waiting: it IS the poster, already on screen.
   const [ready, setReady] = useState<number[]>([0]);
   // Where the pointer last was across the box, 0–1. Continuous, unlike `index`:
@@ -116,10 +111,8 @@ export default function VideoThumb({
   // The box holds the last frame it actually has until the next one arrives, so
   // a slow fetch never blanks it back to the poster mid-scrub.
   useEffect(() => {
-    if (!ready.includes(index) || index === shown) return;
-    setUnder(shown);
-    setShown(index);
-  }, [index, ready, shown]);
+    if (ready.includes(index)) setShown(index);
+  }, [index, ready]);
 
   return (
     <div
@@ -147,20 +140,17 @@ export default function VideoThumb({
         onError={() => setFailed(true)}
       />
 
-      {/* The rest of the strip, stacked over the poster and cross-faded by
-          opacity alone. They are mounted only while the pointer is on the box —
-          every frame is already in the browser cache by then (preloaded above),
-          so each fade starts from a decoded image and never flashes. Index 0
-          fades them all out, which uncovers the poster underneath. */}
+      {/* The rest of the strip, stacked over the poster; exactly one is opaque
+          at a time. Mounted only while the pointer is on the box. Index 0 hides
+          them all, which uncovers the poster underneath — and the poster IS
+          frame 0, so that reads as a cut like any other. */}
       {scrub && loaded && count > 1 && (hovering || shown > 0)
         ? Array.from({ length: count - 1 }, (_, n) => n + 1)
             // Only the frames around the pointer, plus the ones already
             // fetched. At one still per second a whole strip is tens of
             // megabytes, and mounting it all would pull every frame the moment
             // the pointer touched the box — this loads what you scrub over.
-            .filter(
-              (i) => i === shown || i === under || Math.abs(i - index) <= 2 || ready.includes(i),
-            )
+            .filter((i) => i === shown || Math.abs(i - index) <= 2 || ready.includes(i))
             .map((i) => {
             return (
               // eslint-disable-next-line @next/next/no-img-element
@@ -171,15 +161,14 @@ export default function VideoThumb({
                 aria-hidden
                 className={clsx(
                   "video-thumb__frame absolute inset-0 size-full object-contain",
-                  // The incoming frame fades in ON TOP; the outgoing one holds
-                  // its opacity underneath rather than fading out, so nothing
-                  // ever shows through the pair. Anything older fades out, but
-                  // it does so hidden beneath them.
-                  i === shown
-                    ? "z-10 opacity-100 transition-opacity duration-200 ease-out"
-                    : i === under
-                      ? "z-0 opacity-100"
-                      : "z-0 opacity-0 transition-opacity duration-200 ease-out",
+                  // A hard cut, not a cross-fade (user, 2026-09-15). Two frames
+                  // are only ever both part-transparent DURING a fade, and what
+                  // sits under them is the poster — so every fade was a chance
+                  // to flash frame 0, and moving fast took every chance it got.
+                  // Cutting is also what a scrub wants: the frame under the
+                  // pointer, now. The wait-for-its-bytes rule above is what
+                  // keeps the cut clean.
+                  i === shown ? "opacity-100" : "opacity-0",
                 )}
                 decoding="async"
                 onLoad={() => setReady((r) => (r.includes(i) ? r : [...r, i]))}

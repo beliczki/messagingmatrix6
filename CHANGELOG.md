@@ -5,6 +5,11 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.100.3] — 2026-09-15
+
+### Changed
+- **The scrub cuts between frames instead of cross-fading.** Two frames are only ever both part-transparent *during* a fade, and what sits under them is the poster — so every fade was a chance to flash frame 0, and sweeping the pointer quickly took every chance it got. Cutting is also what a scrub wants: the frame under the pointer, now. The wait-until-its-bytes-arrive rule is what keeps the cut clean, and it stays. Removing the fade also removed the layer that existed only to fade over, and the z-index ordering that went with it.
+
 ## [6.100.2] — 2026-09-15
 
 ### Changed

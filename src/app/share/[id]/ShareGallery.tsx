@@ -52,6 +52,9 @@ export type SnapshotMatrixItem = {
   message?: SnapshotMessage;
 };
 
+/** Live delivery folders by creative id, resolved at view time. */
+export type LiveDriveFolders = Record<number, { id: string; name: string | null }>;
+
 export type SnapshotCreative = {
   id: number;
   brand: string | null;
@@ -93,6 +96,8 @@ type Props = {
   generatedAt: string | null;
   matrixItems: Array<{ messageId: number; size: string; message: SnapshotMessage }>;
   creatives: SnapshotCreative[];
+  /** Current delivery folders, keyed by creative id — see resolveDriveFolders. */
+  liveDriveFolders?: LiveDriveFolders;
   files: SnapshotFile[];
   /** Brief decks behind the shared cards, resolved live (see share-briefs.ts). */
   briefs: ShareBriefs;
@@ -109,6 +114,7 @@ export default function ShareGallery({
   generatedAt,
   matrixItems,
   creatives,
+  liveDriveFolders,
   files,
   briefs,
 }: Props) {
@@ -138,22 +144,27 @@ export default function ShareGallery({
     return out;
   }, [matrixItems, creatives, filesById]);
 
-  // Where these creatives were delivered from, and which MCs sit in each folder
-  // — with more than one folder in a share, "which one holds what" is the only
-  // useful thing the list can say. The snapshot froze the links at share time,
-  // so a folder resolved later will not appear on an older share.
+  // Where these creatives are delivered, and which MCs sit in each folder —
+  // with more than one folder in a share, "which one holds what" is the only
+  // useful thing the list can say. The FOLDER is read live (resolveDriveFolders)
+  // and falls back to the snapshot: a folder resolved after the share was
+  // captured is still the way back to these files, so freezing it only ever
+  // cost the reader a link. The MC labels stay snapshot — those are content.
   const driveFolders = useMemo(() => {
     const byId = new Map<string, { name: string; mcs: Set<string> }>();
     for (const c of creatives) {
-      if (!c.driveFolderId) continue;
-      const entry = byId.get(c.driveFolderId) ?? {
-        name: c.driveFolderName ?? "Delivery folder",
+      const live = liveDriveFolders?.[c.id];
+      const folderId = live?.id ?? c.driveFolderId;
+      if (!folderId) continue;
+      const folderName = live?.name ?? c.driveFolderName;
+      const entry = byId.get(folderId) ?? {
+        name: folderName ?? "Delivery folder",
         mcs: new Set<string>(),
       };
       if (c.mcNumber !== null && c.mcNumber !== undefined) {
         entry.mcs.add(`MC${c.mcNumber}${c.mcVariant ?? ""}`);
       }
-      byId.set(c.driveFolderId, entry);
+      byId.set(folderId, entry);
     }
     return [...byId].map(([id, v]) => ({
       id,
@@ -162,7 +173,7 @@ export default function ShareGallery({
         a.localeCompare(b, undefined, { numeric: true }),
       ),
     }));
-  }, [creatives]);
+  }, [creatives, liveDriveFolders]);
 
   // The brief decks behind these cards. Grouped like the delivery folders and
   // for the same reason: one deck is a link, several raise the question of

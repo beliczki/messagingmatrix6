@@ -5,6 +5,11 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.99.0] — 2026-09-15
+
+### Changed
+- **A share's Drive folder is resolved live instead of read from the snapshot.** A delivery folder linked to a creative after the share was captured never reached the person holding the link — the snapshot had frozen it, and `ShareGallery` said so in a comment. A folder is not part of the content under review; it is the way back to the files, so freezing it only ever cost the reader a link. Everything else on the card stays frozen: the snapshot is still what was shared. Scoped to the share's own client and to the creative ids it holds, following `resolveBriefs`, which already resolves live for the same reason. The snapshot value remains the fallback.
+
 ## [6.98.0] — 2026-09-15
 
 ### Added

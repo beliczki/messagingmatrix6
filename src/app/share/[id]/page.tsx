@@ -17,6 +17,7 @@ import {
   type ShareBriefs,
 } from "@/lib/share-briefs";
 import ShareGallery, {
+  type LiveDriveFolders,
   type SnapshotCreative,
   type SnapshotFile,
   type SnapshotMatrixItem,
@@ -85,6 +86,7 @@ export default async function SharePage({
   const fileRows = (meta.files ?? []) as SnapshotFile[];
 
   const briefs = await resolveBriefs(client.id, creativeRows, matrixItems);
+  const driveFolders = await resolveDriveFolders(client.id, creativeRows);
 
   const laf = await getLookAndFeelByClientId(client.id);
   const style = lookAndFeelToCssVars(laf) as CSSProperties;
@@ -109,6 +111,7 @@ export default async function SharePage({
           creatives={creativeRows}
           files={fileRows}
           briefs={briefs}
+          liveDriveFolders={driveFolders}
         />
         <footer className="share-gallery__footer mx-auto max-w-6xl px-6 py-4 text-center text-[11px] text-slate-400">
           Shared from {client.name} · MessagingMatrix{" "}
@@ -128,6 +131,43 @@ export default async function SharePage({
  * neighbouring tenant's briefs. A card with no brief simply has no key in the
  * map, and the Slides button does not render.
  */
+/**
+ * Where these creatives are delivered NOW, resolved live rather than read from
+ * the snapshot (user, 2026-09-15). A delivery folder is not part of the content
+ * being reviewed — it is a pointer to where the files currently sit — so a link
+ * added after the share was captured should still reach the person holding the
+ * link. Everything else on the card stays frozen: the snapshot is what was
+ * shared, and this is only the way back to it.
+ *
+ * Scoped to the share's own client, so a public page can never reach a
+ * neighbouring tenant's folders, and to the creative ids the share holds.
+ */
+async function resolveDriveFolders(
+  clientId: number,
+  creativeRows: SnapshotCreative[],
+): Promise<LiveDriveFolders> {
+  const ids = creativeRows
+    .map((c) => c.id)
+    .filter((n): n is number => typeof n === "number");
+  if (ids.length === 0) return {};
+
+  const rows = await db
+    .select({
+      id: creatives.id,
+      folderId: creatives.driveFolderId,
+      folderName: creatives.driveFolderName,
+    })
+    .from(creatives)
+    .where(and(eq(creatives.clientId, clientId), inArray(creatives.id, ids)));
+
+  const out: LiveDriveFolders = {};
+  for (const r of rows) {
+    if (!r.folderId) continue;
+    out[r.id] = { id: r.folderId, name: r.folderName };
+  }
+  return out;
+}
+
 async function resolveBriefs(
   clientId: number,
   creativeRows: SnapshotCreative[],

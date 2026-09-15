@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import { Icon } from "@/app/_icons/Icon";
 
@@ -27,6 +26,7 @@ export default function VideoThumb({
   imgClassName,
   wrapperClassName,
   width,
+  shareId,
   scrub = true,
   compact = false,
 }: {
@@ -36,6 +36,9 @@ export default function VideoThumb({
   wrapperClassName?: string;
   /** Requested poster width; the route rounds it up to a cached tier. */
   width: number;
+  /** Set on the public share page: the viewer has no session, so the same
+   *  stills come through the share's own file proxy instead of /api/files. */
+  shareId?: string;
   scrub?: boolean;
   /** Icon-only treatment for thumbnails too small to carry a caption. */
   compact?: boolean;
@@ -53,7 +56,15 @@ export default function VideoThumb({
   const [ready, setReady] = useState<number[]>([0]);
   const preloaded = useRef(false);
 
-  const posterSrc = `/api/files/${fileId}/thumbnail?w=${width}`;
+  const base = shareId ? `/share/${shareId}/file/${fileId}` : `/api/files/${fileId}`;
+  const posterSrc = shareId
+    ? `${base}?thumb=${width}`
+    : `${base}/thumbnail?w=${width}`;
+  const manifestSrc = shareId ? `${base}?stills=1` : `${base}/still?manifest=1`;
+  const frameUrl = (i: number, v: number) =>
+    shareId
+      ? `${base}?still=${i}&w=${width}&v=${v}`
+      : `${base}/still?i=${i}&w=${width}&v=${v}`;
 
   // The masonry tile has no height of its own until the poster loads, so the
   // placeholder has to carry one; the fixed-size boxes (card, list row) just
@@ -63,33 +74,37 @@ export default function VideoThumb({
     compact ? "size-full" : "aspect-[4/3] w-full",
   );
 
-  // Fetched once the POSTER is up, not on hover: serving that poster already
-  // cut the strip server-side, so this is a small JSON read off disk and never
-  // an ffmpeg run. It has to be here rather than behind the pointer because the
+  // A plain fetch, not useQuery: this component also renders on the PUBLIC
+  // share page, which has no QueryClientProvider — reaching for react-query
+  // here took the whole share page down with a 500. One small JSON read needs
+  // no cache layer anyway.
+  //
+  // It runs once the POSTER is up rather than on hover: serving that poster
+  // already cut the strip server-side, so this is a disk read and never an
+  // ffmpeg run. It has to be here rather than behind the pointer because the
   // badge reads "now / total" at rest, and the total comes from the manifest.
-  const stillsQ = useQuery<StillManifest>({
-    queryKey: ["file-stills", fileId],
-    enabled: scrub && loaded,
-    staleTime: Infinity,
-    retry: false,
-    queryFn: async () => {
-      // `?manifest=1` names the request, and — because the old bare-URL response
-      // went out with a day-long max-age — it is also a different cache key, so
-      // a browser already holding a stale manifest picks the new one up without
-      // waiting out its cache or being told to hard-reload.
-      const res = await fetch(`/api/files/${fileId}/still?manifest=1`);
-      if (!res.ok) throw new Error(`stills ${res.status}`);
-      return res.json();
-    },
-  });
-  const manifest = stillsQ.data;
+  const [manifest, setManifest] = useState<StillManifest | null>(null);
+  useEffect(() => {
+    if (!scrub || !loaded) return;
+    let cancelled = false;
+    void (async () => {
+      const res = await fetch(manifestSrc);
+      // No manifest means no strip to scrub — a video whose stills could not be
+      // cut (no ffmpeg on the host) still has its poster, and keeps it.
+      if (!res.ok || cancelled) return;
+      setManifest((await res.json()) as StillManifest);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [scrub, loaded, manifestSrc]);
+
   const count = manifest?.count ?? 0;
   // The strip's version rides in the URL so a regenerated strip is a new URL.
   // Without it the frames sit in the browser cache for a day and a redeploy
   // that recuts them — different colour, different frames — goes unseen.
   const version = manifest?.version ?? 0;
-  const frameSrc = (i: number) =>
-    `/api/files/${fileId}/still?i=${i}&w=${width}&v=${version}`;
+  const frameSrc = (i: number) => frameUrl(i, version);
 
   // The box holds the last frame it actually has until the next one arrives, so
   // a slow fetch never blanks it back to the poster mid-scrub.
@@ -104,9 +119,11 @@ export default function VideoThumb({
     preloaded.current = true;
     for (let i = 1; i < count; i += 1) {
       const img = new Image();
-      img.src = `/api/files/${fileId}/still?i=${i}&w=${width}&v=${version}`;
+      img.src = shareId
+        ? `${base}?still=${i}&w=${width}&v=${version}`
+        : `${base}/still?i=${i}&w=${width}&v=${version}`;
     }
-  }, [hovering, count, fileId, width, version]);
+  }, [hovering, count, base, shareId, width, version]);
 
   return (
     <div

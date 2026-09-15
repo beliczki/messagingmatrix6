@@ -16,6 +16,7 @@ import ThemeToggle from "@/app/_components/ThemeToggle";
 import ShareActionsMenu from "./ShareActionsMenu";
 import { bgClassFor, type PreviewBg } from "./preview-bg";
 import { Masonry } from "../../(app)/_components/Masonry";
+import VideoThumb from "../../(app)/_components/VideoThumb";
 import ShareDetailDialog, {
   type DialogItem,
   type ShareCommentRow,
@@ -1367,7 +1368,6 @@ function CreativeMedia({
   }
   const isImage = file.mimeType?.startsWith("image/") ?? false;
   const isVideo = file.mimeType?.startsWith("video/") ?? false;
-  const fullSrc = `/share/${shareId}/file/${file.id}`;
   // 800px is the largest thumbnail tier the public file proxy serves (see
   // ALLOWED_THUMB_WIDTHS); use it for non-compact tiles so retina displays
   // don't render a soft 400px upscale. Compact = list-view 64px thumb.
@@ -1384,14 +1384,20 @@ function CreativeMedia({
     );
   }
   if (isVideo) {
+    // Poster + hover scrub, the same treatment the signed-in library gives a
+    // video. A <video preload="metadata"> per tile had to pull the clip down
+    // before it could paint a frame, and on this page it also counted as a
+    // download every time somebody merely looked at the gallery.
     return (
-      <video
-        src={fullSrc}
-        className={clsx("block w-full", compact && "size-full object-contain")}
-        controls={!compact}
-        muted={compact}
-        playsInline
-        preload="metadata"
+      <VideoThumb
+        fileId={file.id}
+        shareId={shareId}
+        alt={item.creative.fileName ?? file.filename}
+        wrapperClassName={compact ? "size-full" : undefined}
+        imgClassName={clsx("block w-full", compact && "size-full object-contain")}
+        width={compact ? 200 : 800}
+        scrub={!compact}
+        compact={compact}
       />
     );
   }

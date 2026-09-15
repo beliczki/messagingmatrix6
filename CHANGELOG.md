@@ -5,6 +5,16 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.98.0] — 2026-09-15
+
+### Added
+- **Videos on the public share page get the same treatment as in the library:** a poster frame with a hover scrub over the stills, instead of a `<video preload="metadata">` per tile. The share viewer is unauthenticated and cannot reach `/api/files`, so the strip comes through the share's own file proxy — `?stills=1` for the manifest, `?still=N` for a frame, and a `?thumb=` on a video resolves to frame 0, so the gallery's existing poster URL works for video unchanged.
+- The share file proxy streams with `Range` support (206 / `Content-Range`, 416 on an unsatisfiable range), so a video in the share's detail view can be played instead of being downloaded whole first.
+
+### Fixed
+- **Merely looking at a share counted as a download for every video in it.** Each tile's `<video>` fetched the whole file, and the proxy increments `downloadCount` on every full serve. Tiles no longer fetch the file at all, and only a whole-file request counts — a playing video issues a string of Range requests, and counting those would have turned one viewer into dozens of downloads.
+- `VideoThumb` no longer uses react-query. It renders on the share page too, which has no `QueryClientProvider`, and reaching for one there took the whole share page down with a 500.
+
 ## [6.97.2] — 2026-09-15
 
 ### Fixed

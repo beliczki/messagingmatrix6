@@ -5,6 +5,11 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.97.1] — 2026-09-15
+
+### Fixed
+- **Scrubbing to a frame that was not in the browser cache showed the poster while the badge already claimed the new time.** A mounted `<img>` with no bytes yet is transparent, and the layer was flipped to opaque on `mouseenter` — so the first pass over a video (each still is ~230 KB at the 800 tier) appeared to skip frames, the end frame most visibly, since it is the one furthest from the pointer's entry. A frame is now revealed only once its own `onLoad` has fired, the box holds the last frame it actually has until then, and the badge reads the frame on screen rather than the one under the pointer — so the picture and the time can never disagree.
+
 ## [6.97.0] — 2026-09-15
 
 ### Changed

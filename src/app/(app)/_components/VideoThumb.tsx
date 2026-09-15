@@ -43,7 +43,14 @@ export default function VideoThumb({
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
   const [hovering, setHovering] = useState(false);
+  // `index` is where the POINTER is; `shown` is the frame actually on screen.
+  // They differ while a frame is still downloading — a mounted <img> with no
+  // bytes yet is transparent, so flipping it to opaque on mouseenter showed the
+  // poster through it while the badge already claimed the new time.
   const [index, setIndex] = useState(0);
+  const [shown, setShown] = useState(0);
+  // Index 0 needs no waiting: it IS the poster, already on screen.
+  const [ready, setReady] = useState<number[]>([0]);
   const preloaded = useRef(false);
 
   const posterSrc = `/api/files/${fileId}/thumbnail?w=${width}`;
@@ -73,6 +80,12 @@ export default function VideoThumb({
   });
   const manifest = stillsQ.data;
   const count = manifest?.count ?? 0;
+
+  // The box holds the last frame it actually has until the next one arrives, so
+  // a slow fetch never blanks it back to the poster mid-scrub.
+  useEffect(() => {
+    if (ready.includes(index)) setShown(index);
+  }, [index, ready]);
 
   // The FRAMES, unlike the manifest, stay behind the pointer: pulling every
   // still of every tile on page load would be tens of megabytes unasked for.
@@ -111,7 +124,7 @@ export default function VideoThumb({
           every frame is already in the browser cache by then (preloaded above),
           so each fade starts from a decoded image and never flashes. Index 0
           fades them all out, which uncovers the poster underneath. */}
-      {scrub && loaded && count > 1 && (hovering || index > 0)
+      {scrub && loaded && count > 1 && (hovering || shown > 0)
         ? Array.from({ length: count - 1 }, (_, n) => {
             const i = n + 1;
             return (
@@ -123,9 +136,10 @@ export default function VideoThumb({
                 aria-hidden
                 className={clsx(
                   "video-thumb__frame absolute inset-0 size-full object-contain transition-opacity duration-200 ease-out",
-                  i === index ? "opacity-100" : "opacity-0",
+                  i === shown ? "opacity-100" : "opacity-0",
                 )}
                 decoding="async"
+                onLoad={() => setReady((r) => (r.includes(i) ? r : [...r, i]))}
               />
             );
           })
@@ -163,7 +177,7 @@ export default function VideoThumb({
         <span className="video-thumb__time pointer-events-none absolute bottom-1 right-1 flex items-center gap-1 rounded bg-slate-900/70 px-1 py-0.5 text-[10px] font-medium tabular-nums text-white">
           <Icon name="video" className="size-3" />
           {manifest
-            ? `${formatClock(stillTimestamp(index, manifest))} / ${formatClock(manifest.durationSec)}`
+            ? `${formatClock(stillTimestamp(shown, manifest))} / ${formatClock(manifest.durationSec)}`
             : null}
         </span>
       ) : null}

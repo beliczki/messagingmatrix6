@@ -1462,3 +1462,34 @@ kivétel: **6 mp → 2 zóna**, mert az 5,1 mp-es tick már 0,9 mp-re van a vég
 `END_FRAME_MIN_GAP_SEC` alatt a záró kocka kimarad — egy end card ilyenkor amúgy is ugyanaz a kép.
 
 **DEPLOYOLVA 6.97.1 — mindkét tenant.** Séma-migráció nincs. Health zöld.
+
+## 2026-09-15 — 6.97.2: egy napos böngésző-cache tartotta a scrubot 2 sávon
+
+**User:** „nem mutatja meg a 10/10-et" — a képernyőn `0:00/0:10` és `0:05/0:10`, harmadik sáv sehol,
+v6.97.1-en.
+
+**Root cause — nem a szerveren, a böngészőben.** A manifestet
+`Cache-Control: private, max-age=86400`-gyel szolgáltuk ki, és **nincs verzió az URL-jében**. Aki a
+6.95.x idején már megnézte a könyvtárat, annak a böngészője eltette a régi, végkocka nélküli
+`{"count":2,...}`-t — és **egy napig meg sem kérdezte a szervert**. `count:2` → két zóna, `0:00` és
+`0:05`, és semmi a képernyőn, ami elárulná, miért. A lemezen a stillek végig helyesek voltak
+(`count:3, endFrame:true, v3` mindhárom telekom videón, a 0:10-esen rajta a „12 340 Ft/hó" ár).
+A `durationSec` mindkét manifest-verzióban 10 — ezért mutatta a badge helyesen a **teljes** hosszt,
+miközben a pozíció sosem ért el 0:10-ig. Ez volt a megtévesztő rész.
+
+**Javítás, három rétegben:**
+- A **manifest az az egyetlen erőforrás, amit nem lehet a saját URL-jében verziózni** — ő maga jelenti be
+  a verziót. Ezért mostantól **revalidál** (`private, no-cache`); pár tíz bájt.
+- A **kocka-URL-ek viszik a strip verzióját** (`&v=`), így egy újravágott strip új URL, nem elavult
+  találat. Enélkül ugyanez az osztály elrejtette volna a **színjavítást** is mindenki elől, aki a 6.96.0
+  előtt már megnézett egy videót.
+- A manifest-kérés `?manifest=1` lett — **más cache-kulcs**, mint a korábbi csupasz URL, így akinek már
+  benne ül a régi válasz, a következő látogatáskor magától a jóra vált. Nem kell hard reload, és nem kell
+  kivárni a napot.
+
+**Verifikáció:** a HTTP-réteg curl-lel ellenőrizve (`manifest → private, no-cache` + `count:3`;
+`?manifest=1` ugyanaz frissen; `still?i=2&w=800&v=3` → 200, `max-age=86400`). Az nginx nem ír felül
+cache-fejlécet (a vhostokban nincs `add_header Cache-Control` / `proxy_cache`). **Böngészőből ezt a kört
+nem tudtam leellenőrizni** — a lokális dev-session lejárt, jelszót pedig nem írok be.
+
+**DEPLOYOLVA 6.97.2 — mindkét tenant.** Séma-migráció nincs. Health zöld.

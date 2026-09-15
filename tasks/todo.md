@@ -1435,3 +1435,30 @@ ezért **`6.97.0`**; aki ezt a 6.96.0 csiszolásának tekinti, annak `6.96.1` is
 **DEPLOYOLVA 6.97.0 — mindkét tenant.** Séma-migráció nincs. Élő böngésző-ellenőrzés (erste dev):
 nyugalomban `0:00 / 0:10`, a scrub végére húzva `0:10 / 0:10` az Erste end carddal, majd az egeret
 levéve **mindkettő a helyén marad**. Health mindkét tenanton zöld.
+
+## 2026-09-15 — 6.97.1: a scrub a kockát a byte-jai előtt mutatta meg
+
+**User:** „a 0:10 frame-t miért nem mutatja meg?" majd „ha 10 mp a videó, akkor nem 2 scrub sávnak kéne
+lennie, hanem (mp/5)+1-nek."
+
+**A zónák száma már jó volt** (`Array.from({ length: count })`, 10 mp → 3), és a kockák is megvoltak a
+boxon: mindhárom telekom videó `count:3, endFrame:true, v3`, a masterek byte-ban különböznek — a 0:10-es
+az, amin rajta van a „12 340 Ft/hó" ár. A hiba a **megjelenítésben** volt.
+
+**Root cause:** egy frissen mountolt `<img>`, aminek még nincsenek byte-jai, **átlátszó**. A réteget
+`mouseenter`-re billentettük `opacity-100`-ra, így az első áthúzásnál (egy still ~230 KB a 800-as
+tieren) alóla a poster látszott, miközben a badge már az új időt írta. **A záró kocka szenvedte meg a
+legjobban:** az van a legtávolabb attól, ahol az egér belép a dobozba, tehát annak volt a legkevesebb
+ideje megérkezni — úgy nézett ki, mintha soha nem is készült volna el. Nálam azért nem jött elő, mert a
+korábbi tesztekből cache-ben voltak.
+
+**Javítás:** egy kocka csak akkor válik láthatóvá, ha a **saját `onLoad`-ja** lefutott (`ready` lista);
+addig a doboz azt tartja, amije ténylegesen van; a badge pedig a **látott** kockát írja (`shown`), nem
+az egér alattit (`index`). Így a kép és az idő soha nem mondhat mást.
+
+**Zónaszám-ellenőrzés a user képlete ellen** (`(mp/5)+1`): 5→2, 10→3, 15→4, 20→5, 25→6, 30→7, 60→13 —
+mind **egyezik**. Nem 5 többszöröseinél a ceil-alapú általánosítás jön (12→4, 17→5). Egy megjegyzendő
+kivétel: **6 mp → 2 zóna**, mert az 5,1 mp-es tick már 0,9 mp-re van a végtől, és az 1 mp-es
+`END_FRAME_MIN_GAP_SEC` alatt a záró kocka kimarad — egy end card ilyenkor amúgy is ugyanaz a kép.
+
+**DEPLOYOLVA 6.97.1 — mindkét tenant.** Séma-migráció nincs. Health zöld.

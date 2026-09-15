@@ -1531,3 +1531,39 @@ tehát végig ott volt. **Screenshotra ne alapozz állítást, ha a DOM megkérd
 A share `metadata.creatives`-ben a **rögzítéskori** creative-sorokat tárolja; a Drive-link utólag került a
 creative-re, ezért nincs benne. **Frissítő/újrarögzítő végpont nincs** (`share-galleries/[id]` csak
 `DELETE`-et és `restore`-t ismer). Döntés a usernél — lásd a beszélgetést.
+
+## 2026-09-15 — 6.99.0 + 6.100.0: élő Drive-link, másodpercenkénti strip, playhead
+
+### 6.99.0 — a share Drive-mappája élőben
+A user döntése a felkínált három közül: **élő feloldás**. A delivery-mappa nem a megosztott TARTALOM
+része, hanem mutató arra, hol vannak most a fájlok — a befagyasztása csak egy linket vett el az olvasótól.
+Az `resolveDriveFolders` a `resolveBriefs` mintáját követi (az már eleve „resolved live"), a share saját
+kliensére és a benne lévő creative-id-kra szűkítve; a snapshot-érték marad a fallback. **Minden más a
+kártyán snapshot marad** — az továbbra is az, amit megosztottál. Ellenőrizve: a creative (id 17413)
+`drive_folder_id = 1awbYb7X-…`, és a share oldalon megjelent a **Drive** gomb a helyes mappára.
+
+### 6.100.0 — másodpercenkénti kockák + playhead vonal (Frame.io-minta)
+- **1 still / másodperc** az 5 helyett: 10 mp → **11 kocka** (3 helyett). A 60-as cap fölött az
+  **intervallum nyúlik, nem csonkol**: 90 mp → 2 mp, 10 perc → 10 mp. Így a strip mindig a **teljes**
+  klipet fedi, nem áll meg félúton úgy, hogy semmi nem árulja el. Az intervallum klipenkénti, és a
+  manifestben utazik, ezért az idő-kiírás magától követi.
+- **Playhead vonal**: 1px `bg-white/50` + 1px `rgba(0,0,0,.5)` gyűrű — világos és sötét kockán is látszik.
+  Folyamatosan követi az egeret, miközben a kép a legközelebbi stillre ugrik.
+- **A scrub egy pointer-követő overlay lett** a stillenkénti zónák helyett: egy zóna csak azt tudja
+  jelenteni, hogy beléptek — a vonalnak folytonos x kell.
+- **A rétegek ablakban mountolódnak** (pointer ±2 + a már megérkezettek), a „töltsd elő az egész stripet"
+  helyett. 1 mp-es osztásnál egy teljes strip több tíz MB, és a régi kód az egészet lehúzta abban a
+  pillanatban, ahogy az egér hozzáért a csempéhez.
+
+**Disk:** egy 10 mp-es 1080×1920 klip **3,5 MB** master (11 × ~320 KB). Egy 30 mp-es hirdetés ~10 MB.
+A volume 8,8 G szabad, tehát bőven elég — de ha sok hosszú videó jön, a master 960px/q92 lejjebb vehető.
+
+**Verifikáció — és megint az eszközről.** A böngésző-ellenőrzés sokáig félrevitt: **háttérfülön a Chrome
+nem tölti a `loading="lazy"` képeket és nem futtatja a CSS-átmeneteket**, ezért a poszter „töltésben"
+ragadt és a réteg `opacity`-je 0-t mutatott, pedig az osztálya `opacity-100` volt. A DOM-ból derült ki:
+a matched CSS rule `.opacity-100 { opacity: 1 }`, inline style nincs, szülő opacity 1 — tehát nem kódhiba.
+Élesben: manifest `{"count":11,"intervalSec":1,"version":4}`, playhead `left: 91.3%` (pontosan a
+kurzornál), badge `0:10 / 0:10`, **3 réteg mountolva 10 helyett**, a látható kockából vett pixel
+`rgb(197,1,101)` = Telekom magenta. A régi (v3) still-fájlok a deploy előtt törölve.
+
+**DEPLOYOLVA 6.100.0 — mindkét tenant.** Séma-migráció nincs. Health zöld, volume 5%.

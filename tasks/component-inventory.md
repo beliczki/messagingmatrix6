@@ -171,7 +171,7 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `video-thumb__failed` | "No preview for this video" — a poster nem töltődött be | VideoThumb | – |
 | `video-thumb__time` | Bal-alsó badge: videó-ikon + a klip hossza nyugalomban, a scrub pozíciója hover közben | VideoThumb | hossz csak a manifest megjötte után látszik (hover), addig csak az ikon |
 | `video-thumb__scrub` | EGY overlay a poster fölött, `onMouseMove`-ra követi az egeret (nem zónánkénti `onMouseEnter`, mert a playheadnek folytonos x kell) | VideoThumb | `z-20`, a kártya gombja alatta marad kattinthatónak |
-| `video-thumb__playhead` | Függőleges scrub-pozíció vonal a képen (Frame.io-minta): 1px `bg-white/50` + 1px `rgba(0,0,0,.5)` gyűrű, hogy világos és sötét kockán is látszódjon | VideoThumb | `z-30`, `pointer-events-none`; a `left` az egyetlen valóban számított érték, ezért inline |
+| `video-thumb__playhead` | Függőleges scrub-pozíció vonal a képen (Frame.io-minta): 1px széles, **szaggatott**, hosszában váltakozó fehér/fekete 50% (`repeating-linear-gradient`, `globals.css`) — így világos és sötét kockán is látszik | VideoThumb | `z-30`, `pointer-events-none`; egérlevételkor eltűnik (a kocka és az idő marad); a `left` az egyetlen valóban számított érték, ezért inline |
 | `status-dot` | Színes pötty (státusz / state) | FeedView, MessageEditor, TemplateEditor MC stepper | szín később (Phase 7) |
 | `status-badge` | Pötty + szöveg pill | MessageEditor SaveIndicator 546–581, FeedView | szín később (Phase 7) |
 | `empty-state` | Centered card "no data" üzenettel | MatrixGrid 279–298, CL 828–859, Assets, `_placeholder.tsx` | inline duplikátum |

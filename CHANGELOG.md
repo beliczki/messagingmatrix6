@@ -5,6 +5,12 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.100.2] — 2026-09-15
+
+### Changed
+- The scrub playhead is a **dashed 1px line alternating white and black at 50%** down its length, rather than a solid white line in a black ring — one of the two always reads, whether the frame under it is a bright sky or a black end card. Drawn as a single gradient (`.video-thumb__playhead` in `globals.css`) instead of two offset lines, since two elements can only be offset by a fixed amount and a gradient stays right at any height.
+- The playhead **disappears when the pointer leaves** the preview. It marks where the pointer is, so it goes with it; the frame and its time still stay put.
+
 ## [6.100.1] — 2026-09-15
 
 ### Fixed

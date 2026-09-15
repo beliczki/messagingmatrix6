@@ -127,7 +127,12 @@ export default function VideoThumb({
       onMouseEnter={() => setHovering(true)}
       // Leaving does NOT rewind: the frame you stopped on is the one you wanted
       // to look at, so the box keeps it and the badge keeps its time.
-      onMouseLeave={() => setHovering(false)}
+      onMouseLeave={() => {
+        setHovering(false);
+        // The frame and its time stay put; the LINE is the pointer's own
+        // marker, so it leaves with the pointer (user, 2026-09-15).
+        setPlayhead(null);
+      }}
     >
       {/* The poster is the base layer — it is what gives the masonry tile its
           height, so it stays mounted and keeps the box from collapsing. */}
@@ -208,12 +213,13 @@ export default function VideoThumb({
       ) : null}
 
       {/* The scrub position, drawn over the picture (user, 2026-09-15 — the
-          Frame.io reference). White at 50% inside a black 50% ring, so the line
-          stays visible whether the frame under it is bright or dark. `left` is
-          the one genuinely computed value here, so it has to be inline. */}
+          Frame.io reference). A 1px dashed column alternating white and black
+          at 50% (see .video-thumb__playhead), so it reads on a bright frame and
+          a dark one alike. `left` is the one genuinely computed value here, so
+          it is the one thing that has to be inline. */}
       {scrub && loaded && count > 1 && playhead !== null ? (
         <div
-          className="video-thumb__playhead pointer-events-none absolute inset-y-0 z-30 w-px bg-white/50 shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+          className="video-thumb__playhead pointer-events-none absolute inset-y-0 z-30 w-px"
           style={{ left: `${playhead * 100}%` }}
         />
       ) : null}

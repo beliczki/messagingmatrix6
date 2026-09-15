@@ -3,6 +3,7 @@ import os from "node:os";
 import fs from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import sharp from "sharp";
 import { readFileBytes, resolveStoragePath } from "@/lib/storage";
 
 const run = promisify(execFile);
@@ -21,6 +22,16 @@ const FIRST_STILL_OFFSET_SEC = 0.1;
 // Two ffmpeg passes at a time. A masonry wall of unseen videos would otherwise
 // start one decode per tile the moment the page paints.
 const MAX_CONCURRENT_FFMPEG = 2;
+
+// The width tiers a still is cached at. Owned here because they are part of
+// the still cache's file names — an ad-hoc width would write a new JPEG per
+// pixel value the UI happens to ask for.
+export const STILL_WIDTHS = [80, 200, 400, 800];
+
+export function normalizeStillWidth(raw: number): number {
+  if (!Number.isFinite(raw)) return STILL_WIDTHS[1];
+  return STILL_WIDTHS.find((n) => n >= raw) ?? STILL_WIDTHS[STILL_WIDTHS.length - 1];
+}
 
 export type StillManifest = {
   /** How many stills actually exist, `{id}-still-0.jpg` … `-{count-1}.jpg`. */
@@ -208,4 +219,37 @@ export async function ensureStills(
   })();
   inFlight.set(key, job);
   return job;
+}
+
+/**
+ * One still, resized to `width` and cached at that width — the same
+ * generate-once-on-miss contract the image thumbnails have. Returns null when
+ * the index is past the end of the strip.
+ */
+export async function readStillResized(
+  clientKey: string,
+  fileId: string,
+  storagePath: string,
+  index: number,
+  width: number,
+): Promise<Buffer | null> {
+  const sized = path.join(
+    stillCacheDir(clientKey),
+    `${fileId}-still-${index}-${width}.jpg`,
+  );
+  try {
+    return await fs.readFile(sized);
+  } catch {
+    // Not cached at this width yet — fall through and build it.
+  }
+
+  const manifest = await ensureStills(clientKey, fileId, storagePath);
+  if (index < 0 || index >= manifest.count) return null;
+
+  const bytes = await sharp(stillPath(clientKey, fileId, index))
+    .resize({ width, withoutEnlargement: true })
+    .jpeg({ quality: 82 })
+    .toBuffer();
+  await fs.writeFile(sized, bytes);
+  return bytes;
 }

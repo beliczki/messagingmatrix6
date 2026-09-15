@@ -5,6 +5,13 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.97.2] — 2026-09-15
+
+### Fixed
+- **The scrub drew two zones on a 10s video and could never reach the closing frame.** The still manifest went out with `Cache-Control: private, max-age=86400` and carries no version in its URL, so a browser that had seen the library before the end-frame change kept serving itself the old `count: 2` for a day — without ever asking the server. Two zones, `0:00` and `0:05`, and no way to tell from the screen why. The manifest is the one resource that cannot be versioned in its own URL (it is what announces the version), so it now revalidates instead; it is a few dozen bytes.
+- Frame URLs carry the strip's version (`&v=`), so a regenerated strip is a new URL rather than a stale hit on a day-old cache entry — the same class of staleness that would otherwise have hidden the colour fix from anyone who had already viewed a video.
+- The manifest request is now `?manifest=1`, a different cache key from the bare URL it used before, so browsers already holding a stale manifest pick the new one up on their next visit instead of waiting out the day or needing a hard reload.
+
 ## [6.97.1] — 2026-09-15
 
 ### Fixed

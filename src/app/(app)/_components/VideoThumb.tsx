@@ -73,13 +73,23 @@ export default function VideoThumb({
     staleTime: Infinity,
     retry: false,
     queryFn: async () => {
-      const res = await fetch(`/api/files/${fileId}/still`);
+      // `?manifest=1` names the request, and — because the old bare-URL response
+      // went out with a day-long max-age — it is also a different cache key, so
+      // a browser already holding a stale manifest picks the new one up without
+      // waiting out its cache or being told to hard-reload.
+      const res = await fetch(`/api/files/${fileId}/still?manifest=1`);
       if (!res.ok) throw new Error(`stills ${res.status}`);
       return res.json();
     },
   });
   const manifest = stillsQ.data;
   const count = manifest?.count ?? 0;
+  // The strip's version rides in the URL so a regenerated strip is a new URL.
+  // Without it the frames sit in the browser cache for a day and a redeploy
+  // that recuts them — different colour, different frames — goes unseen.
+  const version = manifest?.version ?? 0;
+  const frameSrc = (i: number) =>
+    `/api/files/${fileId}/still?i=${i}&w=${width}&v=${version}`;
 
   // The box holds the last frame it actually has until the next one arrives, so
   // a slow fetch never blanks it back to the poster mid-scrub.
@@ -94,9 +104,9 @@ export default function VideoThumb({
     preloaded.current = true;
     for (let i = 1; i < count; i += 1) {
       const img = new Image();
-      img.src = `/api/files/${fileId}/still?i=${i}&w=${width}`;
+      img.src = `/api/files/${fileId}/still?i=${i}&w=${width}&v=${version}`;
     }
-  }, [hovering, count, fileId, width]);
+  }, [hovering, count, fileId, width, version]);
 
   return (
     <div
@@ -131,7 +141,7 @@ export default function VideoThumb({
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 key={i}
-                src={`/api/files/${fileId}/still?i=${i}&w=${width}`}
+                src={frameSrc(i)}
                 alt=""
                 aria-hidden
                 className={clsx(

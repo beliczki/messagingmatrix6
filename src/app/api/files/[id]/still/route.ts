@@ -30,8 +30,14 @@ export const GET = withSession<Params>(async ({ req, claims, params }) => {
   try {
     if (iRaw === null) {
       const manifest = await ensureStills(client.key, row.id, row.storagePath);
+      // The manifest is the one thing that CANNOT be versioned in its own URL —
+      // it is what announces the version. Cached for a day it would keep a
+      // browser on a strip shape that no longer exists: after the end-frame
+      // change, a browser holding the old `count: 2` drew two scrub zones and
+      // could never reach the closing frame, with nothing on screen to explain
+      // why. It revalidates instead; it is a few dozen bytes.
       return NextResponse.json(manifest, {
-        headers: { "Cache-Control": "private, max-age=86400" },
+        headers: { "Cache-Control": "private, no-cache" },
       });
     }
 
@@ -48,6 +54,8 @@ export const GET = withSession<Params>(async ({ req, claims, params }) => {
       w,
     );
     if (!bytes) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    // Safe to cache hard: the caller carries the strip's version in the query
+    // (`&v=`), so a regenerated strip is a different URL rather than a stale hit.
     return new NextResponse(new Uint8Array(bytes), {
       headers: {
         "Content-Type": "image/jpeg",

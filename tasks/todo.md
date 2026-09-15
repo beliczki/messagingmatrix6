@@ -1493,3 +1493,41 @@ cache-fejlécet (a vhostokban nincs `add_header Cache-Control` / `proxy_cache`).
 nem tudtam leellenőrizni** — a lokális dev-session lejárt, jelszót pedig nem írok be.
 
 **DEPLOYOLVA 6.97.2 — mindkét tenant.** Séma-migráció nincs. Health zöld.
+
+## 2026-09-15 — 6.98.0: videó-poszter + scrub a publikus share oldalon
+
+**User:** „csináld meg a share oldalon is videókra ugyanezt."
+
+A share néző **nincs hitelesítve**, tehát az `/api/files/...` still-végpontokat nem érheti el. A strip a
+share saját publikus proxyján jön: `?stills=1` = manifest, `?still=N` = egy kocka, és **egy `?thumb=`
+videóra a 0. kockára oldódik** — így a galéria meglévő poszter-URL-je változtatás nélkül működik videóra
+is. A `VideoThumb` kapott egy `shareId` propot; abból építi a publikus URL-alakot.
+
+**Két dolog esett ki abból, hogy a csempéről eltűnt a `<video>`:**
+- **Egy share puszta megnyitása letöltésnek számított** minden benne lévő videóra: a csempe `<video>`-ja
+  lehúzta a teljes fájlt, a proxy pedig **minden teljes kiszolgálásra** növeli a `downloadCount`-ot. A
+  csempe már nem kéri le a fájlt, és mostantól csak a teljes fájlos kérés számít — egy lejátszó videó
+  Range-kérések sorozatát küldi, azokat számolva egy nézőből tucatnyi „letöltés" lett volna.
+- **Range-támogatás a proxyn** (206 / `Content-Range`, 416), hogy a detail-nézetben a videó lejátszható
+  legyen, ne kelljen előbb az egészet lehúzni.
+
+**Amit menet közben elrontottam és a dev server kapott el:** a `VideoThumb`-ban `useQuery` volt, a share
+oldal viszont **publikus és nincs benne `QueryClientProvider`** → az egész oldal **500**-zal elszállt.
+Kivettem belőle a react-queryt (egy kis JSON-kérésért nem éri meg provider-függés egy megosztott
+komponensben); sima `fetch` lett.
+
+**Verifikáció — és egy tanulság az eszközről.** A böngésző-screenshot **kétszer is elavult képet mutatott**
+(a badge 0:10-et írt, a képen a nyitókocka), ezért a DOM-ot kérdeztem meg: a látható réteg a **2-es indexű**,
+`opacity: 1`, betöltve, és az alsó harmadából vett pixel **rgb(197,1,101)** = Telekom magenta. A záró kocka
+tehát végig ott volt. **Screenshotra ne alapozz állítást, ha a DOM megkérdezhető.**
+Élesben (publikus URL, auth nélkül): share oldal 200 · manifest `{"count":3,"endFrame":true,"version":3}` ·
+`still=2&w=800&v=3` → 200, 232737 B · `Range: bytes=0-1023` → **206** `bytes 0-1023/18577763` nginxen át.
+
+**DEPLOYOLVA 6.98.0 — mindkét tenant.** Séma-migráció nincs.
+
+### Nyitott: a Drive-link nem jelenik meg a share-en (user, 2026-09-15)
+**Nem hiba, hanem tudatos snapshot-viselkedés** — a `ShareGallery.tsx:143` kommentje ki is mondja:
+„The snapshot froze the links at share time, so a folder resolved later will not appear on an older share."
+A share `metadata.creatives`-ben a **rögzítéskori** creative-sorokat tárolja; a Drive-link utólag került a
+creative-re, ezért nincs benne. **Frissítő/újrarögzítő végpont nincs** (`share-galleries/[id]` csak
+`DELETE`-et és `restore`-t ismer). Döntés a usernél — lásd a beszélgetést.

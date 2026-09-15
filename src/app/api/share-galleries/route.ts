@@ -14,6 +14,8 @@ import { withSession } from "@/lib/scoped";
 import { shareItemCount } from "@/lib/share-metadata";
 import { writeAudit } from "@/lib/audit";
 import { readTemplate } from "@/lib/templates";
+import { getActiveClient } from "@/lib/active-client";
+import { warmStills } from "@/lib/video-stills";
 
 type SnapshotMetadata = {
   generatedAt: string;
@@ -249,6 +251,34 @@ export const POST = withSession(async ({ req, claims }) => {
       metadata: JSON.stringify(metadata),
     })
     .returning();
+
+  // Cut the video strips now rather than leaving them to whoever opens the
+  // link. They are a shared on-disk cache, so this is one pass for everybody —
+  // but somebody has to be first, and it should not be the recipient sitting on
+  // "preparing the video preview". storagePath is fetched here and NOT put in
+  // the snapshot: that metadata is served to an unauthenticated viewer, and
+  // internal storage keys have no business in it.
+  //
+  // Not awaited: a share of many clips would hold the response open for as long
+  // as ffmpeg takes, and the gap between creating a share and someone opening
+  // it is far longer than the warm-up. Failures are logged inside warmStills.
+  if (fileIds.length > 0) {
+    const sources = await db
+      .select({
+        id: uploadedFiles.id,
+        storagePath: uploadedFiles.storagePath,
+        mimeType: uploadedFiles.mimeType,
+      })
+      .from(uploadedFiles)
+      .where(
+        and(
+          eq(uploadedFiles.clientId, claims.cid),
+          inArray(uploadedFiles.id, fileIds),
+        ),
+      );
+    const client = await getActiveClient();
+    void warmStills(client.key, sources);
+  }
 
   await writeAudit({
     clientId: claims.cid,

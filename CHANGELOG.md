@@ -5,6 +5,12 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.102.0] — 2026-09-15
+
+### Added
+- **A share cuts its videos' still strips when it is created**, so the person the link was sent to is not the one who waits for them. The strips were already a shared on-disk cache rather than per-viewer work — but somebody has to be first, and it should not be the recipient sitting on "preparing the video preview". Warming runs alongside the response rather than holding it open, since the gap between creating a share and someone opening it is far longer than the warm-up; failures are logged and skipped so one unreadable file cannot fail a share.
+- `scripts/warm-share-stills.ts` — cuts the strips for every live share of a tenant. Shares warm themselves from now on, so this covers the one case that cannot: strips already on disk under an older `STILLS_CACHE_VERSION`, which a version bump invalidates all at once. Run it on the box after any deploy that bumps the version.
+
 ## [6.101.0] — 2026-09-15
 
 ### Changed

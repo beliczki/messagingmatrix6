@@ -249,6 +249,34 @@ async function generate(
 }
 
 /**
+ * Cut the strips for these videos now, so that the first person to open a share
+ * is not the one who pays for them. The strips are a SHARED on-disk cache, not
+ * per-viewer work — but somebody has to be first, and without this it is
+ * whoever the link was sent to.
+ *
+ * Best effort by design: a file whose strip cannot be cut must not take the
+ * share down with it, so each failure is logged and skipped. The two-at-a-time
+ * gate inside ensureStills is what keeps a large share from flooding the box.
+ */
+export async function warmStills(
+  clientKey: string,
+  files: Array<{ id: string; storagePath: string; mimeType: string | null }>,
+): Promise<void> {
+  const videos = files.filter((f) => f.mimeType?.startsWith("video/"));
+  await Promise.all(
+    videos.map(async (f) => {
+      try {
+        await ensureStills(clientKey, f.id, f.storagePath);
+      } catch (e) {
+        console.error(
+          `[stills] warm failed for ${f.id}: ${(e as Error).message}`,
+        );
+      }
+    }),
+  );
+}
+
+/**
  * The still strip for a video, generated once and cached on local disk beside
  * the image thumbnails. Concurrent callers for the same file share one pass.
  */

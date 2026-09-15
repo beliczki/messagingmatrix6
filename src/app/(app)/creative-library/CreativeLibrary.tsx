@@ -16,6 +16,7 @@ import clsx from "clsx";import { trimEmptyCountSegments } from "@/lib/count-segm
 import { parseDriveFolderId } from "@/lib/drive-link";
 import { Masonry } from "../_components/Masonry";
 import ToolbarUpload from "../_components/ToolbarUpload";
+import VideoThumb from "../_components/VideoThumb";
 import UploadQueuePanel, {
   useDropTarget,
   useUploadQueue,
@@ -1013,12 +1014,12 @@ function Card({
             decoding="async"
           />
         ) : isVideo && creative.fileId ? (
-          <video
-            src={`/api/files/${creative.fileId}#t=0.1`}
-            className="size-full object-contain"
-            preload="metadata"
-            muted
-            playsInline
+          <VideoThumb
+            fileId={creative.fileId}
+            alt={creative.fileName ?? "creative"}
+            wrapperClassName="size-full"
+            imgClassName="size-full object-contain"
+            width={240}
           />
         ) : (
           <div className="flex size-full items-center justify-center bg-slate-50 text-slate-300">
@@ -1076,12 +1077,11 @@ function ImageTile({
           decoding="async"
         />
       ) : isVideo && creative.fileId ? (
-        <video
-          src={`/api/files/${creative.fileId}#t=0.1`}
-          className="media-tile__image block w-full"
-          preload="metadata"
-          muted
-          playsInline
+        <VideoThumb
+          fileId={creative.fileId}
+          alt={creative.fileName ?? "creative"}
+          imgClassName="media-tile__image block w-full"
+          width={320}
         />
       ) : (
         <div className="media-tile__placeholder flex aspect-[4/3] items-center justify-center bg-slate-50 text-slate-300">
@@ -1130,12 +1130,14 @@ function ListRow({
             decoding="async"
           />
         ) : isVideo && creative.fileId ? (
-          <video
-            src={`/api/files/${creative.fileId}#t=0.1`}
-            className="size-full object-contain"
-            preload="metadata"
-            muted
-            playsInline
+          <VideoThumb
+            fileId={creative.fileId}
+            alt={creative.fileName ?? "creative"}
+            wrapperClassName="size-full"
+            imgClassName="size-full object-contain"
+            width={96}
+            scrub={false}
+            compact
           />
         ) : (
           <div className="flex size-full items-center justify-center bg-slate-50 text-slate-300">

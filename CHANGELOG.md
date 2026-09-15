@@ -5,6 +5,11 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.102.2] — 2026-09-15
+
+### Fixed
+- A failure while pre-filling a new share's still cache could have failed the share creation itself — the lookup feeding the warm-up was awaited in the request path. The share is written first and the whole warm-up is now contained, so a cache pre-fill can never cost the user their share.
+
 ## [6.102.1] — 2026-09-15
 
 ### Fixed

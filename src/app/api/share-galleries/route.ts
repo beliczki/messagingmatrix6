@@ -262,22 +262,28 @@ export const POST = withSession(async ({ req, claims }) => {
   // Not awaited: a share of many clips would hold the response open for as long
   // as ffmpeg takes, and the gap between creating a share and someone opening
   // it is far longer than the warm-up. Failures are logged inside warmStills.
+  // Wrapped whole: the share is already written, and a pre-fill of a cache must
+  // never be the reason the user does not get it back.
   if (fileIds.length > 0) {
-    const sources = await db
-      .select({
-        id: uploadedFiles.id,
-        storagePath: uploadedFiles.storagePath,
-        mimeType: uploadedFiles.mimeType,
-      })
-      .from(uploadedFiles)
-      .where(
-        and(
-          eq(uploadedFiles.clientId, claims.cid),
-          inArray(uploadedFiles.id, fileIds),
-        ),
-      );
-    const client = await getActiveClient();
-    void warmStills(client.key, sources);
+    try {
+      const sources = await db
+        .select({
+          id: uploadedFiles.id,
+          storagePath: uploadedFiles.storagePath,
+          mimeType: uploadedFiles.mimeType,
+        })
+        .from(uploadedFiles)
+        .where(
+          and(
+            eq(uploadedFiles.clientId, claims.cid),
+            inArray(uploadedFiles.id, fileIds),
+          ),
+        );
+      const client = await getActiveClient();
+      void warmStills(client.key, sources);
+    } catch (e) {
+      console.error(`[stills] warm skipped for share ${id}: ${(e as Error).message}`);
+    }
   }
 
   await writeAudit({

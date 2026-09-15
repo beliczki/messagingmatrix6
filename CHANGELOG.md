@@ -5,6 +5,24 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.96.0] — 2026-09-15
+
+### Changed
+- **A video's closing frame now gets a still of its own.** The interval ticks miss it whenever the clip's length is not a multiple of 5s — a 10s ad ticked at 0 and 5 and stopped, so the branded end card never appeared in the scrub. A 10s clip now yields **3** stills, a 17s clip 5. The end frame is skipped when the last tick already lands within a second of the end, so a strip never finishes on two near-identical frames.
+- The scrub's time badge reads the closing still as the clip's real end (`stillTimestamp`), not as an interval multiple.
+- The still manifest carries a `version`; a strip cut under an older rule is treated as a cache miss and regenerated on next view. Existing caches pick the end frame up on their own — no manual purge.
+
+### Fixed
+- **Stills came back visibly duller than the video.** ffmpeg's mjpeg encoder writes YCbCr with the BT.601 matrix JPEG is defined around, but does not convert a BT.709 source into it — a solid Telekom magenta round-tripped as `rgb(206,0,109)` instead of `rgb(222,0,111)`, at **every** quality setting and with or without chroma subsampling, while the same frame written as PNG was correct. ffmpeg now hands over lossless PNG and **sharp does every JPEG encode**, which removes the matrix mismatch and the double lossy encode in one go.
+
+### Added
+- `src/lib/still-strip.ts` — the strip's shape and arithmetic, free of node built-ins so the browser-side scrub and the ffmpeg-side extraction share one set of rules. `video-stills.ts` keeps the server half.
+
+### Changed
+- Still masters are cut at **960px** (was 640) and encoded at quality 92 with 4:4:4 chroma; derivatives at 88/4:4:4 (was 82). The widest cached tier (800) is now a real downscale instead of an upscale, and the library's cards and tiles request it — on a 2x display the old 400 tier read soft.
+- Scrubbing **cross-fades** between frames (200ms) instead of cutting. The strip is mounted as stacked layers only while the pointer is on the box, and every frame is preloaded, so a fade always starts from a decoded image.
+- The cache version is part of each derivative's **filename**, not only the manifest — a version bump missed the masters but would have served stale resized copies forever.
+
 ## [6.95.1] — 2026-09-15
 
 ### Fixed

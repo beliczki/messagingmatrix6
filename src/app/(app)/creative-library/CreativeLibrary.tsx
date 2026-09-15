@@ -1019,7 +1019,7 @@ function Card({
             alt={creative.fileName ?? "creative"}
             wrapperClassName="size-full"
             imgClassName="size-full object-contain"
-            width={240}
+            width={800}
           />
         ) : (
           <div className="flex size-full items-center justify-center bg-slate-50 text-slate-300">
@@ -1081,7 +1081,7 @@ function ImageTile({
           fileId={creative.fileId}
           alt={creative.fileName ?? "creative"}
           imgClassName="media-tile__image block w-full"
-          width={320}
+          width={800}
         />
       ) : (
         <div className="media-tile__placeholder flex aspect-[4/3] items-center justify-center bg-slate-50 text-slate-300">

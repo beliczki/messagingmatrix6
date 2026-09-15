@@ -5,53 +5,46 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import sharp from "sharp";
 import { readFileBytes, resolveStoragePath } from "@/lib/storage";
+import {
+  FIRST_STILL_OFFSET_SEC,
+  STILLS_CACHE_VERSION,
+  STILL_INTERVAL_SEC,
+  planStills,
+  wantsEndFrame,
+  type StillManifest,
+} from "@/lib/still-strip";
+
+export {
+  MAX_STILLS,
+  STILL_INTERVAL_SEC,
+  STILL_WIDTHS,
+  normalizeStillWidth,
+  planStills,
+  stillTimestamp,
+  wantsEndFrame,
+  type StillManifest,
+} from "@/lib/still-strip";
 
 const run = promisify(execFile);
 
-// One still every 5 seconds (user, 2026-09-15). The cap covers the first five
-// minutes — ad creatives are 6–60s, so it only ever bites on a stray long file,
-// and it keeps one bad upload from writing 2000 JPEGs into the cache.
-export const STILL_INTERVAL_SEC = 5;
-export const MAX_STILLS = 60;
+// The master every cached width is derived from. 960 so the widest tier (800)
+// is a real downscale rather than an upscale of a smaller master — a card on a
+// 2x display asks for more pixels than its CSS width suggests.
+const STILL_MASTER_WIDTH = 960;
 
-// The first still is taken at 0.1s, not 0: the frame at exactly 0 is a black
-// leader on most rendered ads. This is the same offset the old `#t=0.1` media
-// fragment asked the browser for.
-const FIRST_STILL_OFFSET_SEC = 0.1;
+// ffmpeg hands over LOSSLESS PNG and sharp does every JPEG encode. ffmpeg's
+// mjpeg encoder writes YCbCr with the BT.601 matrix JPEG is defined around, but
+// does not convert a BT.709 source into it — a solid Telekom magenta came back
+// rgb(206,0,109) instead of rgb(222,0,111), visibly duller, at EVERY quality
+// setting. Going through RGB removes the mismatch and the double encode with it.
+const MASTER_JPEG = { quality: 92, mozjpeg: true, chromaSubsampling: "4:4:4" } as const;
+const DERIVATIVE_JPEG = { quality: 88, mozjpeg: true, chromaSubsampling: "4:4:4" } as const;
 
 // Two ffmpeg passes at a time. A masonry wall of unseen videos would otherwise
 // start one decode per tile the moment the page paints.
 const MAX_CONCURRENT_FFMPEG = 2;
 
-// The width tiers a still is cached at. Owned here because they are part of
-// the still cache's file names — an ad-hoc width would write a new JPEG per
-// pixel value the UI happens to ask for.
-export const STILL_WIDTHS = [80, 200, 400, 800];
-
-export function normalizeStillWidth(raw: number): number {
-  if (!Number.isFinite(raw)) return STILL_WIDTHS[1];
-  return STILL_WIDTHS.find((n) => n >= raw) ?? STILL_WIDTHS[STILL_WIDTHS.length - 1];
-}
-
-export type StillManifest = {
-  /** How many stills actually exist, `{id}-still-0.jpg` … `-{count-1}.jpg`. */
-  count: number;
-  intervalSec: number;
-  durationSec: number;
-};
-
 export class StillsUnavailableError extends Error {}
-
-/** How many stills a clip of this length gets. Pure — the cap lives here. */
-export function planStills(durationSec: number): number {
-  if (!Number.isFinite(durationSec) || durationSec <= 0) return 1;
-  return Math.min(MAX_STILLS, Math.max(1, Math.ceil(durationSec / STILL_INTERVAL_SEC)));
-}
-
-/** The timestamp a still index stands for, for the scrub's time readout. */
-export function stillTimestamp(index: number): number {
-  return index * STILL_INTERVAL_SEC;
-}
 
 export function stillCacheDir(clientKey: string): string {
   return resolveStoragePath(path.join(clientKey, ".thumbs"));
@@ -90,9 +83,21 @@ async function readManifest(
 ): Promise<StillManifest | null> {
   try {
     const raw = await fs.readFile(manifestPath(clientKey, fileId), "utf8");
-    return JSON.parse(raw) as StillManifest;
+    const parsed = JSON.parse(raw) as StillManifest;
+    // A strip cut under an older rule is a miss, not a hit — regenerate it.
+    if (parsed.version !== STILLS_CACHE_VERSION) return null;
+    return parsed;
   } catch {
     return null;
+  }
+}
+
+async function exists(file: string): Promise<boolean> {
+  try {
+    await fs.access(file);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -141,37 +146,69 @@ async function generate(
       "-i",
       src,
       "-vf",
-      `select='isnan(prev_selected_t)+gte(t-prev_selected_t,${STILL_INTERVAL_SEC})',scale=640:-2`,
+      `select='isnan(prev_selected_t)+gte(t-prev_selected_t,${STILL_INTERVAL_SEC})',scale=${STILL_MASTER_WIDTH}:-2`,
       "-fps_mode",
       "passthrough",
       "-frames:v",
       String(cap),
-      "-q:v",
-      "4",
-      path.join(work, "still-%03d.jpg"),
+      path.join(work, "still-%03d.png"),
     ]);
 
     // ffmpeg numbers from 1 and may produce FEWER than the cap when the last
     // interval falls past the end of the clip — what actually landed on disk is
     // the count the manifest reports, not what we planned for.
     const produced = (await fs.readdir(work))
-      .filter((f) => f.startsWith("still-") && f.endsWith(".jpg"))
+      .filter((f) => f.startsWith("still-") && f.endsWith(".png"))
       .sort();
     if (produced.length === 0) {
       throw new StillsUnavailableError(`ffmpeg produced no stills for ${fileId}`);
     }
 
-    // copyFile, not rename: STORAGE_ROOT is a config knob and may well point at
-    // a different filesystem than os.tmpdir() — on the live box the cache sits
-    // on a mounted volume while the work dir is on the root disk, and a rename
-    // across that boundary fails with EXDEV. The work dir is removed either way
-    // by the finally below.
+    // The closing frame, seeked from the END of the file rather than by
+    // timestamp, so it lands on the last decodable frame whatever the duration
+    // rounds to. Appended after the sort, so it is always the highest index.
+    let endFrame = false;
+    if (wantsEndFrame(durationSec, produced.length)) {
+      const endName = "end.png";
+      await run("ffmpeg", [
+        "-v",
+        "error",
+        "-sseof",
+        "-0.5",
+        "-i",
+        src,
+        "-vf",
+        `scale=${STILL_MASTER_WIDTH}:-2`,
+        "-frames:v",
+        "1",
+        "-update",
+        "1",
+        "-y",
+        path.join(work, endName),
+      ]);
+      // A container ffmpeg cannot seek backwards from EOF exits 0 having
+      // written nothing. The ticks are a usable strip on their own, so fall
+      // back to them rather than losing the poster over a missing end card.
+      if (await exists(path.join(work, endName))) {
+        produced.push(endName);
+        endFrame = true;
+      }
+    }
+
+    // sharp encodes the masters out of the PNGs. This also sidesteps EXDEV:
+    // STORAGE_ROOT is a config knob and may sit on a different filesystem than
+    // os.tmpdir() — on the live box the cache is on a mounted volume while the
+    // work dir is on the root disk. The work dir goes either way in the finally.
     for (const [i, name] of produced.entries()) {
-      await fs.copyFile(path.join(work, name), stillPath(clientKey, fileId, i));
+      await sharp(path.join(work, name))
+        .jpeg(MASTER_JPEG)
+        .toFile(stillPath(clientKey, fileId, i));
     }
 
     const manifest: StillManifest = {
       count: produced.length,
+      endFrame,
+      version: STILLS_CACHE_VERSION,
       intervalSec: STILL_INTERVAL_SEC,
       durationSec,
     };
@@ -238,9 +275,13 @@ export async function readStillResized(
   index: number,
   width: number,
 ): Promise<Buffer | null> {
+  // The cache version is part of the NAME, not just the manifest: the manifest
+  // check below only guards the masters, and a derivative cut from an older
+  // master would otherwise be served forever — stale colour, stale size, with
+  // nothing to notice it. A bump simply misses and rebuilds.
   const sized = path.join(
     stillCacheDir(clientKey),
-    `${fileId}-still-${index}-${width}.jpg`,
+    `${fileId}-still-${index}-${width}-v${STILLS_CACHE_VERSION}.jpg`,
   );
   try {
     return await fs.readFile(sized);
@@ -253,7 +294,7 @@ export async function readStillResized(
 
   const bytes = await sharp(stillPath(clientKey, fileId, index))
     .resize({ width, withoutEnlargement: true })
-    .jpeg({ quality: 82 })
+    .jpeg(DERIVATIVE_JPEG)
     .toBuffer();
   await fs.writeFile(sized, bytes);
   return bytes;

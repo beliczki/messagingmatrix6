@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import { Icon } from "@/app/_icons/Icon";
 
-type StillManifest = { count: number; intervalSec: number; durationSec: number };
+import { stillTimestamp, type StillManifest } from "@/lib/still-strip";
 
 function formatClock(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
@@ -81,10 +81,6 @@ export default function VideoThumb({
     }
   }, [count, fileId, width]);
 
-  // Still 0 keeps the poster URL so the resting frame stays the one the browser
-  // already has; the scrub only introduces new URLs for the frames past it.
-  const src = index === 0 ? posterSrc : `/api/files/${fileId}/still?i=${index}&w=${width}`;
-
   return (
     <div
       className={clsx("video-thumb relative", wrapperClassName)}
@@ -94,9 +90,11 @@ export default function VideoThumb({
         setIndex(0);
       }}
     >
+      {/* The poster is the base layer — it is what gives the masonry tile its
+          height, so it stays mounted and keeps the box from collapsing. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src={src}
+        src={posterSrc}
         alt={alt}
         className={clsx(imgClassName, !loaded && "absolute inset-0 opacity-0")}
         loading="lazy"
@@ -104,6 +102,31 @@ export default function VideoThumb({
         onLoad={() => setLoaded(true)}
         onError={() => setFailed(true)}
       />
+
+      {/* The rest of the strip, stacked over the poster and cross-faded by
+          opacity alone. They are mounted only while the pointer is on the box —
+          every frame is already in the browser cache by then (preloaded above),
+          so each fade starts from a decoded image and never flashes. Index 0
+          fades them all out, which uncovers the poster underneath. */}
+      {scrub && loaded && count > 1 && hovering
+        ? Array.from({ length: count - 1 }, (_, n) => {
+            const i = n + 1;
+            return (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={i}
+                src={`/api/files/${fileId}/still?i=${i}&w=${width}`}
+                alt=""
+                aria-hidden
+                className={clsx(
+                  "video-thumb__frame absolute inset-0 size-full object-contain transition-opacity duration-200 ease-out",
+                  i === index ? "opacity-100" : "opacity-0",
+                )}
+                decoding="async"
+              />
+            );
+          })
+        : null}
 
       {!loaded && !failed ? (
         <div className={clsx(placeholderBox, "video-thumb__pending")}>
@@ -138,7 +161,9 @@ export default function VideoThumb({
           <Icon name="video" className="size-3" />
           {manifest
             ? formatClock(
-                hovering && count > 1 ? index * manifest.intervalSec : manifest.durationSec,
+                hovering && count > 1
+                  ? stillTimestamp(index, manifest)
+                  : manifest.durationSec,
               )
             : null}
         </span>

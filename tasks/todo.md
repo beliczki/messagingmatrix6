@@ -1315,3 +1315,45 @@ nem törik el semmi, csak nincs poster.
 
 **Scope-on kívül maradt (szándékosan):** a drafts / assets / share tile-ok `<video>`-ja. A V3 miatt a
 poster ott is egy `thumbnail?w=` hívásra elérhető lenne — külön commit, ha kell.
+
+---
+
+## 2026-09-15 — deploy 6.95.0 → 6.95.1 + a thumb-cache átköltöztetése a Hetzner volume-ra
+
+**ffmpeg a boxra (a 6.95.0 előfeltétele).** `apt-get install -y --no-install-recommends ffmpeg` →
+`6.1.1-3ubuntu5`, `/usr/bin/ffmpeg` + `/usr/bin/ffprobe`. **Recommends nélkül szándékosan:** 129 csomag
+helyett 104, a kihagyott rész a mesa/VA-API/VDPAU GPU-driver-halmaz és a pocketsphinx — halott súly egy
+headless boxon, és a diszk 85%-on állt. Így 200 MB lett (85% → 86%).
+**A filter-lánc 6.1.1-en is ellenőrizve:** 17s-es teszt-klip → **4 still**, ugyanaz, mint lokálisan a
+9.0.1-en (`select` + `-fps_mode passthrough`; a flag 5.0 óta létezik, tehát nincs verzió-kockázat).
+
+**Thumb-cache → `/mnt/HC_Volume_104001329/mm6-storage` (user kérése).** A boxon van egy 10 G-s Hetzner
+Cloud Volume (`/dev/sdb`), ami **érintetlenül állt 1%-on**, míg a fő diszk 86%-on. S3-módban a
+`STORAGE_ROOT` **csak a derivált cache-t** jelöli ki (a forrás byte-ok MinIO-ban vannak), tehát egy
+env-sor az egész. A két tenant közös gyökéren osztozik, mert minden útvonal `{root}/{clientKey}/...`.
+- `cp -a` (NEM `mv`) mindkét `storage/`-ból → 460 M, **3488 + 94 fájl, számra egyezik**.
+- `.env`-ben `STORAGE_ROOT=./storage` → abszolút volume-útvonal; a régi `.env` mentve
+  `.env.pre-volume-storage-20260915` néven, a régi `storage/` könyvtárak **megvannak rollback-pontnak**.
+- Diszk utána: `/` 86% (5,3 G szabad), volume **5%** (8,8 G szabad).
+
+**Amit a költöztetés azonnal kibuktatott — `EXDEV` (6.95.1).** A stillek publikálása `fs.rename`-mel ment
+az ffmpeg work-dirből, ami **csak egy fájlrendszeren belül működik**. Az `os.tmpdir()` az `sda1`-en van,
+a cache már az `sdb`-n → `EXDEV: cross-device link not permitted`, minden extrakció elhalt. Lokálisan
+sosem jött elő, mert ott egy eszközön volt minden. Javítás: `fs.copyFile` (`32005df`) — a work-dirt a
+meglévő `finally` takarítja. **Tanulság:** a `STORAGE_ROOT` konfigurálható knob, tehát semmi sem
+feltételezheti, hogy azonos eszközön van a temp-pel.
+
+**Élő verifikáció a boxon** (az app saját kódútján, `npx tsx`-szel, valódi Erste videón):
+`manifest { count: 2, intervalSec: 5, durationSec: 10 }` **2342 ms** alatt (MinIO-letöltés + ffprobe +
+ffmpeg együtt). A 4 fájl a **volume-on** landolt, a régi könyvtárban **0** — ez a bizonyíték, hogy az új
+`STORAGE_ROOT` tényleg él. Temp-könyvtár nem maradt hátra.
+
+**DEPLOYOLVA 6.95.1 — mindkét tenant** (`mm6-erste` és `mm6-telekom`, build ~2,5 perc egyenként, a másik
+app `pm2 stop`-olva a build idejére a 3,7 G RAM miatt). **Séma-migráció nincs.** Health mindkettőn:
+`/login` 200 · `/matrix|/creative-library|/drafts` 307 · `/api/templates` 401 · `/mcp` 401 ·
+`/api/files/*/still` **401** (létezik, auth mögött). `error.log`-ban új hiba nincs (a bennmaradó
+Server-Action és AWS-SDK-node>=22 sorok korábbiak).
+
+**Nyitott, szándékosan:** a régi `storage/` könyvtárak (457 M + 2,8 M a fő diszken) rollback-pontként
+maradtak — csak akkor törlendők, ha a cache napokig bizonyítottan a volume-ról szolgál ki. Olcsó
+mellékszál a diszk-nyomásra: `journalctl --vacuum-size=500M` ~3,3 G-t szabadítana fel.

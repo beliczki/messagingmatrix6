@@ -1782,3 +1782,49 @@ Előfeltétel: a disk-takarítás, mert a `.next-build` még ~1,3G-t kér a jele
 mm6-deploy erste
 mm6-deploy telekom
 ```
+
+### D) Az első deploy az új úton — és amit közben kirántott a szőnyeg alól
+
+**DEPLOYOLVA 6.103.0 — mindkét tenant**, commit `092015a`.
+
+**Mért kiesés (fél másodperces kopogtatás az éles URL-en, végig a deploy alatt):**
+
+| | deploy hossza | nem-200 válasz | ebből 502 | kiesés |
+|---|---|---|---|---|
+| erste | 4m 08s | 15 × 503 | **0** | **8,4 mp** |
+| telekom | 3m 09s | 7 × 503 | **0** | **3,7 mp** |
+
+A korábbi ~10-15 perc nyers 502 helyett néhány másodperc maintenance oldal. Az app a **teljes build
+alatt végig kiszolgált** — a gate csak a `mv` swapre és a restartra megy fel.
+
+**A bukott első próba a bizonyíték a sorrendre:** az első `mm6-deploy erste` 2m18s után elszállt egy
+típushibán — és a prober **egyetlen nem-200-at sem** rögzített. A `set -e` a gate felkapcsolása előtt
+állt meg, az éles app hozzá sem ért a hibához. Pontosan ezért van ebben a sorrendben.
+
+**A típushiba viszont valódi lelet volt — `src/lib/scoped.ts`:**
+```
+Route "src/app/api/adform-snapshots/route.ts" has an invalid "GET" export:
+  Expected "Promise<any>", got "Promise<Record<string, never>> | undefined"
+```
+A `withSession`/`withAdmin` a route-kontextust `{ params?: Promise<T> }`-ként hirdette, **opcionális**
+`params`-szal. A Next viszont **mindig** ad `params`-t (dinamikus szegmens nélküli route-nál üres
+promise-t), és a route-export-validációja a nem kötelező formát elutasítja. **47 route** örökölte.
+
+**Miért nem derült ki eddig:** az inkrementális típusellenőrzés hónapok óta nem nézte újra ezeket a
+fájlokat. A distDir-váltás érvénytelenítette a `tsbuildinfo`-t → **első teljes ellenőrzés → azonnal
+elhasalt**. Tételes teszttel zártam ki a másik gyanúsítottat (duplikált `types` könyvtár a
+tsconfig `include`-ban): az sem `.next/types` nélkül nem múlt el → nem az volt.
+
+- [x] **D1** `scoped.ts`: `params` kötelező és közvetlenül `await`-elt. A `?? ({} as T)` **elhagyva** —
+      épp azt az alakot fedte le, amit a Next soha nem ad át.
+- [x] **D2** 22 teszt-hívás 5 fájlban a valódi kontextust adja át (`{ params: Promise.resolve({}) }`),
+      nem vak cserével: a `tsc` által jelentett pontos sor/oszlop pozíciókon.
+- [x] **D3** `npm test` **969 teszt / 102 fájl zöld**, tiszta `tsc` (tsbuildinfo nélkül) hibátlan.
+- [x] **D4** `.next-build/types/**/*.ts` bekerült a repó `tsconfig.json`-jába — különben a `next build`
+      minden deploynál átírja a fájlt a boxon, és a következő `git pull --ff-only` beleakad.
+      (A boxon a Next által okozott drift `git checkout`-tal törölve — kozmetikai újraformázás volt.)
+
+**Nyitott, amit ez felvet:** ha ez a hiba 47 route-on hónapokig láthatatlan volt, akkor az
+inkrementális típusellenőrzés **más** lappangó hibákat is takarhat. Egy CI-szerű „tiszta
+`tsbuildinfo` + teljes `tsc`" lépés olcsón kiszűrné — most a deploy az egyetlen hely, ahol teljes
+ellenőrzés fut.

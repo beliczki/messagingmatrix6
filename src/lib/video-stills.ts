@@ -10,6 +10,7 @@ import {
   STILLS_CACHE_VERSION,
   STILL_INTERVAL_SEC,
   planStills,
+  stillInterval,
   wantsEndFrame,
   type StillManifest,
 } from "@/lib/still-strip";
@@ -20,6 +21,7 @@ export {
   STILL_WIDTHS,
   normalizeStillWidth,
   planStills,
+  stillInterval,
   stillTimestamp,
   wantsEndFrame,
   type StillManifest,
@@ -132,12 +134,13 @@ async function generate(
 
     const durationSec = await probeDuration(src);
     const cap = planStills(durationSec);
+    const intervalSec = stillInterval(durationSec);
 
-    // `select`, not `fps=1/5`: the fps filter needs a full 5s slot to emit a
-    // frame, so a 17s clip loses its tail and yields 3 stills instead of 4.
-    // This expression takes the first frame, then one every 5s of elapsed
-    // source time. `-fps_mode passthrough` is what stops ffmpeg from padding
-    // the gaps back out to the source framerate (without it: 60 stills).
+    // `select`, not `fps=1/N`: the fps filter needs a full slot to emit a
+    // frame, so a clip whose length is not a multiple of the interval loses its
+    // tail. This expression takes the first frame, then one every interval of
+    // elapsed source time. `-fps_mode passthrough` is what stops ffmpeg from
+    // padding the gaps back out to the source framerate.
     await run("ffmpeg", [
       "-v",
       "error",
@@ -146,7 +149,7 @@ async function generate(
       "-i",
       src,
       "-vf",
-      `select='isnan(prev_selected_t)+gte(t-prev_selected_t,${STILL_INTERVAL_SEC})',scale=${STILL_MASTER_WIDTH}:-2`,
+      `select='isnan(prev_selected_t)+gte(t-prev_selected_t,${intervalSec})',scale=${STILL_MASTER_WIDTH}:-2`,
       "-fps_mode",
       "passthrough",
       "-frames:v",
@@ -209,7 +212,7 @@ async function generate(
       count: produced.length,
       endFrame,
       version: STILLS_CACHE_VERSION,
-      intervalSec: STILL_INTERVAL_SEC,
+      intervalSec,
       durationSec,
     };
     await fs.writeFile(

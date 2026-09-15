@@ -54,7 +54,9 @@ export default function VideoThumb({
   const [shown, setShown] = useState(0);
   // Index 0 needs no waiting: it IS the poster, already on screen.
   const [ready, setReady] = useState<number[]>([0]);
-  const preloaded = useRef(false);
+  // Where the pointer last was across the box, 0–1. Continuous, unlike `index`:
+  // the line tracks the mouse while the picture snaps to the nearest still.
+  const [playhead, setPlayhead] = useState<number | null>(null);
 
   const base = shareId ? `/share/${shareId}/file/${fileId}` : `/api/files/${fileId}`;
   const posterSrc = shareId
@@ -112,19 +114,6 @@ export default function VideoThumb({
     if (ready.includes(index)) setShown(index);
   }, [index, ready]);
 
-  // The FRAMES, unlike the manifest, stay behind the pointer: pulling every
-  // still of every tile on page load would be tens of megabytes unasked for.
-  useEffect(() => {
-    if (!hovering || count < 2 || preloaded.current) return;
-    preloaded.current = true;
-    for (let i = 1; i < count; i += 1) {
-      const img = new Image();
-      img.src = shareId
-        ? `${base}?still=${i}&w=${width}&v=${version}`
-        : `${base}/still?i=${i}&w=${width}&v=${version}`;
-    }
-  }, [hovering, count, base, shareId, width, version]);
-
   return (
     <div
       className={clsx("video-thumb relative", wrapperClassName)}
@@ -152,8 +141,13 @@ export default function VideoThumb({
           so each fade starts from a decoded image and never flashes. Index 0
           fades them all out, which uncovers the poster underneath. */}
       {scrub && loaded && count > 1 && (hovering || shown > 0)
-        ? Array.from({ length: count - 1 }, (_, n) => {
-            const i = n + 1;
+        ? Array.from({ length: count - 1 }, (_, n) => n + 1)
+            // Only the frames around the pointer, plus the ones already
+            // fetched. At one still per second a whole strip is tens of
+            // megabytes, and mounting it all would pull every frame the moment
+            // the pointer touched the box — this loads what you scrub over.
+            .filter((i) => Math.abs(i - index) <= 2 || ready.includes(i))
+            .map((i) => {
             return (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -196,6 +190,17 @@ export default function VideoThumb({
         </div>
       ) : null}
 
+      {/* The scrub position, drawn over the picture (user, 2026-09-15 — the
+          Frame.io reference). White at 50% inside a black 50% ring, so the line
+          stays visible whether the frame under it is bright or dark. `left` is
+          the one genuinely computed value here, so it has to be inline. */}
+      {scrub && loaded && count > 1 && playhead !== null ? (
+        <div
+          className="video-thumb__playhead pointer-events-none absolute inset-y-0 z-30 w-px bg-white/50 shadow-[0_0_0_1px_rgba(0,0,0,0.5)]"
+          style={{ left: `${playhead * 100}%` }}
+        />
+      ) : null}
+
       {/* The badge says WHICH MOMENT is in the box, over the clip's length —
           "0:00 / 0:10" at rest, following the pointer while scrubbing, and
           holding wherever it was left. Until the manifest lands there is no
@@ -209,19 +214,22 @@ export default function VideoThumb({
         </span>
       ) : null}
 
-      {/* One zone per still, laid over the poster — the same scrub the draft
-          tiles use (DraftsView.tsx:677). Divs, not buttons: the card's own
-          button is underneath and must keep taking the click. */}
+      {/* One overlay tracking the pointer, rather than a row of zones: the line
+          has to follow the mouse continuously while the picture snaps to the
+          nearest still, and a zone can only report that it was entered. A div,
+          not a button — the card's own button is underneath and must keep
+          taking the click. */}
       {scrub && loaded && count > 1 ? (
-        <div className="video-thumb__scrub absolute inset-0 z-20 flex">
-          {Array.from({ length: count }, (_, i) => (
-            <div
-              key={i}
-              className="video-thumb__scrub-zone flex-1"
-              onMouseEnter={() => setIndex(i)}
-            />
-          ))}
-        </div>
+        <div
+          className="video-thumb__scrub absolute inset-0 z-20"
+          onMouseMove={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            if (r.width === 0) return;
+            const pct = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+            setPlayhead(pct);
+            setIndex(Math.min(count - 1, Math.floor(pct * count)));
+          }}
+        />
       ) : null}
     </div>
   );

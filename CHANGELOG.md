@@ -5,6 +5,14 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.100.0] — 2026-09-15
+
+### Changed
+- **One still per second instead of one per five** (the Frame.io reference). A 10s clip now scrubs across 11 frames rather than 3. Past the 60-still cap the spacing stretches instead of truncating — a 90s clip goes to 2s, a 10-minute one to 10s — so the strip always spans the whole clip rather than stopping partway through it with nothing on screen to say so. The interval is per-clip and travels in the manifest, so the time readout follows it.
+- **A playhead line marks the scrub position** over the picture: 1px white at 50% inside a black 50% ring, so it reads on a bright frame and a dark one alike. It follows the pointer continuously while the picture snaps to the nearest still.
+- The scrub is one pointer-tracking overlay rather than one zone per still — a zone can only report that it was entered, and the line needs a continuous x.
+- Frames are mounted in a window around the pointer plus whatever has already arrived, replacing the preload-the-whole-strip pass. At one still per second a full strip is tens of megabytes, and mounting it all pulled every frame the moment the pointer touched a tile; now it loads what you actually scrub over.
+
 ## [6.99.0] — 2026-09-15
 
 ### Changed

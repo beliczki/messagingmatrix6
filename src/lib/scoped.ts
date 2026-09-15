@@ -15,20 +15,20 @@ export type ScopedHandler<T> = (
 
 export function withSession<T = Record<string, never>>(
   handler: ScopedHandler<T>,
-): (req: NextRequest, ctx: { params?: Promise<T> }) => Promise<NextResponse> {
+): (req: NextRequest, ctx: { params: Promise<T> }) => Promise<NextResponse> {
   return async (req, ctx) => {
     const claims = await readSession(req);
     if (!claims) {
       return NextResponse.json({ error: "unauthenticated" }, { status: 401 });
     }
-    const params = (await ctx.params) ?? ({} as T);
+    const params = await ctx.params;
     return handler({ req, claims, params });
   };
 }
 
 export function withAdmin<T = Record<string, never>>(
   handler: ScopedHandler<T>,
-): (req: NextRequest, ctx: { params?: Promise<T> }) => Promise<NextResponse> {
+): (req: NextRequest, ctx: { params: Promise<T> }) => Promise<NextResponse> {
   return async (req, ctx) => {
     const claims = await readSession(req);
     if (!claims) {
@@ -37,7 +37,7 @@ export function withAdmin<T = Record<string, never>>(
     if (claims.role !== "admin") {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }
-    const params = (await ctx.params) ?? ({} as T);
+    const params = await ctx.params;
     return handler({ req, claims, params });
   };
 }

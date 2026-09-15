@@ -187,7 +187,7 @@ describe("POST /api/previews/generate", () => {
         cookies: { get: () => undefined },
         json: async () => ({ message_ids: [1] }),
       } as unknown as NextRequest,
-      {},
+      { params: Promise.resolve({}) },
     );
     expect(res.status).toBe(401);
   });
@@ -198,7 +198,7 @@ describe("POST /api/previews/generate", () => {
       authedReq(token, "http://localhost/api/previews/generate", {
         message_ids: [1],
       }),
-      {},
+      { params: Promise.resolve({}) },
     );
     expect(res.status).toBe(403);
   });
@@ -215,7 +215,7 @@ describe("POST /api/previews/generate", () => {
         authedReq(token, "http://localhost/api/previews/generate", {
           message_ids: bad,
         }),
-        {},
+        { params: Promise.resolve({}) },
       );
       expect(res.status).toBe(400);
     }
@@ -230,7 +230,7 @@ describe("POST /api/previews/generate", () => {
       authedReq(token, "http://localhost/api/previews/generate", {
         message_ids: [m1.id],
       }),
-      {},
+      { params: Promise.resolve({}) },
     );
     expect(res.status).toBe(200);
     const body = await bodyOf(res);
@@ -257,7 +257,7 @@ describe("POST /api/previews/generate", () => {
       authedReq(token, "http://localhost/api/previews/generate", {
         message_ids: [m1.id],
       }),
-      {},
+      { params: Promise.resolve({}) },
     );
     const plainBody = await bodyOf(plain);
     expect(plainBody.results).toHaveLength(3); // 4 sizes - 1 fresh
@@ -268,7 +268,7 @@ describe("POST /api/previews/generate", () => {
         message_ids: [m1.id],
         force: true,
       }),
-      {},
+      { params: Promise.resolve({}) },
     );
     const forcedBody = await bodyOf(forced);
     expect(forcedBody.results).toHaveLength(4);
@@ -295,7 +295,7 @@ describe("GET /api/previews/status?message_id=", () => {
         token,
         `http://localhost/api/previews/status?message_id=${m1.id}`,
       ),
-      {},
+      { params: Promise.resolve({}) },
     );
     expect(res.status).toBe(200);
     const body = await bodyOf(res);
@@ -329,7 +329,7 @@ describe("GET /api/previews/status?message_id=", () => {
         token,
         `http://localhost/api/previews/status?message_id=${m1.id}`,
       ),
-      {},
+      { params: Promise.resolve({}) },
     );
     const body = await bodyOf(res);
     expect(
@@ -341,7 +341,7 @@ describe("GET /api/previews/status?message_id=", () => {
     const token = await seedUser("admin", "u-admin");
     const unknown = await statusGET(
       authedReq(token, "http://localhost/api/previews/status?message_id=99999"),
-      {},
+      { params: Promise.resolve({}) },
     );
     expect(unknown.status).toBe(404);
 
@@ -361,7 +361,7 @@ describe("GET /api/previews/status?message_id=", () => {
         token,
         `http://localhost/api/previews/status?message_id=${noTemplate!.id}`,
       ),
-      {},
+      { params: Promise.resolve({}) },
     );
     expect(res.status).toBe(404);
   });
@@ -379,7 +379,7 @@ describe("preview render progress (SSE)", () => {
         authedReq(token, "http://localhost/api/previews/generate", {
           message_ids: [m.id],
         }),
-        {},
+        { params: Promise.resolve({}) },
       );
     } finally {
       unsub();
@@ -411,7 +411,7 @@ describe("preview render progress (SSE)", () => {
         authedReq(token, "http://localhost/api/previews/generate", {
           message_ids: [m.id],
         }),
-        {},
+        { params: Promise.resolve({}) },
       );
     } finally {
       unsub();

@@ -61,7 +61,7 @@ async function upload(buffer: Buffer, filename = "Creative rep_08_2026.xlsx") {
     cookies: { get: () => undefined },
     formData: async () => form,
   } as unknown as NextRequest;
-  const res = await importPOST(req, {});
+  const res = await importPOST(req, { params: Promise.resolve({}) });
   expect(res.status).toBe(200);
   return JSON.parse(await res.text());
 }
@@ -75,7 +75,7 @@ async function readBack() {
     headers: new Headers({ authorization: `Bearer ${token}` }),
     cookies: { get: () => undefined },
   } as unknown as NextRequest;
-  const res = await monitoringGET(req, {});
+  const res = await monitoringGET(req, { params: Promise.resolve({}) });
   return JSON.parse(await res.text());
 }
 

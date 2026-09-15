@@ -19,7 +19,8 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  "//include-next-build": "The deploy builds into .next-build (see next.config.ts). Listing its generated route types here keeps `next build` from rewriting this file on the box every deploy.",
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", ".next-build/types/**/*.ts"],
   "//exclude-scripts": "One-off dev/seed/maintenance scripts run via tsx, not part of the Next app or its build. Excluded from type-checking; they still need a SQLite→Postgres async pass (track in tasks/todo.md) before use.",
   "exclude": ["node_modules", "dist", ".next", "scripts"]
 }

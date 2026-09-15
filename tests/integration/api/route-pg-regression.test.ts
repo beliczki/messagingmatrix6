@@ -86,7 +86,7 @@ async function adminToken() {
 
 describe("route handlers: SQLite->Postgres regression", () => {
   it("GET /api/templates returns an array (unawaited-Promise guard)", async () => {
-    const res = await templatesGET(authedReq(await adminToken()), {});
+    const res = await templatesGET(authedReq(await adminToken()), { params: Promise.resolve({}) });
     expect(res.status).toBe(200);
     const body = await bodyOf(res);
     // Pre-fix this was {} (a serialized pending Promise), so .find/.map crashed.
@@ -104,14 +104,14 @@ describe("route handlers: SQLite->Postgres regression", () => {
     });
 
     const token = await adminToken();
-    const all = await bodyOf(await filesGET(authedReq(token), {}));
+    const all = await bodyOf(await filesGET(authedReq(token), { params: Promise.resolve({}) }));
     expect(Array.isArray(all.files)).toBe(true);
     expect(all.files).toHaveLength(1);
 
     // Upper-case query must still match a lower-case filename — plain Postgres
     // LIKE (the pre-fix code) would return zero rows here.
     const url = "http://localhost/api/files?q=GEORGE";
-    const hit = await bodyOf(await filesGET(authedReq(token, url), {}));
+    const hit = await bodyOf(await filesGET(authedReq(token, url), { params: Promise.resolve({}) }));
     expect(hit.files).toHaveLength(1);
     expect(hit.files[0].filename).toBe("SZA_george_fitzone.jpg");
   });
@@ -168,7 +168,7 @@ describe("route handlers: SQLite->Postgres regression", () => {
     ]);
 
     // Pre-fix this threw Postgres 42803 ("Failed to load users").
-    const res = await usersGET(authedReq(await adminToken()), {});
+    const res = await usersGET(authedReq(await adminToken()), { params: Promise.resolve({}) });
     expect(res.status).toBe(200);
     const body = await bodyOf(res);
     expect(Array.isArray(body.users)).toBe(true);

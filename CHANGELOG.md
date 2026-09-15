@@ -12,6 +12,7 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 - `deploy/bin/mm6-deploy <tenant>` — the deploy as one command, with the build outside the live directory and a readiness check before the page comes down. A failed build exits before the gate goes up, so it cannot touch the running app; an app that never answers leaves the page up and the previous build in place for a rollback.
 
 ### Fixed
+- **`withSession`/`withAdmin` declared a route context Next.js does not use.** They typed the handler's second argument as `{ params?: Promise<T> }`, but Next always supplies `params` — an empty promise for a route without dynamic segments — and its route-export validation requires it. 47 routes inherited the wrong contract. The error had been latent for months because incremental type-checking never re-checked those files; the first full check surfaced it. `params` is now required and awaited directly, which also removes the `?? {}` that existed only to cover the case Next never produces.
 - **A deploy no longer takes the app down for the length of the build.** `next build` clears its dist directory, so building in place pulled `.next` out from under the running server and it died on a missing `required-server-files.json` until the build finished — the 10-15 minute outage, visible in the app's own log and as 167 pm2 restarts. `distDir` now honours `NEXT_DIST_DIR`, the deploy builds into `.next-build` while the app keeps serving, and only the directory swap and the restart happen behind the maintenance page.
 
 ## [6.102.2] — 2026-09-15

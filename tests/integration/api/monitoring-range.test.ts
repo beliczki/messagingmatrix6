@@ -53,7 +53,7 @@ async function get(query = "") {
     headers: new Headers({ authorization: `Bearer ${token}` }),
     cookies: { get: () => undefined },
   } as unknown as NextRequest;
-  const res = await monitoringGET(req, {});
+  const res = await monitoringGET(req, { params: Promise.resolve({}) });
   expect(res.status).toBe(200);
   return JSON.parse(await res.text());
 }

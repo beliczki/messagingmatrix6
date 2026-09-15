@@ -81,7 +81,7 @@ describe("POST /api/creatives/drive-resolve", () => {
       .values({ clientId: erste.id, fileName: "missing.jpg", driveFolderId: FOLDER })
       .returning();
 
-    const res = await POST(authedReq(await adminToken(), { creativeIds: [a.id, b.id] }), {});
+    const res = await POST(authedReq(await adminToken(), { creativeIds: [a.id, b.id] }), { params: Promise.resolve({}) });
     expect(res.status).toBe(200);
     const body = JSON.parse(await res.text());
     expect(body.counts.resolved).toBe(1);
@@ -93,13 +93,13 @@ describe("POST /api/creatives/drive-resolve", () => {
   });
 
   it("rejects an empty id list", async () => {
-    const res = await POST(authedReq(await adminToken(), { creativeIds: [] }), {});
+    const res = await POST(authedReq(await adminToken(), { creativeIds: [] }), { params: Promise.resolve({}) });
     expect(res.status).toBe(400);
   });
 
   it("rejects a batch bigger than the cap instead of silently truncating it", async () => {
     const ids = Array.from({ length: 201 }, (_, i) => i + 1);
-    const res = await POST(authedReq(await adminToken(), { creativeIds: ids }), {});
+    const res = await POST(authedReq(await adminToken(), { creativeIds: ids }), { params: Promise.resolve({}) });
     expect(res.status).toBe(400);
     expect(JSON.parse(await res.text()).error).toBe("too_many_ids");
   });
@@ -115,7 +115,7 @@ describe("POST /api/creatives/drive-resolve", () => {
       })
       .returning();
 
-    const res = await POST(authedReq(await adminToken(), { creativeIds: [a.id] }), {});
+    const res = await POST(authedReq(await adminToken(), { creativeIds: [a.id] }), { params: Promise.resolve({}) });
     expect(res.status).toBe(502);
     expect(await db.select().from(auditLog)).toHaveLength(0);
   });

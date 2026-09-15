@@ -102,7 +102,7 @@ describe("POST /api/monitoring/import", () => {
   it("imports a report that exceeds the single-statement parameter ceiling", async () => {
     const res = await importPOST(
       uploadReq(await adminToken(), buildReport(KEYS), "Creative rep_08_2026.xlsx"),
-      {},
+      { params: Promise.resolve({}) },
     );
     expect(res.status).toBe(200);
     const body = JSON.parse(await res.text());
@@ -118,8 +118,8 @@ describe("POST /api/monitoring/import", () => {
 
   it("replaces the whole period slice on re-upload, never doubling it", async () => {
     const token = await adminToken();
-    await importPOST(uploadReq(token, buildReport(KEYS), "a.xlsx"), {});
-    await importPOST(uploadReq(token, buildReport(KEYS), "b.xlsx"), {});
+    await importPOST(uploadReq(token, buildReport(KEYS), "a.xlsx"), { params: Promise.resolve({}) });
+    await importPOST(uploadReq(token, buildReport(KEYS), "b.xlsx"), { params: Promise.resolve({}) });
 
     const rows = await db
       .select()

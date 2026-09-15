@@ -108,10 +108,23 @@ export default function VideoThumb({
   const version = manifest?.version ?? 0;
   const frameSrc = (i: number) => frameUrl(i, version);
 
-  // The box holds the last frame it actually has until the next one arrives, so
-  // a slow fetch never blanks it back to the poster mid-scrub.
+  // The box stands on the NEAREST frame it actually has until the one under the
+  // pointer arrives. Holding only the last exact match was not enough: enter a
+  // tile at its left edge and the last match is frame 0, so a jump to the right
+  // sat on the poster until the fetch landed. The nearest ready frame is always
+  // a better answer than the poster, and it walks towards the pointer as the
+  // frames in between arrive.
   useEffect(() => {
-    if (ready.includes(index)) setShown(index);
+    if (ready.includes(index)) {
+      setShown(index);
+      return;
+    }
+    setShown((cur) =>
+      ready.reduce(
+        (best, i) => (Math.abs(i - index) < Math.abs(best - index) ? i : best),
+        cur,
+      ),
+    );
   }, [index, ready]);
 
   return (

@@ -29,10 +29,12 @@ export {
 
 const run = promisify(execFile);
 
-// The master every cached width is derived from. 960 so the widest tier (800)
-// is a real downscale rather than an upscale of a smaller master — a card on a
-// 2x display asks for more pixels than its CSS width suggests.
-const STILL_MASTER_WIDTH = 960;
+// The master every cached width is derived from. Half what it was (user,
+// 2026-09-15 — "half resolution is enough, it'll be faster"): the tiles ask for
+// the 400 tier now, so 480 still leaves the widest served width a real
+// downscale. It also quarters the pixels through ffmpeg and sharp, which is
+// most of what makes a first view slow, and quarters what the cache holds.
+const STILL_MASTER_WIDTH = 480;
 
 // ffmpeg hands over LOSSLESS PNG and sharp does every JPEG encode. ffmpeg's
 // mjpeg encoder writes YCbCr with the BT.601 matrix JPEG is defined around, but

@@ -36,8 +36,8 @@ export function endFrameMinGap(intervalSec: number): number {
 // Bumped whenever the shape of a strip changes, so cached manifests written by
 // an older rule are treated as a miss and regenerated. v2 = end frame appended,
 // v3 = masters encoded by sharp from PNG (correct BT.709 colour) at 960px,
-// v4 = one still per second instead of per five.
-export const STILLS_CACHE_VERSION = 4;
+// v4 = one still per second instead of per five, v5 = 480px masters.
+export const STILLS_CACHE_VERSION = 5;
 
 // The width tiers a still is cached at. Owned here because they are part of
 // the still cache's file names — an ad-hoc width would write a new JPEG per

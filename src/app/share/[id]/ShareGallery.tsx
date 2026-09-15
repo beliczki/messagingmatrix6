@@ -1406,7 +1406,7 @@ function CreativeMedia({
         alt={item.creative.fileName ?? file.filename}
         wrapperClassName={compact ? "size-full" : undefined}
         imgClassName={clsx("block w-full", compact && "size-full object-contain")}
-        width={compact ? 200 : 800}
+        width={compact ? 200 : 400}
         scrub={!compact}
         compact={compact}
       />

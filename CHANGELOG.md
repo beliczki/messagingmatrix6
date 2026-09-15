@@ -5,6 +5,12 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.101.0] — 2026-09-15
+
+### Changed
+- **Previews are cut at half resolution** — 480px masters served at the 400 tier, where they were 960/800. Generating a 10s strip went from 2829ms to **1335ms**, the cache it leaves from 3.5MB to **1.4MB**, and a frame fetched while scrubbing from ~230KB to **85KB**.
+- **The box stands on the nearest frame it has** while the one under the pointer loads, instead of only holding the last exact match. Holding the last match was not enough: enter a tile at its left edge and that match is frame 0, so a jump to the right sat on the poster until the fetch landed. The nearest ready frame beats the poster every time, and it walks towards the pointer as the frames in between arrive. Measured: a jump from 0:04 to 0:10 is on 0:10 within 120ms, with nothing in between.
+
 ## [6.100.3] — 2026-09-15
 
 ### Changed

@@ -1412,3 +1412,26 @@ A boxon a 19 régi (v1) still-fájl törölve a deploy előtt — regenerálhat�
 `{"count":3,"endFrame":true,"version":3,"intervalSec":5,"durationSec":10}` **5122 ms** alatt, a fájlok a
 volume-on, a derivatíva neve `...-still-2-800-v3.jpg`. A byte-méretek a lokálissal egyeznek → a box
 ffmpeg 6.1.1-e ugyanazt adja, mint a lokális 9.0.1. Health mindkettőn zöld; volume 5% (8,8 G szabad).
+
+## 2026-09-15 — 6.97.0: a badge `now / total`, és a scrub nem tekercsel vissza
+
+**User:** „a timer azt kéne mutassa hogy melyik időpillanat van a preview boxban éppen, 0:00/0:10, és
+amikor lehúzom az egeret akkor maradjon azon a timer amelyik pillanatban lehúztam, ne ugorjon nullára."
+
+- **Badge `now / total`.** Eddig nyugalomban a hosszt, hover közben a pozíciót mutatta — vagyis sosem
+  válaszolta meg azt az egy kérdést, amiért ott van. Most végig `0:00 / 0:10`.
+- **A kihúzás nem tekercsel vissza.** Az `onMouseLeave` eddig `setIndex(0)`-t is csinált. Ez önmagában
+  kevés lett volna: a strip rétegei `hovering`-re voltak kötve, tehát unmountoltak volna, és alóluk
+  előbújik a poster. A mount-feltétel most `hovering || index > 0` — a csempe, amit sosem érintettél,
+  továbbra sem visz rétegeket a DOM-ba, és a 0-nál hagyott sem (ott a poster amúgy is ugyanaz a kép).
+- **A manifest a poster betöltésére jön, nem hoverre** — kell hozzá, mert a badge nyugalomban is írja a
+  teljes hosszt. Ez nem drága: a poster kiszolgálása **már levágta a stripet**, tehát ez egy kis
+  JSON-olvasás lemezről, sosem ffmpeg-futás. **A kockák előtöltése viszont hoverre maradt** — eagerrel
+  minden csempe minden kockáját lehúznánk, az több tíz MB kéretlenül.
+
+**Verzió — kettős olvasat:** a CLAUDE.md szerint „bármilyen user-látható viselkedésváltozás" = minor,
+ezért **`6.97.0`**; aki ezt a 6.96.0 csiszolásának tekinti, annak `6.96.1` is védhető lett volna.
+
+**DEPLOYOLVA 6.97.0 — mindkét tenant.** Séma-migráció nincs. Élő böngésző-ellenőrzés (erste dev):
+nyugalomban `0:00 / 0:10`, a scrub végére húzva `0:10 / 0:10` az Erste end carddal, majd az egeret
+levéve **mindkettő a helyén marad**. Health mindkét tenanton zöld.

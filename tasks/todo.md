@@ -1624,3 +1624,24 @@ réteg átlátszatlan — sosem nulla (az mutatná a posztert), sosem kettő.
 **Tanulság:** három kör ment el egy 200 ms-os kozmetikai effekt megszelídítésére, mindegyik talált egy új
 utat a hibához. A user javasolta az egyszerűsítést, és az lett a helyes — érdemes lett volna a második kör
 után magamtól felvetni, hogy az effekt nem éri meg.
+
+## 2026-09-15 — 6.101.0: fél felbontású preview + „soha ne essen vissza a poszterre"
+
+**User:** „ugy legyen a preview hogy fél felbontású elég, úgy talán gyorsabb lesz, és ha új frame-re ugrok
+ami még nincs betöltve akkor ne 0-ra essen vissza, hanem tartsa ki a legutóbbi betöltöttet."
+
+### Fél felbontás
+Master **960 → 480**, a csempék a **400-as** tiert kérik (volt 800). Mért hatás egy 10 mp-es klipen:
+generálás **2829 → 1335 ms**, cache **3,5 → 1,4 MB**, egy scrub közben letöltött kocka **~230 → 85 KB**.
+Cache-verzió **v5**, a boxon a v4 fájlok a deploy előtt törölve.
+
+### „Ne essen vissza 0-ra" — a szabály nem az volt, aminek látszott
+A `shown` eddig **csak pontos találatra** lépett, és ezért tartotta a legutóbbi *betöltött* kockát —
+**kivéve, ha az éppen a 0. volt**. Márpedig a doboz bal szélén belépve pont az: onnan jobbra ugorva a
+poszteren ült, amíg a kocha meg nem jött. Ezért nem „tartsd a legutóbbit", hanem **„állj a legközelebbi
+megvolt kockára"** lett a szabály — a reduce a *jelenlegi* `shown`-nal indul, tehát a legutóbbi betöltött
+akkor is nyer, ha nincs nála közelebbi. A 0. kocka már csak akkor jöhet szóba, ha tényleg az a legközelebbi.
+**Mérve:** 0:04 → 0:10 ugrás **120 ms-on belül** a 10-es kockán áll, közte semmi.
+
+**DEPLOYOLVA 6.101.0 — mindkét tenant.** Élesben: manifest `v5`, poszter `400` tier, `etag s5-…-0-400`,
+63 553 B. Health zöld.

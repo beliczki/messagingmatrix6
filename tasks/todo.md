@@ -1567,3 +1567,36 @@ kurzornál), badge `0:10 / 0:10`, **3 réteg mountolva 10 helyett**, a látható
 `rgb(197,1,101)` = Telekom magenta. A régi (v3) still-fájlok a deploy előtt törölve.
 
 **DEPLOYOLVA 6.100.0 — mindkét tenant.** Séma-migráció nincs. Health zöld, volume 5%.
+
+## 2026-09-15 — 6.100.1 + 6.100.2: a tranzíció a 0. kockán ment át, playhead-finomítás
+
+### 6.100.1 — a scrub minden lépése a poszteren keresztül oldott
+**User:** „mindig a 0. frame-hez megy vissza tranzition és nem az előzőhöz."
+**Root cause:** a kimenő kockát `opacity-0`-ra állítottuk (kifakult), a bejövőt 0→1-re — abban a 200 ms-os
+átfedésben **mindkettő félig átlátszó volt, alattuk pedig a poszter**, ami épp a 0. kocka. Innen a
+„visszaugrik a nullára" érzet. **Javítás:** a kimenő kocka **nem fakul ki**, hanem átlátszatlanul tartja
+magát `z-0`-n, a bejövő `z-10`-en fadel be fölötte — a pár alatt semmi nem üt át. Az egyetlen fade, ami
+még eléri a posztert, a 0:00-ra visszalépés, ahol a poszter maga a célállomás.
+**Bizonyíték a DOM-ból:** 4→8 lépésnél a `4`-es `z-0 / opacity-100 / transition:false`, a `8`-as
+`z-10 / opacity-100 / transition:true`.
+
+### 6.100.1 — és a „hard refresh kellett"
+**User:** a share oldal semmit nem mutatott, csak hard refresh után. A **poszter URL-je nem hordoz
+strip-verziót** — nem is tud, mert a hívó még nem olvasta a manifestet. Egy napos cache-sel túlélte az
+újravágást. **Javítás: `ETag` a strip-verzióból + `no-cache`** a videó-posztereken és -stilleken mindkét
+route-on: a változatlan kocka **304**-gyel jön (törzs nélkül), a változott magától megérkezik.
+Élesben ellenőrizve: `"s4-efvRewGv1OS7CY_IdcrL4-0-800"` → második kérés **304**.
+
+### 6.100.2 — playhead: szaggatott, váltakozó, és az egérrel távozik
+Tömör fehér vonal fekete gyűrűben középtónusokon rosszul olvasott. Most **1px széles, hosszában
+váltakozó fehér/fekete 50%** (`repeating-linear-gradient` a `globals.css`-ben, `.video-thumb__playhead`)
+— **egy** gradiens, nem két eltolt vonal: két elemet csak fix értékkel lehet eltolni, a gradiens bármilyen
+magasságnál helyes marad. **Egérlevételkor eltűnik** (a kocka és az idő marad) — a vonal a kurzor
+jelölője, tehát vele megy.
+
+**DEPLOYOLVA 6.100.2 — mindkét tenant.** Séma-migráció nincs. Health zöld.
+
+**Eszköz-tanulság (harmadszor):** a böngésző-automatizálás kurzora elcsúszik a CSS-viewporthoz képest, és
+a `hover` nem mindig generál `mousemove`-ot. Ami bevált: egyszer valódi hoverrel beállítani a `hovering`-et,
+utána **szintetikus `mousemove`-okkal** léptetni a scrubot, és **osztálynevekből** olvasni az állapotot
+(a `getComputedStyle().opacity` háttérfülön 0-t mutat futó átmenetnél).

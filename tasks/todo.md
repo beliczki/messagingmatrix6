@@ -1357,3 +1357,58 @@ Server-Action és AWS-SDK-node>=22 sorok korábbiak).
 **Nyitott, szándékosan:** a régi `storage/` könyvtárak (457 M + 2,8 M a fő diszken) rollback-pontként
 maradtak — csak akkor törlendők, ha a cache napokig bizonyítottan a volume-ról szolgál ki. Olcsó
 mellékszál a diszk-nyomásra: `journalctl --vacuum-size=500M` ~3,3 G-t szabadítana fel.
+
+---
+
+## 2026-09-15 — 6.96.0: záró kocka, színhiba, minőség, cross-fade
+
+**User három dolgot jelzett egy screenshoton** (a still a Creative Library-ban vs. ugyanaz a videó
+macOS-lejátszóban): hiányzik a záró kocka, fakóbb a szín, és jó lenne alfa-átmenet a scrub közben.
+
+### 1. Záró kocka (a strip lezárása)
+Egy 10 mp-es hirdetés 0-nál és 5-nél tickelt, majd megállt — a **branded end card sosem került be**.
+Mostantól a klip utolsó kockája külön stillt kap, **EOF felől seekelve** (`-sseof -0.5`), nem timestamp
+szerint, hogy bárhova is kerekedik a hossz, a valóban utolsó dekódolható kockára essen. Kimarad, ha az
+utolsó tick már 1 mp-en belül van a véghez (`wantsEndFrame`), különben két majdnem azonos kockán
+végződne a strip. **10 mp → 3 still, 17 mp → 5.** Az idő-badge a záró stillre a valódi hosszt írja
+(`stillTimestamp`), nem az intervallum többszörösét.
+
+### 2. A színhiba — NEM a colorspace volt, és nem is a tömörítés
+A user „colorspace is off"-ra tippelt; végigmértem, mert a tipp és az ok itt elvált egymástól.
+- A **range és a mátrix a dekódolásnál rendben**: explicit `in_color_matrix=bt709:in_range=tv:out_range=pc`
+  flagekkel a kimenet **byte-azonos** a flag nélkülivel. Nem ez volt.
+- Kontrollált mérés: tiszta Telekom-magenta `#E20074` (rgb 226,0,116) videóba kódolva bt709/tv taggel.
+  | kimenet | mért RGB |
+  |---|---|
+  | ffmpeg → PNG (skálázás nélkül) | 224, 0, 113 |
+  | ffmpeg → PNG (skálázva) | 222, 0, 111 |
+  | **ffmpeg → JPEG (a régi kód)** | **206, 0, 109** |
+  | macOS QuickLook (független igazodási pont) | 228, 0, 123 |
+- **Minden JPEG-variáns 206-ot adott** — `-q:v 2`, `-q:v 4`, `yuvj444p` subsampling nélkül is. Tehát nem
+  kvantálási veszteség, hanem **szisztematikus mátrix-hiba**: a JPEG YCbCr-je definíció szerint BT.601-es,
+  az ffmpeg mjpeg-enkódere viszont **nem konvertálja bele a BT.709 forrást**, csak átcímkézi.
+- **Javítás:** az ffmpeg veszteségmentes **PNG**-t ad át, és **minden JPEG-kódolást a sharp végez**
+  (`222,0,111` — pontosan a PNG értéke). Ez egyben **megszünteti a dupla veszteséges kódolást** is
+  (eddig az ffmpeg kódolt egyszer, a sharp a derivatívánál még egyszer).
+- Elvetve: `zscale` — **nincs a lokális homebrew ffmpeg-ben** (csak a boxon), tehát dev-en eltört volna.
+
+### 3. Minőség + retina
+Master **960px** (volt 640), q92 4:4:4; derivatíva q88 4:4:4 (volt q82). Így a legszélesebb tier (800)
+valódi lekicsinyítés, nem felnagyítás — és a CL kártyák/tile-ok mostantól a 800-as tiert kérik: egy ~370
+CSS px-es kártya 2x kijelzőn ~740 px-t igényel, a régi 240/320 kérés a 400-as tierre esett és lágy volt.
+
+### 4. Cross-fade
+A strip hover alatt **egymásra rétegzett `<img>`-ekként** mountolódik, `transition-opacity 200ms`.
+Csak hover közben van a DOM-ban, és minden kocka addigra előtöltött, így a fade mindig dekódolt képről
+indul — nincs villanás. Index 0-nál mind kihalványodik, alóla a poster látszik.
+
+### Amit menet közben találtam (majdnem elrontottam)
+A **méretezett derivatívák neve nem hordozta a cache-verziót**. A manifest-verzió csak a mastereket védi,
+a `{id}-still-{i}-{w}.jpg` viszont örökre kiszolgálta volna a régi színű kivágatot, anélkül hogy bármi
+jelezné. Mostantól `-v{VERSION}` a névben → verzióbumpnál egyszerűen nem talál és újraépít.
+A boxon a 19 régi (v1) still-fájl törölve a deploy előtt — regenerálható cache.
+
+**DEPLOYOLVA 6.96.0 — mindkét tenant.** Séma-migráció nincs. Élő verifikáció a telekom masteren:
+`{"count":3,"endFrame":true,"version":3,"intervalSec":5,"durationSec":10}` **5122 ms** alatt, a fájlok a
+volume-on, a derivatíva neve `...-still-2-800-v3.jpg`. A byte-méretek a lokálissal egyeznek → a box
+ffmpeg 6.1.1-e ugyanazt adja, mint a lokális 9.0.1. Health mindkettőn zöld; volume 5% (8,8 G szabad).

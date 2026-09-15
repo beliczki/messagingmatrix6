@@ -5,6 +5,11 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.95.1] — 2026-09-15
+
+### Fixed
+- Still extraction failed with `EXDEV: cross-device link not permitted` when `STORAGE_ROOT` points at a different filesystem than `os.tmpdir()` — which is now the case on the live box, where the thumb cache was moved onto a mounted volume while the ffmpeg work dir stays on the root disk. The publish step uses `copyFile` instead of `rename`.
+
 ## [6.95.0] — 2026-09-15
 
 ### Added

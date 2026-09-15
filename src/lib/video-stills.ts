@@ -161,8 +161,13 @@ async function generate(
       throw new StillsUnavailableError(`ffmpeg produced no stills for ${fileId}`);
     }
 
+    // copyFile, not rename: STORAGE_ROOT is a config knob and may well point at
+    // a different filesystem than os.tmpdir() — on the live box the cache sits
+    // on a mounted volume while the work dir is on the root disk, and a rename
+    // across that boundary fails with EXDEV. The work dir is removed either way
+    // by the finally below.
     for (const [i, name] of produced.entries()) {
-      await fs.rename(path.join(work, name), stillPath(clientKey, fileId, i));
+      await fs.copyFile(path.join(work, name), stillPath(clientKey, fileId, i));
     }
 
     const manifest: StillManifest = {

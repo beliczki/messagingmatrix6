@@ -166,6 +166,11 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `media-field` | MC-editor Content-tab image/video mező (thumbnail + autocomplete input + clear gomb) | MessageEditor `MediaField`, 7× (image1-6 + video1) | `__control` / `__thumb` / `__input-wrap` / `__clear` |
 | `asset-autocomplete` | Asset-Library typeahead dropdown a `media-field` input alatt (≥2 karakter után nyílik) | MessageEditor `MediaField` | `__item` / `__thumb` / `__name`, `--empty` no-match állapot |
 | `thumb-checker` | 16px conic-gradient kockás minta áttetsző PNG/SVG mögé | mind a 6 thumb wrapperben + dialog viewport | global, `app/globals.css` |
+| `video-thumb` | Videó poster-kép (a thumbnail-route 0. stillje) `<video>` helyett, hover-scrubbal a stillek között | `_components/VideoThumb.tsx`, CL `Card` / `ImageTile` / `ListRow` | `compact` prop = list-row 40px thumb (ikon-only, scrub nélkül) |
+| `video-thumb__pending` | "Preparing the video preview" állapot, amíg a poster meg nem jött (a stillek első nézéskor készülnek) | VideoThumb | masonryben `aspect-[4/3]`, mert a tile-nak addig nincs magassága |
+| `video-thumb__failed` | "No preview for this video" — a poster nem töltődött be | VideoThumb | – |
+| `video-thumb__time` | Bal-alsó badge: videó-ikon + a klip hossza nyugalomban, a scrub pozíciója hover közben | VideoThumb | hossz csak a manifest megjötte után látszik (hover), addig csak az ikon |
+| `video-thumb__scrub` / `__scrub-zone` | Stillenként egy zóna a poster fölött; `onMouseEnter` vált frame-et | VideoThumb | ugyanaz a minta mint `drafts-tile__scrub`; `z-20`, a kártya gombja alatta marad kattinthatónak |
 | `status-dot` | Színes pötty (státusz / state) | FeedView, MessageEditor, TemplateEditor MC stepper | szín később (Phase 7) |
 | `status-badge` | Pötty + szöveg pill | MessageEditor SaveIndicator 546–581, FeedView | szín később (Phase 7) |
 | `empty-state` | Centered card "no data" üzenettel | MatrixGrid 279–298, CL 828–859, Assets, `_placeholder.tsx` | inline duplikátum |

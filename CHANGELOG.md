@@ -5,6 +5,18 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.95.0] — 2026-09-15
+
+### Added
+- **Video stills**: one frame every 5 seconds is cut from each video on first view and cached on local disk beside the image thumbnails (`ensureStills`, `src/lib/video-stills.ts`). Two ffmpeg passes run at a time, and concurrent viewers of one file share a single pass. **Requires `ffmpeg` on the host** (`apt-get install -y ffmpeg`).
+- `GET /api/files/{id}/still` — the still manifest with no query, still `{i}` at a cached width with one.
+- A video's `thumbnail` is now its **first still**, so every existing caller (library cards and tiles, draft covers, share gallery) gets a poster with no change of its own.
+- **Hover scrub** on Creative Library cards and tiles: running the mouse across a video walks its stills, with a badge showing the clip's length at rest and the scrub position under the pointer.
+
+### Fixed
+- **A freshly uploaded video sat behind an empty preview box.** `/api/files/{id}` read the whole object into memory and served it with no `Accept-Ranges`, so a `<video preload="metadata">` could not ask for just the head of the clip — it had to pull the entire file down from the object store before the browser could paint one frame. Bytes now stream and `Range` requests are answered with `206` + `Content-Range`.
+- The Creative Library's video boxes now say **"preparing the video preview"** while the stills are being cut, instead of showing nothing.
+
 ## [6.94.2] — 2026-09-13
 
 ### Fixed

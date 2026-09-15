@@ -1226,3 +1226,92 @@ pont az, hogy a **DB-t** kérdezi — ez az a nézet, ami a mostani kérdést (�
 → Ready 1300ms, box `package.json` **6.93.0**. **Séma-migráció nincs** (a config-sorok törlése SQL volt,
 a deploy előtt, a közös DB-n — a régi kód sem olvasta őket, tehát nem volt átmeneti törés). Health:
 `/login` 200 · `/matrix` 307 · `/feeds` 307 · `/api/schema` **401** (admin-only, ahogy kell) · `/mcp` 401.
+
+---
+
+## 2026-09-15 — Video preview a Creative Library-ban: root cause + stillek + hover-scrub (TERV)
+
+**User:** „ha frissen feltöltöttem egy videót, akkor gondolom háttérfeldolgozás miatt sokára jelenik meg /
+töltődik le a videó, tegyünk be valami magyarázatot a screenre amíg letöltődik vagy ready a lejátszásra,
+ne üresen legyen a preview box; kéne valami háttértár cache a videók megjelenítéséhez, hogy mondjuk 5
+másodpercenként legyen róla egy képünk, és hasonlóan a draft kártyákhoz a creative library ahogy hozzuk az
+egeret a video preview boxa fölé, mutassa meg a stilleket a videóból."
+
+**Root cause (nem háttérfeldolgozás — olyan nincs is):**
+`src/app/api/files/[id]/route.ts:9` a **teljes fájlt beolvassa memóriába** (S3/MinIO-ból a tunnelen át),
+és `Accept-Ranges` / 206 nélkül adja vissza. A grid-ben a videó `<video preload="metadata" src=...#t=0.1>`
+(`CreativeLibrary.tsx:1016,1079,1133`) — Range nélkül a böngésző nem tud „csak az elejét" kérni, végig kell
+töltenie a klipet, mire egy képkockát kirajzol. Innen az üres doboz. A `.thumbs` cache-t kiszolgáló
+`thumbnail/route.ts:20` pedig videóra **415 `not_an_image`** — videónak ma egyáltalán nincs poster-képe.
+
+**Külső előfeltétel:** `ffmpeg` **nincs a boxon** (`which ffmpeg` → NO_FFMPEG); lokálisan van
+(`/opt/homebrew/bin/ffmpeg`). Deploy előtt `apt-get install -y ffmpeg` a Hetzner boxon (nem npm dep:
+az `ffmpeg-static` ~80MB-ot tenne minden app `node_modules`-jába, és négy deploy fut a boxon).
+
+### Lépések (mindegyik külön commit, `tsc` + vitest után)
+
+- [x] **V1 — Range/streaming a file route-ban (root cause).** `storage.ts`: új `readFileStream(rel, range?)`
+      — S3 ágon `GetObjectCommand({ Range })`, local-fs ágon `fs.createReadStream({start,end})`, mindkettő
+      `Readable.toWeb()`-bel web streammé. `api/files/[id]/route.ts`: `Accept-Ranges: bytes` a 200-on,
+      `Range:` fejlécre 206 + `Content-Range`, hibás range-re 416. Nincs többé teljes-fájl bufferelés.
+      Ez önmagában javítja a detail-dialog lejátszást is (`MatrixDetailDialog`, `PreviewPane`).
+- [x] **V2 — `src/lib/video-stills.ts`: still-strip generálás + lemez-cache.** `ensureStills(file)`:
+      ha van `.thumbs/{clientKey}/{id}-stills.json` manifest → visszaadja; különben **egy** ffmpeg passz:
+      forrás tmp-be (S3 mód), `ffprobe` duration, `ffmpeg -vf fps=1/5,scale=640:-1` → `{id}-still-{i}.jpg`
+      a `.thumbs`-ba, majd manifest `{count, intervalSec: 5, durationSec}`. Cap **60 frame** (=5 perc);
+      in-flight Promise-map, hogy 3 egyszerre hoverelt tile ne indítson 3 ffmpeget; max 2 párhuzamos ffmpeg.
+      A cache ugyanott és ugyanúgy regenerálható, mint a kép-thumbok (`resolveStoragePath`, mindig local disk).
+- [x] **V3 — `thumbnail/route.ts` videóra: a 0. still a poster.** A `not_an_image` 415 helyett videó
+      mime-re `ensureStills` → 0. frame, `sharp`-pal az `ALLOWED_WIDTHS` tierre méretezve, ugyanabba a
+      `.thumbs` cache-be. Így **minden meglévő hívó** (CL Card/Tile/Row, drafts cover, Assets, ShareGallery,
+      `ScaledMediaPreview`) ingyen kap videó-postert — és a grid-ből kikerül a nehéz `<video>` elem.
+- [x] **V4 — `api/files/[id]/still` route.** `?i=N&w=…` → az N. still JPEG-je (`.thumbs`-ból), `?i` nélkül
+      a manifest JSON. Ez táplálja a hover-scrubot.
+- [x] **V5 — CL tile-ok: `<video>` → poster `<img>` + „feldolgozás" állapot + hover-scrub.** Új
+      `VideoThumb` komponens a `creative-library/`-ben, a három hívóhelyre (`Card:1016`, `ImageTile:1079`,
+      `ListRow:1133`): poster `<img src=…/thumbnail?w=…>`; amíg az `onLoad` nem jött meg →
+      `video-thumb__pending` skeleton **„Videó feldolgozása…"** felirattal (ez a user kérése: ne üres doboz);
+      `onError` → `video-thumb__failed` „az előnézet nem készült el". Hover-scrub a `drafts-tile__scrub`
+      mintájára (`DraftsView.tsx:677`): `count` db zóna abszolút a médián, `onMouseEnter` → frame-index,
+      `<img>` src a `/still?i=N`-re vált, `new Image()` előtöltéssel; readout egy kis idő-badge (`0:15`).
+      `onMouseLeave` → vissza a 0. frame-re. ListRow-ban (40px thumb) scrub nincs, csak poster.
+      Új inventory-nevek: `video-thumb`, `video-thumb__pending`, `video-thumb__failed`,
+      `video-thumb__scrub`, `video-thumb__scrub-zone`, `video-thumb__time` → `component-inventory.md`.
+- [x] **V6 — teszt + inventory + bump.** Vitest: Range-fejléc parse (206/416/`Content-Range`), és a
+      still-matematika (interval/count/cap) ffmpeg nélkül. Séma-migráció **nincs**. Bump: `6.94.2` → **`6.95.0`**
+      (minor: új route + új user-látható viselkedés). CHANGELOG.
+
+**Scope-on kívül (szándékosan):** a drafts/assets/share tile-ok `<video>`-ja marad, amíg a user nem kéri —
+a V3 miatt a poster ott is elérhető lenne, de az külön commit. Videó-`fileDimensions` ffprobe-ból: nem most.
+
+### Review (2026-09-15) — mi lett belőle
+
+**Commitok (mind `main`-en, a user zöld jelzésére — az Erste is örül neki):**
+- `c04d10c` V1 — Range/streaming a file route-ban. `readFileStream(rel, range?)` a `storage.ts`-ben
+  (S3 `GetObjectCommand({Range})` / `fs.createReadStream({start,end})`, mindkettő `Readable.toWeb`),
+  `parseRangeHeader` a `lib/http-range.ts`-ben (9 teszt: zárt / nyitott / suffix / túllógó / fordított
+  range, üres objektum). 206 + `Content-Range`, 416 unsatisfiable-re, `Accept-Ranges` a 200-on is.
+- `21c27ec` V2 — `lib/video-stills.ts`. **`select` filter, NEM `fps=1/5`:** az fps filternek teljes 5s
+  slot kell egy frame kiadásához, így egy 17s-es klip elveszti a farkát (3 still 4 helyett). A
+  `select='isnan(prev_selected_t)+gte(t-prev_selected_t,5)'` + `-fps_mode passthrough` adja a helyes 4-et
+  (a flag nélkül 60-at ad, mert visszapaddingolja a forrás framerate-re). Első still `-ss 0.1`-nél, mert
+  a 0-s kocka a legtöbb renderelt hirdetésen fekete leader. Cap 60 frame, in-flight dedup, max 2 ffmpeg.
+- `2dccf62` V3+V4 — videó `thumbnail` = 0. still; `/api/files/[id]/still` (manifest + `?i=N&w=`).
+- `827f4c9` V5 — `_components/VideoThumb.tsx` + a CL három hívóhelye.
+
+**Élő ellenőrzés (dev:erste, 48 valódi Erste videó):** a pending felirat tényleg megjelenik, majd 10 mp
+alatt mind a 48 poster kirajzolódik (2-es ffmpeg-throttle), masonry/grid/list mind jó, a hover-scrub a
+0:00 → 0:05 kockát váltja (a második still a lilás branded végkép). Egy 1920x1080-as klip stilljei
+MinIO-ból **1034 ms** alatt készültek el (letöltés + ffprobe + ffmpeg együtt).
+
+**Amit NEM én törtem el:** a detail-dialog videólejátszója pörög és 0:00-nál áll. Ugyanez történik, ha
+ugyanazokat a byte-okat egy sima `python3 -m http.server`-ről tölti be — tehát **ez a Chrome-példány nem
+tud H.264-et dekódolni**, nem a route hibája. A route-ot curl-lel ellenőriztem: `206` helyes
+`Content-Range: bytes 0-1023/1020584`-gyel, a teljes `200` byte-pontos (ffprobe 10.0s).
+
+**Deploy-előfeltétel:** `apt-get install -y ffmpeg` a boxon (Ubuntu 24.04, candidate `7:6.1.1-3ubuntu5`).
+Enélkül a videó-thumbnail `503 still_unavailable`, és a UI a „No preview for this video" ágat mutatja —
+nem törik el semmi, csak nincs poster.
+
+**Scope-on kívül maradt (szándékosan):** a drafts / assets / share tile-ok `<video>`-ja. A V3 miatt a
+poster ott is egy `thumbnail?w=` hívásra elérhető lenne — külön commit, ha kell.

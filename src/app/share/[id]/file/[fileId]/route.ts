@@ -12,6 +12,7 @@ import {
   ensureStills,
   normalizeStillWidth,
   readStillResized,
+  stillETag,
 } from "@/lib/video-stills";
 
 // Public file proxy used by the share viewer. The viewer is unauthenticated,
@@ -104,11 +105,19 @@ export async function GET(
       );
       const bytes = await readStillResized(key, file.id, file.storagePath, index, w);
       if (!bytes) return NextResponse.json({ error: "not_found" }, { status: 404 });
+      // The poster (`?thumb=` on a video) has no strip version in its URL — the
+      // caller has not read the manifest yet. An ETag lets it revalidate rather
+      // than survive a recut for a day and need a hard reload to come back.
+      const tag = stillETag(file.id, index, w);
+      if (req.headers.get("if-none-match") === tag) {
+        return new NextResponse(null, { status: 304, headers: { ETag: tag } });
+      }
       return new NextResponse(new Uint8Array(bytes), {
         headers: {
           "Content-Type": "image/jpeg",
           "Content-Length": String(bytes.length),
-          "Cache-Control": "public, max-age=86400",
+          ETag: tag,
+          "Cache-Control": "public, no-cache",
         },
       });
     } catch (e) {

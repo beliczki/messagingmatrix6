@@ -48,6 +48,15 @@ const MAX_CONCURRENT_FFMPEG = 2;
 
 export class StillsUnavailableError extends Error {}
 
+/**
+ * Identifies one still's BYTES. The strip version is in it, so a recut changes
+ * the tag and a browser holding the old frame revalidates its way to the new
+ * one instead of sitting on it until the cache expires.
+ */
+export function stillETag(fileId: string, index: number, width: number): string {
+  return `"s${STILLS_CACHE_VERSION}-${fileId}-${index}-${width}"`;
+}
+
 export function stillCacheDir(clientKey: string): string {
   return resolveStoragePath(path.join(clientKey, ".thumbs"));
 }

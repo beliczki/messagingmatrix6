@@ -8,6 +8,7 @@ import {
   StillsUnavailableError,
   normalizeStillWidth,
   readStillResized,
+  stillETag,
 } from "@/lib/video-stills";
 import { withSession } from "@/lib/scoped";
 import { getActiveClient } from "@/lib/active-client";
@@ -75,11 +76,20 @@ export const GET = withSession<Params>(async ({ req, claims, params }) => {
       throw e;
     }
     if (!bytes) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    // A video poster is still 0, and its URL carries no strip version — the
+    // caller has not read the manifest yet, so it cannot. Cached hard it would
+    // survive a recut for a day and need a hard reload to come back; an ETag
+    // lets it revalidate instead, and an unchanged poster costs a 304.
+    const tag = stillETag(row.id, 0, normalizeStillWidth(wRaw));
+    if (req.headers.get("if-none-match") === tag) {
+      return new NextResponse(null, { status: 304, headers: { ETag: tag } });
+    }
     return new NextResponse(new Uint8Array(bytes), {
       headers: {
         "Content-Type": "image/jpeg",
         "Content-Length": String(bytes.length),
-        "Cache-Control": "private, max-age=86400",
+        ETag: tag,
+        "Cache-Control": "private, no-cache",
       },
     });
   }

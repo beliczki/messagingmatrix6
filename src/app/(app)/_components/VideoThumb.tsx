@@ -52,6 +52,11 @@ export default function VideoThumb({
   // poster through it while the badge already claimed the new time.
   const [index, setIndex] = useState(0);
   const [shown, setShown] = useState(0);
+  // The frame the box was on before this one. It stays fully opaque UNDER the
+  // incoming frame while that fades in — fading it out instead let the poster
+  // show through the overlap, so every step of the scrub dissolved through
+  // frame 0 on its way to the next one.
+  const [under, setUnder] = useState(0);
   // Index 0 needs no waiting: it IS the poster, already on screen.
   const [ready, setReady] = useState<number[]>([0]);
   // Where the pointer last was across the box, 0–1. Continuous, unlike `index`:
@@ -111,8 +116,10 @@ export default function VideoThumb({
   // The box holds the last frame it actually has until the next one arrives, so
   // a slow fetch never blanks it back to the poster mid-scrub.
   useEffect(() => {
-    if (ready.includes(index)) setShown(index);
-  }, [index, ready]);
+    if (!ready.includes(index) || index === shown) return;
+    setUnder(shown);
+    setShown(index);
+  }, [index, ready, shown]);
 
   return (
     <div
@@ -146,7 +153,9 @@ export default function VideoThumb({
             // fetched. At one still per second a whole strip is tens of
             // megabytes, and mounting it all would pull every frame the moment
             // the pointer touched the box — this loads what you scrub over.
-            .filter((i) => Math.abs(i - index) <= 2 || ready.includes(i))
+            .filter(
+              (i) => i === shown || i === under || Math.abs(i - index) <= 2 || ready.includes(i),
+            )
             .map((i) => {
             return (
               // eslint-disable-next-line @next/next/no-img-element
@@ -156,8 +165,16 @@ export default function VideoThumb({
                 alt=""
                 aria-hidden
                 className={clsx(
-                  "video-thumb__frame absolute inset-0 size-full object-contain transition-opacity duration-200 ease-out",
-                  i === shown ? "opacity-100" : "opacity-0",
+                  "video-thumb__frame absolute inset-0 size-full object-contain",
+                  // The incoming frame fades in ON TOP; the outgoing one holds
+                  // its opacity underneath rather than fading out, so nothing
+                  // ever shows through the pair. Anything older fades out, but
+                  // it does so hidden beneath them.
+                  i === shown
+                    ? "z-10 opacity-100 transition-opacity duration-200 ease-out"
+                    : i === under
+                      ? "z-0 opacity-100"
+                      : "z-0 opacity-0 transition-opacity duration-200 ease-out",
                 )}
                 decoding="async"
                 onLoad={() => setReady((r) => (r.includes(i) ? r : [...r, i]))}

@@ -5,6 +5,12 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.100.1] — 2026-09-15
+
+### Fixed
+- **Every scrub step dissolved through frame 0 instead of the previous frame.** The outgoing frame was faded out while the incoming one faded in, and for those 200ms both were semi-transparent — with the poster underneath, which is frame 0. The outgoing frame now holds its opacity beneath the incoming one rather than fading out, so nothing shows through the pair. The one fade that does reach the poster is a step back to 0:00, where the poster *is* the destination.
+- **A recut strip needed a hard refresh to appear.** The video poster is still 0 and its URL carries no strip version — the caller has not read the manifest yet, so it cannot. Cached for a day it survived a recut, leaving the box on "preparing the video preview" or on the previous cut. Posters and stills now carry an `ETag` built from the strip version and revalidate, so an unchanged frame costs a `304` and a changed one arrives on its own.
+
 ## [6.100.0] — 2026-09-15
 
 ### Changed

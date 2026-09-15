@@ -1,5 +1,9 @@
 node_modules
 .next
+# the deploy builds into .next-build and keeps the previous build as .next-old
+# while it swaps, so the live .next is never the one being written
+.next-build
+.next-old
 next-env.d.ts
 tsconfig.tsbuildinfo
 dist

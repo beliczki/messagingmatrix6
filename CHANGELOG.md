@@ -5,6 +5,15 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.103.0] — 2026-09-15
+
+### Added
+- **A redeploy shows a page instead of a raw `502 Bad Gateway`.** nginx now answers 503 with a static maintenance page for both mm6 tenants, covering an unplanned crash as well as a deploy. The page reports how long the deploy has actually been running, re-probes every 10 seconds and reloads itself the moment the app answers, so nobody has to guess when to come back. MCP clients get a JSON 503 rather than HTML. Ships as `deploy/nginx/` + `deploy/maintenance/`, with `mm6-maint on|off|status <tenant>` on the box; the flag file is the single source of truth for "a deploy is running".
+- `deploy/bin/mm6-deploy <tenant>` — the deploy as one command, with the build outside the live directory and a readiness check before the page comes down. A failed build exits before the gate goes up, so it cannot touch the running app; an app that never answers leaves the page up and the previous build in place for a rollback.
+
+### Fixed
+- **A deploy no longer takes the app down for the length of the build.** `next build` clears its dist directory, so building in place pulled `.next` out from under the running server and it died on a missing `required-server-files.json` until the build finished — the 10-15 minute outage, visible in the app's own log and as 167 pm2 restarts. `distDir` now honours `NEXT_DIST_DIR`, the deploy builds into `.next-build` while the app keeps serving, and only the directory swap and the restart happen behind the maintenance page.
+
 ## [6.102.2] — 2026-09-15
 
 ### Fixed

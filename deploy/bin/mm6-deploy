@@ -1,0 +1,60 @@
+#!/bin/sh
+# mm6-deploy <tenant>
+#
+# Builds without touching the .next the live server reads from.
+#
+# `next build` clears its dist dir. Building in place therefore kills the running
+# app for the WHOLE build — its own log says so:
+#   ENOENT ... open '/var/www/mm6-erste/.next/required-server-files.json'
+# Here the build goes to .next-build while the app keeps serving, and only the
+# directory swap plus the restart happen behind the maintenance page.
+set -e
+
+TENANT="$1"
+[ -n "$TENANT" ] || { echo "usage: mm6-deploy <tenant>" >&2; exit 2; }
+
+DIR="/var/www/mm6-$TENANT"
+APP="mm6-$TENANT"
+cd "$DIR"
+
+PORT=$(grep '^PORT=' .env | cut -d= -f2)
+[ -n "$PORT" ] || { echo "no PORT in $DIR/.env" >&2; exit 1; }
+
+echo "==> git pull"
+git pull --ff-only
+
+echo "==> build into .next-build (app stays up and serving)"
+rm -rf .next-build
+mkdir .next-build
+# Next keeps cache/ when it clears the dist dir, so seeding it from the live
+# build keeps a deploy from being a cold build every single time.
+if [ -d .next/cache ]; then cp -a .next/cache .next-build/cache; fi
+NEXT_DIST_DIR=.next-build npm run build
+
+# A failed build exits above, before the gate goes up: the live app is untouched.
+echo "==> swap + restart behind the maintenance page"
+mm6-maint on "$TENANT"
+rm -rf .next-old
+mv .next .next-old
+mv .next-build .next
+pm2 restart "$APP" --update-env
+
+echo "==> waiting for the app to answer on :$PORT"
+code=""
+i=0
+while [ "$i" -lt 60 ]; do
+    code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$PORT/login" || true)
+    [ "$code" = "200" ] && break
+    i=$((i + 1))
+    sleep 1
+done
+
+if [ "$code" != "200" ]; then
+    echo "app did not come up (last status: ${code:-none})." >&2
+    echo "leaving the maintenance page ON and .next-old in place for a rollback." >&2
+    exit 1
+fi
+
+mm6-maint off "$TENANT"
+rm -rf .next-old
+echo "==> deployed $APP (up after ${i}s behind the page)"

@@ -1679,3 +1679,106 @@ Nincs többé „preparing the video preview".
 **Amit NEM ellenőriztem:** a megosztáskori melegítést élő POST-tal nem futtattam — ahhoz session kell,
 jelszót pedig nem írok be, és nem akartam éles adatba teszt-share-t létrehozni. Ugyanazt az
 `ensureStills` útvonalat hívja, amit a script bizonyítottan végigfuttat.
+
+---
+
+## 2026-09-15 — Deploy-ablak elfedése (nginx maintenance page) + build-disk / swap vizsgálat
+
+**Kiindulás (a boxon mérve, nem feltételezve):** az `messagingmatrix_error.log`-ban
+`connect() failed (111: Connection refused)` — a Node process a deploy-ablakban **tényleg halott**,
+nem csak lassú. A vhostokban **nincs `error_page`**, ezért nyers nginx 502 megy ki.
+Gyökérok: a `next build` helyben írja felül a `.next`-et, amiből a futó `next start` épp kiszolgál,
+plusz 3,8G RAM / 907M swap már használatban. Ezért nem csak a `pm2 restart` 1,3 másodperce törik,
+hanem a teljes build ideje.
+
+### A) Elfedés — 503 + statikus oldal a nyers 502 helyett — **✅ ÉL (2026-09-15)**
+- [x] **A1** `deploy/maintenance/index.html` — login design-nyelv (slate-100→200 alap, `white/70` kártya,
+      `rounded-2xl`, `shadow-xl`, `backdrop-blur`, `mmatrix.svg`), `status-badge` újrahasznosítva.
+      **A-változat:** nincs visszaszámláló; valódi eltelt idő + 10 mp-enkénti próba + automatikus újratöltés.
+- [x] **A2** `deploy/nginx/mm6-maintenance.conf` (`@mm6_maintenance` HTML + `@mm6_maintenance_json` a `/mcp`-nek,
+      `error_page 502 503 504 =503`, sosem gate-elt `/__deploy-status.json` és `/__maintenance/`)
+      + `deploy/nginx/mm6-maintenance-gate.conf` (a `location`-ökbe kerülő egysoros gate).
+- [x] **A3** A gate **nem** server-level: az `if` ott a `/__deploy-status.json`-t és a logót is elnyelné,
+      épp amikor kellenek. Ezért a `location /` és a `location /mcp` első sora.
+- [x] **A4** Kitelepítve: `/var/www/mm6-maintenance/` (oldal + logó), `/etc/nginx/snippets/` (2 snippet),
+      `/usr/local/bin/mm6-maint`, és az `erste` + `telekom` vhost. Proficio kimaradt (még v5).
+      Valódi változás előtti mentés: `/var/backups/nginx-vhosts-20260915/*.pre-maintenance`.
+      ⚠️ Az első mentés a **már módosított** fájlokat fogta meg (egy félresikerült parancs `scp`-jei
+      már lefutottak) — újragyártva a bizonyítottan azonos visszaalakítással.
+- [x] **A5** Élő ellenőrzés. Gate ON (csak erste): `/login` és `/matrix` → **503 text/html** a maintenance
+      oldallal, `/api/*` → 503, `/mcp` → **503 application/json** (nem HTML), `/__deploy-status.json` → 200
+      `{"active":true,"startedAt":…}`, `/__maintenance/mmatrix.svg` → 200, `Retry-After: 60`,
+      `Cache-Control: no-store`. **Telekom közben végig 200** (per-tenant izoláció bizonyítva).
+      Gate OFF → `/login` 200 · `/` 307 · `/mcp` 401 · status.json 404.
+      **Crash-ág külön bizonyítva** eldobható vhosttal halott upstreamre (`:6099`→`:6999`), éles app
+      megzavarása nélkül: flag **nélkül** is 502 → **503 + oldal**, `/mcp` → JSON. Utána törölve.
+      **Böngészőben végigmérve:** az oldal renderel, a timer a status.json-ből számol, és a gate
+      lekapcsolása után a fül **magától visszatöltött** (`/matrix` → app → `/login`) — kézi frissítés nélkül.
+- [x] **A6** `mm6-maint on|off|status <tenant>` a boxon.
+
+**Új deploy-recept (a flag az egyetlen igazság arról, hogy fut-e deploy):**
+```
+mm6-maint on erste
+cd /var/www/mm6-erste && git pull && npm run build && pm2 restart mm6-erste --update-env
+mm6-maint off erste
+```
+
+### B) Vizsgálat — extra disk buildre, swap a volume-ra — **✅ KIVIZSGÁLVA (2026-09-15)**
+
+**A gyökérok megvan, és se a diszk, se a swap nem az** — az app saját logja mondja ki
+(`/var/www/mm6-erste/logs/error.log`, 2026-09-15 14:52:21, ismétlődve):
+
+```
+ENOENT: no such file or directory, open '/var/www/mm6-erste/.next/required-server-files.json'
+```
+
+Ez pontosan a „`next build` kitörölte a `.next`-et a futó `next start` alól" aláírás. Nem OOM, nem
+lassú I/O: **0 OOM-kill a kernel logban 30 napra visszamenőleg**, `available` RAM 2,2G, a 907M
+swap-használat sima tétlen lapkisöprés, nem nyomás. A 167 restart és a 10-15 perces 502 ebből jön.
+
+- [x] **B1 — az extra disk használható, de nem ez kell.** `/dev/sdb` **Hetzner Cloud Volume**
+      (`scsi-0HC_Volume_104001329`), azaz **hálózati blokk-eszköz**. Egy build több tízezer apró fájl —
+      pont az a profil, amin a hálózati volume lassú. Buildet odatenni **lassítana**.
+      A valódi baj a root diszken van: **87%, 4,8G szabad**.
+      ⚠️ **Két korábbi állításom tételes ellenőrzésre megdőlt:** a `docker system df` „3,4G reclaimable"-je
+      félrevezet — **0 dangling image, mind a 6 futó containerhez tartozik**, ott nincs mit takarítani;
+      a `/root/.cache/ms-playwright` 646M pedig **nem szemét**, azt használja a `preview-shooter.ts`.
+      Valóban szemét: `journal` 3,6G (sapka nélkül) · `/root/.npm` 1,3G · régi pm2-logok 141M.
+      A `/var/backups/mm5-legacy` (756M) marad — az a v5 adatmentés.
+- [x] **B2 — a cross-disk swap technikailag megy, de itt értelmetlen és kockázatos.** Linux több
+      swap-területet kezel, prioritás szerint (azonos prioritás = körkörös csíkozás), szóval egy második
+      swapfile a volume-ra `swapon`-olható. De: **hálózati** eszközre swapelni azt jelenti, hogy a kernel
+      memórianyomás alatt hálózati I/O-ra vár — ha a volume megbicsaklik, az egész box befagyhat.
+      És nincs mit megoldani vele: **nincs memórianyomás** (0 OOM-kill, 2,2G available).
+
+**Javasolt valódi fix (külön szelet, még nincs megcsinálva):** `next.config.ts` `distDir`-je olvasson
+`process.env.NEXT_DIST_DIR`-t, a deploy `NEXT_DIST_DIR=.next-build`-be építsen, aztán `mv` + `pm2 restart`.
+Így a futó app `.next`-jéhez hozzá sem ér a build → a leállás a `mv` + restart ≈ **1,5 másodperc**,
+a maintenance oldal pedig visszalép annak, aminek való: **hálónak**, nem a fő mechanizmusnak.
+Előfeltétel: a disk-takarítás, mert a `.next-build` még ~1,3G-t kér a jelenlegi 4,8G szabadból.
+
+### C) Disk-takarítás + a valódi fix — **✅ KÉSZ (2026-09-15)**
+
+- [x] **C1 Takarítás a boxon** — **4,8G → 9,4G szabad (87% → 74%)**, éles adathoz nem nyúltam.
+      `journalctl --vacuum-size=500M` (3,2G) + **állandó sapka** `SystemMaxUse=500M` a
+      `journald.conf`-ban, hogy ne nőjön vissza · `npm cache clean --force` (1,3G → 3,2M) ·
+      7 napnál régebbi pm2-logok (141M → 108K; a legnagyobb egy áprilisi 68M-es `mm-server-telekom-out`).
+      **Nem töröltem:** docker (nincs mit), `ms-playwright` (kell), `mm5-legacy` (v5 mentés),
+      és a futó appok `.next/cache`-ét sem — egy futó szerver alól kacsintás nélkül nem rántok cache-t,
+      és a headroom így is bőven megvan.
+- [x] **C2 `next.config.ts`: `distDir: process.env.NEXT_DIST_DIR || ".next"`** — a build ezentúl
+      máshova ír, mint amiből a futó szerver olvas. `npm run typecheck` tiszta.
+      A `.gitignore` kiegészítve (`.next-build`, `.next-old`).
+- [x] **C3 `deploy/bin/mm6-deploy <tenant>`** — a deploy egy paranccsá vonva:
+      `git pull` → build `.next-build`-be (**az app közben végig szolgál ki**) → gate fel → `mv` swap →
+      `pm2 restart` → **readiness-poll a tenant portján** → gate le → `.next-old` törlés.
+      A cache-t átmásolja a `.next-build`-be, hogy a deploy ne legyen minden alkalommal hideg build.
+      **Bukott build az `set -e` miatt a gate felkapcsolása ELŐTT áll meg** — az éles apphoz hozzá sem ér.
+      Ha az app nem jön fel 60 mp alatt: a **maintenance oldal fent marad**, a `.next-old` a helyén,
+      exit 1 — nem hallgat el egy fél-deployt.
+
+**A deploy-recept mostantól:**
+```
+mm6-deploy erste
+mm6-deploy telekom
+```

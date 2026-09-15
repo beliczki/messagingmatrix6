@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MessagingMatrix — being redeployed</title>
+<link rel="icon" href="/__maintenance/mmatrix.svg">
+<style>
+  /* Static page, served by nginx while the app is down — no Tailwind build here.
+     The values mirror the login screen's tokens so the two read as one product:
+     slate-100→slate-200 ground, white/70 card, rounded-2xl, shadow-xl, backdrop-blur. */
+  :root {
+    --mm-ground-from: #f1f5f9;
+    --mm-ground-to:   #e2e8f0;
+    --mm-card:        rgba(255, 255, 255, 0.7);
+    --mm-card-border: rgba(255, 255, 255, 0.4);
+    --mm-ink:         #111827;
+    --mm-ink-soft:    #374151;
+    --mm-ink-muted:   #6b7280;
+    --mm-accent:      #b45309;
+    --mm-accent-bg:   #fffbeb;
+    --mm-accent-brd:  #fde68a;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--mm-ink);
+    background: linear-gradient(to bottom right, var(--mm-ground-from), var(--mm-ground-to));
+  }
+  .maintenance {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 1.5rem;
+  }
+  .maintenance__card {
+    width: 100%;
+    max-width: 30rem;
+    padding: 2rem;
+    border: 1px solid var(--mm-card-border);
+    border-radius: 1rem;
+    background: var(--mm-card);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, .1), 0 8px 10px -6px rgba(0, 0, 0, .1);
+    backdrop-filter: blur(8px);
+    text-align: center;
+  }
+  .maintenance__brand { margin-bottom: 1.5rem; }
+  .maintenance__logo { width: 5rem; height: 5rem; }
+  .maintenance__host {
+    margin: .25rem 0 0;
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .025em;
+    color: var(--mm-ink-muted);
+  }
+  .status-badge {
+    display: inline-block;
+    padding: .125rem .5rem;
+    border: 1px solid var(--mm-accent-brd);
+    border-radius: 9999px;
+    background: var(--mm-accent-bg);
+    color: var(--mm-accent);
+    font-size: .625rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+  .maintenance__title {
+    margin: .75rem 0 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
+  .maintenance__body {
+    margin: .75rem 0 0;
+    font-size: .875rem;
+    line-height: 1.5;
+    color: var(--mm-ink-soft);
+  }
+  .maintenance__timer {
+    margin: 1.5rem 0 0;
+    font-size: 2.25rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.02em;
+  }
+  .maintenance__timer-label {
+    margin: .25rem 0 0;
+    font-size: .75rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--mm-ink-muted);
+  }
+  .maintenance__hint {
+    margin: 1.5rem 0 0;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(0, 0, 0, .06);
+    font-size: .75rem;
+    color: var(--mm-ink-muted);
+  }
+  .maintenance__probe::before {
+    content: "";
+    display: inline-block;
+    width: .375rem;
+    height: .375rem;
+    margin-right: .375rem;
+    border-radius: 9999px;
+    background: var(--mm-accent);
+    vertical-align: middle;
+    animation: maintenance-pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes maintenance-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+</style>
+</head>
+<body>
+  <main class="maintenance">
+    <div class="maintenance__card">
+      <div class="maintenance__brand">
+        <img class="maintenance__logo" src="/__maintenance/mmatrix.svg" alt="MessagingMatrix">
+        <p class="maintenance__host" id="host"></p>
+      </div>
+
+      <span class="status-badge">Redeploying</span>
+      <h1 class="maintenance__title">A new version is going live</h1>
+      <p class="maintenance__body">
+        Messaging Matrix is being redeployed right now. A deploy usually takes
+        <strong>10&ndash;15 minutes</strong>.
+      </p>
+
+      <p class="maintenance__timer" id="elapsed">&mdash;</p>
+      <p class="maintenance__timer-label" id="elapsed-label">elapsed</p>
+
+      <p class="maintenance__hint maintenance__probe" id="probe">
+        Checking every 10 seconds &mdash; this page reloads itself the moment the app is back.
+      </p>
+    </div>
+  </main>
+
+<script>
+(function () {
+  var PROBE_PATH = "/login";
+  var PROBE_EVERY_MS = 10000;
+
+  var elapsedEl = document.getElementById("elapsed");
+  var labelEl = document.getElementById("elapsed-label");
+  var probeEl = document.getElementById("probe");
+  document.getElementById("host").textContent = location.hostname;
+
+  // The flag file is the single source of truth for "a deploy is running", and it
+  // carries the epoch the deploy started at. Absent (a plain crash, not a deploy)
+  // means we only honestly know how long THIS page has been open.
+  var startedAt = null;
+  var openedAt = Date.now();
+
+  function fmt(ms) {
+    var total = Math.max(0, Math.floor(ms / 1000));
+    var m = Math.floor(total / 60);
+    var s = total % 60;
+    return m + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  function tick() {
+    if (startedAt) {
+      elapsedEl.textContent = fmt(Date.now() - startedAt);
+      labelEl.textContent = "since the deploy started";
+    } else {
+      elapsedEl.textContent = fmt(Date.now() - openedAt);
+      labelEl.textContent = "since you opened this page";
+    }
+  }
+
+  function readStatus() {
+    return fetch("/__deploy-status.json", { cache: "no-store" })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (body) {
+        if (body && typeof body.startedAt === "number") {
+          startedAt = body.startedAt * 1000;
+        }
+      })
+      .catch(function () { /* no status file: keep the page-open timer */ });
+  }
+
+  function probe() {
+    // 503 is what the maintenance gate returns. Anything else means nginx reached
+    // the app again, so the page the visitor actually wanted is available.
+    fetch(PROBE_PATH, { method: "HEAD", cache: "no-store" })
+      .then(function (res) {
+        if (res.status !== 503) {
+          probeEl.textContent = "Back up — reloading…";
+          location.reload();
+        }
+      })
+      .catch(function () { /* still down: keep waiting */ });
+  }
+
+  readStatus();
+  tick();
+  setInterval(tick, 1000);
+  setInterval(probe, PROBE_EVERY_MS);
+  setInterval(readStatus, 60000);
+})();
+</script>
+</body>
+</html>

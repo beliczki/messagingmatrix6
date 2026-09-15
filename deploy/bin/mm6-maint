@@ -1,0 +1,32 @@
+#!/bin/sh
+# mm6-maint on|off|status <tenant>
+#
+# Flips the maintenance gate for one mm6 tenant. The flag file is the single
+# source of truth: while it exists nginx serves the maintenance page instead of
+# proxying, and its content is the status JSON the page reads for elapsed time.
+set -e
+
+DIR=/var/www/mm6-maintenance
+
+usage() { echo "usage: mm6-maint on|off|status <tenant>" >&2; exit 2; }
+
+case "$1" in
+  on)
+    [ -n "$2" ] || usage
+    printf '{"active":true,"startedAt":%s}\n' "$(date +%s)" > "$DIR/$2.deploying"
+    echo "maintenance ON for $2"
+    ;;
+  off)
+    [ -n "$2" ] || usage
+    rm -f "$DIR/$2.deploying"
+    echo "maintenance OFF for $2"
+    ;;
+  status)
+    if ls "$DIR"/*.deploying >/dev/null 2>&1; then
+      for f in "$DIR"/*.deploying; do echo "$(basename "$f" .deploying): $(cat "$f")"; done
+    else
+      echo "no deploy running"
+    fi
+    ;;
+  *) usage ;;
+esac

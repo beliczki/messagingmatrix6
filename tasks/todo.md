@@ -1600,3 +1600,27 @@ jelölője, tehát vele megy.
 a `hover` nem mindig generál `mousemove`-ot. Ami bevált: egyszer valódi hoverrel beállítani a `hovering`-et,
 utána **szintetikus `mousemove`-okkal** léptetni a scrubot, és **osztálynevekből** olvasni az állapotot
 (a `getComputedStyle().opacity` háttérfülön 0-t mutat futó átmenetnél).
+
+## 2026-09-15 — 6.100.3: az átmenet kivezetve, a scrub vág
+
+**User:** „ez a transition még mindig, ha gyorsan húzom az egeret, akkor a frame 0 visszaugrál — lehet
+elhagyhatjuk a transition, mert az bonyolít nagyon." **Igaza volt, és a javaslata is jó.**
+
+**Miért maradt hibás a 6.100.1 után is:** a `shown` csak akkor lép, ha a kocka byte-jai megérkeztek, ezért
+gyors mozgásnál többet ugrik egyszerre — és ahol az előző állapot még a poszter (0. kocka) volt, ott azon
+keresztül oldott. Két kocka **kizárólag fade közben** félig átlátszó egyszerre, alattuk pedig a poszter:
+minden átmenet egy esély volt a 0. kocka felvillantására, és a gyors söprés minden eséllyel élt.
+
+**Döntés: nincs átmenet, a scrub vág.** Ez amúgy is az, amit egy scrub akar (a Frame.io is vág). A
+„várd meg a kocka byte-jait" szabály marad — az tartja tisztán a vágást. Az átmenettel **elment az a
+réteg is, ami csak azért létezett, hogy legyen mi fölött fadelni**, és a hozzá tartozó z-index sorrend.
+Nettó: −27 sor a komponensben.
+
+**Verifikáció:** `anyTransition: false` sehol; gyors végigsöprésnél **minden mintavételnél pontosan egy**
+réteg átlátszatlan — sosem nulla (az mutatná a posztert), sosem kettő.
+
+**DEPLOYOLVA 6.100.3 — mindkét tenant.** Health zöld.
+
+**Tanulság:** három kör ment el egy 200 ms-os kozmetikai effekt megszelídítésére, mindegyik talált egy új
+utat a hibához. A user javasolta az egyszerűsítést, és az lett a helyes — érdemes lett volna a második kör
+után magamtól felvetni, hogy az effekt nem éri meg.

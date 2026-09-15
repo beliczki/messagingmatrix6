@@ -5,6 +5,11 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.102.1] — 2026-09-15
+
+### Fixed
+- `scripts/warm-share-stills.ts` loaded no environment and so connected to nothing. It now loads `.env.local` / `.env` and uses relative imports, matching every other script in `scripts/`.
+
 ## [6.102.0] — 2026-09-15
 
 ### Added

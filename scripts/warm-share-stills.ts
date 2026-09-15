@@ -12,11 +12,14 @@
  *
  * Idempotent: a strip already cut at the current version is a manifest read.
  */
+import { config as loadEnv } from "dotenv";
+loadEnv({ path: ".env.local" });
+loadEnv({ path: ".env" });
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import { db } from "@/db";
-import { clients, shareGalleries, uploadedFiles } from "@/db/schema";
-import { ensureStills } from "@/lib/video-stills";
-import { getActiveClient } from "@/lib/active-client";
+import { db } from "../src/db";
+import { clients, shareGalleries, uploadedFiles } from "../src/db/schema";
+import { ensureStills } from "../src/lib/video-stills";
+import { getActiveClient } from "../src/lib/active-client";
 
 type SnapshotFile = { id?: string };
 

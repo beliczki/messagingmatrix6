@@ -5,6 +5,13 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.105.0] — 2026-09-16
+
+### Fixed
+- **A share came out in an order nobody chose.** Two separate losses, one after the other: the Creative Library collected the selected ids from the unsorted row list rather than from what was on screen, and the snapshot query then fetched them with `IN (...)` and no `ORDER BY`, so the rows arrived in whatever order the query plan produced. A hundred creatives came back cycling through their MCs several times over. The client now sends the ids in display order and the snapshot is written in that order, so a share matches the list it was made from.
+- **Equal timestamps sorted by nothing the eye can see.** `created_at` has one-second resolution, so a batch upload puts several rows on each value, and the tie-break was a fixed `b.id - a.id` — which ignored the sort direction (every group of equal values read backwards when sorting oldest-first) and said nothing about the files anyway. Ties now break on file name, which is the field that carries the grouping people look for (`ERSTE_SZK_MC141_c_…`), and they follow the direction.
+- **The Creative Library's masonry dealt tiles round-robin.** It never passed a height estimate, so each tile went to the next column in turn rather than to the shortest one; with banners from 970x250 to 300x600 the columns ended ragged and items that belong together were scattered down the page. It now estimates from the size it already knows — the same estimate the share gallery uses, now shared rather than written twice.
+
 ## [6.104.0] — 2026-09-16
 
 ### Added

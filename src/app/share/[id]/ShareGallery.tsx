@@ -15,7 +15,7 @@ import ImagePreviewToggle from "./ImagePreviewToggle";
 import ThemeToggle from "@/app/_components/ThemeToggle";
 import ShareActionsMenu from "./ShareActionsMenu";
 import { bgClassFor, type PreviewBg } from "./preview-bg";
-import { Masonry } from "../../(app)/_components/Masonry";
+import { Masonry, aspectEstimate } from "../../(app)/_components/Masonry";
 import VideoThumb from "../../(app)/_components/VideoThumb";
 import ShareDetailDialog, {
   type DialogItem,
@@ -640,13 +640,7 @@ export default function ShareGallery({
               // dimensions — so the packer can put each tile in the column that
               // is currently shortest instead of the next one in turn. Without
               // it the first columns ran several screens longer than the last.
-              estimateHeight={(it, colWidth) => {
-                const dims = parseDimensions(it.size);
-                // Unknown shape (a creative with no recorded dimensions): a
-                // square is the least-wrong guess, and a wrong guess only
-                // costs balance, never correctness.
-                return dims ? colWidth * (dims.h / dims.w) : colWidth;
-              }}
+              estimateHeight={(it, colWidth) => aspectEstimate(it.size, colWidth)}
               render={(it) => (
                 <MasonryTile
                   item={it}

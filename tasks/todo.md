@@ -1980,3 +1980,49 @@ nem volt kint, a live app 6.103.0-n állt, ahol az `upload:last` csak szabad sz�
 egy valódi hiányra: üres tárolt halmaznál a szűrő ugyanúgy „semmi nem illik"-et mutat, mint egy törött
 szűrő. Ezért **saját üres állapot**: „No upload recorded in this browser" + magyarázat, hogy a funkció
 előtti feltöltések nem lettek rögzítve.
+
+---
+
+## 2026-09-16 — A sorrend, ami sehol nem volt megadva (6.105.0)
+
+**A bejelentés:** „össze-vissza van a sorrend, mert egyszerre történt sok feltöltés" — és a javaslat,
+hogy toljuk el az időbélyegeket MC-csoportonként pár másodperccel.
+
+**Először tévesen azt mondtam, hogy a tárolt sorrend hibátlan** — csak az első 12 sort néztem.
+A teljes 104-en mérve a 17 MC **75 külön blokkra** esett szét. A user-nek igaza volt.
+
+**A valódi ok kettő volt, egymás után:**
+1. `CreativeLibrary.tsx` — `selectedCreativeIds` a **nyers `items`** listán ment végig, nem a
+   `sorted`-on. A képernyőn látott rendezés már itt elveszett.
+2. `api/share-galleries/route.ts` — `where id in (...)` **`ORDER BY` nélkül**. A Postgres a tervből
+   adódó sorrendet adta: növekvő futamok, amik visszaugranak. Ez volt a „random".
+
+**A harmadik, külön hiba:** `sortListRows` döntetlennél `b.id - a.id` — **a `sort.dir`-t figyelmen
+kívül hagyva**, tehát növekvő rendezésnél minden azonos értékű csoport fordítva jött ki. És az `id`
+amúgy sem mond semmit a szemnek.
+
+**A negyedik:** a Creative Library masonry-ja **nem adott át `estimateHeight`-et**, ezért körbeosztásra
+(`i % colCount`) esett vissza — meg sem próbálta a legalacsonyabb oszlopba tenni a következő csempét.
+
+- [x] Kliens a **látott** sorrendet küldi (`sorted` előre, `items` utána, hogy a szűrőváltás előtt
+      kijelölt elem ne tűnjön el némán).
+- [x] Szerver **megőrzi a kapott sorrendet** (`creativeIds` pozíció szerint).
+- [x] Döntetlen = **fájlnév** (numerikus összehasonlítással, hogy MC99 < MC1000), majd id; iránykövető.
+- [x] Masonry becslés a libraryben is; a becslő `aspectEstimate`-ként a `Masonry` mellé került, mert
+      innentől két hívója van (a share eddig saját másolatot használt).
+- [x] 4 új teszt a döntetlenre. **982 teszt zöld**, `tsc` tiszta, lint 0 hiba.
+
+**Elvetve:** az időbélyeg-eltolás (nem kellett, a sorrend sehol nem volt megadva — nem a bélyegek voltak
+rosszak) és az MC-csoportonkénti külön feltöltés (104 fájl 22 csomagban = szopás).
+
+**Nem javul visszamenőleg:** a meglévő share-ek snapshotja már rögzült. Új share már jól jön ki.
+
+### Törlések (kérésre, mentéssel)
+- 10:34-es **125 SZK** → törölve (sorok + fájlok + 2 cella + 124 thumbnail).
+  Mentés: `~/mm6-backups/erste-szk-20260916/` (42,9 MB).
+- 16:21-es **104 SZK** → törölve (sorok + fájlok + 2 cella + 233 thumbnail).
+  Mentés: `~/mm6-backups/erste-szk-1621-20260916/` (33,4 MB).
+- Mindkettőnél ellenőrizve: **0 osztott `storage_path`** (a sha-dedup miatt ez nem elhanyagolható),
+  0 FK-hivatkozás, 0 tört fájl-hivatkozás utána. A **639 korábbi SZK** és a MARKET érintetlen.
+- ⚠️ **Nyitott:** a `izsndLWqS4We` és `JgDhExMgmYlX` share a 104-re hivatkozik → **törött képek**.
+  A user döntése, hogy törli-e őket.

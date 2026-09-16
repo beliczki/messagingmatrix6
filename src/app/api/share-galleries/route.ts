@@ -189,7 +189,7 @@ export const POST = withSession(async ({ req, claims }) => {
     matrixSeen.add(k);
     matrixItems.push(p);
   }
-  const creativeRows = creativeIds.length
+  const creativeRowsUnordered = creativeIds.length
     ? await db
         .select()
         .from(creatives)
@@ -200,6 +200,15 @@ export const POST = withSession(async ({ req, claims }) => {
           ),
         )
     : [];
+  // `IN (...)` carries no order, so the rows came back in whatever order the
+  // plan produced — which read as random in the share and had nothing to do
+  // with what the person had arranged on screen. The caller sends the ids in
+  // display order; the snapshot is written in that order.
+  const creativePosition = new Map(creativeIds.map((id, i) => [id, i]));
+  const creativeRows = creativeRowsUnordered.sort(
+    (a, b) =>
+      (creativePosition.get(a.id) ?? 0) - (creativePosition.get(b.id) ?? 0),
+  );
   if (messageRows.length === 0 && creativeRows.length === 0) {
     return NextResponse.json(
       { error: "no matching messages or creatives found in this client" },

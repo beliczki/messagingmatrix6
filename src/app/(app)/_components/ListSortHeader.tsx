@@ -190,7 +190,16 @@ function compareValues(a: Sortable, b: Sortable, key: ListSortKey): number {
 }
 
 // Sorts a copy of `rows` by the given sort. Missing values sink to the bottom
-// regardless of direction; ties break on id desc for stable order.
+// regardless of direction; ties break on FILE NAME, then id, following the
+// direction either way.
+//
+// Both halves of that were wrong before. The tie-break was a fixed
+// `b.id - a.id`: it ignored the direction, so every group of equal values read
+// backwards on an ascending sort. And id says nothing to the eye — created_at
+// has one-second resolution, so a drop of 100+ files lands several per second,
+// and those seconds came out in an order with no meaning. The file name is the
+// one field that carries the grouping people actually see
+// (ERSTE_SZK_MC141_c_… ), so equal timestamps now read as the batch is named.
 export function sortListRows<T extends Sortable>(
   rows: ReadonlyArray<T>,
   sort: SortState,
@@ -203,7 +212,11 @@ export function sortListRows<T extends Sortable>(
     if (!aMissing && bMissing) return -1;
     const cmp = compareValues(a, b, sort.key);
     if (cmp !== 0) return sort.dir === "asc" ? cmp : -cmp;
-    return b.id - a.id;
+    const byName = (a.fileName ?? "").localeCompare(b.fileName ?? "", undefined, {
+      numeric: true,
+    });
+    const tie = byName !== 0 ? byName : a.id - b.id;
+    return sort.dir === "asc" ? tie : -tie;
   });
   return out;
 }

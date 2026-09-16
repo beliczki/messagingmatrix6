@@ -14,7 +14,7 @@ import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";import { trimEmptyCountSegments } from "@/lib/count-segments";
 
 import { parseDriveFolderId } from "@/lib/drive-link";
-import { Masonry } from "../_components/Masonry";
+import { Masonry, aspectEstimate } from "../_components/Masonry";
 import ToolbarUpload from "../_components/ToolbarUpload";
 import VideoThumb from "../_components/VideoThumb";
 import UploadQueuePanel, {
@@ -661,7 +661,11 @@ export default function CreativeLibrary() {
     const seen = new Set<string>();
     const matrix: Array<{ messageId: number; size: string }> = [];
     const creatives = new Set<number>();
-    for (const c of items) {
+    // Walk the SORTED list first, so a share is built in the order the person
+    // is looking at rather than in whatever order the rows arrived. `items`
+    // follows, to keep anything that was selected before the filter changed —
+    // a selection must not quietly shrink because a row scrolled out of scope.
+    for (const c of [...sorted, ...items]) {
       if (!selectedIds.has(c.id)) continue;
       if (c.kind === "matrix") {
         const key = `${c.message.id}|${c.liveSize}`;
@@ -674,9 +678,10 @@ export default function CreativeLibrary() {
     }
     return {
       selectedMatrixPairs: matrix,
+      // A Set keeps insertion order, so this is the sorted order above.
       selectedCreativeIds: Array.from(creatives),
     };
-  }, [items, selectedIds]);
+  }, [sorted, items, selectedIds]);
 
   return (
     <div className="creative-library flex h-full">
@@ -732,6 +737,18 @@ export default function CreativeLibrary() {
                   <Masonry
                     items={visible}
                     itemKey={(c) => (c.kind === "uploaded" ? c.groupKey : c.id)}
+                    // Every tile's shape is known up front — a matrix render
+                    // from its banner size, a delivered file from its stored
+                    // dimensions. Without this the grid fell back to dealing
+                    // tiles round-robin, which with banners from 970x250 to
+                    // 300x600 left the columns ragged and scattered items that
+                    // belong together across the page.
+                    estimateHeight={(c, colWidth) =>
+                      aspectEstimate(
+                        c.kind === "uploaded" ? c.fileDimensions : c.liveSize,
+                        colWidth,
+                      )
+                    }
                     render={(c) => (
                       <SelectableItem
                         id={c.id}

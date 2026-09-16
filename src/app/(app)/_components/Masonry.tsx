@@ -50,6 +50,22 @@ function columnCountFor(width: number): number {
 // item and stateful children (e.g. iframe previews that lazy-init their html
 // from a per-message cache) keep the previous item's render. Falls back to the
 // positional index only as a last resort for callers that genuinely have no id.
+/**
+ * Height a "WxH" banner size will occupy at `colWidth` — the estimate every
+ * tile grid here needs, since a banner's shape is known before a byte loads.
+ * An unreadable or missing size falls back to a square: the estimate only picks
+ * a column, so a wrong guess costs balance, never correctness.
+ */
+export function aspectEstimate(
+  size: string | null | undefined,
+  colWidth: number,
+): number {
+  const m = size?.match(/^(\d+)\s*x\s*(\d+)$/i);
+  const w = m ? parseInt(m[1]!, 10) : 0;
+  const h = m ? parseInt(m[2]!, 10) : 0;
+  return w && h ? colWidth * (h / w) : colWidth;
+}
+
 export function Masonry<T>({
   items,
   render,

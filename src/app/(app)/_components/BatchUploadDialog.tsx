@@ -34,6 +34,12 @@ type Props = {
     applyToAll: (patch: Record<string, string>) => void;
     count: number;
   }) => ReactNode;
+  /**
+   * Show only what this drop created. Offered by the Creative Library, which
+   * knows how to narrow itself to a set of ids; a caller that cannot omits it
+   * and the button is not rendered.
+   */
+  onFilterToUploaded?: () => void;
   onClose: () => void;
 };
 
@@ -45,6 +51,7 @@ export default function BatchUploadDialog({
   columns,
   optionsFor: optionsForProp,
   batchForm,
+  onFilterToUploaded,
   onClose,
 }: Props) {
   const { addFiles, items } = queue;
@@ -110,6 +117,18 @@ export default function BatchUploadDialog({
               ) : null}
               Save {ready > 0 ? ready : ""}
             </button>
+            {onFilterToUploaded && queue.createdIds.length > 0 ? (
+              <button
+                onClick={() => {
+                  onFilterToUploaded();
+                  close();
+                }}
+                title="Close and show only the creatives this upload created"
+                className={`${block}-dialog__filter-to toolbar-btn rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50`}
+              >
+                Filter to these {queue.createdIds.length}
+              </button>
+            ) : null}
             <button
               onClick={close}
               aria-label="Close"

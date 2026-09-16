@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   parseSearchQuery,
   hasNarrowingPrefix,
@@ -14,6 +14,8 @@ function fields(p: Partial<SearchFields>): SearchFields {
     platform: p.platform ?? "",
     mc: p.mc ?? "",
     free: p.free ?? "",
+    createdDate: p.createdDate ?? "",
+    createdTime: p.createdTime ?? "",
   };
 }
 
@@ -228,5 +230,76 @@ describe("narrowingAxes", () => {
   it("ignores empty prefix values and unknown prefixes", () => {
     expect(narrowingAxes("a:")).toEqual({ audience: false, topic: false });
     expect(narrowingAxes("brand:erste")).toEqual({ audience: false, topic: false });
+  });
+});
+
+describe("date: and time:", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const made = fields({
+    createdDate: "2026-09-16",
+    createdTime: "12:34:56",
+    free: "banner",
+  });
+
+  it("matches a whole day", () => {
+    expect(parseSearchQuery("date:2026-09-16")(made)).toBe(true);
+    expect(parseSearchQuery("date:2026-09-15")(made)).toBe(false);
+  });
+
+  it("a partial date matches its prefix", () => {
+    expect(parseSearchQuery("date:2026-09")(made)).toBe(true);
+    expect(parseSearchQuery("date:2026-08")(made)).toBe(false);
+  });
+
+  it("time: narrows to an hour with a wildcard", () => {
+    expect(parseSearchQuery("time:12:*")(made)).toBe(true);
+    expect(parseSearchQuery("time:13:*")(made)).toBe(false);
+  });
+
+  it("a wildcard works anywhere in the value", () => {
+    expect(parseSearchQuery("date:2026-*-16")(made)).toBe(true);
+    expect(parseSearchQuery("date:2026-*-17")(made)).toBe(false);
+    expect(parseSearchQuery("time:*:34:*")(made)).toBe(true);
+  });
+
+  it("date: and time: combine, and combine with other prefixes", () => {
+    expect(parseSearchQuery("date:2026-09-16 time:12:*")(made)).toBe(true);
+    expect(parseSearchQuery("date:2026-09-16 time:11:*")(made)).toBe(false);
+    expect(
+      parseSearchQuery("date:2026-09-16 banner")(made),
+    ).toBe(true);
+  });
+
+  it("date:today and date:yesterday resolve against the local calendar", () => {
+    // Local, not UTC: at 00:30 in Budapest the row was stored as the previous
+    // UTC day, and the list column still shows it as today.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 8, 16, 0, 30, 0));
+    expect(parseSearchQuery("date:today")(made)).toBe(true);
+    expect(parseSearchQuery("date:yesterday")(made)).toBe(false);
+
+    vi.setSystemTime(new Date(2026, 8, 17, 23, 59, 0));
+    expect(parseSearchQuery("date:today")(made)).toBe(false);
+    expect(parseSearchQuery("date:yesterday")(made)).toBe(true);
+  });
+
+  it("a date is not reachable from free text", () => {
+    expect(parseSearchQuery("2026-09-16")(made)).toBe(false);
+  });
+
+  it("does not narrow a grid axis", () => {
+    expect(narrowingAxes("date:today time:12:*")).toEqual({
+      audience: false,
+      topic: false,
+    });
+  });
+
+  it("leaves the anchored mc: behaviour alone", () => {
+    const card = fields({ mc: "mc321", createdDate: "2026-09-16" });
+    expect(parseSearchQuery("mc:21")(card)).toBe(false);
+    expect(parseSearchQuery("mc:321 date:2026-09-16")(card)).toBe(true);
   });
 });

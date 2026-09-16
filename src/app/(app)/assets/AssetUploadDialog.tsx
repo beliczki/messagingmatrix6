@@ -41,7 +41,12 @@ export default function AssetUploadDialog({
   const queue = useUploadQueue({
     category: "asset",
     parsingRules,
-    commitItem,
+    // "Filter to these" is a Creative Library affordance; assets have no id to
+    // report back, so the batch is simply not recorded here.
+    commitItem: async (item) => {
+      await commitItem(item);
+      return null;
+    },
     onAllDone,
   });
   const { addFiles } = queue;

@@ -71,6 +71,7 @@ import {
   LIST_SORT_CODEC,
   DEFAULT_SORT,
   formatListDate,
+  listDateParts,
   sortListRows,
   type SortState,
 } from "../_components/ListSortHeader";
@@ -183,11 +184,40 @@ async function fetchJSON<T>(url: string): Promise<T> {
   return r.json();
 }
 
+// `upload:last` is resolved in this page, not in search-query.ts: the ids live
+// here, and the generic parser stays free of a Creative Library concept. Pulled
+// out of the query first, so the token still composes ("upload:last mc:328").
+const UPLOAD_LAST = /(^|\s)upload:last(?=\s|$)/i;
+
+function splitUploadToken(query: string): {
+  wantLastUpload: boolean;
+  rest: string;
+} {
+  if (!UPLOAD_LAST.test(query)) return { wantLastUpload: false, rest: query };
+  return { wantLastUpload: true, rest: query.replace(UPLOAD_LAST, " ").trim() };
+}
+
+const SEARCH_HELP = [
+  "Free text searches all fields. Prefixes: a: (audience), t: (topic),",
+  "s: (strategy), p: (platform), mc: (MC#), date: and time: (when it was made,",
+  'as the Created column shows it — for a matrix card that is when it last changed).',
+  "date:today, date:yesterday, date:2026-09-16, date:2026-09, time:12:* — * matches any run.",
+  "upload:last is the batch you just uploaded.",
+  'AND implicit, OR explicit. Quote "two words" for phrases.',
+].join(" ");
+
 export default function CreativeLibrary() {
   const [search, setSearch] = usePersistent(
     "mm6_creative_library_filter_search",
     "",
     STRING_CODEC,
+  );
+  // What the last upload from this browser created, so "filter to these"
+  // survives a reload. Ids as strings to reuse SET_CODEC.
+  const [lastUpload, setLastUpload] = usePersistent<Set<string>>(
+    "mm6_creative_library_last_upload",
+    new Set(),
+    SET_CODEC,
   );
   const [products, setProducts] = usePersistent<Set<string>>(
     "mm6_creative_library_filter_products",
@@ -354,13 +384,26 @@ export default function CreativeLibrary() {
         }),
       });
       if (!r.ok) throw new Error(await r.text());
+      const body = (await r.json()) as { creative: { id: number } };
+      return body.creative.id;
     },
-    onAllDone: () => {
+    onAllDone: (createdIds) => {
+      if (createdIds.length > 0) {
+        setLastUpload(new Set(createdIds.map(String)));
+      }
       qcCommit.invalidateQueries({ queryKey: ["creatives"] });
       qcCommit.invalidateQueries({ queryKey: ["files", "creative"] });
     },
   });
   const drop = useDropTarget(queue.addFiles);
+
+  // Both upload views offer this; both land on the same query, so the box shows
+  // what is being filtered and the token can be edited or removed by hand.
+  function filterToUploaded() {
+    setSearch("upload:last");
+    setUploadOpen(false);
+    queue.setOpen(false);
+  }
 
   const creatives = creativesQ.data?.creatives ?? [];
   const files = filesQ.data?.files ?? [];
@@ -503,9 +546,20 @@ export default function CreativeLibrary() {
     });
   }, [items]);
 
-  const predicate = useMemo(() => parseSearchQuery(debouncedSearch), [debouncedSearch]);
+  const { wantLastUpload, rest: searchRest } = useMemo(
+    () => splitUploadToken(debouncedSearch),
+    [debouncedSearch],
+  );
+  const predicate = useMemo(() => parseSearchQuery(searchRest), [searchRest]);
   const filtered = useMemo(() => {
     return items.filter((c) => {
+      if (wantLastUpload) {
+        // An upload can land as a new VERSION of an existing family, and the
+        // list shows one row per family. So the row matches if any version in
+        // it was created by that batch, not just the latest one on display.
+        if (c.kind !== "uploaded") return false;
+        if (!c.versions.some((v) => lastUpload.has(String(v.id)))) return false;
+      }
       if (products.size > 0 && (!c.product || !products.has(c.product))) {
         return false;
       }
@@ -534,6 +588,9 @@ export default function CreativeLibrary() {
         platform = a?.buyingPlatform ?? "";
         free += ` ${m.headline ?? ""} ${m.copy1 ?? ""} ${m.copy2 ?? ""} ${m.disclaimer ?? ""} ${m.name ?? ""} ${m.cta ?? ""} ${m.pmmid ?? ""} ${audience} ${topic} ${strategy} ${platform} ${a?.lineitemId ?? ""} ${a?.comment ?? ""} ${t?.comment ?? ""}`;
       }
+      // Read from the same value the Created column renders, so `date:today`
+      // and a row that reads "today" can never disagree.
+      const created = listDateParts(c.createdAt);
       return predicate({
         audience: audience.toLowerCase(),
         topic: topic.toLowerCase(),
@@ -541,9 +598,21 @@ export default function CreativeLibrary() {
         platform: platform.toLowerCase(),
         mc,
         free: free.toLowerCase(),
+        createdDate: created.date,
+        createdTime: created.time,
       });
     });
-  }, [items, products, axes, sizes, predicate, audienceMap, topicMap]);
+  }, [
+    items,
+    products,
+    axes,
+    sizes,
+    predicate,
+    audienceMap,
+    topicMap,
+    wantLastUpload,
+    lastUpload,
+  ]);
 
   // The view lists one item per MC x size; the generator takes message ids, so
   // the same card must not be sent four times.
@@ -651,7 +720,11 @@ export default function CreativeLibrary() {
               Loading…
             </div>
           ) : filtered.length === 0 ? (
-            <EmptyState empty={items.length === 0} onUpload={() => setUploadOpen(true)} />
+            <EmptyState
+              empty={items.length === 0}
+              noUploadRecorded={wantLastUpload && lastUpload.size === 0}
+              onUpload={() => setUploadOpen(true)}
+            />
           ) : (
             <>
               {view === "masonry" ? (
@@ -764,6 +837,7 @@ export default function CreativeLibrary() {
             the big window when you want the whole batch as a table. */}
         <UploadQueuePanel
           queue={queue}
+          onFilterToUploaded={filterToUploaded}
           onExpand={() => setUploadOpen(true)}
           renderForm={({ item, update }) => (
             <QueueItemForm item={item} update={update} />
@@ -780,6 +854,7 @@ export default function CreativeLibrary() {
           block="creative-upload"
           columns={CREATIVE_UPLOAD_COLUMNS}
           optionsFor={uploadColumnOptions}
+          onFilterToUploaded={filterToUploaded}
           batchForm={({ applyToAll, count }) => (
             <DriveFolderBatchField applyToAll={applyToAll} count={count} />
           )}
@@ -938,8 +1013,8 @@ function Toolbar({
         <Icon name="filter" className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400" />
         <input
           type="search"
-          placeholder="Filter… a: t: s: p: mc: OR …"
-          title='Free text searches all fields. Prefixes: a: (audience), t: (topic), s: (strategy), p: (platform), mc: (MC#). AND implicit, OR explicit. Quote "two words" for phrases.'
+          placeholder="Filter… a: t: s: p: mc: date: time: OR …"
+          title={SEARCH_HELP}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="input-box__field w-72 rounded-md border border-slate-300 py-1 pl-7 pr-2 text-xs focus:border-slate-500 focus:outline-none"
@@ -1452,22 +1527,35 @@ function SelectableItem({
 
 function EmptyState({
   empty,
+  noUploadRecorded,
   onUpload,
 }: {
   empty: boolean;
+  /** `upload:last` was asked for, but this browser has not saved an upload
+   *  since the feature shipped — which otherwise looks exactly like a filter
+   *  that matches nothing, and reads as a broken filter. */
+  noUploadRecorded: boolean;
   onUpload: () => void;
 }) {
+  const title = empty
+    ? "No creatives yet"
+    : noUploadRecorded
+      ? "No upload recorded in this browser"
+      : "No creatives match the filters";
+  const hint = empty
+    ? "Upload an HTML banner, a static image, or a video clip."
+    : noUploadRecorded
+      ? "upload:last points at the batch this browser saved most recently. Upload something, then use “Filter to these” — an upload made before this filter existed was never recorded."
+      : "Clear filters or adjust the search to see all creatives.";
   return (
     <div className="flex h-full items-center justify-center">
       <div className="empty-state creative-library__empty max-w-md rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center">
         <Icon name="image" className="empty-state__icon mx-auto mb-2 size-8 text-slate-400" />
         <h2 className="empty-state__title text-sm font-semibold text-slate-900">
-          {empty ? "No creatives yet" : "No creatives match the filters"}
+          {title}
         </h2>
         <p className="empty-state__hint mt-1 text-xs text-slate-500">
-          {empty
-            ? "Upload an HTML banner, a static image, or a video clip."
-            : "Clear filters or adjust the search to see all creatives."}
+          {hint}
         </p>
         {empty ? (
           <button

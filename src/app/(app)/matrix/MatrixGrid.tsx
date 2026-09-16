@@ -892,7 +892,18 @@ export default function MatrixWorkspace() {
         const platform = (a?.buyingPlatform ?? "").toLowerCase();
         const mc = `mc${m.number}${m.variant} ${m.pmmid ?? ""}`.toLowerCase();
         const free = `${m.name ?? ""} ${m.headline ?? ""} ${m.copy1 ?? ""} ${m.copy2 ?? ""} ${m.disclaimer ?? ""} ${m.cta ?? ""} ${audience} ${topic} ${strategy} ${platform} ${a?.lineitemId ?? ""} ${a?.comment ?? ""} ${t?.comment ?? ""} ${m.pmmid ?? ""}`.toLowerCase();
-        return predicate({ audience, topic, strategy, platform, mc, free });
+        // date:/time: is a Creative Library filter; the grid has nothing to
+        // match it against.
+        return predicate({
+          audience,
+          topic,
+          strategy,
+          platform,
+          mc,
+          free,
+          createdDate: "",
+          createdTime: "",
+        });
       });
     }
     // Per-status MC counts for the Status filter menu. Measured here, with

@@ -5,6 +5,12 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.104.0] — 2026-09-16
+
+### Added
+- **`date:` and `time:` in the Creative Library filter.** `date:today`, `date:yesterday`, `date:2026-09-16`, a partial `date:2026-09`, and `time:12:*` — `*` matches any run of characters, anywhere in the value (`date:2026-*-16`, `time:*:34:*`). They combine with everything else (`date:today mc:328`). A date is only reachable through these prefixes: bare "2026" should not drag in every row made this year. The values are read from what the Created column renders, so a row showing "today" and a `date:today` match can never disagree.
+- **"Filter to these" after an upload**, in both the big batch window and the floating queue panel. It writes `upload:last` into the filter and shows exactly the rows that upload created. A date window would only be close: a long save straddles minutes, and somebody else's upload in the same minute is not part of the batch. The set is recorded per browser and survives a reload; an upload can also land as a new version of an existing family, so a row matches when any version in it came from that batch, not just the one on display.
+
 ## [6.103.0] — 2026-09-15
 
 ### Added

@@ -5,6 +5,12 @@ export type SearchFields = {
   platform: string;
   mc: string;
   free: string;
+  // When the row was made, split so `date:` and `time:` can be asked
+  // separately. LOCAL time, not the stored UTC: the list column renders these
+  // with toLocaleString, and a `date:today` answered in UTC would disagree
+  // with what the person sees for anything made near midnight.
+  createdDate: string; // 2026-09-16
+  createdTime: string; // 14:07:52
 };
 
 export type MatchPredicate = (fields: SearchFields) => boolean;
@@ -19,7 +25,14 @@ const PREFIX_MAP: Record<string, keyof SearchFields> = {
   s: "strategy",
   p: "platform",
   mc: "mc",
+  date: "createdDate",
+  time: "createdTime",
 };
+
+// `*` is honoured in these two fields only. Everywhere else a `*` stays a
+// literal character, as it always has — a date is the one value people write
+// as a partial pattern ("that afternoon", "some day in September").
+const WILDCARD_FIELDS = new Set<keyof SearchFields>(["createdDate", "createdTime"]);
 
 const NARROWING_PREFIXES = new Set(["a", "t", "s", "p", "mc"]);
 
@@ -75,12 +88,33 @@ function classifyToken(raw: string): Term | null {
       const rawValue = raw.slice(colon + 1);
       const value = unquote(rawValue).toLowerCase();
       if (!value) return null;
-      return { kind: "field", field, value };
+      return {
+        kind: "field",
+        field,
+        value: field === "createdDate" ? resolveDayWord(value) : value,
+      };
     }
   }
   const value = unquote(raw).toLowerCase();
   if (!value) return null;
   return { kind: "free", value };
+}
+
+// `date:today` means the day the person is reading the screen on, so it
+// resolves against the local calendar — the same day the list column shows.
+// Resolved when the query is parsed, which is every time the query changes.
+function localDay(offsetDays: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  const month = `${d.getMonth() + 1}`.padStart(2, "0");
+  const day = `${d.getDate()}`.padStart(2, "0");
+  return `${d.getFullYear()}-${month}-${day}`;
+}
+
+function resolveDayWord(value: string): string {
+  if (value === "today") return localDay(0);
+  if (value === "yesterday") return localDay(-1);
+  return value;
 }
 
 function unquote(s: string): string {
@@ -90,6 +124,9 @@ function unquote(s: string): string {
   return s;
 }
 
+// Deliberately without createdDate/createdTime: bare "2026" should not drag in
+// every row made this year, and a size like 300x250 should not collide with a
+// time. A date is only ever asked for through date:/time:.
 const FREE_FIELDS: (keyof SearchFields)[] = [
   "audience",
   "topic",
@@ -116,11 +153,22 @@ function mcMatches(value: string, field: string): boolean {
   return new RegExp(`\\bmc${number}${variant || "[a-z]*"}\\b`).test(field);
 }
 
+function wildcardMatches(value: string, field: string): boolean {
+  if (!value.includes("*")) return field.includes(value);
+  const pattern = value
+    .split("*")
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+    .join(".*");
+  return new RegExp(pattern).test(field);
+}
+
 function termMatches(term: Term, fields: SearchFields): boolean {
   if (term.kind === "field") {
-    return term.field === "mc"
-      ? mcMatches(term.value, fields.mc)
-      : fields[term.field].includes(term.value);
+    if (term.field === "mc") return mcMatches(term.value, fields.mc);
+    if (WILDCARD_FIELDS.has(term.field)) {
+      return wildcardMatches(term.value, fields[term.field]);
+    }
+    return fields[term.field].includes(term.value);
   }
   for (const f of FREE_FIELDS) {
     if (fields[f].includes(term.value)) return true;
@@ -161,7 +209,16 @@ export function parseSearchQuery(input: string): MatchPredicate {
 }
 
 export function emptySearchFields(): SearchFields {
-  return { audience: "", topic: "", strategy: "", platform: "", mc: "", free: "" };
+  return {
+    audience: "",
+    topic: "",
+    strategy: "",
+    platform: "",
+    mc: "",
+    free: "",
+    createdDate: "",
+    createdTime: "",
+  };
 }
 
 // Which grid axes a search narrows, for row/column pruning in the matrix.

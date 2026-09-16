@@ -210,6 +210,24 @@ export function sortListRows<T extends Sortable>(
 
 // ── Date formatting (compact for the Created / Updated columns) ──────────
 
+// The same instant formatListDate renders, split for the date:/time: filter.
+// It lives here so the two cannot drift: a filter that disagrees with the
+// column it filters on is worse than no filter. Both read `new Date(iso)`,
+// so a "today" in the column is a `date:today` match and vice versa.
+export function listDateParts(iso: string | null | undefined): {
+  date: string;
+  time: string;
+} {
+  if (!iso) return { date: "", time: "" };
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return { date: "", time: "" };
+  const p2 = (n: number) => `${n}`.padStart(2, "0");
+  return {
+    date: `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`,
+    time: `${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}`,
+  };
+}
+
 export function formatListDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   const d = new Date(iso);

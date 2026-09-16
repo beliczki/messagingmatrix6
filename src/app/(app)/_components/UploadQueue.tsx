@@ -21,6 +21,9 @@ export type QueueItem = {
   error: string | null;
   /** Per-item editable metadata (overrides parsed). */
   metadata: Record<string, string>;
+  /** The row this item became, once saved. Null until then — and for a
+   *  category whose commit has no id to report. */
+  createdId: number | null;
 };
 
 export type QueueOptions = {
@@ -29,9 +32,14 @@ export type QueueOptions = {
   /**
    * Commit one item — typically POST /api/{creatives|assets} with the metadata
    * + uploadedFileId. Throws on failure (the queue marks it errored).
+   * Returns the created row's id so the caller can filter to the batch it just
+   * made, or null when this category has no id worth reporting.
    */
-  commitItem: (item: QueueItem) => Promise<void>;
-  onAllDone?: () => void;
+  commitItem: (item: QueueItem) => Promise<number | null>;
+  /** Called once the batch is committed, with the ids it created. Passed out
+   *  of the loop rather than read back off the items: the status updates are
+   *  queued state, so reading them here would see the batch before last. */
+  onAllDone?: (createdIds: number[]) => void;
 };
 
 export type UploadQueueApi = ReturnType<typeof useUploadQueue>;
@@ -57,6 +65,12 @@ type PanelProps = {
     applyToAll: (patch: Record<string, string>) => void;
     count: number;
   }) => ReactNode;
+  /**
+   * Show only what this drop created. Offered by the Creative Library, which
+   * knows how to narrow itself to a set of ids; a category that cannot do
+   * that simply omits it and the button is not rendered.
+   */
+  onFilterToUploaded?: () => void;
   /** Open the same queue in the big batch window. */
   onExpand?: () => void;
 };
@@ -114,6 +128,7 @@ export function useUploadQueue({
           uploadedDimensions: null,
           uploadedSize: null,
           status: "queued",
+          createdId: null,
           error: null,
           metadata: { ...fields },
         };
@@ -174,12 +189,14 @@ export function useUploadQueue({
   }, [items, category, update]);
 
   async function commitAll() {
+    const created: number[] = [];
     for (const item of items) {
       if (item.status !== "metadata") continue;
       update(item.localId, { status: "saving" });
       try {
-        await commitItem(item);
-        update(item.localId, { status: "done" });
+        const createdId = await commitItem(item);
+        if (createdId !== null) created.push(createdId);
+        update(item.localId, { status: "done", createdId });
       } catch (e) {
         update(item.localId, {
           status: "error",
@@ -187,7 +204,7 @@ export function useUploadQueue({
         });
       }
     }
-    onAllDone?.();
+    onAllDone?.(created);
   }
 
   function discard(id: string) {
@@ -200,6 +217,12 @@ export function useUploadQueue({
 
   const total = items.length;
   const done = items.filter((i) => i.status === "done").length;
+  // The rows this drop actually created, for "filter to these". Exact where a
+  // date window is only close: a long save straddles minutes, and somebody
+  // else's upload in the same minute is not part of this batch.
+  const createdIds = items.flatMap((i) =>
+    i.createdId !== null ? [i.createdId] : [],
+  );
   const errored = items.filter((i) => i.status === "error").length;
   const ready = items.filter((i) => i.status === "metadata").length;
 
@@ -251,6 +274,7 @@ export function useUploadQueue({
     done,
     errored,
     ready,
+    createdIds,
   };
 }
 
@@ -261,6 +285,7 @@ export default function UploadQueuePanel({
   queue,
   renderForm,
   batchForm,
+  onFilterToUploaded,
   onExpand,
 }: PanelProps) {
   const {
@@ -277,6 +302,7 @@ export default function UploadQueuePanel({
     done,
     errored,
     ready,
+    createdIds,
   } = queue;
 
   if (total === 0) return null;
@@ -308,6 +334,23 @@ export default function UploadQueuePanel({
               className="ml-auto rounded-md bg-slate-900 px-2 py-1 text-[11px] font-medium text-white hover:bg-slate-800"
             >
               Save {ready}
+            </button>
+          ) : null}
+          {onFilterToUploaded && createdIds.length > 0 ? (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onFilterToUploaded();
+              }}
+              title="Show only the creatives this upload created"
+              className={clsx(
+                "upload-queue__filter-to rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50",
+                // Save carries the ml-auto while there is anything to save;
+                // once the batch is in, this button is the first of the group.
+                ready === 0 && "ml-auto",
+              )}
+            >
+              Filter to these {createdIds.length}
             </button>
           ) : null}
           {done > 0 ? (

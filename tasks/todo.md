@@ -356,10 +356,10 @@ Fő lépések (ha full-lifecycle):
 ### FR-A/B/C/D — agent-facing tárházak
 **Elv:** elsősorban az AGENTEKÉRT (vékony UI + MCP tool-felület). Mindegyik előtt 3-kérdéses push-back (tényleg MM6 vs brain/inbox? legolcsóbb 80%? build vs outcome?).
 **Közös minta (grounded):** managed tábla ordering+archive-val → `keywords` pgTable (`schema.ts:725`) + `/api/keywords/*` + `KeywordsTab`. Új MCP tool → `registerTool(name,{description,inputSchema:zod-field-map},handler)`; write: `requireRate`→entity-helper→`writeAudit({userId:mcpUserId})`→`jsonResult`; batch = `db.transaction`+egy audit (`mcp.ts:1180/2122/228`). Új Settings tab → folder+komponens + `TabKey` + `TABS` + render-ág (`SettingsView.tsx:16,27-37,115-131`).
-- [ ] **FR-A Prodlist management** — agent-feldolgozott prodlist-sorok first-class rekordként; soronként MC vagy creative-hez köthető. Ref: `~/ERSTE Addressable AI Agent/outputs/prodlist_q3_2026`. Lépések: `prodlist_rows` tábla → `/api/prodlist/*` → MCP list/get/update/link/processed-mark → vékony lista-UI. ⚠️ OPEN Q lent.
-- [ ] **FR-B Documents** — Google Slides link-tárház; agent követi melyik MC-nek van tracking-slide-ja + állapota. Lépések: `documents` tábla nullable soft-link a messages-hez → `/api/documents/*` → MCP list/get/add/update/link + "mely MC-knek nincs slide" query → vékony lista-UI.
-- [ ] **FR-C Request-a-change** — ticket-inbox → auto-roadmap. **Default: legolcsóbb 80% = strukturált `todo.md` szekció** (ez a reorg adja az alapot), nem új tábla; `change_requests` tábla + státusz-pipeline csak valós multi-filer igényre.
-- [ ] **FR-D Dashboard** (meglévő oldal, legkönnyebb push-back): **D.1** `actor_kind` (`ui|mcp`, opc. `token_id`) oszlop az `audit_log`-ba (`schema.ts:113` ma csak `userId`; `0004+` migráció) + beállítás a két writer-site-on (UI entity-route + `mcp.ts` ~30 call-site) + widget-badge. **D.2** users-join a raw `row.userId` helyett (`page.tsx:123` → email/név). **D.3** utolsó-90-nap `count()` predikátum az `entityCounts()`-ba (`page.tsx:18`) tile-onként.
+- [x] **FR-A Prodlist management** — agent-feldolgozott prodlist-sorok first-class rekordként; soronként MC vagy creative-hez köthető. Ref: `~/ERSTE Addressable AI Agent/outputs/prodlist_q3_2026`. Lépések: `prodlist_rows` tábla → `/api/prodlist/*` → MCP list/get/update/link/processed-mark → vékony lista-UI. ⚠️ OPEN Q lent.
+- [x] **FR-B Documents** — Google Slides link-tárház; agent követi melyik MC-nek van tracking-slide-ja + állapota. Lépések: `documents` tábla nullable soft-link a messages-hez → `/api/documents/*` → MCP list/get/add/update/link + "mely MC-knek nincs slide" query → vékony lista-UI.
+- [x] **FR-C Request-a-change** — ticket-inbox → auto-roadmap. **Default: legolcsóbb 80% = strukturált `todo.md` szekció** (ez a reorg adja az alapot), nem új tábla; `change_requests` tábla + státusz-pipeline csak valós multi-filer igényre.
+- [x] **FR-D Dashboard** (meglévő oldal, legkönnyebb push-back): **D.1** `actor_kind` (`ui|mcp`, opc. `token_id`) oszlop az `audit_log`-ba (`schema.ts:113` ma csak `userId`; `0004+` migráció) + beállítás a két writer-site-on (UI entity-route + `mcp.ts` ~30 call-site) + widget-badge. **D.2** users-join a raw `row.userId` helyett (`page.tsx:123` → email/név). **D.3** utolsó-90-nap `count()` predikátum az `entityCounts()`-ba (`page.tsx:18`) tile-onként.
 
 ### MCP SDK v2 migráció (`2026-07-28` spec)
 - [ ] **NEM most.** Várunk a v2 stable-re (~2026-07-28), aztán branch-en. Migrációs checklist: archív § "MCP `2026-07-28` spec compatibility" (~L1450). A `show_mc_previews` widget (OpenAI Apps SDK) a valódi app-szintű munka.
@@ -1828,3 +1828,155 @@ tsconfig `include`-ban): az sem `.next/types` nélkül nem múlt el → nem az v
 inkrementális típusellenőrzés **más** lappangó hibákat is takarhat. Egy CI-szerű „tiszta
 `tsbuildinfo` + teljes `tsc`" lépés olcsón kiszűrné — most a deploy az egyetlen hely, ahol teljes
 ellenőrzés fut.
+
+---
+
+## 2026-09-16 — Creative Library: `date:`/`time:` szűrő + „Filter to these" a feltöltés után
+
+**Döntés (user):** `upload:last`, **séma-migráció nélkül**. A batch-oszlop (`batch:<id>`) elvetve —
+ha később kell a régi feltöltésekre visszakeresni, az külön szelet.
+
+**Miért nem a dátumszűrő a „filter to these" motorja:** 125 kreatív mentése átlóghat percen/órán, és
+bármelyik másik feltöltés ugyanabból az ablakból belesöprődik. A feltöltés viszont pontosan tudja,
+melyik sorokat hozta létre — csak most eldobja (`commitItem: (item) => Promise<void>`).
+
+### 1. `src/lib/search-query.ts` — `date:` és `time:`
+- [x] **F1** `SearchFields` két új mezővel: `createdDate` (`2026-09-16`) és `createdTime` (`12:34:56`),
+      **helyi időben** — a lista is `toLocaleString`-gel mutat, és `date:today` UTC-ben éjfél körül hazudna.
+      `emptySearchFields()` is megkapja őket.
+- [x] **F2** `PREFIX_MAP`: `date` → `createdDate`, `time` → `createdTime`.
+- [x] **F3** `date:today` / `date:yesterday` feloldása a **helyi** naptári napra, parse-időben.
+- [x] **F4** `*` joker a mezőértékben: `time:12:*`, `date:2026-09-*`, `time:*:30`. (A `time:12:*` a
+      tokenizáláson átmegy: a `classifyToken` az ELSŐ kettőspontnál vág, tehát prefix=`time`, érték=`12:*`.)
+- [x] **F5** `NARROWING_PREFIXES`/`narrowingAxes` **változatlan**: a dátum se audience-t, se topicot nem ír
+      le, tehát nem nyeshet grid-tengelyt — ugyanaz az érv, mint a szabad szövegnél.
+- [x] **F6** Unit tesztek a `tests/unit/`-ba (a `search-query` mintájára): nap, óra-joker, `today`,
+      és hogy a `mc:` horgonyzott viselkedése nem sérül.
+
+### 2. A három teljes literál feltöltése
+- [x] **F7** Creative Library: `createdAt` → helyi dátum/idő. ⚠️ Mátrix-sornál a `createdAt` valójában
+      a `message.updatedAt` (CreativeLibrary.tsx:439) — a **kijelzett oszlop is ezt mutatja**, tehát a
+      szűrő konzisztens marad vele; ezt kiírom a súgóba.
+- [x] **F8** `assets/AssetsLibrary.tsx` és `matrix/MatrixGrid.tsx`: üres stringet adnak (a `date:` ott
+      egyszerűen nem talál). Nem bővítem őket — nem ezt kérted.
+- [x] **F9** Placeholder + `title` súgó a kereső mezőn: `date:` `time:` felvétele.
+
+### 3. „Filter to these" — `upload:last`
+- [x] **F10** `UploadQueue`: a `commitItem` visszaadja a létrehozott id-t, a `QueueItem` megjegyzi.
+- [x] **F11** A queue kiadja a session `done` id-jait; eltárolva `mm6_creative_library_last_upload`
+      kulcson (a házi `mm6_<page>_<thing>` konvenció szerint), hogy reload után is megvan.
+- [x] **F12** Gomb a **nagy** dialógus fejlécében a Close mellé **és** a **kicsi** lebegő panelre:
+      `Filter to these N` — csak ha `done > 0`. Új opcionális prop, a `BatchUploadDialog` marad általános.
+- [x] **F13** A library `upload:last`-ot ír a keresőbe és bezárja a dialógust.
+- [x] **F14** A feloldás a **libraryben**, nem a parserben: az `upload:last` tokent kiemeli a
+      keresőstringből, a maradékot adja a `parseSearchQuery`-nek, és metszi a tárolt id-halmazzal.
+      Így a generikus parser nem tud egy library-specifikus fogalomról, és a token **kombinálható**
+      a többivel (`upload:last mc:328`).
+- [x] **F15** Ellenőrzés böngészőben éles adaton (erste dev), és `npm test`.
+
+---
+
+## 2026-09-16 — Ügynökségi riportok (AO_Meta / AO_PRG / AO_PMAX) vs. a mi monitoringunk — FELMÉRÉS
+
+Forrás: `~/GoogleDrive/Data/ERSTE HU/_riports/` (2026-09-16), mindhárom **2026-01-01 → 08-31**.
+A mi `monitoring` táblánk: 4 AdForm „Creative rep" (május–augusztus), 15 646 sor.
+
+### Tények
+
+**T1 — PRG (programmatic) MC-egyezés: a DCO rendben van, ahogy gondoltad.**
+- PRG = **PBU** (nálunk `platform=adform`) + **Flex** (nálunk `platform=dv360`). Semmi más vendor
+  (adaptivemedia, telex, centralmedia, wppnexus…) **nincs benne** — ezért van, hogy nálunk 294a és 302a
+  *több* impressziót mutat, mint a PRG.
+- Ahol a periódus egyezik (Q3-as MC-k, 314+), a mi impresszió / PRG impresszió = **0,96–0,97** minden
+  MC-nél — a különbség a „Rendered Impressions" (mi) vs „Impressions" (ők). Régebbi MC-knél 0,4–0,6, mert
+  a PRG jan–aug, mi máj–aug. **Az MC-szintű egyeztetés tehát jó.**
+- PRG-ben van, nálunk nincs: `MC00*` (Cseperedő Q1, OtthonStart, Future — nem mátrixos statikus kreák,
+  35,4M impr a 103M-ból), `MC165a–169e` (Flex calculatorMockup — régi számozás, ma 316–320), `MC110`/`MC117`
+  variáns nélkül (ügynökségi címke), `MC114NA`/`MC116NA`.
+- PRG Topic oszlop: 109-ből **58** azonos a mi topic-kulcsunkkal, a többi ügynökségi címke
+  (`a_fuvarozo - Native`, `400e_a_sajat_tered`…) — MC+topic párra nem szabad kulcsolni, csak MC-re.
+
+**T2 — A konverziószám a nagy gond, nem az MC.** A mi AdForm riportunk `Conversions` oszlopa **120**
+augusztusra az egész accountra; a PRG ugyanezekre az MC-kre **13 269** jan–aug (SZK e2e+vhk 1 225,
+Max HK 538, VAL „számlacsomag visit" 11 242). Q3 példa: 321a nálunk **0**, PRG **7**; 110b nálunk 3,
+PRG 72. Ez nem periódus-különbség (100×), hanem **más metrika**: a „Creative rep" egyetlen
+`Conversions` oszlopa (a riport-builder 13 fix mezője, `adform-report-skill-spec.md`) nem tartalmazza
+azt, amit az ügynökség számol (valószínűleg post-view/„all conversions", tracking pontonként bontva:
+e2e / vhk / számlacsomag visit / javaslatok). **Amíg ez nincs tisztázva, a mi CPA-nk nem hasonlítható
+össze az övékével** — a nevező hiányzik.
+- Költség: nálunk csak `adform` soron van cost (26,2M HUF máj–aug); `dv360` sorokon **0** (67 HUF).
+  A PRG-ben **egyáltalán nincs cost oszlop**. Flex/DV360 CPA tehát a mi adatunkból nem számolható.
+
+**T3 — Meta: 97 hirdetés a Raw Data lapon, ebből egyetlenegy sem kerülhet be ma a monitoringba.**
+A mi Meta-adatunk csak az AdForm-tracking `m_00` kampányszintű sora (`p_meta_facebook…-m_00-t_szk_q1-q4`),
+kreatív szint nincs. Az ügynökségi Meta-riportban a hirdetésnév hordozza a kulcsot:
+`native!newsfeedad!<kreatívszám><variáns>!1080x1080!pmmid=<pmmid>!v11`. Költés szerint:
+| kategória | hirdetés | költés | |
+|---|---|---|---|
+| A — konzisztens pmmid (hirdetésnév-szám = `m_`) | 15 | 1,05M (12,8%) | ma is parse-olható |
+| B — **hirdetésnév-szám ≠ pmmid `m_`** (28 db: 131→m_129, 318→m_301, 323→m_293, 320→m_127, 316/319/331→m_303, 332→m_317…) | 28 | 2,49M (30,4%) | a pmmid a *klónozott eredeti* MC-jét viszi, a név az újat |
+| C — pmmid **üres audience-szel** (`-a_-m_312`) | 22 | 1,81M (22,1%) | `parsePmmid` eldobja (`!audienceKey`) |
+| D — nincs MM-pmmid (`marketgo_pro`, `hajo`, `future_ret`, `felreteszek_pro`, `otthonstart-lakashitel_pro`) | 32 | 2,84M (34,6%) | nem mátrixos kreák |
+- **Számütközés a mátrixszal (régi/ügynökségi számozás):** Meta `312` = onlineSzamla_150e pro
+  (mátrix 312 = MARKET genZ; a mátrixban a 150e-s online számla = **296**), Meta `111` = cseperedoSzamla_20e
+  (mátrix 111 = SZK Pénztárca), Meta `41c` = instantkartya (mátrix 41 = HITEL yes2loans; instantkártya =
+  39/43), Meta pmmid `m_129` (mátrix 129 = SZA switchon; a Szelfi = **131 f/g**, amit a hirdetésnév mond).
+- Meta „Results" kampányonként **más esemény** (Online számla Action / SZK VHK+e2e / Max HK e2e begin /
+  Landing page views / Hitel Tinder lead / SoftConversion) — a CPA-nak kampány-szintű definíciója van,
+  nem account-szintű.
+- Facebook preview-ellenőrzés (Opus subagent, ~30 link): eredmény lentebb, T4.
+
+**T4 — Preview-ellenőrzés: NEM SIKERÜLT, környezeti ok (2026-09-16).** Az Opus subagent 0/27 preview-t
+tudott elolvasni: a Chrome-ablak takarásban/minimalizálva volt (`document.visibilityState === "hidden"`,
+`requestAnimationFrame` és `IntersectionObserver` soha nem tüzelt), a Facebook feed pedig virtualizált —
+az 1. poszt után csak skeleton marad, görgetni sem lehet. Nem a linkek hibásak (a sima facebook.com
+ugyanígy viselkedett). **Újrafuttatás:** Chrome előtérben, nem takarva — a 27 prioritizált sor kész:
+`scratchpad/preview_check.csv`. Megjegyzés: az egyetlen rövid szakaszban, ahol ~10 poszt renderelt, Erste
+hirdetés nem jelent meg — az első linknél ellenőrizni kell, hogy a demo-ad egyáltalán injektálódik-e a
+bejelentkezett fiókkal.
+
+### Javasolt terv — CPA-szintű hozzárendelés (DÖNTÉSRE VÁR, nem indult el)
+
+**Push-back először:** a T2 nem kód, hanem riport-definíció. A leggyorsabb 80%: az ügynökségtől (vagy az
+AdForm riport-builderben) **egy** módosítás — a „Creative rep" kapjon `Conversions` bontást tracking
+pontonként (+ post-click/post-view), és a PRG kapjon `Cost` oszlopot + hónap-bontást. Ha ez megvan, a
+mostani importer **változatlanul** hozza az MC-szintű CPA-t PBU-ra; DV360-ra a cost külön forrás.
+
+- [ ] **R1 (0 kód)** Kérés az ügynökségnek / AdForm builder: (a) Creative rep: `Conversions` tracking
+      pontonként és attribúció szerint; (b) PRG: `Cost` + `Month` oszlop; (c) Meta: **havi** bontás
+      (`Reporting starts/ends` már ott van, csak a breakdown hiányzik) + `Ad ID` oszlop.
+- [ ] **R2 (minor)** `parsePmmid`: üres `-a_` **nem eldobás** — Meta-nál az audience az ad set
+      (`…!con!bro!…` / `…!con!ret!…` → pro/rem) és nem a pmmid hordozza. Csak a `-m_` + `-v_` legyen kötelező.
+- [ ] **R3 (minor)** Meta-importer (`AO_Meta.xlsx` „Raw Data Report" lap): sor = hirdetés; kulcs =
+      **hirdetésnév-szám+variáns** (T4 dönti el, hogy ez vagy a pmmid `m_` a valós kreatív); `platform=meta`,
+      `scope=p_meta`, cost = `Amount spent`, conversions = `Results`, + **új oszlop `result_type`**
+      (kampányonként más esemény, CPA csak azonos típuson belül összegezhető). Periódus a Reporting starts/ends-ből.
+      A meglévő `monitoring` sémába illik; egy új oszlop → migráció.
+- [ ] **R4 (patch)** Resolver: a Meta-sorok a nem-DCO tengelyre illeszkedjenek (`family` szint elég, mert a
+      Meta-nak nincs audience-kulcsa); a régi-számozású ütközések (312/111/41/129) **kézi override-tábla**
+      helyett R1(c) `Ad ID`-val + a W3.h override-mintával — külön szelet, nem most.
+- [ ] **R5 (UI, minor)** Monitoring tábla: `CPA = cost / conversions` oszlop + `result_type` szűrő;
+      csak akkor, ha R1(a) után a nevező értelmes.
+- [ ] **R6** PMAX (`AO_PMAX.xlsx`, asset-group szint, van Cost + Conversions): nincs MC-kulcs, csak
+      kampány/asset group → **nem MC-szintű**, LATER.
+
+**LESZÁLLÍTVA 6.104.0 (2026-09-16).** `tsc` tiszta, lint 0 hiba, **978 teszt zöld** (9 új a
+`date:`/`time:`-ra: nap, részleges dátum, óra-joker, joker az érték bármely pontján, `today`/`yesterday`
+hamis órával, „dátum nem érhető el szabad szövegből", és hogy a horgonyzott `mc:` nem sérült).
+
+**Két dolog másképp lett, mint a terv — mindkettő menet közbeni lelet:**
+- **Verzió-családok:** a feltöltött sorok családonként csoportosulnak, és a látható sor a `latest`.
+  Ha a feltöltés egy meglévő család új verzióját hozta létre, a megjelenő id **más**, mint a most
+  létrejött id. Ezért a család **bármelyik** verziójára illesztek — enélkül a „filter to these"
+  némán kihagyott volna sorokat.
+- **Időzóna:** a tárolt bélyeg UTC, jelölés nélkül (`2026-09-16 10:35:03`), a kijelzés `new Date(iso)`-val
+  olvassa, amit a JS **helyi időként** ért. A Created oszlop tehát **ma is 2 órával elcsúszva mutat**.
+  A szűrőt szándékosan **ugyanarra az értékre** építettem (`listDateParts`, a `formatListDate` mellett,
+  hogy ne tudjanak elcsúszni) — az ára, hogy a 12:35-kor (helyi) feltöltött anyagot `time:10:*` találja.
+  **Meglévő hiba, nem most keletkezett; app-szintű javítás lenne. Nyitott.**
+
+**Amit a user bejelentett és NEM hiba volt:** „upload:last does not seem to work" — a funkció akkor még
+nem volt kint, a live app 6.103.0-n állt, ahol az `upload:last` csak szabad szöveg. Viszont rávilágított
+egy valódi hiányra: üres tárolt halmaznál a szűrő ugyanúgy „semmi nem illik"-et mutat, mint egy törött
+szűrő. Ezért **saját üres állapot**: „No upload recorded in this browser" + magyarázat, hogy a funkció
+előtti feltöltések nem lettek rögzítve.

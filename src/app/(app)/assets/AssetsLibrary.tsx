@@ -183,6 +183,9 @@ export default function AssetsLibrary() {
         platform: "",
         mc: "",
         free,
+        // date:/time: is a Creative Library filter; nothing here to match yet.
+        createdDate: "",
+        createdTime: "",
       });
     });
   }, [assets, products, types, predicate]);

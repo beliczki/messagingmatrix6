@@ -5,6 +5,11 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.106.1] — 2026-09-16
+
+### Changed
+- **"Commented only" joins the rest of the controls in the share's Actions menu on a narrow screen**, instead of wrapping onto a line of its own beside it. It sits in a Filter section at the top of the menu: what it narrows is what everything below it acts on, Download included.
+
 ## [6.106.0] — 2026-09-16
 
 ### Added

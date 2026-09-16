@@ -32,6 +32,8 @@ export default function ShareActionsMenu({
   zipping,
   zipProgress,
   onDownloadAll,
+  commentedOnly,
+  setCommentedOnly,
   driveFolders,
   briefDecks,
 }: {
@@ -47,6 +49,8 @@ export default function ShareActionsMenu({
   zipping: boolean;
   zipProgress: number;
   onDownloadAll: () => void;
+  commentedOnly: boolean;
+  setCommentedOnly: (v: boolean) => void;
   driveFolders: DriveFolder[];
   briefDecks: BriefDeck[];
 }) {
@@ -85,6 +89,16 @@ export default function ShareActionsMenu({
       </button>
       {open ? (
         <div className="share-actions-menu__panel absolute right-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg">
+          <Section label="Filter">
+            <Row
+              onClick={() => setCommentedOnly(!commentedOnly)}
+              icon={<Icon name="comment" className="size-4" />}
+              active={commentedOnly}
+            >
+              Commented only
+            </Row>
+          </Section>
+
           <Section label="Download">
             <Row
               onClick={() => {

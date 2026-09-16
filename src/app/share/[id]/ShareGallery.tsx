@@ -609,7 +609,9 @@ export default function ShareGallery({
             onClick={() => setCommentedOnly((v) => !v)}
             title={commentedOnly ? "Show all items" : "Show only commented items"}
             className={clsx(
-              "commented-only-toggle inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition sm:px-2 sm:py-1 sm:text-xs",
+              // Narrow: this lives in the Actions menu instead, with the rest
+              // of the controls, rather than wrapping onto a line of its own.
+              "commented-only-toggle hidden items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition sm:inline-flex sm:px-2 sm:py-1 sm:text-xs",
               commentedOnly
                 ? "border-slate-900 bg-slate-900 text-white"
                 : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
@@ -624,6 +626,8 @@ export default function ShareGallery({
             setView={setView}
             imagePreview={imagePreview}
             setImagePreview={setImagePreview}
+            commentedOnly={commentedOnly}
+            setCommentedOnly={setCommentedOnly}
             canImagePreview={canImagePreview}
             imageReadyCount={imageReady.length}
             totalCount={filtered.length}

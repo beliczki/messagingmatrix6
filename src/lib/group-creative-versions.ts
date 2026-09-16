@@ -21,6 +21,25 @@ type GroupableCreative = {
   createdAt: string;
 };
 
+/**
+ * The bucket a filename belongs to: same campaign, same declared size — the
+ * files that are versions of each other. Exported so the upload dialog can tell
+ * you a dropped file is a new version of something you already have, using the
+ * exact key the grouping itself uses. Two answers from two derivations of "same
+ * family" would eventually disagree, and the disagreement would show up as a
+ * file that promised to replace a version and then sat beside it.
+ */
+export function versionFamilyKey(
+  fileName: string,
+): { key: string; version: number } | null {
+  const parsed = parseCreativeFilename(fileName);
+  if (!parsed.familyKey) return null;
+  return {
+    key: `${parsed.familyKey.toLowerCase()}|${parsed.declaredDimensions ?? ""}`,
+    version: parsed.version,
+  };
+}
+
 export function groupCreativeVersions<T extends GroupableCreative>(
   rows: readonly T[],
 ): VersionGroup<T>[] {
@@ -30,11 +49,9 @@ export function groupCreativeVersions<T extends GroupableCreative>(
     let key: string;
     let version = 1;
     if (row.fileName) {
-      const parsed = parseCreativeFilename(row.fileName);
-      key = parsed.familyKey
-        ? `${parsed.familyKey.toLowerCase()}|${parsed.declaredDimensions ?? ""}`
-        : `id:${row.id}`;
-      version = parsed.version;
+      const family = versionFamilyKey(row.fileName);
+      key = family ? family.key : `id:${row.id}`;
+      version = family ? family.version : 1;
     } else {
       key = `id:${row.id}`;
     }

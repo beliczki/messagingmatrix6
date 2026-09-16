@@ -49,14 +49,6 @@ type PanelProps = {
    *  in the big batch dialog — the panel is one of two views over it. */
   queue: UploadQueueApi;
   /**
-   * Render the per-item metadata form. Caller decides which fields to expose
-   * (creatives have more than assets) and how to commit the entity.
-   */
-  renderForm: (args: {
-    item: QueueItem;
-    update: (patch: Partial<QueueItem["metadata"]>) => void;
-  }) => ReactNode;
-  /**
    * Batch-level fields rendered once above the item list — for metadata that is
    * a property of the whole drop rather than of one file (the creatives' Drive
    * parent-folder link). Writes onto every editable item via applyToAll.
@@ -283,7 +275,6 @@ export function useUploadQueue({
  *  so nothing is lost on the way there and back. */
 export default function UploadQueuePanel({
   queue,
-  renderForm,
   batchForm,
   onFilterToUploaded,
   onExpand,
@@ -311,7 +302,9 @@ export default function UploadQueuePanel({
       <div
         className={clsx(
           "upload-queue fixed bottom-0 right-0 z-40 m-4 flex w-[440px] flex-col rounded-xl border border-slate-200 bg-white shadow-2xl transition",
-          open ? "upload-queue--open max-h-[70vh]" : "upload-queue--collapsed max-h-12",
+          // Collapsed still shows the action row under the title: Save is the
+          // one thing you must be able to reach without expanding first.
+          open ? "upload-queue--open max-h-[70vh]" : "upload-queue--collapsed max-h-20",
         )}
       >
         <header
@@ -325,69 +318,62 @@ export default function UploadQueuePanel({
             {done}/{total} done
             {errored > 0 ? ` · ${errored} error` : ""}
           </span>
-          {ready > 0 ? (
+          <div className="upload-queue__window-actions ml-auto flex items-center gap-1">
+            {onExpand ? (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onExpand();
+                }}
+                aria-label="Open in the big window"
+                title="Open in the big window"
+                className="upload-queue__expand rounded p-1 text-slate-500 hover:bg-slate-100"
+              >
+                <Icon name="expand-corners" className="size-4" />
+              </button>
+            ) : null}
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                commitAll();
+                reset();
               }}
-              className="ml-auto rounded-md bg-slate-900 px-2 py-1 text-[11px] font-medium text-white hover:bg-slate-800"
+              aria-label="Close queue"
+              className="rounded p-1 text-slate-500 hover:bg-slate-100"
             >
-              Save {ready}
+              <Icon name="close" className="size-4" />
             </button>
-          ) : null}
-          {onFilterToUploaded && createdIds.length > 0 ? (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onFilterToUploaded();
-              }}
-              title="Show only the creatives this upload created"
-              className={clsx(
-                "upload-queue__filter-to rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50",
-                // Save carries the ml-auto while there is anything to save;
-                // once the batch is in, this button is the first of the group.
-                ready === 0 && "ml-auto",
-              )}
-            >
-              Filter to these {createdIds.length}
-            </button>
-          ) : null}
-          {done > 0 ? (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                clearDone();
-              }}
-              className="rounded-md border border-slate-200 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
-            >
-              Clear done
-            </button>
-          ) : null}
-          {onExpand ? (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onExpand();
-              }}
-              aria-label="Open in the big window"
-              title="Open in the big window"
-              className="upload-queue__expand rounded p-1 text-slate-500 hover:bg-slate-100"
-            >
-              <Icon name="expand-corners" className="size-4" />
-            </button>
-          ) : null}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              reset();
-            }}
-            aria-label="Close queue"
-            className="rounded p-1 text-slate-500 hover:bg-slate-100"
-          >
-            <Icon name="close" className="size-4" />
-          </button>
+          </div>
         </header>
+
+        {ready > 0 || done > 0 ? (
+          <div className="upload-queue__actions flex items-center gap-2 border-b border-slate-100 px-3 py-1.5">
+            {ready > 0 ? (
+              <button
+                onClick={() => commitAll()}
+                className="toolbar-btn--primary rounded-md bg-slate-900 px-2 py-1 text-[11px] font-medium text-white hover:bg-slate-800"
+              >
+                Save {ready}
+              </button>
+            ) : null}
+            {onFilterToUploaded && createdIds.length > 0 ? (
+              <button
+                onClick={() => onFilterToUploaded()}
+                title="Show only the creatives this upload created"
+                className="upload-queue__filter-to toolbar-btn rounded-md border border-slate-300 bg-white px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-50"
+              >
+                Filter to these {createdIds.length}
+              </button>
+            ) : null}
+            {done > 0 ? (
+              <button
+                onClick={() => clearDone()}
+                className="toolbar-btn rounded-md border border-slate-200 px-2 py-1 text-[11px] text-slate-600 hover:bg-slate-50"
+              >
+                Clear done
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         {open && batchForm ? (
           <div className="upload-queue__batch border-b border-slate-100 px-3 py-2">
             {batchForm({ applyToAll, count: total })}
@@ -400,14 +386,6 @@ export default function UploadQueuePanel({
               key={item.localId}
               item={item}
               onDiscard={() => discard(item.localId)}
-              onUpdate={(patch) => {
-                const merged: Record<string, string> = { ...item.metadata };
-                for (const [k, v] of Object.entries(patch)) {
-                  if (typeof v === "string") merged[k] = v;
-                }
-                update(item.localId, { metadata: merged });
-              }}
-              renderForm={renderForm}
             />
           ))}
         </div>
@@ -416,23 +394,26 @@ export default function UploadQueuePanel({
   );
 }
 
+// The head of a creative filename repeats on every row (ERSTE_SZK_…); what
+// tells the rows apart is the tail — MC, variant, version, size. So the head is
+// what gets dropped when it does not fit.
+function trimFront(name: string, max = 34): string {
+  return name.length <= max ? name : `…${name.slice(-max)}`;
+}
+
 function ItemRow({
   item,
   onDiscard,
-  onUpdate,
-  renderForm,
 }: {
   item: QueueItem;
   onDiscard: () => void;
-  onUpdate: (patch: Partial<QueueItem["metadata"]>) => void;
-  renderForm: PanelProps["renderForm"];
 }) {
   return (
     <div className={`upload-queue__item upload-queue__item--${item.status} mb-2 rounded-md border border-slate-200 bg-white p-2 text-xs`}>
       <div className="flex items-baseline gap-2">
         <StatusIcon status={item.status} />
         <span className="upload-queue__item-name truncate font-medium text-slate-700" title={item.file.name}>
-          {item.file.name}
+          {trimFront(item.file.name)}
         </span>
         <span className="ml-auto text-[10px] text-slate-400">
           {(item.file.size / 1024).toFixed(1)} KB
@@ -454,9 +435,6 @@ function ItemRow({
         <div className="error-alert mt-1 rounded bg-rose-50 p-1 text-[10px] text-rose-700">
           {item.error}
         </div>
-      ) : null}
-      {item.status === "metadata" || item.status === "saving" ? (
-        <div className="mt-2">{renderForm({ item, update: onUpdate })}</div>
       ) : null}
     </div>
   );

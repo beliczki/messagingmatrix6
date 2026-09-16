@@ -2026,3 +2026,49 @@ rosszak) és az MC-csoportonkénti külön feltöltés (104 fájl 22 csomagban =
   0 FK-hivatkozás, 0 tört fájl-hivatkozás utána. A **639 korábbi SZK** és a MARKET érintetlen.
 - ⚠️ **Nyitott:** a `izsndLWqS4We` és `JgDhExMgmYlX` share a 104-re hivatkozik → **törött képek**.
   A user döntése, hogy törli-e őket.
+
+---
+
+## 2026-09-16 — Feltöltő UI + share szűrő (terv)
+
+### A) Nagy feltöltő tábla — verzió és verzió-ugrás
+- [x] **A1** Új **`V`** oszlop: a fájlnévből kiolvasott verzió (`_nN_` → `parseCreativeFilename().version`).
+- [x] **A2** **Match-jelzés**: ha a `familyKey|declaredDimensions` kulcs már létezik a libraryben lévő
+      kreatívok között, a sor jelzi, hogy ez **verzió-ugrás** (pl. `v3 → v4`), nem új kreatív.
+      Minden kliensoldalon: a `creatives` lista már be van töltve, nincs szükség új lekérésre.
+      A kulcs pontosan az, amit a `groupCreativeVersions` használ — egy helyen definiálva, hogy a
+      jelzés és a tényleges csoportosítás ne tudjon elcsúszni.
+- [x] **A3** Ami **nem** derül ki a fájlnévből (a `_nN_` hiányzik → v1), az is látszódjon, hogy ne
+      tűnjön véletlen ütközésnek.
+
+### B) Kis lebegő panel — átrendezés
+- [x] **B1** 1. sor: **`Upload queue` cím teljes szélességben**, mellette **csak** maximize + close.
+- [x] **B2** 2. sor: `Save N` · `Filter to these N` · `Clear done` gombok.
+- [x] **B3** 3. sor: Drive parent folder link **ikonnal**, az „Optional — the direct file link…"
+      segédszöveg **elhagyva** (a nagy nézetben marad).
+- [x] **B4** Sorok: fájlnév **rövidítve** (a lényeg a vége: MC + méret — tehát elöl csonkolva),
+      és a kinyert metaadatok (brand/product/type/MC/variant) **nem** jelennek meg itt —
+      az a nagy táblára való.
+
+### C) Share oldal — szűrő felülre
+- [x] **C1** Szövegszűrő a `share-gallery__controls` sorba, a Size és a Commented only mellé:
+      MC-re és kreatív-kulcsszavakra. **A meglévő `parseSearchQuery`-t használja** (`src/lib/`,
+      nem app-specifikus), így `mc:141`, `mc:141c`, szabad szöveg, `OR` és idézőjeles kifejezés
+      mind ingyen jön, és ugyanúgy viselkedik, mint a libraryben.
+- [x] **C2** A szűrő a Download all / Drive gombok darabszámát is kövesse (ami látszik, az töltődik).
+- [x] **C3** Üres találat: a meglévő `empty-state` mintát használja.
+
+**LESZÁLLÍTVA 6.106.0 (2026-09-16).** 982 teszt zöld, `tsc` tiszta, lint 0 hiba.
+
+- A verzió-kulcs `versionFamilyKey`-ként kiemelve a `group-creative-versions.ts`-be, és a csoportosítás
+  is azt használja — két külön levezetés a „ugyanaz a család"-ra előbb-utóbb szétcsúszna, és az úgy
+  jelenne meg, hogy egy fájl verziót ígért, aztán a régi mellé állt be.
+- A `BatchUploadDialog` generikus maradt: a verzió-jelzést `fileNote` propon át a **library** adja,
+  mert a verzió-fogalom kreatív-specifikus (az assets nem tud róla).
+- A kis panelről kikerült a `renderForm`, ezért a `QueueItemForm` halott kóddá vált — **törölve**,
+  nem hagytam bent.
+- **C2 nem igényelt változtatást:** a `downloadTargets` már a `filtered`-ből jött, tehát a
+  `Download all (N)` magától követi az új szűrőt.
+- A share szűrő a **típusos propokból** építi a mezőket, nem a megjelenített elemből: a dialógus
+  item-típusa szűkebb nézet ugyanarra a sorra, és épp a `pmmid`-et meg a kulcsszó-oszlopokat nem
+  deklarálja — vagyis pont azokat, amikre egy share-t szűrve rákeres az ember.

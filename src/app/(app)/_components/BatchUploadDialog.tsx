@@ -40,6 +40,12 @@ type Props = {
    * and the button is not rendered.
    */
   onFilterToUploaded?: () => void;
+  /**
+   * Extra line under a row's filename — what the caller can tell about the file
+   * that the queue cannot, e.g. that it is a new version of something already
+   * in the library. Omitted by callers with nothing to add.
+   */
+  fileNote?: (item: QueueItem) => ReactNode;
   onClose: () => void;
 };
 
@@ -52,6 +58,7 @@ export default function BatchUploadDialog({
   optionsFor: optionsForProp,
   batchForm,
   onFilterToUploaded,
+  fileNote,
   onClose,
 }: Props) {
   const { addFiles, items } = queue;
@@ -241,6 +248,7 @@ export default function BatchUploadDialog({
                     block={block}
                     columns={columns}
                     optionsFor={optionsFor}
+                    fileNote={fileNote}
                     onChange={(patch) => queue.updateMetadata(item.localId, patch)}
                     onDiscard={() => queue.discard(item.localId)}
                   />
@@ -259,6 +267,7 @@ function Row({
   block,
   columns,
   optionsFor,
+  fileNote,
   onChange,
   onDiscard,
 }: {
@@ -266,6 +275,7 @@ function Row({
   block: string;
   columns: BatchColumn[];
   optionsFor: Record<string, string[]>;
+  fileNote?: (item: QueueItem) => ReactNode;
   onChange: (patch: Record<string, string>) => void;
   onDiscard: () => void;
 }) {
@@ -312,6 +322,7 @@ function Row({
               {(item.file.size / 1024).toFixed(1)} KB
               {item.uploadedDimensions ? ` · ${item.uploadedDimensions}` : ""}
             </div>
+            {fileNote ? fileNote(item) : null}
             {item.status === "error" && item.error ? (
               <div className="error-alert mt-0.5 truncate text-[10px] text-rose-600" title={item.error}>
                 {item.error}

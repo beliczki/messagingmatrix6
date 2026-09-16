@@ -16,6 +16,7 @@ import ThemeToggle from "@/app/_components/ThemeToggle";
 import ShareActionsMenu from "./ShareActionsMenu";
 import { bgClassFor, type PreviewBg } from "./preview-bg";
 import { Masonry, aspectEstimate } from "../../(app)/_components/Masonry";
+import { parseSearchQuery, type SearchFields } from "@/lib/search-query";
 import VideoThumb from "../../(app)/_components/VideoThumb";
 import ShareDetailDialog, {
   type DialogItem,
@@ -230,6 +231,7 @@ export default function ShareGallery({
   }, [items]);
 
   const [sizeFilter, setSizeFilter] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
   const [commentedOnly, setCommentedOnly] = useState(false);
   const [view, setView] = useState<ViewMode>("masonry");
   // Image-preview mode: tiles show the stored preview PNG instead of rendering
@@ -316,8 +318,61 @@ export default function ShareGallery({
     return map;
   }, [comments]);
 
+  // Same query language as the Creative Library, over everything the snapshot
+  // carries. Built from the typed props rather than from the rendered items:
+  // the dialog's item type is a narrower view of the same rows and does not
+  // declare pmmid or the keyword columns, which are exactly the fields somebody
+  // filtering a share reaches for. A share holds keys rather than names for
+  // audience and topic — that is all a public viewer is given — so a:/t: match
+  // the key; the rest behaves identically, which is the point.
+  const searchFieldsByKey = useMemo(() => {
+    const m = new Map<string, SearchFields>();
+    const blank = {
+      strategy: "",
+      platform: "",
+      createdDate: "",
+      createdTime: "",
+    };
+    for (const p of matrixItems) {
+      const msg = p.message;
+      m.set(`m-${p.messageId}-${p.size}`, {
+        ...blank,
+        audience: (msg.audience ?? "").toLowerCase(),
+        topic: (msg.topic ?? "").toLowerCase(),
+        mc: `mc${msg.number}${msg.variant ?? ""} ${msg.pmmid ?? ""}`.toLowerCase(),
+        free: [
+          msg.headline, msg.copy1, msg.copy2, msg.disclaimer, msg.cta,
+          msg.flash, msg.landingUrl, msg.template, msg.status,
+          msg.audience, msg.topic, msg.pmmid, p.size,
+        ].join(" ").toLowerCase(),
+      });
+    }
+    for (const c of creatives) {
+      m.set(`c-${c.id}`, {
+        ...blank,
+        audience: "",
+        topic: "",
+        mc: c.mcNumber !== null ? `mc${c.mcNumber}${c.mcVariant ?? ""}` : "",
+        free: [
+          c.fileName, c.brand, c.product, c.type, c.template,
+          c.visualKeyword, c.comment, c.fileFormat, c.fileDimensions,
+          c.driveFolderName,
+        ].join(" ").toLowerCase(),
+      });
+    }
+    return m;
+  }, [matrixItems, creatives]);
+
+  const predicate = useMemo(() => parseSearchQuery(search), [search]);
+
   const filtered = useMemo(() => {
     let out = items;
+    if (search.trim() !== "") {
+      out = out.filter((it) => {
+        const fields = searchFieldsByKey.get(it.key);
+        return fields ? predicate(fields) : false;
+      });
+    }
     if (sizeFilter.size > 0) {
       out = out.filter((it) => it.size !== null && sizeFilter.has(it.size));
     }
@@ -325,7 +380,15 @@ export default function ShareGallery({
       out = out.filter((it) => (commentCountByKey.get(it.itemKey) ?? 0) > 0);
     }
     return out;
-  }, [items, sizeFilter, commentedOnly, commentCountByKey]);
+  }, [
+    items,
+    search,
+    predicate,
+    searchFieldsByKey,
+    sizeFilter,
+    commentedOnly,
+    commentCountByKey,
+  ]);
 
   // Author name persisted across visits.
   const [authorName, setAuthorNameState] = useState("");
@@ -512,6 +575,29 @@ export default function ShareGallery({
             sits left under the title; what changes how it is rendered or taken
             away sits right. */}
         <div className="share-gallery__controls mx-auto flex max-w-6xl flex-wrap items-center gap-2 border-t border-slate-100 px-4 py-2">
+          <div className="share-gallery__search input-box relative min-w-[13rem] flex-1 sm:max-w-sm">
+            <Icon
+              name="filter"
+              className="input-box__icon pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2 text-slate-400"
+            />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Filter… mc:141c, keyword, OR …"
+              title={'Free text searches every field in this share. Prefixes: mc: (MC#), a: (audience), t: (topic). AND implicit, OR explicit. Quote "two words" for phrases.'}
+              className="w-full rounded-md border border-slate-200 bg-white py-2 pl-7 pr-7 text-sm focus:border-slate-500 focus:outline-none sm:py-1 sm:text-xs"
+            />
+            {search ? (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                aria-label="Clear filter"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                <Icon name="close" className="size-3.5" />
+              </button>
+            ) : null}
+          </div>
           <SizePill
             options={sizeOptions}
             counts={items}
@@ -592,7 +678,11 @@ export default function ShareGallery({
           </div>
         ) : filtered.length === 0 ? (
           <div className="empty-state mx-auto max-w-md rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center">
-            <p className="text-sm text-slate-500">No items match the size filter.</p>
+            <p className="text-sm text-slate-500">
+              {search.trim() !== ""
+                ? `Nothing in this share matches “${search.trim()}”.`
+                : "No items match the filters."}
+            </p>
           </div>
         ) : view === "list" ? (
           <ul className="share-gallery__view share-gallery__view--list flex flex-col gap-2">

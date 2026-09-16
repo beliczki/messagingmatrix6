@@ -5,6 +5,15 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.106.0] — 2026-09-16
+
+### Added
+- **The upload table says whether a file is a new creative or the next version of one.** Each row now shows the version read from its name (`_n4` → v4) and, when the library already holds that version family at that size, what the save will actually do — `v3 → v4`. A file whose number is not above what is stored says so instead (`already have v4`): the library shows the highest version of a family, so that one would land without replacing anything. The family key comes from `versionFamilyKey`, the same one the grouping itself uses, so the promise and the result cannot drift apart.
+- **A filter on the share page**, using the Creative Library's query language over everything the snapshot carries — `mc:141c`, a keyword, `OR`, quoted phrases. The fields are built from the typed snapshot rather than the rendered item, so pmmid and the keyword columns are searchable too. `Download all` already counted the filtered set, so it follows the filter for free.
+
+### Changed
+- **The floating upload queue is laid out for the space it has.** Title row carries only maximize and close; the actions (`Save`, `Filter to these`, `Clear done`) get their own row and stay reachable while collapsed; the Drive folder field is an icon and an input, without the label and the idle hint. Rows show the tail of the filename — every creative filename starts the same way and it is the end that tells them apart — and no longer repeat the parsed metadata, which belongs to the full-size table where there is room to edit it.
+
 ## [6.105.0] — 2026-09-16
 
 ### Fixed

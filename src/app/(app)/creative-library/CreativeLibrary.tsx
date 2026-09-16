@@ -15,6 +15,7 @@ import clsx from "clsx";import { trimEmptyCountSegments } from "@/lib/count-segm
 
 import { parseDriveFolderId } from "@/lib/drive-link";
 import { Masonry, aspectEstimate } from "../_components/Masonry";
+import { versionFamilyKey } from "@/lib/group-creative-versions";
 import ToolbarUpload from "../_components/ToolbarUpload";
 import VideoThumb from "../_components/VideoThumb";
 import UploadQueuePanel, {
@@ -397,6 +398,56 @@ export default function CreativeLibrary() {
   });
   const drop = useDropTarget(queue.addFiles);
 
+  const creatives = creativesQ.data?.creatives ?? [];
+
+  // The highest version already in the library, per version family. A dropped
+  // file whose family is in here is not a new creative — it is the next version
+  // of one, and the upload table says so before anything is saved.
+  const highestVersionByFamily = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const c of creatives) {
+      if (!c.fileName) continue;
+      const family = versionFamilyKey(c.fileName);
+      if (!family) continue;
+      m.set(family.key, Math.max(m.get(family.key) ?? 0, family.version));
+    }
+    return m;
+  }, [creatives]);
+
+  function uploadFileNote(item: QueueItem) {
+    const family = versionFamilyKey(item.file.name);
+    if (!family) return null;
+    const existing = highestVersionByFamily.get(family.key);
+    if (existing === undefined) {
+      return (
+        <div className="upload-version-note mt-0.5 text-[10px] text-slate-400">
+          v{family.version} · new
+        </div>
+      );
+    }
+    // Same or lower number against something already stored: the library keeps
+    // the highest version of a family, so this file would not become the one on
+    // display. Worth saying out loud rather than letting it land silently.
+    const stale = family.version <= existing;
+    return (
+      <div
+        className={clsx(
+          "upload-version-note mt-0.5 text-[10px]",
+          stale ? "text-amber-700" : "text-emerald-700",
+        )}
+        title={
+          stale
+            ? `The library already holds v${existing} of this file and shows the highest version, so this one would not replace it.`
+            : `Matches a creative already in the library — saving this makes it v${family.version}.`
+        }
+      >
+        {stale
+          ? `v${family.version} · already have v${existing}`
+          : `v${existing} → v${family.version}`}
+      </div>
+    );
+  }
+
   // Both upload views offer this; both land on the same query, so the box shows
   // what is being filtered and the token can be edited or removed by hand.
   function filterToUploaded() {
@@ -404,8 +455,6 @@ export default function CreativeLibrary() {
     setUploadOpen(false);
     queue.setOpen(false);
   }
-
-  const creatives = creativesQ.data?.creatives ?? [];
   const files = filesQ.data?.files ?? [];
   const messages = messagesQ.data?.messages ?? [];
   const audiences = audiencesQ.data?.audiences ?? [];
@@ -856,11 +905,8 @@ export default function CreativeLibrary() {
           queue={queue}
           onFilterToUploaded={filterToUploaded}
           onExpand={() => setUploadOpen(true)}
-          renderForm={({ item, update }) => (
-            <QueueItemForm item={item} update={update} />
-          )}
           batchForm={({ applyToAll, count }) => (
-            <DriveFolderBatchField applyToAll={applyToAll} count={count} />
+            <DriveFolderBatchField applyToAll={applyToAll} count={count} compact />
           )}
         />
 
@@ -872,6 +918,7 @@ export default function CreativeLibrary() {
           columns={CREATIVE_UPLOAD_COLUMNS}
           optionsFor={uploadColumnOptions}
           onFilterToUploaded={filterToUploaded}
+          fileNote={uploadFileNote}
           batchForm={({ applyToAll, count }) => (
             <DriveFolderBatchField applyToAll={applyToAll} count={count} />
           )}
@@ -1291,9 +1338,14 @@ const inputCls =
 function DriveFolderBatchField({
   applyToAll,
   count,
+  compact = false,
 }: {
   applyToAll: (patch: Record<string, string>) => void;
   count: number;
+  /** Floating panel: the icon says what the field is, so the label and the
+   *  idle hint go. What the field has to report — a bad link, or that it was
+   *  applied — still shows; that is feedback, not decoration. */
+  compact?: boolean;
 }) {
   const [value, setValue] = useState("");
   const folderId = parseDriveFolderId(value);
@@ -1304,64 +1356,57 @@ function DriveFolderBatchField({
     if (folderId) applyToAll({ driveFolderUrl: value });
   }, [folderId, value, count, applyToAll]);
 
+  const hint = invalid
+    ? "Not a Drive folder link — paste the folder, not a file."
+    : folderId
+      ? `Applied to all ${count} file${count === 1 ? "" : "s"} in this batch.`
+      : compact
+        ? null
+        : "Optional — the direct file link is resolved from it.";
+
+  const input = (
+    <input
+      value={value}
+      onChange={(e) => setValue(e.target.value)}
+      placeholder="https://drive.google.com/drive/folders/…"
+      className={clsx(
+        "input-box w-full rounded border px-1.5 py-0.5 text-xs focus:outline-none",
+        invalid
+          ? "border-red-400 focus:border-red-500"
+          : "border-slate-200 focus:border-slate-500",
+      )}
+    />
+  );
+
   return (
     <label className="drive-folder-field form-field block">
-      <div className="form-field__label mb-0.5 text-[9px] uppercase tracking-wide text-slate-500">
-        Drive parent folder link
-      </div>
-      <input
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        placeholder="https://drive.google.com/drive/folders/…"
-        className={clsx(
-          "input-box w-full rounded border px-1.5 py-0.5 text-xs focus:outline-none",
-          invalid
-            ? "border-red-400 focus:border-red-500"
-            : "border-slate-200 focus:border-slate-500",
-        )}
-      />
-      <div className="form-field__hint mt-0.5 text-[10px] text-slate-500">
-        {invalid
-          ? "Not a Drive folder link — paste the folder, not a file."
-          : folderId
-            ? `Applied to all ${count} file${count === 1 ? "" : "s"} in this batch.`
-            : "Optional — the direct file link is resolved from it."}
-      </div>
-    </label>
-  );
-}
-
-function QueueItemForm({
-  item,
-  update,
-}: {
-  item: QueueItem;
-  update: (patch: Partial<QueueItem["metadata"]>) => void;
-}) {
-  const cellCls =
-    "input-box rounded border border-slate-200 bg-white px-1.5 py-0.5 text-xs focus:border-slate-500 focus:outline-none";
-  const fields: Array<{ k: string; label: string }> = [
-    { k: "brand", label: "Brand" },
-    { k: "product", label: "Product" },
-    { k: "type", label: "Type" },
-    { k: "mcNumber", label: "MC#" },
-    { k: "mcVariant", label: "Variant" },
-  ];
-  return (
-    <div className="upload-queue__item-form form-grid grid grid-cols-5 gap-1.5">
-      {fields.map((f) => (
-        <label key={f.k} className="form-field block">
+      {compact ? (
+        <div className="drive-folder-field__row flex items-center gap-2">
+          <span title="Drive parent folder link" className="flex shrink-0">
+            <Icon name="google-drive" className="size-4 text-slate-500" />
+          </span>
+          {input}
+        </div>
+      ) : (
+        <>
           <div className="form-field__label mb-0.5 text-[9px] uppercase tracking-wide text-slate-500">
-            {f.label}
+            Drive parent folder link
           </div>
-          <input
-            value={item.metadata[f.k] ?? ""}
-            onChange={(e) => update({ [f.k]: e.target.value })}
-            className={cellCls}
-          />
-        </label>
-      ))}
-    </div>
+          {input}
+        </>
+      )}
+      {hint ? (
+        <div
+          className={clsx(
+            "form-field__hint mt-0.5 text-[10px]",
+            invalid ? "text-red-600" : "text-slate-500",
+            compact && "pl-6",
+          )}
+        >
+          {hint}
+        </div>
+      ) : null}
+    </label>
   );
 }
 

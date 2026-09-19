@@ -599,7 +599,9 @@ function DraftTile({
   // a brief so it is never mistaken for a delivered creative.
   const briefEmbed =
     cover === null && !rendersTemplate
-      ? slidesEmbedUrl(draft.briefSlidesFileId, draft.briefSlideId)
+      ? slidesEmbedUrl(draft.briefSlidesFileId, draft.briefSlideId, {
+          minimal: true,
+        })
       : null;
 
   // "matched 18 (a,b)" beside the MC instead of a count badge in the corner
@@ -648,19 +650,22 @@ function DraftTile({
             )}
           </div>
         ) : briefEmbed !== null ? (
-          <div className="drafts-tile__brief relative aspect-[300/250] w-full bg-slate-100">
-            {/* pointer-events-none: the card is one big button and the scrub
-                zones sit on the media — a live iframe would swallow both. The
-                deck opens from the draft's own Brief tab. */}
+          <div className="drafts-tile__brief relative aspect-[300/250] w-full overflow-hidden bg-slate-100">
+            {/* The frame is 16:9 at the box's full HEIGHT, so the slide fills
+                the card and loses its right edge rather than sitting in
+                letterbox bars: a deck slide reads left-to-right, and a peek at
+                the left of it is worth more than the whole of it at a third of
+                the size (user, 2026-09-19).
+
+                pointer-events-none: the card is one big button and the variant
+                scrub zones sit on the media — a live iframe would swallow
+                both. The deck opens from the draft's own Brief tab. */}
             <iframe
               src={briefEmbed}
               title={`Brief slide — ${mcLabel(draft)}`}
               loading="lazy"
-              className="drafts-tile__brief-frame pointer-events-none size-full border-0"
+              className="drafts-tile__brief-frame pointer-events-none absolute left-0 top-0 aspect-video h-full w-auto max-w-none border-0"
             />
-            <span className="drafts-tile__brief-tag absolute left-1.5 top-1.5 rounded bg-slate-900/80 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-white">
-              brief
-            </span>
           </div>
         ) : wantsLibrary ? (
           <div className="drafts-tile__placeholder flex aspect-[300/250] w-full items-center justify-center p-6 text-center text-[11px] leading-relaxed text-slate-400">
@@ -751,6 +756,17 @@ function DraftTile({
             MC{draft.number}
             {rows.length > 1 ? draft.variant : ""}
           </span>
+          {briefEmbed !== null ? (
+            // Says what the media above IS, in the place the card already uses
+            // to say what is on screen (the variant letter, the matched count).
+            // A corner tag would have covered the slide it labels.
+            <span
+              className="drafts-tile__brief-label shrink-0 text-[10px] text-slate-500"
+              title="No creative yet — showing the brief slide this card was asked for on"
+            >
+              brief
+            </span>
+          ) : null}
           {matchedTotal > 0 ? (
             <span
               className="drafts-tile__matched min-w-0 truncate text-[10px] tabular-nums text-slate-500"
@@ -854,18 +870,20 @@ function DraftTileMenu({
         aria-label={`Actions for MC${number}`}
         onClick={() => setOpen((o) => !o)}
         className={clsx(
-          // `bg-white/90` carries an alpha, which puts it outside the
-          // dark-mode shim in globals.css (that matches `.bg-white`, a
-          // different class) — so it needs the explicit dark pair, the way the
-          // grid's reorder overlay already does it. The hover does NOT: the
-          // shim covers `hover:bg-white` and lands on the same surface var.
-          "drafts-tile__menu-btn rounded bg-white/90 p-1 text-slate-600 shadow-sm ring-1 ring-slate-200 transition hover:bg-white dark:bg-slate-800/90 dark:ring-slate-600",
+          // A dialog's close button, not a chip: one icon on a faint ground,
+          // no ring and no shadow (user, 2026-09-19). The ground is still
+          // needed — unlike a close button this one sits ON the creative — so
+          // `bg-white/70` stays, and with it the explicit dark pair: an alpha
+          // white is a different CLASS from `bg-white`, which is what the
+          // dark-mode shim in globals.css matches. The hover does not need
+          // one: the shim covers `hover:bg-white`.
+          "drafts-tile__menu-btn rounded p-1 text-slate-600 backdrop-blur-sm transition bg-white/70 hover:bg-white dark:bg-slate-800/70",
           // Out of the way until the card is reached for; always there once the
           // menu is open, or it would vanish under its own dropdown.
           open ? "opacity-100" : "opacity-0 group-hover:opacity-100",
         )}
       >
-        <Icon name="more" className="size-4" />
+        <Icon name="more-vertical" className="size-4" />
       </button>
 
       {/* Drops UP: the button sits at the bottom edge of a card in a masonry

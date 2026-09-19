@@ -82,6 +82,15 @@ export function parseSlideAnchor(
 export function slidesEmbedUrl(
   fileId: string | null | undefined,
   slideId?: string | null,
+  opts?: {
+    /**
+     * Drop Google's own player chrome (the slide counter, the arrows and the
+     * "Google Slides" label under the deck). Right for a thumbnail-sized frame
+     * where that bar is most of the box; wrong for the Brief tab, where paging
+     * through the deck is the point.
+     */
+    minimal?: boolean;
+  },
 ): string | null {
   if (!fileId) return null;
   const params = new URLSearchParams({
@@ -89,6 +98,7 @@ export function slidesEmbedUrl(
     loop: "false",
     delayms: "60000",
   });
+  if (opts?.minimal) params.set("rm", "minimal");
   if (slideId) params.set("slide", `id.${slideId}`);
   return `https://docs.google.com/presentation/d/${fileId}/embed?${params.toString()}`;
 }

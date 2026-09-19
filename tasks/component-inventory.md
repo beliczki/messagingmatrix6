@@ -1002,3 +1002,6 @@ A lap gyökere `dashboard`. Meglévő névből vettük: `toolbar-btn` (nap-lépt
 
 | **SchemaTab** (Settings › Schema, 6.93.0) | `schema-tab` + `__totals`, `__total`, `__drift`, `__search`, `__tables`; táblánként `schema-table` (`__head`, `__name`, `__scope`, `__orphan`, `__meta`, `__body`, `__columns`, `__missing`, `__refs`), oszloponként `schema-column` (`__pk`, `__drift`) | csak olvasható; az `about-tab` hangja (read-only info), de listás, mert 23 tábla × 323 oszlop |
 | **StructureTab feed-panel** (6.93.0) | `structure-tab__section--feed` | a négy halott CSV-mező helyére; a `feedStructure` önálló szekció, mert **él** (FeedView + referencia-feed validálás) |
+
+| **DraftTile brief-fallback** (6.107.0) | `drafts-tile__brief` + `__brief-frame` (a médiadobozban), `drafts-tile__brief-label` (szürke „brief" az MC-szám mellett) | akkor látszik, ha se agentic cover, se renderelhető DCO tartalom nincs, de van `briefSlidesFileId`. A frame 16:9 a doboz **magasságára**, balra igazítva → jobbra levágódik, nem letterbox |
+| **DraftTileMenu gomb** (6.107.0) | `drafts-tile__menu-btn` | borderes chipből **close-gomb**: `more-vertical` ikon, `bg-white/70` + `backdrop-blur-sm`, ring és shadow nélkül |

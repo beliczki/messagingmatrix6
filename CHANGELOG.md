@@ -10,12 +10,23 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 ### Added
 - **A draft card with no creative yet shows its brief slide.** Until an Agentic
   300×250 lands in the library, or a DCO draft has enough copy to render, the
-  card falls back to the Google Slides deck the work was asked for on — the
-  slide itself, in the same 300×250 box, tagged `brief` so it is never read as
-  a delivered creative. The wall of drafts is how work in flight gets scanned,
-  and "what was this supposed to be" is exactly the question a card with no
-  creative raises; a grey sentence could not answer it. Drafts with no deck
-  keep the sentence they had.
+  card falls back to the Google Slides deck the work was asked for on. The
+  wall of drafts is how work in flight gets scanned, and "what was this
+  supposed to be" is exactly the question a card with no creative raises; a
+  grey sentence could not answer it. Drafts with no deck keep the sentence they
+  had.
+  - The frame is 16:9 at the card's full height, so the slide fills the box and
+    loses its right edge rather than sitting in letterbox bars — a deck slide
+    reads left-to-right, and a peek at the left of it beats all of it at a
+    third of the size. Google's own player chrome is off (`rm=minimal`).
+  - What it is gets said where the card already says what is on screen: a grey
+    `brief` after the MC number, beside the variant letter and the matched
+    count. A corner tag would have covered the slide it labels.
+
+### Changed
+- **The draft card's actions button is a close button, not a chip**: a vertical
+  ellipsis on a faint ground, no ring and no shadow. `more-vertical` joins the
+  icon registry.
 
 ## [6.106.1] — 2026-09-16
 

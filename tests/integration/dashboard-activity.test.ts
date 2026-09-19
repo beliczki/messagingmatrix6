@@ -8,7 +8,7 @@ import {
   messages,
   topics,
 } from "@/db/schema";
-import { activityDigest } from "@/lib/dashboard-activity";
+import { activityDigest, activitySeries } from "@/lib/dashboard-activity";
 import type { DayScope } from "@/lib/day-scope";
 import { createTestDb, type TestDb } from "../helpers/test-db";
 
@@ -170,5 +170,69 @@ describe("activityDigest product filter", () => {
     await write("messages", String(m.id), { clientId: other.id });
 
     expect(await digest(["SZK"])).toEqual({ "messages:update": 1 });
+  });
+});
+
+describe("activitySeries", () => {
+  it("buckets by day, counts per bucket, and keeps the window", async () => {
+    await db.insert(messages).values({
+      clientId: erste.id,
+      number: 9,
+      variant: "a",
+      audience: "ch_soc",
+      topic: "SZK_topic",
+    });
+    await write("messages", "1", { createdAt: "2026-08-28 09:00:00" });
+    await write("messages", "1", { createdAt: "2026-08-28 17:30:00" });
+    await write("messages", "1", { createdAt: "2026-08-30 08:00:00" });
+    // Outside the window, and another client inside it.
+    await write("messages", "1", { createdAt: "2026-07-01 10:00:00" });
+    await write("messages", "1", { clientId: other.id });
+
+    const rows = await activitySeries(erste.id, SCOPE, []);
+    expect(rows.map((r) => [r.bucket, Number(r.n)])).toEqual([
+      ["2026-08-28", 2],
+      ["2026-08-30", 1],
+    ]);
+  });
+
+  it("buckets by hour when the window is a single day", async () => {
+    await write("messages", "1", { createdAt: "2026-08-28 09:05:00" });
+    await write("messages", "1", { createdAt: "2026-08-28 09:55:00" });
+    await write("messages", "1", { createdAt: "2026-08-28 11:00:00" });
+
+    const oneDay = {
+      date: "2026-08-28",
+      range: "day" as const,
+      from: "2026-08-28 00:00:00",
+      to: "2026-08-28 23:59:59",
+      label: "28 Aug",
+    };
+    const rows = await activitySeries(erste.id, oneDay, []);
+    expect(rows.map((r) => [r.bucket, Number(r.n)])).toEqual([
+      ["2026-08-28 09", 2],
+      ["2026-08-28 11", 1],
+    ]);
+  });
+
+  it("is scoped by product the same way the digest is", async () => {
+    await db.insert(audiences).values([
+      { clientId: erste.id, key: "SZK_x", name: "SZK x", orderIndex: 1, product: "SZK" },
+      { clientId: erste.id, key: "HK_x", name: "HK x", orderIndex: 2, product: "HK" },
+    ]);
+    const inserted = await db
+      .insert(messages)
+      .values([
+        { clientId: erste.id, number: 1, variant: "a", audience: "SZK_x", topic: "SZK_t" },
+        { clientId: erste.id, number: 2, variant: "a", audience: "HK_x", topic: "HK_t" },
+      ])
+      .returning();
+    await write("messages", String(inserted[0].id));
+    await write("messages", String(inserted[1].id));
+
+    const all = await activitySeries(erste.id, SCOPE, []);
+    const szk = await activitySeries(erste.id, SCOPE, ["SZK"]);
+    expect(all.reduce((n, r) => n + Number(r.n), 0)).toBe(2);
+    expect(szk.reduce((n, r) => n + Number(r.n), 0)).toBe(1);
   });
 });

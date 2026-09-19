@@ -5,6 +5,19 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.108.0] — 2026-09-19
+
+### Added
+- **A daily curve on top of the Activity panel.** The digest says WHAT was
+  written; the curve says when — the question a list grouped by kind cannot
+  answer. Same window and the same product scoping as the counts under it, so
+  the two are one number split two ways and cannot disagree. Days with no
+  writes are drawn as zeros rather than skipped, the area is anchored at zero,
+  the busiest bucket is the only labelled point, and a window one day wide
+  buckets by hour instead (one point is not a series). Server-rendered inline
+  SVG with a native tooltip per bucket — no client bundle, the same hover the
+  delivery tile's bars already use.
+
 ## [6.107.0] — 2026-09-19
 
 ### Added

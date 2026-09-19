@@ -99,3 +99,56 @@ export function productScoped(clientId: number, products: string[]) {
     where resolved.product in (${wanted})
   )`;
 }
+
+export type ActivityBucket = {
+  /** `YYYY-MM-DD`, or `YYYY-MM-DD HH` when the window is a single day. */
+  bucket: string;
+  n: number;
+};
+
+/**
+ * The same writes the digest counts, laid out in time.
+ *
+ * The digest answers "what was written"; this answers "when" — the question a
+ * list grouped by kind structurally cannot. Same window, same product scoping
+ * (`productScoped`), so the curve and the counts under it are the same number
+ * split two ways and can never disagree.
+ *
+ * Granularity follows the window: a day-wide window bucketed by day is one
+ * point, which is not a series, so it buckets by HOUR instead. `created_at` is
+ * a `YYYY-MM-DD HH:MM:SS` string (nowUtc), so the bucket is a prefix — no date
+ * parsing, and the same lexical ordering the column is already stored in.
+ *
+ * Gaps are filled by the caller, not here: a day with no writes is a zero in
+ * the series, and SQL that returns nothing for it would draw a line straight
+ * through the quiet day as if it never happened.
+ */
+export function activitySeries(
+  clientId: number,
+  scope: DayScope,
+  products: string[],
+) {
+  // Written as raw, table-qualified SQL on purpose. Handed `${auditLog.createdAt}`,
+  // drizzle renders the column WITHOUT its table in the select list and WITH it
+  // in the GROUP BY, and Postgres then matches neither against the other:
+  // `column "audit_log.created_at" must appear in the GROUP BY clause`. One
+  // literal string renders identically in both places. The width is ours (10 or
+  // 13), never user input, so `sql.raw` cannot carry anything in.
+  const width = scope.range === "day" ? 13 : 10;
+  const bucket = sql<string>`substring(audit_log.created_at, 1, ${sql.raw(
+    String(width),
+  )})`;
+  return db
+    .select({ bucket, n: count() })
+    .from(auditLog)
+    .where(
+      and(
+        eq(auditLog.clientId, clientId),
+        gte(auditLog.createdAt, scope.from),
+        lte(auditLog.createdAt, scope.to),
+        products.length ? productScoped(clientId, products) : undefined,
+      ),
+    )
+    .groupBy(bucket)
+    .orderBy(bucket);
+}

@@ -39,7 +39,11 @@ import {
   todayUtc,
   type DayScope,
 } from "@/lib/day-scope";
-import { activityDigest, type DigestRow } from "@/lib/dashboard-activity";
+import {
+  activityDigest,
+  activitySeries,
+  type DigestRow,
+} from "@/lib/dashboard-activity";
 import {
   CTR_MIN_IMPRESSIONS,
   listStripCreatives,
@@ -57,6 +61,7 @@ import {
   viewHref,
 } from "@/lib/dashboard-view";
 import ActivityDigest from "./_dashboard/ActivityDigest";
+import ActivitySparkline from "./_dashboard/ActivitySparkline";
 import CoverageTile from "./_dashboard/CoverageTile";
 import CreativeStrip from "./_dashboard/CreativeStrip";
 import DeliveryTrend from "./_dashboard/DeliveryTrend";
@@ -270,6 +275,7 @@ export default async function Dashboard({
     counts,
     delivery,
     digest,
+    series,
     feeds,
     lastFeed,
     freshness,
@@ -283,6 +289,7 @@ export default async function Dashboard({
     // column it is instead of ending on the newest import (August).
     monthlyDelivery(client.id, 6, products, scope.date.slice(0, 7)),
     activityDigest(client.id, scope, products),
+    activitySeries(client.id, scope, products),
     feedsInScope(client.id, scope, products),
     lastFeedBefore(client.id, scope, products),
     reportFreshness(client.id),
@@ -366,14 +373,17 @@ export default async function Dashboard({
                 Nothing was written in this window.
               </EmptyLine>
             ) : (
-              <ActivityDigest
-                groups={grouped.slice(0, DIGEST_ROWS)}
-                more={Math.max(grouped.length - DIGEST_ROWS, 0)}
-                scope={{ from: scope.from, to: scope.to, label: scope.label }}
-                products={products}
-                actors={Object.fromEntries(emailById)}
-                canDrillDown={claims.role === "admin"}
-              />
+              <>
+                <ActivitySparkline scope={scope} rows={series} />
+                <ActivityDigest
+                  groups={grouped.slice(0, DIGEST_ROWS)}
+                  more={Math.max(grouped.length - DIGEST_ROWS, 0)}
+                  scope={{ from: scope.from, to: scope.to, label: scope.label }}
+                  products={products}
+                  actors={Object.fromEntries(emailById)}
+                  canDrillDown={claims.role === "admin"}
+                />
+              </>
             )}
           </Panel>
 

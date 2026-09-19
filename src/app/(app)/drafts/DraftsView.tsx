@@ -38,6 +38,7 @@ import {
 } from "../matrix/types";
 import { emptySearchFields, parseSearchQuery } from "@/lib/search-query";
 import type { Draft } from "./types";
+import { slidesEmbedUrl } from "@/lib/slides-link";
 import type { McCreativeMatch } from "@/lib/entities/creatives";
 
 /** The Creative Library's answer for one MC, as the wall receives it. */
@@ -587,6 +588,20 @@ function DraftTile({
   const wantsLibrary = target === "agentic" || target === "both";
   const cover = wantsLibrary ? (match?.cover ?? null) : null;
 
+  // A DCO draft only renders once it has copy; before that the template would
+  // draw an empty card (see the note above).
+  const rendersTemplate = !wantsLibrary && draft.template !== null && hasContent;
+
+  // Until either world has something to show, the BRIEF is what exists — the
+  // deck slide the card was asked for on. Showing it beats a grey sentence:
+  // this wall is how the work in flight is scanned, and "what was this
+  // supposed to be" is the question a card with no creative raises. Marked as
+  // a brief so it is never mistaken for a delivered creative.
+  const briefEmbed =
+    cover === null && !rendersTemplate
+      ? slidesEmbedUrl(draft.briefSlidesFileId, draft.briefSlideId)
+      : null;
+
   // "matched 18 (a,b)" beside the MC instead of a count badge in the corner
   // (user, 2026-09-10): the number belongs to the MC, and which VARIANTS the
   // files landed on is the half a corner badge could never say.
@@ -632,6 +647,21 @@ function DraftTile({
               />
             )}
           </div>
+        ) : briefEmbed !== null ? (
+          <div className="drafts-tile__brief relative aspect-[300/250] w-full bg-slate-100">
+            {/* pointer-events-none: the card is one big button and the scrub
+                zones sit on the media — a live iframe would swallow both. The
+                deck opens from the draft's own Brief tab. */}
+            <iframe
+              src={briefEmbed}
+              title={`Brief slide — ${mcLabel(draft)}`}
+              loading="lazy"
+              className="drafts-tile__brief-frame pointer-events-none size-full border-0"
+            />
+            <span className="drafts-tile__brief-tag absolute left-1.5 top-1.5 rounded bg-slate-900/80 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wider text-white">
+              brief
+            </span>
+          </div>
         ) : wantsLibrary ? (
           <div className="drafts-tile__placeholder flex aspect-[300/250] w-full items-center justify-center p-6 text-center text-[11px] leading-relaxed text-slate-400">
             No 300×250 agentic preview yet —
@@ -640,7 +670,7 @@ function DraftTile({
               ? `${match.total} other file${match.total === 1 ? "" : "s"} delivered.`
               : "nothing delivered to the library."}
           </div>
-        ) : draft.template && hasContent ? (
+        ) : rendersTemplate && draft.template ? (
           <MatrixIframePreview
             message={draft as unknown as Message}
             templateName={draft.template}

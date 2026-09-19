@@ -5,6 +5,18 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.107.0] — 2026-09-19
+
+### Added
+- **A draft card with no creative yet shows its brief slide.** Until an Agentic
+  300×250 lands in the library, or a DCO draft has enough copy to render, the
+  card falls back to the Google Slides deck the work was asked for on — the
+  slide itself, in the same 300×250 box, tagged `brief` so it is never read as
+  a delivered creative. The wall of drafts is how work in flight gets scanned,
+  and "what was this supposed to be" is exactly the question a card with no
+  creative raises; a grey sentence could not answer it. Drafts with no deck
+  keep the sentence they had.
+
 ## [6.106.1] — 2026-09-16
 
 ### Changed

@@ -40,3 +40,11 @@ test-results
 
 # Office temporary owner-lock files (e.g. ~$foo.xlsx)
 ~$*
+
+# scripts/recon generated artifacts (read-only analysis harness; see docs/REPORT_RECONCILIATION_STUDY.md)
+scripts/recon/bundle.json
+scripts/recon/resid_C.json
+scripts/recon/meta_*.json
+# common.py is imported by the other scripts, so a run leaves bytecode behind.
+__pycache__/
+*.pyc

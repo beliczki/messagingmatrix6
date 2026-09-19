@@ -2072,3 +2072,92 @@ rosszak) és az MC-csoportonkénti külön feltöltés (104 fájl 22 csomagban =
 - A share szűrő a **típusos propokból** építi a mezőket, nem a megjelenített elemből: a dialógus
   item-típusa szűkebb nézet ugyanarra a sorra, és épp a `pmmid`-et meg a kulcsszó-oszlopokat nem
   deklarálja — vagyis pont azokat, amikre egy share-t szűrve rákeres az ember.
+
+---
+
+## 2026-09-16 (2) — Riport-egyeztetés: mérőkeret + kvantitatív elemzés — **a fenti R1–R6-ot felváltja**
+
+**Teljes tanulmány: `docs/REPORT_RECONCILIATION_STUDY.md`. Mérőkeret: `scripts/recon/` (olvasás-only,
+újrafuttatható, saját README).** A fenti (első) szekció kvalitatív becslései közül kettő **tévesnek
+bizonyult** a mérésen — az ott írt R1–R6 helyett az alábbi H1–H12 érvényes.
+
+### A módszer, amit a user kért: minta → kvalitatív ítélet → kvantitatív szabály → mérés → újabb minta
+27 kézzel ítélt vitás Meta-eset + 32 negatív minta = **gold címkék** (`scripts/recon/labels.py`).
+A hurok **háromszor javított és kétszer rontott**; mindkét rontás önálló lelet:
+
+| lépés | gold | költés-súly | tanulság |
+|---|---|---|---|
+| v1 szózsák | 70% | 58% | a token-átfedés összemossa a rokon kártyákat |
+| v2 laza topic-bővítés | **41%** ↓ | **30%** ↓ | **a topic cáfolni tud, jelölni nem** (289 topicból 37 több MC-t nevez meg) |
+| v3 szekvencia-hasonlóság | 85% | 89% | a `t_` szó szerint a topic-kulcs, nem szózsák kell |
+| v4 „minden szám nyer" | 99,9% ✗ | — | **hamis pozitív gyár**: ügynökségi `01a/02a` ráül MC1/MC2-re |
+| **v5 bizonyíték-kapu** | **85%** | **89%** | 0 hamis pozitív **kézi tiltólista nélkül** |
+
+### Az elvi hiba (mérve)
+**Három, egymástól függetlenül mozgó azonosítótér; az MC szám nem kulcs, hanem címke.**
+A mátrix él és átszámozódik, a pmmid a trafficking pillanatában befagy, a Meta-klón örökli a régi
+linket, az ügynökség pedig saját címkét használ.
+
+1. **A méret identitásként viselkedik, pedig attribútum.** Többértelműség:
+   `(szám,variáns)` **40,3%** → `(tengely,szám,variáns)` 37,7% → **méret nélkül 4,6%**.
+   A 258 ütköző csoportból **201 csak méret-fan-out** — a káosz 78%-a modellezési műtermék.
+2. **A klónozás szétcsúsztat.** 97 Meta hirdetésből 28-ban tér el a név és a pmmid (költés 30,4%).
+   A hirdetésnév-prior monoton javít és 1,2-nél telítődik (0,0→74% · 0,8→81% · **1,2→85%** · 2,0→85%);
+   a 27 vitás eset **23:4 arányban a hirdetésnévnek ad igazat**.
+3. **A tárolt egyezés befagy.** `match_level` importkori: exact 25,2%. **Ma újraszámolva: 48,7%**,
+   ugyanaz a kód, csak friss mátrix (+26,9M megjelenés). A `-n_` a sorok 12%-ában már driftelt.
+4. **Ami nem a mátrixból indul, nem csatolható vissza.** `m_00` = 24,1% megjelenés, **42,7M Ft**.
+   Megmértem a visszanyerhetőséget: **0,0%**. A legnagyobb tétel `t_diak_q3` (8,1M megj., 38,1M Ft),
+   miközben a kártya **létezik** (MC324/325) — csak a forgalom nem hordozza.
+
+### Mért lefedettség
+- **PRG azonosság: 66,9%** (a hiány 27,7% MC00 + 2,9% ismeretlen + 2,5% értelmezhetetlen címke).
+- **PRG volumen, periódus-igazított 43 MC-n: megjelenés arány 1,021** (MC-medián 0,963) —
+  **a megjelenés 4%-on belül egyezik**. **Konverzió arány 0,093** — tízszeres eltérés, és ez már
+  NEM periódus-műtermék. A PRG-ben nincs cost; a `dv360` sorainkon nincs költség.
+- **Meta: ma 0% → a javasolt eljárással 65,4% költés-lefedettség**; a maradék 34,6% ügynökségi saját
+  számozás, szerkezetileg csatolhatatlan.
+- **Eldobott, meglévő dimenzió:** a pmmid `-s_` (pro/rem) a sorok **100%-ában** kitöltött, de nincs
+  oszlopa; a `-l_<lineitem>` 47,4%-ban ott van, szintén kihasználatlanul.
+
+### H1–H12 — teendők (sorrend: H11 → H6 → H7+H8 → H1–H4 → H9+H10 → H12)
+
+**Nulla kód, ügynökségi/trafficking oldal (itt van a legnagyobb hozam):**
+- [ ] **H1** Az MC kerüljön bele MINDEN trafficking-névbe (`-m_` soha ne `00`, `-t_` a mátrix
+      topic-kulcsa legyen, ne kampány-slug). Ez a `m_00` blokk **egyetlen** megoldása: 42,7M Ft.
+- [ ] **H2** „Creative rep": `Conversions` bontás tracking pontonként (e2e / vhk / számlacsomag
+      visit / javaslatok) + post-click vs post-view. Enélkül nincs CPA-nevező (arány ma 0,093).
+- [ ] **H3** PRG: `Cost` + `Month` oszlop. Cost nélkül Flex/DV360 CPA nem létezik.
+- [ ] **H4** Meta: **`Ad ID` oszlop** + havi bontás. Az `Ad ID` stabil, a név nem — ez egy csapásra
+      megszüntetné a klón-drift problémakört.
+- [ ] **H5** Meta ad-elnevezési szabály: klón után a landing URL pmmid-jét is frissíteni, VAGY a
+      nevet nem átírni. A kettő együtt hazudik.
+
+**mm6 kód:**
+- [ ] **H11 (patch, ELSŐ)** Újraimport a 4 meglévő AdForm fájlból (a korábbi `W3.j-6`). Önmagában
+      **25,2% → 48,7% exact**, új szabály nélkül, csak a mai mátrixszal. Migráció nem kell.
+- [ ] **H6 (patch)** `buildMessageResolver` (`src/lib/adform-report.ts`): a `family` teszt
+      **üzenet-azonosságon**, ne sor-azonosságon — `(tengely, szám, variáns, koncepció)`, a méret
+      attribútum. Többértelműség **40,3% → 4,6%**. A lista legolcsóbb egyetlen javítása.
+- [ ] **H7 (minor)** `monitoring.strategy` oszlop — a `-s_` már 100%-ban kitöltött, csak eldobjuk.
+      Ezzel lesz prospecting/remarketing bontás, ami az ügynökségi riport alapbontása.
+- [ ] **H8 (minor)** `parsePmmid` fogadja el az üres `-a_`-t (Metánál az audience az ad set).
+      Ma a `!audienceKey` ág 22 hirdetést dob el = a Meta-költés 22,1%-a.
+- [ ] **H9 (minor)** Meta importer: kulcs a **hirdetésnév-szám+variáns**, a pmmid `m_` csak ellenőrző
+      tanú; `platform=meta`, cost=`Amount spent`, conv=`Results`, **+ új `result_type` oszlop**
+      (kampányonként más az esemény → CPA csak azonos típuson belül összegezhető).
+- [ ] **H10 (minor)** Az öt tanú + a bizonyíték-kapu portolása TS-be a `scripts/recon/score.py`
+      súlyaival; a gold címkék mennek vele tesztként (regressziós korlát: 85% / 89% / 0 FP).
+- [ ] **H12 (minor)** `-l_<lineitem_id>` eltárolása negyedik egyeztetési tengelynek.
+
+### Amit NE csináljunk (mérve, nem vélemény)
+- **Ne építsünk fuzzy visszanyerést a `m_00` blokkra** — 0,0% csatolható, minden lazítás hamis
+  pozitívot gyárt. A helye a trafficking, nem a resolver.
+- **Ne kulcsoljunk MC+topic párra** az ügynökségi riportoknál — a PRG 109 topicjából 58 a mi
+  kulcsunk, a többi kampány-slug. Csak MC-re.
+- **Ne javítsuk a `match_level`-t sorszinten** — az import periódusonként töröl+újratölt.
+
+**Plafon H1–H4 nélkül:** AdForm/DV360 66,9% azonosság, Meta 65,4% költés-lefedettség, **és CPA
+továbbra sem** — mert a konverzió-nevező az ügynökségnél van, nem nálunk.
+
+**Kód nem változott** (csak `scripts/recon/` + `.gitignore` + `docs/`). Verzió-bump nem indokolt.

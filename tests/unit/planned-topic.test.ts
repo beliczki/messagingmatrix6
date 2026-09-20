@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   joinTopic,
   splitTopic,
+  vocabulary,
   type Parts,
 } from "@/app/(app)/matrix/PlannedTopicField";
 
@@ -60,5 +61,38 @@ describe("planned topic composer", () => {
   it("reads an empty value as four empty parts", () => {
     expect(splitTopic(null, "HK")).toEqual(parts());
     expect(joinTopic("HK", parts())).toBe("HK");
+  });
+});
+
+// The picker used to be built from the topics dimension alone, which made it a
+// mirror of the past: a keyword added for work that has not started yet — the
+// exact moment a draft is briefed — could not be picked.
+describe("planned topic vocabulary", () => {
+  const topic = (tag2: string | null) =>
+    ({ tag2 }) as unknown as Parameters<typeof vocabulary>[1][number];
+
+  it("offers a curated keyword no topic uses yet", () => {
+    const out = vocabulary(["bankvaltas", "partner"], [topic("bankvaltas")], (t) => t.tag2);
+    expect(out).toContain("partner");
+  });
+
+  it("keeps the curated order instead of re-sorting it", () => {
+    const out = vocabulary(["zzz", "aaa", "mmm"], [], (t) => t.tag2);
+    expect(out).toEqual(["zzz", "aaa", "mmm"]);
+  });
+
+  it("keeps an in-use value the curated list does not carry", () => {
+    const out = vocabulary(["partner"], [topic("legacy")], (t) => t.tag2);
+    expect(out).toEqual(["partner", "legacy"]);
+  });
+
+  it("puts NA first wherever it comes from, and never repeats a value", () => {
+    const out = vocabulary(["partner", "NA"], [topic("NA"), topic("partner")], (t) => t.tag2);
+    expect(out).toEqual(["NA", "partner"]);
+  });
+
+  it("ignores blank and whitespace-only values", () => {
+    const out = vocabulary(["  ", "partner"], [topic(""), topic(null)], (t) => t.tag2);
+    expect(out).toEqual(["partner"]);
   });
 });

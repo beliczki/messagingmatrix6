@@ -26,6 +26,7 @@
 // what drifts is a suggestion in a text field, not a key anything resolves by.
 import { useEffect, useMemo, useRef, useState } from "react";
 import Field from "./EditorField";
+import { useKeywordOptions } from "../_components/useKeywordOptions";
 import type { TopicRow } from "./BriefTab";
 
 export type Parts = { tag1: string; tag2: string; tag3: string; tag4: string };
@@ -64,23 +65,37 @@ export function joinTopic(product: string | null, p: Parts): string {
   return parts.join("_");
 }
 
-/** The values a tag column already carries across the dimension. */
-function vocabulary(
+/**
+ * What a tag picker offers: the CURATED list first (Settings → Keywords →
+ * Topics · Tag N, in the order an admin dragged it into), then anything the
+ * dimension already uses that the list does not carry.
+ *
+ * It used to be the second half alone, which made the picker a mirror of the
+ * past: a keyword added for work that has not started yet — the exact moment a
+ * draft is being briefed — could not be picked, because no topic used it. The
+ * in-use values stay because the reverse is also true: a topic written before
+ * the list existed must not lose the value it already carries.
+ */
+export function vocabulary(
+  curated: string[],
   topics: TopicRow[],
   pick: (t: TopicRow) => string | null,
 ): string[] {
-  const seen = new Set<string>();
+  const inUse = new Set<string>();
   for (const t of topics) {
     const v = (pick(t) ?? "").trim();
-    if (v) seen.add(v);
+    if (v) inUse.add(v);
   }
-  return [...seen].sort((a, b) => {
-    // NA first: it is the "this axis does not apply" answer, and it is the most
-    // frequently correct one on tags 2 and 3.
-    if (a === "NA") return -1;
-    if (b === "NA") return 1;
-    return a.localeCompare(b);
-  });
+  const out: string[] = [];
+  const push = (v: string) => {
+    if (v && !out.includes(v)) out.push(v);
+  };
+  // NA first wherever it comes from: it is the "this axis does not apply"
+  // answer, and the most frequently correct one on tags 2 and 3.
+  if (inUse.has("NA") || curated.includes("NA")) push("NA");
+  for (const v of curated) push(v.trim());
+  for (const v of [...inUse].sort((a, b) => a.localeCompare(b))) push(v);
+  return out;
 }
 
 export default function PlannedTopicField({
@@ -113,14 +128,18 @@ export default function PlannedTopicField({
       composedRef.current = value ?? "";
     }
   }, [value, product]);
-  const vocab = useMemo(
-    () => ({
-      tag1: vocabulary(topics, (t) => t.tag1),
-      tag2: vocabulary(topics, (t) => t.tag2),
-      tag3: vocabulary(topics, (t) => t.tag3),
-    }),
-    [topics],
-  );
+  // The same react-query key the Settings list and the topics editor use, so
+  // an admin adding a keyword refreshes this picker through the existing SSE
+  // invalidation rather than needing a reload.
+  const { options: keywordOptions } = useKeywordOptions();
+  const vocab = useMemo(() => {
+    const curated = keywordOptions.topics ?? {};
+    return {
+      tag1: vocabulary(curated.tag1 ?? [], topics, (t) => t.tag1),
+      tag2: vocabulary(curated.tag2 ?? [], topics, (t) => t.tag2),
+      tag3: vocabulary(curated.tag3 ?? [], topics, (t) => t.tag3),
+    };
+  }, [keywordOptions, topics]);
 
   if (!tagged) {
     return (

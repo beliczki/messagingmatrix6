@@ -5,6 +5,19 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.108.1] — 2026-09-20
+
+### Fixed
+- **A keyword added in Settings now appears in the draft's planned-topic
+  pickers.** The tag 1–3 dropdowns were built from the values the topics
+  dimension already uses, which made them a mirror of the past: a keyword added
+  for work that has not started yet — the exact moment a draft is being briefed
+  — could not be picked, because no topic used it. They now offer the curated
+  list (Settings → Keywords → Topics · Tag N, in the order an admin put it in),
+  and keep any in-use value the list does not carry, so a topic written before
+  the list existed cannot lose what it already says. Same react-query key as
+  the Settings list, so an edit refreshes the picker without a reload.
+
 ## [6.108.0] — 2026-09-19
 
 ### Added

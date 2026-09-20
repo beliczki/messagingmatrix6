@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { creatives, nowUtc, uploadedFiles, type Creative } from "@/db/schema";
 import { parseDriveFolderId } from "@/lib/drive-link";
 import { parseCreativeFilename } from "@/lib/parse-creative-filename";
+import { versionLadder } from "@/lib/group-creative-versions";
 import { mediaKindFromFilename } from "@/lib/parse-filename";
 
 export class CreativeError extends Error {}
@@ -192,8 +193,19 @@ export async function listCreativeMatchesForMcs(
     match.items.push(item);
     match.total += 1;
     if (isVideo) match.videoCount += 1;
-    if (match.cover === null && dimensions === COVER_SIZE) match.cover = item;
     out.set(key, match);
+  }
+
+  // The cover is the NEWEST version in the slot, not the first file that
+  // happened to land in it. Taking `creatives.id` order alone meant a delivered
+  // n2 sat in the library while every draft still showed the n1 it replaced.
+  // `versionLadder` decides the family from the first cover-size file, so an MC
+  // with two different 300x250 concepts keeps showing the same one.
+  for (const match of out.values()) {
+    const ladder = versionLadder(
+      match.items.filter((i) => i.dimensions === COVER_SIZE),
+    );
+    match.cover = ladder.at(-1) ?? null;
   }
   return out;
 }

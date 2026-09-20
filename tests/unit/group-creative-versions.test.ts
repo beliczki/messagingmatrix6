@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { groupCreativeVersions } from "@/lib/group-creative-versions";
+import { groupCreativeVersions, versionLadder } from "@/lib/group-creative-versions";
 
 let nextId = 1;
 function row(fileName: string | null, createdAt = "2026-01-01 10:00:00") {
@@ -63,5 +63,36 @@ describe("groupCreativeVersions", () => {
     const b = row("ERSTE_SZA_MC5_a_cseperedo_n2_300x250.jpg");
     const groups = groupCreativeVersions([a, b]);
     expect(groups).toHaveLength(1);
+  });
+});
+
+// The draft card and the draft editor both ask "which file is current in this
+// slot". They used to answer with whatever landed first, so a delivered n2 sat
+// in the library while every draft still showed the n1 it replaced.
+describe("versionLadder", () => {
+  const f = (id: number, fileName: string | null) => ({ id, fileName });
+
+  it("orders one family oldest → newest, whatever order it arrives in", () => {
+    const out = versionLadder([
+      f(3, "ERSTE_MARKET_MC405_b_balaton_n2_300x250.png"),
+      f(1, "ERSTE_MARKET_MC405_b_balaton_300x250.png"),
+      f(7, "ERSTE_MARKET_MC405_b_balaton_n4_300x250.png"),
+    ]);
+    expect(out.map((i) => i.id)).toEqual([1, 3, 7]);
+  });
+
+  it("keeps the slot on the FIRST file's family when two concepts share a size", () => {
+    const out = versionLadder([
+      f(1, "ERSTE_MARKET_MC405_b_balaton_300x250.png"),
+      f(2, "ERSTE_MARKET_MC405_b_hegyek_300x250.png"),
+      f(3, "ERSTE_MARKET_MC405_b_balaton_n2_300x250.png"),
+    ]);
+    expect(out.map((i) => i.id)).toEqual([1, 3]);
+  });
+
+  it("treats a file with no parsable family as a ladder of one", () => {
+    expect(versionLadder([f(1, "random.png"), f(2, "other.png")])).toHaveLength(1);
+    expect(versionLadder([f(1, null)])).toEqual([f(1, null)]);
+    expect(versionLadder([])).toEqual([]);
   });
 });

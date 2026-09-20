@@ -35,6 +35,8 @@ const IMAGE_FORMATS = new Set(["jpg", "jpeg", "png", "svg", "gif", "webp"]);
 const VIDEO_FORMATS = new Set(["mp4", "webm", "mov", "m4v"]);
 import { MATRIX_STATUSES } from "@/lib/mc-status";
 import { touchesDraftIntake } from "@/lib/draft-intake";
+import { versionLadder } from "@/lib/group-creative-versions";
+import { parseCreativeFilename } from "@/lib/parse-creative-filename";
 
 const ASSET_AUTOCOMPLETE_MIN = 2;
 
@@ -989,6 +991,12 @@ export default function MessageEditor({
     ) : null}
     </>
   );
+}
+
+/** `n2` from the filename's own token — the only authoritative version, the
+ *  way the Creative Library labels its version nav. */
+function versionTokenOf(fileName: string): string {
+  return `n${parseCreativeFilename(fileName).version}`;
 }
 
 function isLandscape(size: string | null): boolean {
@@ -2306,20 +2314,41 @@ function MessagePreview({
       draftTarget === "both" ||
       (draftTarget === null && libraryItems.length > 0)) &&
     libraryItems.length > 0;
-  const librarySizeMap = useMemo(() => {
-    const m = new Map<string, string>();
+  // Per size, the VERSION LADDER of the slot — oldest → newest — not one
+  // filename. A delivered n2 replaces the n1 it was made from, and the preview
+  // used to show whichever file landed first, so a re-shot creative never
+  // reached the draft. Same `versionLadder` the card's cover picks with, so the
+  // wall and the editor cannot disagree about which file is current.
+  const libraryVersionsBySize = useMemo(() => {
+    const m = new Map<string, { id: number; fileName: string }[]>();
     if (!wantsLibrary) return m;
-    const rows = [...libraryItems]
-      .filter((i) => i.dimensions && i.fileName)
-      .sort((a, b) => {
-        const ar = a.dimensions!.match(/^(\d+)x(\d+)$/);
-        const br = b.dimensions!.match(/^(\d+)x(\d+)$/);
-        return (br ? +br[1]! * +br[2]! : 0) - (ar ? +ar[1]! * +ar[2]! : 0);
-      });
-    for (const r of rows) if (!m.has(r.dimensions!)) m.set(r.dimensions!, r.fileName!);
+    const bySize = new Map<string, typeof libraryItems>();
+    for (const i of libraryItems) {
+      if (!i.dimensions || !i.fileName) continue;
+      bySize.set(i.dimensions, [...(bySize.get(i.dimensions) ?? []), i]);
+    }
+    const sizes = [...bySize.keys()].sort((a, b) => {
+      const ar = a.match(/^(\d+)x(\d+)$/);
+      const br = b.match(/^(\d+)x(\d+)$/);
+      return (br ? +br[1]! * +br[2]! : 0) - (ar ? +ar[1]! * +ar[2]! : 0);
+    });
+    for (const size of sizes) {
+      const ladder = versionLadder(bySize.get(size)!).flatMap((i) =>
+        i.fileName ? [{ id: i.id, fileName: i.fileName }] : [],
+      );
+      if (ladder.length > 0) m.set(size, ladder);
+    }
     return m;
-  }, [wantsLibrary, siblingsQ.data]);
-  const librarySizes = useMemo(() => [...librarySizeMap.keys()], [librarySizeMap]);
+  }, [wantsLibrary, libraryItems]);
+  const librarySizes = useMemo(
+    () => [...libraryVersionsBySize.keys()],
+    [libraryVersionsBySize],
+  );
+
+  // Which version of the current slot is on screen. Null means "the newest",
+  // which is what a draft should open on: the question the preview answers is
+  // "what is delivered now", and the ladder below lets you look back.
+  const [libVersionId, setLibVersionId] = useState<number | null>(null);
 
   const sizes = isStatic
     ? staticSizes
@@ -2327,6 +2356,17 @@ function MessagePreview({
       ? librarySizes
       : templateSizes;
   const [size, setSize] = useState<string>(templateSizes[0] ?? "300x250");
+  const libraryLadder = useMemo(
+    () => libraryVersionsBySize.get(size) ?? [],
+    [libraryVersionsBySize, size],
+  );
+  // A selection only survives while the ladder still holds it: switching size
+  // (or a new upload landing) falls back to the newest rather than to a file
+  // that belongs to a different slot.
+  const libraryFile =
+    libraryLadder.find((v) => v.id === libVersionId) ??
+    libraryLadder.at(-1) ??
+    null;
   // Reset the selected size when the available set changes. In static mode
   // default to the size whose file IS the current image1 (else the first).
   useEffect(() => {
@@ -2506,8 +2546,28 @@ function MessagePreview({
         isStatic
           ? (staticSizeMap.get(size) ?? draftImage1)
           : wantsLibrary
-            ? (librarySizeMap.get(size) ?? null)
+            ? (libraryFile?.fileName ?? null)
             : null
+      }
+      rightExtras={
+        libraryLadder.length > 1 ? (
+          <label className="preview-pane__version flex items-center gap-1 text-xs text-slate-500">
+            <span className="sr-only">Creative version</span>
+            <select
+              value={libraryFile?.id ?? ""}
+              onChange={(e) => setLibVersionId(Number(e.target.value))}
+              title="Delivered versions of this size — newest is the default"
+              className="input-box rounded border border-slate-300 bg-white px-1.5 py-0.5 text-xs"
+            >
+              {libraryLadder.map((v, i) => (
+                <option key={v.id} value={v.id}>
+                  {versionTokenOf(v.fileName)}
+                  {i === libraryLadder.length - 1 ? " · latest" : ""}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : undefined
       }
     />
   );

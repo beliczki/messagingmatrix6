@@ -74,3 +74,35 @@ export function groupCreativeVersions<T extends GroupableCreative>(
   }
   return out;
 }
+
+/**
+ * The version ladder of ONE slot: given the delivered files that share a
+ * declared size, the ones that are versions of each other, oldest → newest.
+ *
+ * Which family owns the slot is decided by the FIRST item handed in (the
+ * caller's own order — `creatives.id`, i.e. what landed first). That keeps the
+ * choice stable when an MC carries two different 300×250 concepts: the slot
+ * does not jump to another picture because a second family gained a version.
+ * Within the family the highest `_nN` wins, which is the whole point — a
+ * delivered n2 replaces the n1 it was made from, and the draft was still
+ * showing n1.
+ *
+ * Files with no parsable family (no `_nN` convention) are their own ladder of
+ * one, so nothing is ever grouped by accident.
+ */
+export function versionLadder<T extends { id: number; fileName: string | null }>(
+  items: readonly T[],
+): T[] {
+  const first = items[0];
+  if (!first) return [];
+  const family = first.fileName ? versionFamilyKey(first.fileName) : null;
+  if (!family) return [first];
+  const withVersion = items.flatMap((item) => {
+    const f = item.fileName ? versionFamilyKey(item.fileName) : null;
+    return f && f.key === family.key ? [{ item, version: f.version }] : [];
+  });
+  withVersion.sort((a, b) =>
+    a.version !== b.version ? a.version - b.version : a.item.id - b.item.id,
+  );
+  return withVersion.map((e) => e.item);
+}

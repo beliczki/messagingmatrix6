@@ -5,6 +5,27 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.109.0] — 2026-09-21
+
+### Fixed
+- **A draft showed the creative it was delivered FIRST, not the current one.**
+  Both the card's cover and the editor's preview took whichever matching file
+  landed earliest, so a re-shot `_n2` sat in the Creative Library while every
+  draft still showed the `_n1` it replaced. Both now take the newest version of
+  the slot, decided by the filename's `_nN` token — the same authority the
+  library groups versions with.
+
+### Added
+- **A version picker in the draft editor's preview**, beside the size dropdown,
+  whenever the selected size has more than one delivered version: `n1`,
+  `n2 · latest`. It opens on the newest — what a draft should answer is "what
+  is delivered now" — and the ladder is there to look back.
+
+### Changed
+- When an MC carries two different concepts at the same size, the slot stays
+  with the one that landed first and only its own versions can replace it; an
+  unrelated upload no longer changes the picture on the card.
+
 ## [6.108.1] — 2026-09-20
 
 ### Fixed

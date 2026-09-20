@@ -98,6 +98,33 @@ describe("listCreativeMatchesForMcs", () => {
     expect(m.get("404|b")?.cover?.id).toBe(wanted.id);
   });
 
+  it("covers with the NEWEST version of the slot, not the first file in it", async () => {
+    // n1 lands first and used to keep the slot for good — a re-shot n2 sat in
+    // the library while every draft still showed the picture it replaced.
+    await creative();
+    const n2 = await creative({
+      fileName: "ERSTE_HK_MC404_b_easypay_n2_300x250.png",
+    });
+
+    const m = await listCreativeMatchesForMcs(erste.id, [
+      { number: 404, variant: "b" },
+    ]);
+    expect(m.get("404|b")?.cover?.id).toBe(n2.id);
+    expect(m.get("404|b")?.total).toBe(2);
+  });
+
+  it("keeps the cover on one concept when two share the size", async () => {
+    const first = await creative();
+    await creative({ fileName: "ERSTE_HK_MC404_b_other_n3_300x250.png" });
+
+    const m = await listCreativeMatchesForMcs(erste.id, [
+      { number: 404, variant: "b" },
+    ]);
+    // The second family's n3 is newer, but the slot belongs to what landed
+    // first; otherwise the card would change picture on an unrelated upload.
+    expect(m.get("404|b")?.cover?.id).toBe(first.id);
+  });
+
   it("has no cover when nothing was delivered at 300x250", async () => {
     await creative({
       fileName: "ERSTE_HK_MC404_b_easypay_n1_1080x1080.png",

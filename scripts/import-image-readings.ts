@@ -23,7 +23,7 @@ import { writeAudit } from "@/lib/audit";
 import { parseCreativeFilename } from "@/lib/parse-creative-filename";
 import { nowUtc } from "@/db/schema";
 
-type SheetRow = { rel: string; mc: number; size: string; letter: string; version: number; text: string; desc: string };
+type SheetRow = { rel: string; mc: number; size: string; letter: string; version: number; ext: string; text: string; desc: string };
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -48,7 +48,7 @@ function readSheet(path: string): SheetRow[] {
     const text = String(r[2] ?? "").trim();
     const desc = String(r[3] ?? "").trim();
     if (!text && !desc) continue; // not read yet
-    const m = rel.match(/^[^/]+\/MC(\d+)[^/]*\/(.+?)__([a-z])(?:_n(\d+))?\.[a-z0-9]+$/i);
+    const m = rel.match(/^[^/]+\/MC(\d+)[^/]*\/(.+?)__([a-z])(?:_n(\d+))?\.([a-z0-9]+)$/i);
     if (!m) {
       console.log(`  ? nem értelmezhető útvonal: ${rel}`);
       continue;
@@ -58,7 +58,7 @@ function readSheet(path: string): SheetRow[] {
     // write one reading onto both.
     out.push({
       rel, mc: Number(m[1]), size: m[2]!, letter: m[3]!.toLowerCase(),
-      version: m[4] ? Number(m[4]) : 1, text, desc,
+      version: m[4] ? Number(m[4]) : 1, ext: (m[5] ?? "").toLowerCase(), text, desc,
     });
   }
   return out;
@@ -96,7 +96,10 @@ async function main() {
         c.mcNumber === s.mc &&
         (c.mcVariant ?? "a").toLowerCase() === s.letter &&
         (c.fileName ?? "").includes(s.size) &&
-        parseCreativeFilename(c.fileName ?? "").version === s.version,
+        parseCreativeFilename(c.fileName ?? "").version === s.version &&
+        // The extension is part of the identity: one slot often holds the same
+        // picture as .jpg AND .png, and they are two rows.
+        (c.fileName ?? "").toLowerCase().endsWith(`.${s.ext}`),
     );
     if (hits.length === 0) { missing += 1; console.log(`  – nincs találat: ${s.rel}`); continue; }
     if (hits.length > 1) { ambiguous += 1; console.log(`  ! több találat (${hits.length}): ${s.rel}`); continue; }

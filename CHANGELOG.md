@@ -5,6 +5,26 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.110.0] — 2026-09-21
+
+### Changed
+- **Promoting an Agentic draft stops offering DCO audiences.** Its files
+  scatter across the channels BY SIZE — a 1080×1080 is Social, a 300×250 is
+  Display — so a DCO cell was not a slower answer there, it was the wrong axis.
+  The dialog now lists channels only and opens on the one the delivered sizes
+  imply. A DCO or "both" draft still sees both groups.
+- **The topic picker offers what the card already says**: the brief's planned
+  topic and the topic the delivered filenames imply, from the same rule the
+  upload path writes with (`agenticTopicFromFilename`), so the promote and the
+  upload cannot land the same MC in two near-identical rows.
+- **A promote onto a channel takes a free topic string.** The refusal
+  ("promoting never mints topics") protects the curated topics dimension, and
+  the Agentic axis does not have one: `ensureAgenticMc` writes a string derived
+  from the filename and the grid synthesizes its rows from those. Measured on
+  the erste tenant: 667 of 714 live agentic messages (93%, 227 distinct
+  strings) already sit on a topic with no topics row. DCO still refuses an
+  unknown topic; a channel still refuses an empty one.
+
 ## [6.109.0] — 2026-09-21
 
 ### Fixed

@@ -194,14 +194,42 @@ describe("POST /api/drafts/[id]/promote — target", () => {
     expect(body.message.draftProduct).toBeNull();
   });
 
-  it("still refuses a topic that does not exist — promoting never mints one", async () => {
+  // This used to demand a topics row on BOTH axes ("promoting never mints
+  // one"). It does not hold on the Agentic side and never did: ensureAgenticMc
+  // writes a free string derived from the delivered filename and the grid
+  // synthesizes its rows from those strings. Measured on the erste tenant
+  // 2026-09-21: 667 of 714 live agentic messages (93%, across 227 distinct
+  // strings) sit on a topic with no topics row. Demanding one made an agentic
+  // draft impossible to promote onto the topic its own files name, while the
+  // dimension it was protecting is not the one being written.
+  it("takes a free topic string on a CHANNEL — that axis has no topics dimension", async () => {
     const d = await createDraft(erste.id, {});
     const { status, body } = await promote(d.id, {
       target: "agentic",
       audienceKey: "ch_disp",
+      topicKey: "MARKET_balatoniparos",
+    });
+    expect(status).toBe(200);
+    expect(body.message.topic).toBe("MARKET_balatoniparos");
+  });
+
+  it("still refuses an unknown topic on a DCO audience — that dimension IS curated", async () => {
+    const d = await createDraft(erste.id, {});
+    const { status, body } = await promote(d.id, {
+      audienceKey: "SZK_visitors",
       topicKey: "SZK_nope",
     });
     expect(status).toBe(400);
     expect(body.error).toMatch(/topic 'SZK_nope' not found/);
+  });
+
+  it("still refuses an empty topic on a channel", async () => {
+    const d = await createDraft(erste.id, {});
+    const { status } = await promote(d.id, {
+      target: "agentic",
+      audienceKey: "ch_disp",
+      topicKey: "   ",
+    });
+    expect(status).toBe(400);
   });
 });

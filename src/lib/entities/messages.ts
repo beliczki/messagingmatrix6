@@ -664,15 +664,27 @@ export async function promoteDraft(
   if (!audienceRow) {
     throw new MessageError(`audience '${opts.audienceKey}' not found`);
   }
-  // The draft's own topic is a suggested NAME and may not name anything; the
-  // promote is where it has to become a real key. Refusing here (rather than
-  // creating the topic) keeps the topics dimension curated — a promote that
-  // silently minted topics would fill it with near-duplicate spellings.
+  // On the DCO axis the draft's own topic is a suggested NAME and may not name
+  // anything; the promote is where it has to become a real key. Refusing here
+  // (rather than creating the topic) keeps the topics dimension curated — a
+  // promote that silently minted topics would fill it with near-duplicate
+  // spellings.
+  //
+  // The Agentic axis has no topics dimension to curate: `ensureAgenticMc`
+  // writes a free string derived from the delivered filename and the grid
+  // synthesizes its rows from those strings. Demanding a topics row there made
+  // an agentic draft impossible to promote onto the topic its own files name —
+  // so a channel target takes the string as given, and only requires it to be
+  // non-empty.
+  const targetIsChannel = (audienceRow.channel ?? null) !== null;
   const topicRow = await findTopicByKey(clientId, opts.topicKey);
-  if (!topicRow) {
+  if (!topicRow && !targetIsChannel) {
     throw new MessageError(
       `topic '${opts.topicKey}' not found — create the topic first, then promote`,
     );
+  }
+  if (!topicRow && opts.topicKey.trim() === "") {
+    throw new MessageError("topic is required");
   }
 
   const live = await listLiveMessages(clientId);

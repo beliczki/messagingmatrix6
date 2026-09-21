@@ -21,6 +21,11 @@ import ModalBackdrop from "../_components/ModalBackdrop";
 import { MATRIX_STATUSES, BIRTH_STATUS } from "@/lib/mc-status";
 import type { Audience, Topic } from "../matrix/types";
 import type { Draft } from "./types";
+import type { McCreativeMatch } from "@/lib/entities/creatives";
+import {
+  agenticTopicFromFilename,
+  channelCodeForSize,
+} from "@/lib/agentic-topic";
 
 /**
  * The cell work arrives in. A draft that has not been placed yet belongs on the
@@ -43,10 +48,34 @@ function defaultAudienceKey(
   );
 }
 
+/**
+ * Which channel an Agentic card opens on: the one its files actually imply.
+ * An MC's sizes scatter across Display and Social, and the upload path already
+ * decided that per file — so the dialog opens on the channel of the majority
+ * rather than on whatever channel happens to be first in the list.
+ */
+function defaultChannelKey(
+  channels: Audience[],
+  files: { dimensions: string | null }[],
+): string {
+  if (channels.length === 0) return "";
+  const votes = new Map<string, number>();
+  for (const f of files) {
+    const code = channelCodeForSize(f.dimensions);
+    votes.set(code, (votes.get(code) ?? 0) + 1);
+  }
+  const winner = [...votes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const byCode = winner
+    ? channels.find((c) => (c.channel ?? "").toUpperCase() === winner)
+    : undefined;
+  return (byCode ?? channels[0]!).key;
+}
+
 export default function PromoteDraftDialog({
   rows,
   audiences,
   topics,
+  matches,
   onClose,
   onDone,
 }: {
@@ -54,6 +83,8 @@ export default function PromoteDraftDialog({
   rows: Draft[];
   audiences: Audience[];
   topics: Topic[];
+  /** What the Creative Library holds for these MCs, keyed `number|variant`. */
+  matches: Record<string, McCreativeMatch>;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -63,28 +94,69 @@ export default function PromoteDraftDialog({
   const [selected, setSelected] = useState<Set<number>>(
     () => new Set(rows.map((r) => r.id)),
   );
+  // The delivered files behind this card, and therefore which world it is in.
+  // Same fallback the wall uses: a draft with matched files is Agentic whether
+  // or not anyone ticked the box.
+  const files = useMemo(
+    () => rows.flatMap((r) => matches[`${r.number}|${r.variant}`]?.items ?? []),
+    [rows, matches],
+  );
+  const target =
+    rows.find((r) => r.draftTarget)?.draftTarget ??
+    (files.length > 0 ? "agentic" : "dco");
+  const isAgentic = target === "agentic";
+
+  const dcoAudiences = useMemo(
+    () => audiences.filter((a) => a.channel == null),
+    [audiences],
+  );
+  const channelAudiences = useMemo(
+    () => audiences.filter((a) => a.channel != null),
+    [audiences],
+  );
+
   const [audienceKey, setAudienceKey] = useState(() =>
-    defaultAudienceKey(audiences, product),
+    isAgentic
+      ? defaultChannelKey(channelAudiences, files)
+      : defaultAudienceKey(audiences, product),
   );
   const [status, setStatus] = useState<string>(BIRTH_STATUS);
   // The planned topic is a working TITLE and usually names nothing real, but
   // when it happens to match a topic key exactly the user already answered this
   // question on the Brief tab.
+  // What this card's topic can honestly be. On the Agentic axis the topic is a
+  // STRING, not a row — `ensureAgenticMc` writes one derived from the delivered
+  // filename and the grid builds its rows from those — so the two answers worth
+  // offering are the brief's planned topic and the one the files themselves
+  // name. Offered in that order: the brief is a decision, the filename a
+  // derivation.
+  const suggestions = useMemo(() => {
+    if (!isAgentic) return [] as { key: string; label: string }[];
+    const out: { key: string; label: string }[] = [];
+    const planned = rows.find((r) => r.topic)?.topic?.trim();
+    if (planned) out.push({ key: planned, label: `${planned} · from the brief` });
+    for (const f of files) {
+      const derived = agenticTopicFromFilename(f.fileName, product);
+      if (derived && !out.some((o) => o.key === derived)) {
+        out.push({ key: derived, label: `${derived} · from the filenames` });
+      }
+    }
+    return out;
+  }, [isAgentic, rows, files, product]);
+
   const [topicKey, setTopicKey] = useState(() => {
     const planned = rows.find((r) => r.topic)?.topic ?? null;
-    return planned && topics.some((t) => t.key === planned) ? planned : "";
+    if (planned && topics.some((t) => t.key === planned)) return planned;
+    // Agentic: the string is the topic, so a suggestion can be the answer.
+    const agentic =
+      rows.find((r) => r.draftTarget)?.draftTarget === "agentic" ||
+      (!rows.some((r) => r.draftTarget) &&
+        rows.some((r) => (matches[`${r.number}|${r.variant}`]?.total ?? 0) > 0));
+    if (agentic && planned?.trim()) return planned.trim();
+    return "";
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // DCO audiences and channels in one list, split by a label: the axis is
-  // simply whichever key is chosen — promoteDraft resolves both through the
-  // same lookup, so an Agentic placement is an ordinary promote onto a channel.
-  const dco = useMemo(() => audiences.filter((a) => a.channel == null), [audiences]);
-  const channels = useMemo(
-    () => audiences.filter((a) => a.channel != null),
-    [audiences],
-  );
 
   const staying = rows.filter((r) => !selected.has(r.id));
   const ready = selected.size > 0 && !!audienceKey && !!topicKey;
@@ -173,16 +245,21 @@ export default function PromoteDraftDialog({
               className="input-box custom-dropdown w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
             >
               <option value="">— pick a cell —</option>
-              <optgroup label="DCO">
-                {dco.map((a) => (
-                  <option key={a.key} value={a.key}>
-                    {a.name || a.key}
-                  </option>
-                ))}
-              </optgroup>
-              {channels.length > 0 ? (
-                <optgroup label="Agentic">
-                  {channels.map((a) => (
+              {/* An Agentic card is never offered a DCO audience: its files
+                  scatter across the channels BY SIZE, so a DCO cell is not a
+                  slower answer, it is the wrong axis. */}
+              {isAgentic ? null : (
+                <optgroup label="DCO">
+                  {dcoAudiences.map((a) => (
+                    <option key={a.key} value={a.key}>
+                      {a.name || a.key}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {channelAudiences.length > 0 ? (
+                <optgroup label={isAgentic ? "Channels" : "Agentic"}>
+                  {channelAudiences.map((a) => (
                     <option key={a.key} value={a.key}>
                       {a.name || a.key}
                     </option>
@@ -202,12 +279,30 @@ export default function PromoteDraftDialog({
               className="input-box custom-dropdown w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
             >
               <option value="">— pick a topic —</option>
-              {topics.map((t) => (
-                <option key={t.key} value={t.key}>
-                  {t.name || t.key}
-                </option>
-              ))}
+              {suggestions.length > 0 ? (
+                <optgroup label="From this card">
+                  {suggestions.map((sug) => (
+                    <option key={sug.key} value={sug.key}>
+                      {sug.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              <optgroup label={suggestions.length > 0 ? "Topics" : ""}>
+                {topics.map((t) => (
+                  <option key={t.key} value={t.key}>
+                    {t.name || t.key}
+                  </option>
+                ))}
+              </optgroup>
             </select>
+            {isAgentic ? (
+              <p className="form-field__hint mt-1 text-[11px] text-slate-500">
+                The Agentic axis has no topics dimension — its rows are the
+                strings themselves, so a suggestion here is the answer, not a
+                placeholder.
+              </p>
+            ) : null}
           </label>
 
           <label className="form-field promote-dialog__field mb-3 block">

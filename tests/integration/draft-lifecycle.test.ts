@@ -518,6 +518,27 @@ describe("promoteDraft", () => {
     ).rejects.toThrow(/create the topic first/);
   });
 
+  it("takes a free topic string when the target is a CHANNEL", async () => {
+    // The Agentic axis has no topics dimension: ensureAgenticMc writes a string
+    // derived from the delivered filename and the grid synthesizes its rows
+    // from those. Demanding a topics row there made an agentic draft impossible
+    // to promote onto the topic its own files name.
+    const d = await createDraft(erste.id, { topic: "MARKET_balatoniparos" });
+    const placed = await promoteDraft(erste.id, d.id, {
+      audienceKey: "ch_disp",
+      topicKey: "MARKET_balatoniparos",
+    });
+    expect(placed.audience).toBe("ch_disp");
+    expect(placed.topic).toBe("MARKET_balatoniparos");
+  });
+
+  it("still refuses an empty topic on a channel", async () => {
+    const d = await createDraft(erste.id);
+    await expect(
+      promoteDraft(erste.id, d.id, { audienceKey: "ch_disp", topicKey: "  " }),
+    ).rejects.toThrow(/topic is required/);
+  });
+
   it("refuses an unknown audience", async () => {
     const d = await createDraft(erste.id);
     await expect(

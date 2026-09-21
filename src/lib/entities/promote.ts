@@ -10,6 +10,10 @@ import {
   type Topic,
 } from "@/db/schema";
 import { parseCreativeFilename } from "@/lib/parse-creative-filename";
+import {
+  agenticTopicFromFilename,
+  channelCodeForSize,
+} from "@/lib/agentic-topic";
 import { regeneratedIdentity } from "@/lib/message-identity";
 import { isLive } from "@/lib/numbering";
 import { createMessage, readClientPatterns } from "./messages";
@@ -240,7 +244,6 @@ export async function promoteCreative(
 // ---------------------------------------------------------------------------
 
 // Channel from size — user-locked, v1 (scripts/rebuild-creatives.ts:26).
-const SOC_SIZES = new Set(["1080x1080", "1200x628"]);
 
 export type MirrorSkip =
   | "no-mc-number"
@@ -258,9 +261,7 @@ export type MirrorResult =
       audience: Audience | null;
     };
 
-export function channelCodeForSize(dimensions: string | null): "SOC" | "DISP" {
-  return dimensions && SOC_SIZES.has(dimensions.toLowerCase()) ? "SOC" : "DISP";
-}
+export { channelCodeForSize } from "@/lib/agentic-topic";
 
 // The number's topic, as the matrix already knows it. A number never spans
 // topics within an axis, so any existing sibling answers for all of them —
@@ -293,12 +294,11 @@ async function agenticTopicForNumber(
 
 // Fallback for a number the matrix has never seen: "<PRODUCT>_<keywords>",
 // the shape the batch import wrote (no topics-table row — the Agentic grid
-// synthesizes its rows from these strings).
+// synthesizes its rows from these strings). The rule lives in
+// `lib/agentic-topic` so the promote dialog can OFFER the same string this
+// path would write.
 function topicFromCreative(creative: Creative): string {
-  const parsed = parseCreativeFilename(creative.fileName ?? "");
-  const keywords = parsed.keywords.trim().split(/\s+/).filter(Boolean).join("_");
-  const product = creative.product ?? parsed.product ?? "";
-  return [product, keywords].filter(Boolean).join("_").slice(0, 200) || "creative";
+  return agenticTopicFromFilename(creative.fileName, creative.product);
 }
 
 // Ensure the Agentic MC named by this creative's filename exists. Creates the

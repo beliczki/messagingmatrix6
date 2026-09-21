@@ -520,6 +520,7 @@ export default function DraftsView() {
           rows={promoteRows}
           audiences={audiences}
           topics={topicsQ.data?.topics ?? []}
+          matches={matches}
           onClose={() => setPromoteNumber(null)}
           onDone={() => {
             setPromoteNumber(null);

@@ -23,7 +23,7 @@ import { writeAudit } from "@/lib/audit";
 import { parseCreativeFilename } from "@/lib/parse-creative-filename";
 import { nowUtc } from "@/db/schema";
 
-type SheetRow = { rel: string; mc: number; size: string; letter: string; version: number; ext: string; text: string; desc: string };
+type SheetRow = { rel: string; id?: number; mc: number; size: string; letter: string; version: number; ext: string; text: string; desc: string };
 
 function parseArgs() {
   const args = process.argv.slice(2);
@@ -48,6 +48,16 @@ function readSheet(path: string): SheetRow[] {
     const text = String(r[2] ?? "").trim();
     const desc = String(r[3] ?? "").trim();
     if (!text && !desc) continue; // not read yet
+    // Round 2 onward the filename opens with the creative's own id — the only
+    // token that is unique by construction. When it is there, nothing else has
+    // to be inferred.
+    const byId = rel.match(/\/id(\d+)__/i);
+    if (byId) {
+      out.push({
+        rel, id: Number(byId[1]), mc: 0, size: "", letter: "", version: 1, ext: "", text, desc,
+      });
+      continue;
+    }
     const m = rel.match(/^[^/]+\/MC(\d+)[^/]*\/(.+?)__([a-z])(?:_n(\d+))?\.([a-z0-9]+)$/i);
     if (!m) {
       console.log(`  ? nem értelmezhető útvonal: ${rel}`);
@@ -77,13 +87,7 @@ async function main() {
   const rows = await db
     .select()
     .from(creatives)
-    .where(
-      and(
-        eq(creatives.clientId, client.id),
-        isNull(creatives.archivedAt),
-        inArray(creatives.mcNumber, [...new Set(sheet.map((s) => s.mc))]),
-      ),
-    );
+    .where(and(eq(creatives.clientId, client.id), isNull(creatives.archivedAt)));
 
   let written = 0, unchanged = 0, missing = 0, ambiguous = 0;
 
@@ -91,7 +95,9 @@ async function main() {
     // The size in the exported name is the DECLARED one, which is what the
     // stored filename carries too — so matching on the filename containing it
     // is stricter than matching on file_dimensions (retina crops differ there).
-    const hits = rows.filter(
+    const hits = s.id
+      ? rows.filter((c) => c.id === s.id)
+      : rows.filter(
       (c) =>
         c.mcNumber === s.mc &&
         (c.mcVariant ?? "a").toLowerCase() === s.letter &&

@@ -35,7 +35,7 @@ const SAME_DESIGN_MEAN = 12;
 const LOCALISED_BOX_PCT = 18;
 
 type Row = {
-  rel: string; mc: number; size: string; letter: string; version: number;
+  rel: string; mc: number; size: string; letter: string; version: number; ext: string;
   id?: number; name?: string; sha?: string; uploaded?: string;
   text?: string; desc?: string; thm?: string;
 };
@@ -87,7 +87,7 @@ function scanExport(): Row[] {
         if (!m) continue;
         out.push({
           rel: `${cls}/${dir}/${f}`, mc, size: m[1]!, letter: m[2]!.toLowerCase(),
-          version: m[3] ? Number(m[3]) : 1,
+          version: m[3] ? Number(m[3]) : 1, ext: (m[4] ?? "").toLowerCase(),
         });
       }
     }
@@ -120,7 +120,10 @@ async function main() {
       c.mc === r.mc &&
       (c.variant ?? "a").toLowerCase() === r.letter &&
       (c.name ?? "").includes(r.size) &&
-      parseCreativeFilename(c.name ?? "").version === r.version);
+      parseCreativeFilename(c.name ?? "").version === r.version &&
+      // The extension identifies a row as much as the size does: one slot
+      // commonly holds the same picture as .jpg AND .png.
+      (c.name ?? "").toLowerCase().endsWith(`.${r.ext}`));
     const hit = hits.length === 1 ? hits[0] : undefined;
     if (!hit) continue;
     r.id = hit.id; r.name = hit.name ?? undefined; r.sha = hit.sha ?? undefined;

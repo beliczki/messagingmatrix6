@@ -129,6 +129,9 @@ type Creative = {
   fileSize: string | null;
   fileDimensions: string | null;
   comment: string | null;
+  imageText: string | null;
+  imageDescription: string | null;
+  imageReadAt: string | null;
   driveFolderId: string | null;
   driveFolderName: string | null;
   driveFileId: string | null;
@@ -522,6 +525,12 @@ export default function CreativeLibrary() {
           fileSize: null,
           fileDimensions: size,
           comment: null,
+          // A DCO tile is a live render of the template: its words are the
+          // message's own copy, which the search string already pulls in below.
+          // Nothing was read off a picture here.
+          imageText: null,
+          imageDescription: null,
+          imageReadAt: null,
           // A matrix tile is rendered live from the template, not delivered as
           // a file — there is nothing on Drive to point at.
           driveFolderId: null,
@@ -626,7 +635,10 @@ export default function CreativeLibrary() {
       let topic = "";
       let strategy = "";
       let platform = "";
-      let free = `${c.fileName ?? ""} ${c.brand ?? ""} ${c.product ?? ""} ${c.template ?? ""} ${c.visualKeyword ?? ""} ${c.copyKeyword ?? ""} ${c.comment ?? ""}`;
+      // `imageText` / `imageDescription` are what the PICTURE says, read off the
+      // file. An uploaded creative has no matrix copy behind it, so without
+      // these the only way to find one was its filename and its keywords.
+      let free = `${c.fileName ?? ""} ${c.brand ?? ""} ${c.product ?? ""} ${c.template ?? ""} ${c.visualKeyword ?? ""} ${c.copyKeyword ?? ""} ${c.comment ?? ""} ${c.imageText ?? ""} ${c.imageDescription ?? ""}`;
       if (c.kind === "matrix") {
         const m = c.message;
         const a = audienceMap.get(m.audience);

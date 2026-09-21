@@ -5,6 +5,24 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.111.0] — 2026-09-21
+
+### Added
+- **What a creative SAYS is now in the library, and searchable.** Four new
+  columns on `creatives`: `image_text` (the copy read off the picture,
+  verbatim), `image_description` (the reading), plus `image_read_at` and
+  `image_read_model` so a description can be told from a stale one — the file
+  can be replaced by a later version, and then it describes a picture that is
+  no longer there. An uploaded creative carries no matrix copy, so until now
+  the only way to find one was its filename and its keywords; the free-text
+  search now covers both new fields, and the creative detail dialog shows them
+  as a dated, read-only block beside Comment — which stays the human's field.
+- **`scripts/import-image-readings.ts`** loads the inventory sheet into those
+  columns. Re-runnable: it matches a row back to its creative by MC number,
+  variant, declared size AND version token (one slot can hold several versions,
+  and they are different pictures), skips what has not changed, and writes one
+  silent audit row per change. First run: 200 rows across 11 MCs.
+
 ## [6.110.0] — 2026-09-21
 
 ### Changed

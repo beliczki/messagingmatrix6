@@ -550,6 +550,20 @@ export const creatives = pgTable(
     driveFolderId: text("drive_folder_id"),
     driveFolderName: text("drive_folder_name"),
     driveFileId: text("drive_file_id"),
+    // What the picture itself says, read off the file rather than off its name.
+    // An uploaded creative carries no matrix copy, so before this the only way
+    // to find one was its filename and its keywords — the text ON it was
+    // invisible to search. `imageText` is verbatim (the THM line in it is what
+    // tells an `_n2` rate refresh from a different creative); `imageDescription`
+    // is the reading. Kept apart from `comment`, which belongs to whoever types
+    // in it.
+    imageText: text("image_text"),
+    imageDescription: text("image_description"),
+    // Provenance, so a description can be told from a stale one: the file can be
+    // replaced by a later version, and then this describes a picture that is no
+    // longer there.
+    imageReadAt: text("image_read_at"),
+    imageReadModel: text("image_read_model"),
     driveCheckedAt: text("drive_checked_at"),
     version: integer("version").notNull().default(1),
     createdAt: text("created_at")

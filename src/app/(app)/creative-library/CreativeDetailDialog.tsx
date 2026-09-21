@@ -30,6 +30,9 @@ type Creative = {
   fileSize: string | null;
   fileDimensions: string | null;
   comment: string | null;
+  imageText?: string | null;
+  imageDescription?: string | null;
+  imageReadAt?: string | null;
   driveFolderId: string | null;
   driveFolderName: string | null;
   driveFileId: string | null;
@@ -229,9 +232,41 @@ export default function CreativeDetailDialog({
               />
             </DraftField>
           </div>
+          <ImageReading creative={current} />
         </div>
       )}
     />
+  );
+}
+
+/** What was read off the picture itself — the words on it, and a description.
+ *  Read-only on purpose: it is a machine reading with a date on it, not a field
+ *  to edit. What a person wants to add belongs in Comment, above. */
+function ImageReading({ creative }: { creative: Creative }) {
+  if (!creative.imageText && !creative.imageDescription) return null;
+  return (
+    <div className="creative-detail__image-reading col-span-2 border-t border-slate-100 pt-3">
+      <div className="mb-1 flex items-baseline gap-2">
+        <span className="text-[10px] font-medium uppercase tracking-wider text-slate-500">
+          A képről olvasva
+        </span>
+        {creative.imageReadAt ? (
+          <span className="font-mono text-[10px] text-slate-400">
+            {creative.imageReadAt.slice(0, 10)}
+          </span>
+        ) : null}
+      </div>
+      {creative.imageText ? (
+        <pre className="creative-detail__image-text mb-2 whitespace-pre-wrap font-sans text-xs text-slate-700">
+          {creative.imageText}
+        </pre>
+      ) : null}
+      {creative.imageDescription ? (
+        <p className="creative-detail__image-desc text-xs italic text-slate-500">
+          {creative.imageDescription}
+        </p>
+      ) : null}
+    </div>
   );
 }
 

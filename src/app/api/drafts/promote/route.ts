@@ -6,6 +6,7 @@ import {
   MessageError,
   promoteDraft,
 } from "@/lib/entities/messages";
+import { placeAgenticSiblings } from "@/lib/entities/promote";
 import { denyDemo, withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 
@@ -98,6 +99,12 @@ export const POST = withSession(async ({ req, claims }) => {
         after: result,
       });
       promoted.push(result);
+      // The draft was the gate: while it was open, uploads deliberately created
+      // no cell (ensureAgenticMc → "draft-open"). Now that it is placed, the
+      // files that arrived in the meantime have to land too — each size on the
+      // channel it belongs to. A DCO promote finds no channel for its files and
+      // this is a no-op.
+      await placeAgenticSiblings(claims.cid, result.number, result.variant);
     }
 
     let archived = 0;

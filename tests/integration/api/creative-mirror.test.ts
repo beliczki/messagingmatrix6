@@ -5,6 +5,7 @@ import { channels, clients, creatives, messages } from "@/db/schema";
 import {
   createCreativeWithMirror,
   ensureAgenticMc,
+  placeAgenticSiblings,
 } from "@/lib/entities/promote";
 import { createTestDb, withActiveClientKey, type TestDb } from "../../helpers/test-db";
 
@@ -140,5 +141,67 @@ describe("uploading a correctly-named creative fills the Agentic matrix", () => 
     expect(second.created).toBe(false);
     expect(second.reason).toBe("exists");
     expect(await agenticCells(erste.id, 324)).toHaveLength(1);
+  });
+});
+
+// The draft is a gate. Uploading used to place the cell anyway, which stranded
+// the draft on the wall AND made its promote impossible — the cell it wanted to
+// create was already there (MC404/MC405, 2026-09-22).
+describe("a live draft holds the number until it is promoted", () => {
+  async function draftOn(number: number, variant: string) {
+    const [row] = await db
+      .insert(messages)
+      .values({
+        clientId: erste.id,
+        number,
+        variant,
+        audience: null,
+        topic: "tervezett_topic",
+        status: "DRAFT",
+        draftTarget: "agentic",
+      })
+      .returning();
+    return row!;
+  }
+
+  it("creates no cell while the draft is open", async () => {
+    await draftOn(404, "a");
+    await upload(erste.id, "ERSTE_SZA_MC404_a_balaton_n1_300x250.png");
+
+    const rows = await agenticCells(erste.id, 404);
+    // Only the draft itself: nothing was placed.
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.audience).toBeNull();
+  });
+
+  it("still places the cell for a number with no draft", async () => {
+    await upload(erste.id, "ERSTE_SZA_MC406_a_balaton_n1_300x250.png");
+    const rows = await agenticCells(erste.id, 406);
+    expect(rows.map((r) => r.audience)).toEqual(["ch_disp"]);
+  });
+
+  it("the draft gate is per variant, not per number", async () => {
+    await draftOn(407, "a");
+    await upload(erste.id, "ERSTE_SZA_MC407_b_balaton_n1_300x250.png");
+    const rows = await agenticCells(erste.id, 407);
+    expect(rows.filter((r) => r.audience === "ch_disp").map((r) => r.variant)).toEqual(["b"]);
+  });
+
+  it("places every size's channel once the draft is gone", async () => {
+    const draft = await draftOn(405, "a");
+    await upload(erste.id, "ERSTE_SZA_MC405_a_balaton_n1_300x250.png");
+    await upload(erste.id, "ERSTE_SZA_MC405_a_balaton_n1_1080x1080.png");
+    expect(await agenticCells(erste.id, 405)).toHaveLength(1);
+
+    // What a promote does to the draft row, without going through the route.
+    await db
+      .update(messages)
+      .set({ audience: "ch_disp", status: "PREVIEW" })
+      .where(eq(messages.id, draft.id));
+    await placeAgenticSiblings(erste.id, 405, "a");
+
+    const rows = await agenticCells(erste.id, 405);
+    // The promoted row on DISP, plus the social size that had been waiting.
+    expect(rows.map((r) => r.audience).sort()).toEqual(["ch_disp", "ch_soc"]);
   });
 });

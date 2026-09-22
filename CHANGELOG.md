@@ -5,6 +5,31 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.112.0] — 2026-09-22
+
+### Fixed
+- **An open draft now holds its MC number until somebody promotes it.**
+  Uploading a correctly-named creative placed the Agentic cell straight away,
+  even when a draft existed for that number and variant — so the work appeared
+  in the matrix while its draft stayed on the wall, and the promote could no
+  longer run at all: the cell it wanted to create was already there and the
+  duplicate guard refused it. (MC404 and MC405 had sat like that since 10 and
+  16 September; their channel cells carry no audit rows, which is what
+  identified the upload path as their author.) `ensureAgenticMc` now skips with
+  a `draft-open` reason while a live draft holds the number+variant. The
+  delivered files still show on the draft card, so nothing is hidden — only the
+  placement waits for a person.
+- **Promoting then places every channel the files imply.** The gate would
+  otherwise strand the other half: a promote converts the draft into one cell,
+  and `placeAgenticSiblings` lets each delivered size find its own channel
+  afterwards. Wired into both promote routes, so the wall and MCP behave alike.
+  A DCO promote finds no channel and is unaffected.
+
+### Changed
+- The two stranded drafts (MC404a/b, MC405a/b) were archived — their cells are
+  live and carry the real data, so the drafts had done their job. Audited and
+  reversible.
+
 ## [6.111.0] — 2026-09-21
 
 ### Added

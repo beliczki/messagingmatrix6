@@ -17,6 +17,7 @@ import {
 import { regeneratedIdentity } from "@/lib/message-identity";
 import { isLive } from "@/lib/numbering";
 import { createMessage, readClientPatterns } from "./messages";
+import { listCreativesByMc } from "./creatives";
 import { createTopic } from "./topics";
 import {
   createCreative,
@@ -250,7 +251,8 @@ export type MirrorSkip =
   | "no-file"
   | "no-channel"
   | "exists"
-  | "archived-twin";
+  | "archived-twin"
+  | "draft-open";
 
 export type MirrorResult =
   | { created: true; reason: null; message: Message; audience: Audience }
@@ -330,6 +332,30 @@ export async function ensureAgenticMc(
     return { created: false, reason: "no-channel", message: null, audience: null };
   }
   const audienceRow = channelToAudience(channelRow);
+
+  // A DRAFT on this number+variant is a gate, not a coincidence: somebody is
+  // preparing this card, and promoting it is how it enters the matrix. Placing
+  // the cell here anyway used to strand the draft — the wall kept showing work
+  // that was already in the grid, and the promote could no longer run, because
+  // the cell it wanted to create was already there (user, 2026-09-22, MC404 and
+  // MC405). The delivered files still show on the draft card ("matched 18"),
+  // so nothing is hidden; only the placement waits for a person.
+  const openDraft = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .where(
+      and(
+        eq(messages.clientId, clientId),
+        eq(messages.number, number),
+        eq(messages.variant, variant),
+        isNull(messages.audience),
+        isNull(messages.archivedAt),
+      ),
+    )
+    .limit(1);
+  if (openDraft.length > 0) {
+    return { created: false, reason: "draft-open", message: null, audience: null };
+  }
 
   const existing = await db
     .select()
@@ -416,4 +442,28 @@ export async function createCreativeWithMirror(
   const creative = await createCreative(clientId, input);
   await ensureAgenticMc(clientId, creative);
   return creative;
+}
+
+/**
+ * Place the cells the MC's delivered files imply — the other half of the draft
+ * gate above.
+ *
+ * While a draft is open, `ensureAgenticMc` creates nothing; the moment it is
+ * promoted, the files that arrived in the meantime still have to land. The
+ * promote converts the draft into ONE cell (the channel the user picked), so
+ * this walks the MC's live creatives and lets each size find its own channel.
+ * Cells that already exist are left exactly as they are — `ensureAgenticMc`
+ * never touches a card that is there.
+ */
+export async function placeAgenticSiblings(
+  clientId: number,
+  number: number,
+  variant: string,
+): Promise<MirrorResult[]> {
+  const files = await listCreativesByMc(clientId, number, variant);
+  const out: MirrorResult[] = [];
+  for (const creative of files) {
+    out.push(await ensureAgenticMc(clientId, creative));
+  }
+  return out;
 }

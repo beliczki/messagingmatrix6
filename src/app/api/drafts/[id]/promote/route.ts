@@ -7,6 +7,7 @@ import {
 } from "@/lib/entities/messages";
 import { denyDemo, withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
+import { placeAgenticSiblings } from "@/lib/entities/promote";
 
 type Params = { id: string };
 
@@ -82,6 +83,10 @@ export const POST = withSession<Params>(async ({ req, claims, params }) => {
       before,
       after: row,
     });
+
+    // Same gate as the bulk route: while the draft was open, uploads created no
+    // cell, so the delivered files land now — each size on its own channel.
+    await placeAgenticSiblings(claims.cid, row.number, row.variant);
 
     if (target !== "both") {
       return NextResponse.json({ message: row });

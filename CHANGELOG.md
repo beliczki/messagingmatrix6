@@ -5,6 +5,23 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.113.1] — 2026-09-23
+
+### Fixed
+- **A draft promoted onto a channel no longer renders as an HTML card.** An
+  Agentic placement is image-based — `createMessage` writes the client default
+  template only when the target is DCO, and `ensureAgenticMc` inserts
+  `template: null` outright — but promote did neither, so it carried the draft's
+  own template across and the cell drew the HTML it was drafted as instead of
+  the file delivered for it. The brief's headline and copy stay on the row: with
+  no template to render them they are a record, not a render.
+- **The cell a draft becomes now receives its delivered file.** Promote turns
+  the draft row itself into one cell, then the sibling pass fills the other
+  channels from the files; for the channel the draft became, that pass found the
+  row already there and left empty-handed — so the one cell with a file waiting
+  for it was the only one that never got it. `ensureAgenticMc` now fills `image1`
+  on an existing row that has none, and still never touches one that does.
+
 ## [6.113.0] — 2026-09-23
 
 ### Changed

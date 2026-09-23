@@ -787,6 +787,16 @@ export async function promoteDraft(
       // ties them together, so splitting this into two updates would be
       // rejected by whichever half went first.
       status: opts.status ?? PROMOTED_STATUS,
+      // An Agentic placement is IMAGE-based. `createMessage` writes the client
+      // default template only when the target is DCO, and `ensureAgenticMc`
+      // inserts `template: null` outright — promote did neither, so it carried
+      // the draft's own template onto a channel cell and the card rendered the
+      // HTML it was drafted as instead of the file that was delivered for it
+      // (user, 2026-09-23, MC406a: the Display cell drew "Legyen a társasházad
+      // is erstés!" while its own 970x250 sat in image1, unused). The brief's
+      // headline and copy stay on the row — they are a person's words, and with
+      // no template to render them they are a record, not a render.
+      ...(targetIsChannel ? { template: null } : {}),
       ...identity,
       version: sql`${messages.version} + 1`,
       updatedAt: nowUtc,

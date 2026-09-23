@@ -1,7 +1,8 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   messages,
+  nowUtc,
   prodlistRows,
   topics,
   type Audience,
@@ -371,6 +372,27 @@ export async function ensureAgenticMc(
     .orderBy(asc(messages.id));
   const live = existing.find(isLive);
   if (live) {
+    // The cell is there, so this pass must not rewrite it — except for the one
+    // thing it alone can supply. A PROMOTED draft becomes the cell for one
+    // channel, and the sibling pass that follows fills the OTHER channels from
+    // the delivered files; for the channel the draft became, that pass lands
+    // here and used to leave empty-handed. So the one cell that had a file
+    // waiting for it was the only one that never got it (user, 2026-09-23,
+    // MC406a's Display cell). Filling it is not an overwrite: it happens only
+    // while image1 is empty, and never touches a card that already names one.
+    if (!live.image1) {
+      const [filled] = await db
+        .update(messages)
+        .set({
+          image1: creative.fileName,
+          name: live.name ?? creative.fileName,
+          version: sql`${messages.version} + 1`,
+          updatedAt: nowUtc,
+        })
+        .where(and(eq(messages.clientId, clientId), eq(messages.id, live.id)))
+        .returning();
+      return { created: false, reason: "exists", message: filled, audience: audienceRow };
+    }
     return { created: false, reason: "exists", message: live, audience: audienceRow };
   }
   if (existing.length > 0) {

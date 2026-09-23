@@ -41,6 +41,7 @@ import {
 } from "./types";
 import { parseSearchQuery, narrowingAxes } from "@/lib/search-query";
 import { isMeasurementLocked } from "@/lib/mc-status";
+import { splitAgenticTopic } from "@/lib/agentic-topic";
 
 async function fetchJSON<T>(url: string): Promise<T> {
   const r = await fetch(url, { credentials: "include" });
@@ -773,9 +774,7 @@ export default function MatrixWorkspace() {
     const seen = new Map<string, Topic>();
     for (const m of messages) {
       if (!channelAudienceKeys.has(m.audience) || seen.has(m.topic)) continue;
-      const i = m.topic.indexOf("_");
-      const product = i > 0 ? m.topic.slice(0, i) : null;
-      const name = i > 0 ? m.topic.slice(i + 1) : m.topic;
+      const { product, name } = splitAgenticTopic(m.topic);
       seen.set(m.topic, {
         key: m.topic,
         name,

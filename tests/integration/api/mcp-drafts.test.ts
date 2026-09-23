@@ -268,7 +268,7 @@ describe("draft_promote", () => {
       number: draft.json.mc_number,
       audience: "SZK_visitors",
       topic: "SZK_brand",
-      status: "PREVIEW",
+      status: "ACTIVE",
       headline: "Promote me",
     });
     expect(res.json.message.pmmid).toBeTruthy();

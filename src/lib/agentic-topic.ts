@@ -20,6 +20,32 @@ export function agenticTopicFromFilename(
   return [p, keywords].filter(Boolean).join("_").slice(0, 200) || "creative";
 }
 
+/**
+ * An Agentic topic key split into what a reader sees and what filters on it.
+ *
+ * The key CARRIES the product (`SZA_diakszamla_2026Q1_colorAndImage`) and that
+ * is load-bearing rather than noise. It is what splits two products that
+ * briefed the same topic into two rows — `SZA_BeErste3Q2_personas` and
+ * `VAL_BeErste3Q2_personas` are two campaigns, not one — and it is the only
+ * place the product reaches the PMMID at all, whose pattern
+ * (`a_{{audience}}-t_{{topic}}-m_{{number}}-v_{{variant}}-n_{{version}}`) has
+ * no product token of its own.
+ *
+ * What it must not do is shout at a reader. The grid has always dropped the
+ * prefix from the row label and shown the product as its own tag; this is that
+ * rule lifted into one place, so the promote dialog stops being the single
+ * surface that spells the raw key out (user, 2026-09-23).
+ */
+export function splitAgenticTopic(key: string): {
+  product: string | null;
+  name: string;
+} {
+  const i = key.indexOf("_");
+  return i > 0
+    ? { product: key.slice(0, i), name: key.slice(i + 1) }
+    : { product: null, name: key };
+}
+
 // Which channel a delivered size belongs to. The Agentic axis is channels, and
 // an MC's files scatter across them BY SIZE — a 1080x1080 is Social, a 300x250
 // is Display — which is why the promote dialog never asks for a DCO audience

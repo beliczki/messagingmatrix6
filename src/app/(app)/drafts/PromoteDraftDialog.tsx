@@ -18,13 +18,14 @@ import { useMemo, useState } from "react";
 import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import ModalBackdrop from "../_components/ModalBackdrop";
-import { MATRIX_STATUSES, BIRTH_STATUS } from "@/lib/mc-status";
+import { MATRIX_STATUSES, PROMOTED_STATUS } from "@/lib/mc-status";
 import type { Audience, Topic } from "../matrix/types";
 import type { Draft } from "./types";
 import type { McCreativeMatch } from "@/lib/entities/creatives";
 import {
   agenticTopicFromFilename,
   channelCodeForSize,
+  splitAgenticTopic,
 } from "@/lib/agentic-topic";
 
 /**
@@ -120,7 +121,7 @@ export default function PromoteDraftDialog({
       ? defaultChannelKey(channelAudiences, files)
       : defaultAudienceKey(audiences, product),
   );
-  const [status, setStatus] = useState<string>(BIRTH_STATUS);
+  const [status, setStatus] = useState<string>(PROMOTED_STATUS);
   // The planned topic is a working TITLE and usually names nothing real, but
   // when it happens to match a topic key exactly the user already answered this
   // question on the Brief tab.
@@ -133,12 +134,27 @@ export default function PromoteDraftDialog({
   const suggestions = useMemo(() => {
     if (!isAgentic) return [] as { key: string; label: string }[];
     const out: { key: string; label: string }[] = [];
+    // The brief's topic is typed by a person and follows no prefix convention,
+    // so it is shown verbatim: splitting it on its first underscore would hand
+    // somebody their own words back with the first one cut off.
     const planned = rows.find((r) => r.topic)?.topic?.trim();
     if (planned) out.push({ key: planned, label: `${planned} · from the brief` });
+    // The derived one DOES follow it — this dialog knows the product, because
+    // the same value built the string — so the label drops that prefix and
+    // shows it as a tag, the way the grid's row labels always have. The VALUE
+    // keeps the whole key: it is what splits two products that briefed the same
+    // topic into two rows, and the only product the PMMID ever carries.
     for (const f of files) {
       const derived = agenticTopicFromFilename(f.fileName, product);
       if (derived && !out.some((o) => o.key === derived)) {
-        out.push({ key: derived, label: `${derived} · from the filenames` });
+        const { product: p, name } = splitAgenticTopic(derived);
+        const shown = p && p === product ? name : derived;
+        out.push({
+          key: derived,
+          label: [shown, p === product ? p : null, "from the filenames"]
+            .filter(Boolean)
+            .join(" · "),
+        });
       }
     }
     return out;

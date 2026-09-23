@@ -31,7 +31,7 @@ import {
 } from "@/lib/entities/channels";
 import { readDefaultTemplate } from "@/lib/templates";
 import { MC_LEVEL_DRAFT_FIELDS } from "@/lib/draft-intake";
-import { BIRTH_STATUS, isMeasurementLocked } from "@/lib/mc-status";
+import { BIRTH_STATUS, PROMOTED_STATUS, isMeasurementLocked } from "@/lib/mc-status";
 
 // A row that occupies a cell. DRAFT rows are the only audience-less ones (DB
 // check `messages_draft_has_no_audience`) and a placed row always carries a
@@ -786,7 +786,7 @@ export async function promoteDraft(
       // Status and audience have to land in the SAME write: the schema check
       // ties them together, so splitting this into two updates would be
       // rejected by whichever half went first.
-      status: opts.status ?? "PREVIEW",
+      status: opts.status ?? PROMOTED_STATUS,
       ...identity,
       version: sql`${messages.version} + 1`,
       updatedAt: nowUtc,

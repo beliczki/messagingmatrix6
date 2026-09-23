@@ -2161,3 +2161,160 @@ linket, az ügynökség pedig saját címkét használ.
 továbbra sem** — mert a konverzió-nevező az ügynökségnél van, nem nálunk.
 
 **Kód nem változott** (csak `scripts/recon/` + `.gitignore` + `docs/`). Verzió-bump nem indokolt.
+
+---
+
+## 2026-09-23 — Videó-kreatívok képi elemzése, és a teendő-terv lezárása
+
+A round 2 leltár (50 sor) bekerült a DB-be: **930 → 980** kreatívnak van `image_text` +
+`image_description`. MC311 80/80, MC348 10/10 kész. Ami nyitva maradt: **97 videó, 0 elolvasva**
+(19 MC, 25 külön (MC, betű) design) — köztük az MC33 20 mp4-e, ami a teendő-tábla 16 ELLENŐRIZ sora.
+
+**Mérés (MC33, 10 mp, 60 fps), ami a módszert eldöntötte:**
+- A klip 0–4 mp-ben néma fotó, nulla szöveggel; az end card ~5 mp-től épül fel és a legutolsó
+  kockáig sértetlen — nincs fade-out. A teljes szöveg EGY kockán van, és az az utolsó.
+- Mind a négy betű záró kártyája **karakterre ugyanazt mondja** („Kalkulálj velünk!", azonos THM).
+  A négy videót **kizárólag a kép** különbözteti meg (lila/pink/türkiz/kék + más fotó).
+  Vagyis videónál a szövegtanú önmagában nem dönt — a képleírás a döntő mező.
+- Az mp4 `a` ≠ a png `a`: egy MC, egy betű, egy méret, két különböző design — csak a kiterjesztés
+  választja el őket (a 6baa7a4-ben bevezetett kiterjesztés-identitás szabály helyes volt).
+
+**A kockakivágás valódi hozama nem a szöveg, hanem a pixeltanú.** A `gen-variant-actions.ts`
+`diff()`-je `sharp()`-pal nyit, ami mp4-en dob → `null` → a logika a záró `else`-re esik, és
+„MARAD (külön kreatív) — azonos szöveg, de nagy felületen tér el" indoklást ír **mérés nélkül**.
+Kivágott JPEG-en a diff működik, tehát a harmadik tanú visszatér.
+
+### Lépések
+- [x] **V1** `scripts/export-video-frames-for-reading.ts` — záró kártya (az utolsó kocka, amin még
+      rajta van a kreatív: hátralépés, amíg a kocka majdnem egyszínű) + (MC, betű)-nként EGY
+      idősáv-kontaktlap (20/40/60/80% próbakockák 2×2-ben), hogy látszódjon, ha a klip lépcsőzi a
+      szöveget. 97 záró kártya + 25 kontaktlap.
+- [x] **V2** A kockák elolvasása és a leltár-xlsx kitöltése (ugyanaz a két oszlop, videó-prompttal).
+- [x] **V3** Import `import-image-readings.ts`-szel → **1077 olvasott kreatív** (97/97 videó).
+- [x] **V4** `gen-variant-actions.ts` javítás: (a) `scanExport()` ismerje az `idNNNN__` nevet, mint
+      az importer már; (b) videó-ág — a kivágott záró kártyát diffelje, ne az mp4-et; (c) dedup:
+      ha egy slotot már lefed egy id-vel párosított sor, a régi ütköző sor essen ki.
+- [x] **V5** Újrafuttatás → **NINCS PÁROSÍTVA: 0**, a 16 MC33-as ELLENŐRIZ lezárva.
+- [x] **V6** VÉGREHAJTÁS — `scripts/apply-variant-actions.ts`, száraz futás, user jóváhagyás,
+      majd éles írás: **35 átnevezve, 40 archiválva**.
+
+### V1–V3 LESZÁLLÍTVA (2026-09-23). Amit a munka közben MÉRTÜNK
+
+**A záró kocka nem elég őrszem nélkül.** Az első szabály (lépj hátra, amíg a kocka majdnem
+egyszínű) az MC377-en elbukott: a klip utolsó négy másodperce **csupasz Erste logó kék mezőn**,
+ami nem egyszínű, tehát átment a teszten — és négy kreatív üres kártyát kapott volna.
+A javítás mért küszöb, nem tipp: a "festék-arány" (a domináns színtől távol eső pixelek aránya)
+a 97 kártyán **4,3–5,1% a négy logókártyán és 26,0% a legszegényebb tartalmi kártyán** — a 15%
+széles résben ül. Ha a teljes farok üres, a script végigpásztázza a klipet és a LEGKÉSŐBBI
+tartalmas kockát veszi (MC377-nél a ~25%-nál lévőt).
+
+**97 kártya → 31 design.** A panelszín-ujjlenyomat (RGB-távolság, 25-ös tűrés) csoportosít:
+egy design méretváltozatai 10 egységen belül maradnak, két külön design 60+ egységre van.
+Ez 97 helyett 50 tényleges olvasást jelentett, **bizonyítékkal**, nem feltételezéssel — és ahol
+egy klaszterben ugyanaz a méret többször szerepelt (verziók), ott minden fájl külön el lett olvasva.
+
+**A Babaváró-család: MC3 és MC33 UGYANAZ a négy design, két kamattal.**
+MC33 = 0,49%-10,20%, betűk a/b/c/d. MC3 = 0,50%-10,18%, **mind a négy az `a` betű alatt**.
+A panelszín keresztbe igazolja (`#4c6aac`, `#ce6680` pontosan egyezik). Két hiba egyszerre:
+az MC3-ban négy külön kreatív ül egy betűn, az MC3↔MC33 pár pedig kamatfrissítés — vagyis
+VERZIÓ —, csak épp két külön MC-szám alatt. A generátor ezt nem látja: MC-n belül dolgozik.
+
+**Ugyanez MC386-on:** öt külön persona-design (borbély / varrónő / kötényes férfi / halas /
+autószerelő), **karakterre azonos szöveggel**, mind az `a` betű alatt. A szövegtanú itt nulla
+értékű — csak a kép választ el.
+
+**MC35: verziólétra verziószám nélkül.** Három 1080x1080 fájl fut 9,01% / 9,04% / 9,14% THM-mel,
+de csak az egyik visel `_n2` jelölést, a másik kettő csupasz `a`. (MC289 ezzel szemben helyesen
+számoz: n3 = 8,98%, n4 = 8,92%.)
+
+**MC180: fél-képernyős placement pár**, nem duplikátum — id15900 a BAL, id15901 a JOBB térfelén
+hordozza ugyanazt a kreatívot, a másik fele fekete.
+
+**Sortörés-normalizálás.** Ugyanaz a mondat a négyzetes kiírásban két sorba, a portréban négybe
+törik. A tördelés elrendezés, nem tartalom, és a feldolgozás karakterre hasonlít — ezért a
+leltárban a MONDATHATÁR a sortörés, a tipográfiai tördelés nem.
+
+**Egy hiba, amit a saját scriptünk okozott:** a `_TARTALOM.txt`-et egy részfutás (`--mc 377`)
+felülírta, így az index négy kreatívot állított a 97 helyett, és az első leltár-kiegészítés
+ennek megfelelően 4 sort írt. Javítva: az index MOST összefésül, nem felülír. A tanulság a
+szokásos — egy részhalmazon futó írás a teljes állapotot csonkította, csendben.
+
+### V4–V5 LESZÁLLÍTVA (2026-09-23)
+
+`gen-variant-actions.ts` három javítása, majd újrafuttatás. **1077 sor** (= pontosan annyi,
+ahány kreatívnak van képolvasata), és a korábbi 974-es terv szétesett kategóriái helyett:
+
+| teendő | volt | most |
+|---|---|---|
+| MARAD (külön kreatív) | 543 | 626 |
+| MARAD | 322 | 357 |
+| ÁTNEVEZ | 53 | 54 |
+| ARCHIVÁL | 20 | 25 |
+| ELLENŐRIZ | 16 | 15 |
+| **NINCS PÁROSÍTVA** | **20** | **0** |
+
+1. **id-név a `scanExport()`-ban.** A `(?:id(\d+)__)?` előtag opcionális, így a round1 nevek
+   változatlanul mennek. A kontaktlapok maguktól kiesnek: a betű-csoport EGY karaktert illeszt,
+   az `idosav` hat.
+2. **Dedup — egy kreatív, egy sor.** Ugyanaz a fájl három körben is exportálva van (MC33: round1
+   osztályozó mappa, round2 id-vel, round3 záró kártya), és három sor esetén a kreatív önmagával
+   versenyzett volna a referencia-helyért. A győztes az, amit MÉRNI lehet: sharp által nyitható
+   fájl > mp4, id-név > visszafejtett név. A párosítatlan sor pedig csak akkor marad a jelentésben,
+   ha a slotját semmi nem fedi — ez oldotta fel a 20 NINCS PÁROSÍTVA sort.
+3. **A hamis indoklás megszűnt.** Ha `sameWords` igaz, de nincs diff, a logika eddig a záró
+   `else`-re esett és „nagy felületen tér el"-t írt **mérés nélkül**. Most külön ág: ELLENŐRIZ,
+   és megnevezi az okot.
+
+### A maradék 15 ELLENŐRIZ — megnéztem, és NEM tizenöt külön eset
+
+Mind a 15 sor ugyanaz: MC97/99/101/103/115 × 160x600 / 468x120 / 970x90, és az `a` fájl **pontosan
+1 pixellel nagyobb** az egyik irányban (161x600, 468x121, 970x91), mind a tizenötben azonos mintával
+— tehát egyetlen renderelési job műterméke, nem tizenöt döntés.
+
+A pixeltanú azért nem tud dönteni, mert a nagyobb render a design NYÚJTÁSA: minden vízszintes él
+pixelek közé esik, és semmilyen egész eltolás nem rakja helyre. Mérve: vágás és ±2px keresés is
+~26%-on hagyja az MC97 468x120 párt, miközben az azonos méretű testvére 2,7%-on ül. Átméretezés
+rosszabb (32%).
+
+**Szemrevételezve (MC97 468x120, MC97 970x90, MC101 160x600 — mindhárom alak, két MC):
+azonos design, azonos szöveg, azonos THM.** Emberi ítélet: mind a 15 **ARCHIVÁL**.
+A generátorban szándékosan ELLENŐRIZ marad — nem mértük, csak megnéztük.
+
+### V6 LESZÁLLÍTVA (2026-09-23) — éles írás megtörtént
+
+`scripts/apply-variant-actions.ts` (új). Száraz futás az alapértelmezett; `--apply` ír,
+`--with-ellenoriz` veszi be a 15 ELLENŐRIZ sort (emberi döntés, ezért gépelni kell),
+`--skip <id>` zár ki egy sort (a kizárás a parancsban látszik, nem szűrőben rejtve).
+
+**Eredmény: 35 átnevezés, 40 archiválás, 18 kihagyva, 1 kizárva.** Ellenőrizve: az MC97
+160x600/970x90 létra most `n1` = THM 14,3%, `n2` = 12,1% — azonos betű és méret alatt,
+ami az egész szál célja volt. Írás előtt CSV-pillanatkép készült a 94 érintett sorról.
+
+**Az átnevezés három mezőt visz együtt** — `file_name`, `mc_variant`, `family_key` —, mert a
+`family_key` a fájlnév-tőből származik és TARTALMAZZA a betűt, a `promote.ts` pedig ezen
+egyeztet prodlist-szállítandóval; elavulva a régi betűre mutatna. A `banner_version` CSAK ott
+mozdul, ahol ma szinkronban van a fájlnévvel (a `Version` xlsx-oszlopból jön, UI-feltöltésnél
+null — üres mezőbe számot írni adatkitalálás volna).
+
+### Két dolog, amit csak a száraz futás mutatott meg
+
+1. **Az 54 ÁTNEVEZ valójában 36.** Tizennyolc sor (MC330/331/332) már pontosan így hívta magát:
+   a generátor a VISZONYT írja le („ez a fájl a referencia-betű n2-je"), és ezek már helyes
+   néven érkeztek. Az apply ezeket kihagyja, nem „alkalmazza".
+2. **Egy sor élesben csendben rontott volna.** MC130 `b_n5` → `a_…_n2`: az `a` család már tart
+   n3-at és n4-et, tehát a LEGÚJABB fájl két régebbi alá került volna, és a `versionLadder` az
+   n4-et adta volna a mátrixnak aktuálisként. Gyökérok: a generátor a verziószámot az exportált
+   méretcsoportban látott THM-ekből indexeli, és nem tudja, mit tart már a célcsalád.
+   **Állandó őrszem került az apply-ba:** átnevezés nem landolhat meglévő verzión vagy alatta,
+   ugyanazzal a `versionFamilyKey`-jel, amit az app használ.
+
+**Nyitva maradt — MC130 (id17830).** Három különböző kulcsszó-készlet fut egy MC alatt
+(`SZK_fuggoagy`, `fuggoagy_videoAndColor`, `fuggoagy_fullVideoSurface`), és a 17829 neve törött
+(`_1080x1080_1.mp4`, ezért üres a `file_dimensions` és a `family_key`; a 14980/14981 tárolt
+`family_key`-e ráadásul `MC0`-t mond). Döntés kell rá, nem átnevezés.
+
+**Nyitva maradt — cross-MC.** Az MC3↔MC33 (ugyanaz a négy Babaváró-design két kamattal) és az
+MC386 (öt persona egy betűn) nem oldódik meg ettől: a generátor MC-n belül dolgozik.
+
+**Közben, 15:47 UTC-kor valaki 18 kreatívot töltött fel az élő appon** (MC406, Társasház/
+MediaMarkt). Az egyenleg ezzel jön ki pontosan: 3361 + 18 − 40 = 3339 élő.

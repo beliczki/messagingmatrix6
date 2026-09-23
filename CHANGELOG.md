@@ -5,6 +5,70 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.113.0] — 2026-09-23
+
+### Changed
+- **Promoting a draft now lands on ACTIVE, not PREVIEW.** A card created
+  straight into the matrix still has to be built and looked at, but a draft has
+  already been through the brief and its delivered files — PREVIEW was a stop
+  everyone clicked past. The new `PROMOTED_STATUS` sits beside `BIRTH_STATUS`
+  in `mc-status.ts`, and both the promote dialog and `promoteDraft`'s server
+  fallback read it, so the two can no longer drift (the fallback had already
+  drifted: it spelled `"PREVIEW"` inline rather than reading the constant).
+  Note the cost, because it is real: ACTIVE is measurement-locked, so a card
+  promoted this way can no longer be moved to another cell.
+
+### Fixed
+- One redundant MC406b draft archived. The 15:47 upload had already placed a
+  live MC406b from the delivered files; the draft was added by hand a minute
+  later, and promoting it would have bumped it to a fresh letter and duplicated
+  the live row.
+
+## [6.112.1] — 2026-09-23
+
+### Changed
+- **Every video creative now carries what its picture says.** 97 clips (19 MCs)
+  had no `image_text` at all, because an image reader cannot open an mp4 — so
+  the library could not search them and the variant planner had nothing to
+  judge them by. `export-video-frames-for-reading.ts` cuts the end card out of
+  each clip and the readings were imported: **930 → 1077** creatives now carry
+  text and a description.
+- **75 creatives tidied against the variant action plan.** 35 renamed into a
+  version of their reference letter (MC97/99/101/103/115: the same creative
+  with a refreshed rate line, `_n1_` → `_n2_`, letters `e…m` → `a`) and 40
+  archived as redundant exports. `file_name`, `mc_variant` and `family_key`
+  move together, because `family_key` is derived from the filename stem and
+  contains the letter — `promote.ts` matches prodlist deliverables on it.
+
+### Added
+- `scripts/export-video-frames-for-reading.ts` — takes the last frame a clip's
+  creative is still on. Walking back from the end is not enough on its own: an
+  ad that spends its last seconds on a bare wordmark passes a flatness test, so
+  an "ink" measure (share of pixels far from the dominant colour) separates the
+  two — measured over all 97 cards, logo cards sit at 4.3-5.1% and the lowest
+  content card at 26.0%. Also writes one 2x2 contact sheet per (MC, letter) so
+  a reader can see whether the clip staged its copy earlier.
+- `scripts/apply-variant-actions.ts` — carries out the plan. Dry by default;
+  `--apply` writes, `--with-ellenoriz` opts the unmeasurable rows in, `--skip`
+  excludes one in the command rather than in a hidden filter. Refuses to write
+  anything at all if a single row looks wrong.
+
+### Fixed
+- **A rename can no longer file the newest delivery under an older one.** The
+  plan numbered MC130's newest clip (`b_n5`) as `a_…_n2` while the target
+  family already held n3 and n4 — `versionLadder` would then have handed the
+  matrix n4 as the current creative. The apply script now refuses a rename that
+  lands at or below an existing version, using the same `versionFamilyKey` the
+  app uses.
+- **`gen-variant-actions` no longer claims a measurement it never made.** When
+  the text matched but no pixel diff was possible (an mp4, or a one-pixel
+  export size difference), it fell through to "differs over a large area". It
+  now reports the actual reason and leaves the row for a human.
+- `gen-variant-actions` reads the `idNNNN__` filenames the id-based exports
+  write, keeps one row per creative when a file was exported into several
+  rounds, and carries the creative id as the plan's first column — which closed
+  the last 20 unmatched rows.
+
 ## [6.112.0] — 2026-09-22
 
 ### Fixed

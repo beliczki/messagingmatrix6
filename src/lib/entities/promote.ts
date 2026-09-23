@@ -16,8 +16,9 @@ import {
   channelCodeForSize,
 } from "@/lib/agentic-topic";
 import { regeneratedIdentity } from "@/lib/message-identity";
+import { MC_LEVEL_DRAFT_FIELDS } from "@/lib/draft-intake";
 import { isLive } from "@/lib/numbering";
-import { createMessage, readClientPatterns } from "./messages";
+import { createDraft, createMessage, readClientPatterns } from "./messages";
 import { listCreativesByMc } from "./creatives";
 import { createTopic } from "./topics";
 import {
@@ -341,20 +342,51 @@ export async function ensureAgenticMc(
   // the cell it wanted to create was already there (user, 2026-09-22, MC404 and
   // MC405). The delivered files still show on the draft card ("matched 18"),
   // so nothing is hidden; only the placement waits for a person.
-  const openDraft = await db
-    .select({ id: messages.id })
+  // The gate is on the NUMBER, not on (number, variant) — and that distinction
+  // is the whole bug it now fixes. "A number never spans topics" is a rule
+  // about the NUMBER, so a delivered letter with no draft of its own could walk
+  // past a per-variant gate, mint a live cell in a topic derived from its
+  // filename, and take the number's topic with it. The drafted letters were
+  // then stranded: their own promote was refused for pointing the number at a
+  // second topic (user, 2026-09-23, MC406 — `a` was drafted and correctly
+  // skipped while `b` and `c` placed themselves and carried the number off).
+  //
+  // Axis-scoped, for the reason promoteDraft's cross-topic check is: a DCO
+  // draft and an Agentic cell may legally share a number, so only a draft
+  // heading for this axis holds it. A draft with no stated target has not ruled
+  // the Agentic axis out, so it counts.
+  const openDrafts = await db
+    .select()
     .from(messages)
     .where(
       and(
         eq(messages.clientId, clientId),
         eq(messages.number, number),
-        eq(messages.variant, variant),
         isNull(messages.audience),
         isNull(messages.archivedAt),
       ),
-    )
-    .limit(1);
-  if (openDraft.length > 0) {
+    );
+  const holders = openDrafts.filter(
+    (d) => d.draftTarget == null || d.draftTarget === "agentic" || d.draftTarget === "both",
+  );
+  if (holders.length > 0) {
+    // The delivered letter may be one the brief never named. Adding it BY HAND
+    // was the old answer, and it is how MC406 ended up with a duplicate `b`:
+    // the upload had already placed one, the wall did not show it, and a second
+    // was typed a minute later. So the letter arrives as a draft variant beside
+    // its siblings, carrying the MC-level intake — the brief belongs to the MC,
+    // not to the variant, which `propagateBriefAcrossDraftVariants` already
+    // holds as an invariant for every other path that adds one.
+    if (!holders.some((d) => (d.variant ?? "") === variant)) {
+      const source = holders[0]!;
+      const intake = Object.fromEntries(
+        MC_LEVEL_DRAFT_FIELDS.map((f) => [f, source[f]]),
+      );
+      await createDraft(clientId, intake, {
+        requestedNumber: number,
+        requestedVariant: variant,
+      });
+    }
     return { created: false, reason: "draft-open", message: null, audience: null };
   }
 

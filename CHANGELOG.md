@@ -5,6 +5,36 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.114.0] — 2026-09-23
+
+### Fixed
+- **A live draft now holds its NUMBER, not just its letter.** "A number never
+  spans topics" is a rule about the number, so a delivered letter with no draft
+  of its own walked past the per-variant gate, minted a live cell in a topic
+  derived from its filename, and took the number's topic with it — after which
+  the drafted letters could not be promoted at all. MC406 is the case: `a` was
+  drafted and correctly skipped while `b` and `c` placed themselves and carried
+  the number off. Axis-scoped, for the same reason promoteDraft's cross-topic
+  check is: a DCO draft and an Agentic cell may legally share a number.
+- **A delivered letter the brief never named now arrives as a draft variant.**
+  Adding it by hand was the old answer, and it is how MC406 ended up with a
+  duplicate `b` — the upload had already placed one, the wall did not show it,
+  and a second was typed a minute later. The new variant carries the MC-level
+  intake, since the brief belongs to the MC and not to the variant.
+
+### Changed
+- `creatives.updated_at` restored on 1037 rows. The dashboard's creative strip
+  windows and orders on that column, and three bookkeeping passes — the image
+  readings and the variant-plan renames — had written it without anything about
+  the creative changing, filling the last 30 days with files delivered in 2024.
+  Each row went back to its newest real change (an audit entry that is not one
+  of those silent passes, else its own `created_at`). The 30-day window went
+  from 1153 creatives to 246, and what remains are actual deliveries.
+- MC130's broken filename repaired: `..._n5_1080x1080_1.mp4` ended in a stray
+  `_1`, which the parser read as part of the size token, leaving
+  `file_dimensions` and `family_key` empty. The matrix cell that names the file
+  moved with it.
+
 ## [6.113.1] — 2026-09-23
 
 ### Fixed

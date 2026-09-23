@@ -180,11 +180,55 @@ describe("a live draft holds the number until it is promoted", () => {
     expect(rows.map((r) => r.audience)).toEqual(["ch_disp"]);
   });
 
-  it("the draft gate is per variant, not per number", async () => {
-    await draftOn(407, "a");
+  // Reversed on 2026-09-23. The gate used to be per (number, variant), and the
+  // letter with no draft of its own walked straight past it: it minted a live
+  // cell in a topic derived from its filename and took the NUMBER's topic with
+  // it, which then refused the drafted letter's own promote ("a number never
+  // spans topics"). MC406 is the case — `a` was drafted and correctly skipped
+  // while `b` and `c` placed themselves and carried the number off.
+  it("holds the number for a letter the brief never named, and drafts it", async () => {
+    const source = await draftOn(407, "a");
     await upload(erste.id, "ERSTE_SZA_MC407_b_balaton_n1_300x250.png");
+
     const rows = await agenticCells(erste.id, 407);
-    expect(rows.filter((r) => r.audience === "ch_disp").map((r) => r.variant)).toEqual(["b"]);
+    // Nothing placed: the number is still the draft's.
+    expect(rows.filter((r) => r.audience !== null)).toHaveLength(0);
+    // And the delivered letter is waiting as a draft variant, not as something
+    // somebody has to notice and type in.
+    const drafts = rows.filter((r) => r.audience === null);
+    expect(drafts.map((r) => r.variant).sort()).toEqual(["a", "b"]);
+    // The brief belongs to the MC, not to the variant.
+    expect(drafts.find((r) => r.variant === "b")!.topic).toBe(source.topic);
+  });
+
+  it("adds the letter once, however many sizes arrive for it", async () => {
+    await draftOn(408, "a");
+    await upload(erste.id, "ERSTE_SZA_MC408_b_balaton_n1_300x250.png");
+    await upload(erste.id, "ERSTE_SZA_MC408_b_balaton_n1_970x250.png");
+    const drafts = (await agenticCells(erste.id, 408)).filter((r) => r.audience === null);
+    expect(drafts.map((r) => r.variant).sort()).toEqual(["a", "b"]);
+  });
+
+  // A DCO draft and an Agentic cell may legally share a number, so a draft
+  // heading elsewhere does not hold this axis — the same scoping promoteDraft's
+  // cross-topic check uses.
+  it("a DCO-targeted draft does not hold the Agentic axis", async () => {
+    const [d] = await db
+      .insert(messages)
+      .values({
+        clientId: erste.id,
+        number: 409,
+        variant: "a",
+        audience: null,
+        topic: "tervezett_topic",
+        status: "DRAFT",
+        draftTarget: "dco",
+      })
+      .returning();
+    expect(d).toBeTruthy();
+    await upload(erste.id, "ERSTE_SZA_MC409_a_balaton_n1_300x250.png");
+    const rows = await agenticCells(erste.id, 409);
+    expect(rows.filter((r) => r.audience === "ch_disp")).toHaveLength(1);
   });
 
   it("places every size's channel once the draft is gone", async () => {

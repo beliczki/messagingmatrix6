@@ -5,6 +5,15 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.115.1] — 2026-09-24
+
+### Fixed
+- **Promoted drafts no longer come back to the Drafts wall.** A bulk promote
+  places each letter's delivered files right after promoting it; with the other
+  letters still drafted, the just-promoted letter was mistaken for one the brief
+  never named and re-drafted — and its cell never got its file (MC407). A letter
+  that already has a live Agentic cell now goes to ordinary placement instead.
+
 ## [6.115.0] — 2026-09-24
 
 ### Added

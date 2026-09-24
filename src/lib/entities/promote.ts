@@ -369,7 +369,31 @@ export async function ensureAgenticMc(
   const holders = openDrafts.filter(
     (d) => d.draftTarget == null || d.draftTarget === "agentic" || d.draftTarget === "both",
   );
-  if (holders.length > 0) {
+  // A letter that is already placed on this axis is not one the brief never
+  // named — its draft was just promoted, and the number's topic is already
+  // pinned by that live cell. Treating it as un-named re-drafted every letter
+  // of a bulk promote the moment the next one's siblings were placed, and left
+  // the promoted cells without their files (user, 2026-09-24, MC407). It falls
+  // through to ordinary placement, where the topic comes from the live sibling.
+  const channelList = await listChannels(clientId);
+  const channelKeys = channelList.map((c) => c.key);
+  const placed = (
+    await db
+      .select({ status: messages.status, archivedAt: messages.archivedAt })
+      .from(messages)
+      .where(
+        and(
+          eq(messages.clientId, clientId),
+          eq(messages.number, number),
+          eq(messages.variant, variant),
+          inArray(messages.audience, channelKeys),
+        ),
+      )
+  ).some(isLive);
+  if (holders.some((d) => (d.variant ?? "") === variant)) {
+    return { created: false, reason: "draft-open", message: null, audience: null };
+  }
+  if (holders.length > 0 && !placed) {
     // The delivered letter may be one the brief never named. Adding it BY HAND
     // was the old answer, and it is how MC406 ended up with a duplicate `b`:
     // the upload had already placed one, the wall did not show it, and a second
@@ -377,16 +401,14 @@ export async function ensureAgenticMc(
     // its siblings, carrying the MC-level intake — the brief belongs to the MC,
     // not to the variant, which `propagateBriefAcrossDraftVariants` already
     // holds as an invariant for every other path that adds one.
-    if (!holders.some((d) => (d.variant ?? "") === variant)) {
-      const source = holders[0]!;
-      const intake = Object.fromEntries(
-        MC_LEVEL_DRAFT_FIELDS.map((f) => [f, source[f]]),
-      );
-      await createDraft(clientId, intake, {
-        requestedNumber: number,
-        requestedVariant: variant,
-      });
-    }
+    const source = holders[0]!;
+    const intake = Object.fromEntries(
+      MC_LEVEL_DRAFT_FIELDS.map((f) => [f, source[f]]),
+    );
+    await createDraft(clientId, intake, {
+      requestedNumber: number,
+      requestedVariant: variant,
+    });
     return { created: false, reason: "draft-open", message: null, audience: null };
   }
 
@@ -438,8 +460,6 @@ export async function ensureAgenticMc(
     };
   }
 
-  const channelList = await listChannels(clientId);
-  const channelKeys = channelList.map((c) => c.key);
   const topic =
     (await agenticTopicForNumber(clientId, number, channelKeys)) ??
     topicFromCreative(creative);

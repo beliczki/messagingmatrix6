@@ -248,4 +248,32 @@ describe("a live draft holds the number until it is promoted", () => {
     // The promoted row on DISP, plus the social size that had been waiting.
     expect(rows.map((r) => r.audience).sort()).toEqual(["ch_disp", "ch_soc"]);
   });
+
+  // MC407, 2026-09-24. The bulk promote places siblings after EACH letter, so
+  // when `a` is placed, `b` and `c` are still open drafts holding the number —
+  // and `a`, no longer drafted, used to look like a letter the brief never
+  // named. Every promoted letter was re-drafted, and its cell got no file.
+  it("a bulk promote leaves no draft behind and gives each cell its file", async () => {
+    const drafts = [await draftOn(410, "a"), await draftOn(410, "b"), await draftOn(410, "c")];
+    for (const v of ["a", "b", "c"]) {
+      await upload(erste.id, `ERSTE_SZA_MC410_${v}_balaton_n1_300x250.png`);
+    }
+
+    // The route's loop: promote one letter, place its siblings, next letter.
+    for (const d of drafts) {
+      await db
+        .update(messages)
+        .set({ audience: "ch_disp", status: "ACTIVE" })
+        .where(eq(messages.id, d.id));
+      await placeAgenticSiblings(erste.id, 410, d.variant);
+    }
+
+    const rows = await agenticCells(erste.id, 410);
+    expect(rows.filter((r) => r.audience === null)).toHaveLength(0);
+    expect(rows.map((r) => [r.variant, r.image1])).toEqual([
+      ["a", "ERSTE_SZA_MC410_a_balaton_n1_300x250.png"],
+      ["b", "ERSTE_SZA_MC410_b_balaton_n1_300x250.png"],
+      ["c", "ERSTE_SZA_MC410_c_balaton_n1_300x250.png"],
+    ]);
+  });
 });

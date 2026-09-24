@@ -2480,3 +2480,25 @@ bump). Séma-migráció **nincs** — a titok a már létező `system_config`-ba
 a `sed` az utolsó karaktert `0`-ra írta, az pedig **már `0` volt**, tehát ugyanazt az URL-t kértem le.
 A route rendben volt; a teszt nem. Nem elég elrontani akarni a bemenetet, ellenőrizni kell, hogy
 tényleg más lett-e.
+
+### FIX — promote után visszajövő draftok (MC407, 2026-09-24)
+
+**Tünet:** az MC407 a/b/c bulk promote után a/b/c újra megjelent draftként a falon, és a három élő
+DISP cella `image1`-e üres maradt.
+
+**Gyökérok:** a bulk route minden betű után futtatja a `placeAgenticSiblings`-t. Amikor `a` a helyére
+került, `b` és `c` még nyitott draft volt és tartotta a számot, `a`-nak pedig már nem volt saját
+draftja — így az `ensureAgenticMc` „a brief által meg nem nevezett betűnek" nézte és **újradraftolta**
+(`draft-open`, tehát a fájl sem került a cellába). Ugyanez `b`-re és `c`-re.
+
+**Javítás** (`src/lib/entities/promote.ts`, `ensureAgenticMc`): a kapu külön kezeli a három esetet —
+saját nyitott draft → vár (MC404/405 változatlan); **már élő cella az Agentic tengelyen** → átmegy a
+rendes elhelyezésre (a topic az élő testvértől jön, így az MC406-os eset nem jöhet vissza); sem draft,
+sem cella → új draft-variáns. Teszt: `creative-mirror.test.ts` „a bulk promote leaves no draft
+behind…" — a javítás nélkül bukik, vele zöld. Teljes suite 1032/1032, `tsc` tiszta.
+
+**Élő adat rendbetéve** (`scripts/fix-mc407-redrafts.ts`, auditálva): 36118–36120 archiválva; a
+sibling pass újrafuttatva → a/b/c DISP cellák `image1`-et kaptak, és létrejött a/b/c SOC cella
+(36121–36123, 1080x1080) ugyanabban a topicban.
+
+- [x] commit + deploy (erste, telekom) — 6.115.1

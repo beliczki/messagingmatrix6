@@ -2452,3 +2452,31 @@ nem rendereltek volna. Az új verzióban nincsenek benne. Ha kell inline kép-os
 kell kiírnia, a mostani aláírt linkekkel.
 
 **Verzió:** `6.114.0` → `6.115.0`, `CHANGELOG.md` megírva.
+
+### DEPLOYOLVA 6.115.0 — mindkét tenant (2026-09-24)
+
+Commit `44294b2` (három szeletben: `aa6c72a` aláírt URL-ek · `a7fc54c` API tab · `44294b2` export +
+bump). Séma-migráció **nincs** — a titok a már létező `system_config`-ban ül.
+
+`mm6-deploy erste` és `mm6-deploy telekom`, mindkettő **„up after 1s behind the page"**. Box
+`package.json` mindkét tenantnál **6.115.0**, disk 9,2G szabad, `mm6-erste-error.log` a restart óta
+üres.
+
+**Élő ellenőrzés (`erste.messagingmatrix.ai`):**
+
+| | |
+|---|---|
+| `/login` | 200 |
+| `/matrix`, `/mcp`, `/api/previews/6390` | 307 · 401 · **401** |
+| `…/publicshortcut/m31385.4a6371c2752c6b40/300x250` | **200**, PNG 300×250, 82 KB |
+| ugyanaz `c<id>` kreatív-tokennel | **200**, JPEG 464 KB |
+| aláírás első / utolsó karaktere átírva | 404 · 404 |
+| más message-id ugyanazzal az aláírással | 404 |
+| `c` típus `m` id-vel | 404 |
+| nem generált méret (`160x600`) | 404 |
+| `?html=1` | 200, `text/html` |
+
+**Egy hamis riasztás, amit magamnak kell felírni:** az első „aláírás elrontva" próbám 200-at adott —
+a `sed` az utolsó karaktert `0`-ra írta, az pedig **már `0` volt**, tehát ugyanazt az URL-t kértem le.
+A route rendben volt; a teszt nem. Nem elég elrontani akarni a bemenetet, ellenőrizni kell, hogy
+tényleg más lett-e.

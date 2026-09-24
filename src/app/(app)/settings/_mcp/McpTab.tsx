@@ -182,11 +182,16 @@ export function McpTab() {
           <code className="font-mono text-xs">{"{size: url}"}</code> map of
           generated PNG screenshots of each rendered HTML creative. The URLs
           point at{" "}
-          <code className="font-mono text-xs">/api/previews/&lt;id&gt;</code>{" "}
-          and are <strong className="font-semibold">public</strong> — a plain
-          unauthenticated HTTP GET works (they are fetched outside the MCP
-          protocol; the deploy still only serves the active client&apos;s
-          previews, and generation stays authenticated). Previews are
+          <code className="font-mono text-xs">
+            /publicshortcut/m&lt;message_id&gt;.&lt;sig&gt;/&lt;size&gt;
+          </code>{" "}
+          and are <strong className="font-semibold">signed</strong> — a plain
+          HTTP GET with no auth header works, and the signature is what stands
+          in for one (they are fetched outside the MCP protocol; the deploy
+          still only serves the active client&apos;s previews, and generation
+          stays authenticated). The message id is in the clear, so an agent
+          holding it can build the link for any other size itself — see
+          Settings&nbsp;→&nbsp;API. Previews are
           generated per template size by the{" "}
           <code className="font-mono text-xs">preview_generate</code> tool (max
           20 labels per call, synchronous headless Chromium — a few seconds per
@@ -236,9 +241,11 @@ export function McpTab() {
           is <strong className="font-semibold">derived</strong>, not stored — a
           size counts as done when its preview was shot at the draft&apos;s
           current version, so editing a draft makes its previews stale again and
-          the percentage drops back. Previews are ordinary MC previews at{" "}
-          <code className="font-mono text-xs">/api/previews/&lt;id&gt;</code>;
-          display them with{" "}
+          the percentage drops back. Previews are ordinary MC previews on the
+          same signed{" "}
+          <code className="font-mono text-xs">/publicshortcut</code> URLs, with
+          no status gate — that is what lets a client&apos;s agent watch a
+          draft take shape; display them with{" "}
           <code className="font-mono text-xs">show_draft_previews</code>. Then{" "}
           <code className="font-mono text-xs">draft_promote</code> gives the
           draft its cell — the MC number is{" "}

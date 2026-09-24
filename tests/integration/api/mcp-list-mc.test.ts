@@ -128,13 +128,15 @@ describe("list_mc via MCP", () => {
     const { json } = await callTool(erste.id, "list_mc", {});
     const row1 = json.find((r: { number: number }) => r.number === 1);
     const row2 = json.find((r: { number: number }) => r.number === 2);
-    // URLs carry a ?v=<updated_at> cache-buster (same scheme as the matrix
-    // editor) so a regenerated preview is not served stale from cache.
+    // Signed and addressed by MESSAGE id + size, not by the preview row id —
+    // that is what lets a caller holding the message id build the link for
+    // another size itself. ?v=<updated_at> stays outside the signature so a
+    // regenerated preview is not served stale from cache.
     expect(row1.preview_urls["300x250"]).toMatch(
-      new RegExp(`^/api/previews/${p300!.id}\\?v=.+$`),
+      new RegExp(`^/publicshortcut/m${mc1!.id}\\.[0-9a-f]{16}/300x250\\?v=.+$`),
     );
     expect(row1.preview_urls["970x250"]).toMatch(
-      new RegExp(`^/api/previews/${p970!.id}\\?v=.+$`),
+      new RegExp(`^/publicshortcut/m${mc1!.id}\\.[0-9a-f]{16}/970x250\\?v=.+$`),
     );
     expect(Object.keys(row1.preview_urls).sort()).toEqual(["300x250", "970x250"]);
     expect(row2.preview_urls).toEqual({});
@@ -170,7 +172,7 @@ describe("list_mc via MCP", () => {
     const json = JSON.parse(res.content[0]!.text);
     expect(json[0].preview_urls["300x250"]).toMatch(
       new RegExp(
-        `^https://erste\\.messagingmatrix\\.ai/api/previews/${p!.id}\\?v=.+$`,
+        `^https://erste\\.messagingmatrix\\.ai/publicshortcut/m${mc1!.id}\\.[0-9a-f]{16}/300x250\\?v=.+$`,
       ),
     );
   });

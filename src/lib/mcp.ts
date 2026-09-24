@@ -60,6 +60,7 @@ import { periodDateKey } from "@/lib/period";
 import { driveFileUrl, driveFolderUrl } from "@/lib/drive-link";
 import { listVisibleTemplates, readTemplate } from "@/lib/templates";
 import { collectStalePreviews } from "@/lib/previews";
+import { ensureSecret, signTokenWith } from "@/lib/public-shortcut";
 import { shootPreviews } from "@/lib/preview-shooter";
 import { createAsset } from "@/lib/entities/assets";
 import {
@@ -282,17 +283,28 @@ function resolvePeriodFrom(fromArg: string, available: string[]): string | null 
   return available.find((p) => periodDateKey(p) === target) ?? null;
 }
 
-// Preview URLs use a STABLE row id but the bytes change on every regenerate.
-// Without a cache-buster the same URL keeps serving the pre-regen image from the
-// browser / CDN / ChatGPT image-proxy cache. We key ?v on the preview row's
-// updated_at (set to now() on every (re)shot) — identical to how the matrix
-// editor builds these URLs (MessageEditor.tsx), so both share one cache entry.
+// Preview URLs are SIGNED and addressed by message id + size, not by the
+// preview row id (2026-09-24). Two reasons: /api/previews/[id] is behind the
+// session now, so an agent cannot reach it at all; and the message id is what
+// the agent already holds from list_mc, so it can compute its own link for any
+// size without asking us for one. See lib/public-shortcut.ts.
+//
+// The signature covers the message, not the size — one signed token opens every
+// size the template declares.
+//
+// Without a cache-buster the same URL keeps serving the pre-regen image from
+// the browser / CDN / ChatGPT image-proxy cache, because the address is stable
+// across reshoots while the bytes are not. ?v is the preview row's updated_at
+// (set to now() on every (re)shot) and stays OUTSIDE the signature.
 function previewUrl(
   origin: string,
-  id: number,
+  secret: string,
+  messageId: number,
+  size: string,
   updatedAt: string | null,
 ): string {
-  return `${origin}/api/previews/${id}?v=${encodeURIComponent(updatedAt ?? "")}`;
+  const token = signTokenWith(secret, "m", messageId);
+  return `${origin}/publicshortcut/${token}/${encodeURIComponent(size)}?v=${encodeURIComponent(updatedAt ?? "")}`;
 }
 
 // A draft's previews ARE message previews now (a draft is a message row), so
@@ -372,7 +384,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
     "list_mc",
     {
       description:
-        "List messages (MCs). Returns a LEAN projection by default (id, number, variant, audience, topic, version_no, pmmid, status, start_date, end_date, template, name, headline) — pass verbose=true for the full row (copy/styles/custom_css/images/video). Each row also carries preview_urls: a {size: url} map of generated PNG screenshots of the rendered HTML creative (e.g. \"300x250\") — fetch with the same Authorization bearer; empty {} when no preview has been generated yet. Paging: limit (default 100, MAX 5000 — set this explicitly to fetch more than 100 in one call) and offset (skip N rows; stable order is number,variant, so offset paging is gap-free for a full export). Filters: topic_key, audience_key, product (matches either audience.product or topic.product), status. Default excludes soft-archived rows; pass include_archived=true to see them. Each row also carries drive_folders: the distinct Google Drive delivery folders of the creatives filed under this MC number+variant ([] when none is recorded).",
+        "List messages (MCs). Returns a LEAN projection by default (id, number, variant, audience, topic, version_no, pmmid, status, start_date, end_date, template, name, headline) — pass verbose=true for the full row (copy/styles/custom_css/images/video). Each row also carries preview_urls: a {size: url} map of generated PNG screenshots of the rendered HTML creative (e.g. \"300x250\") — SIGNED public URLs, fetch them with no auth header at all; empty {} when no preview has been generated yet. Paging: limit (default 100, MAX 5000 — set this explicitly to fetch more than 100 in one call) and offset (skip N rows; stable order is number,variant, so offset paging is gap-free for a full export). Filters: topic_key, audience_key, product (matches either audience.product or topic.product), status. Default excludes soft-archived rows; pass include_archived=true to see them. Each row also carries drive_folders: the distinct Google Drive delivery folders of the creatives filed under this MC number+variant ([] when none is recorded).",
       inputSchema: {
         topic_key: z.string().optional(),
         audience_key: z.string().optional(),
@@ -474,9 +486,16 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
             )
         : [];
       const urlsByMessage = new Map<number, Record<string, string>>();
+      const previewSecret = previewRows.length ? await ensureSecret() : "";
       for (const p of previewRows) {
         const urls = urlsByMessage.get(p.messageId) ?? {};
-        urls[p.size] = previewUrl(ctx.origin ?? "", p.id, p.updatedAt);
+        urls[p.size] = previewUrl(
+          ctx.origin ?? "",
+          previewSecret,
+          p.messageId,
+          p.size,
+          p.updatedAt,
+        );
         urlsByMessage.set(p.messageId, urls);
       }
       // Where the delivered files of each MC live on Drive — one grouped query
@@ -761,7 +780,7 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
     "mc_get",
     {
       description:
-        "Get one or more MCs, each with preview_urls — the {size: url} PNG-screenshot map (same shape as list_mc; fetch with the same Authorization bearer, empty {} when no preview generated yet). Look up by EXACTLY ONE of: mc_label (PMMID — yields at most one row) OR mc_number (optionally narrowed by variant). A number can live in several cells / variants (card fan-out is a copy), so a number/variant lookup may match MULTIPLE rows — the result is therefore ALWAYS an ARRAY (empty when nothing matches). Default excludes soft-archived rows; pass include_archived=true to include them. Ordered by number, variant.",
+        "Get one or more MCs, each with preview_urls — the {size: url} PNG-screenshot map (same shape as list_mc; SIGNED public URLs, fetch with no auth header, empty {} when no preview generated yet). Look up by EXACTLY ONE of: mc_label (PMMID — yields at most one row) OR mc_number (optionally narrowed by variant). A number can live in several cells / variants (card fan-out is a copy), so a number/variant lookup may match MULTIPLE rows — the result is therefore ALWAYS an ARRAY (empty when nothing matches). Default excludes soft-archived rows; pass include_archived=true to include them. Ordered by number, variant.",
       inputSchema: {
         mc_label: z.string().optional(),
         mc_number: z.number().int().optional(),
@@ -811,9 +830,16 @@ function registerReadTools(server: McpServer, ctx: McpContext): void {
             )
         : [];
       const urlsByMessage = new Map<number, Record<string, string>>();
+      const previewSecret = previewRows.length ? await ensureSecret() : "";
       for (const p of previewRows) {
         const urls = urlsByMessage.get(p.messageId) ?? {};
-        urls[p.size] = previewUrl(ctx.origin ?? "", p.id, p.updatedAt);
+        urls[p.size] = previewUrl(
+          ctx.origin ?? "",
+          previewSecret,
+          p.messageId,
+          p.size,
+          p.updatedAt,
+        );
         urlsByMessage.set(p.messageId, urls);
       }
       return jsonResult(
@@ -1787,6 +1813,7 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
         list.push(s);
         shotsByMessage.set(s.messageId, list);
       }
+      const shotSecret = shots.length ? await ensureSecret() : "";
 
       const results = mc_labels.map((label) => {
         if (notFound.includes(label)) {
@@ -1799,7 +1826,13 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
         for (const s of shotsByMessage.get(msg.id) ?? []) {
           shotSizes.add(s.size);
           if (s.ok) {
-            generated[s.size] = previewUrl(ctx.origin ?? "", s.previewId, s.updatedAt);
+            generated[s.size] = previewUrl(
+              ctx.origin ?? "",
+              shotSecret,
+              msg.id,
+              s.size,
+              s.updatedAt,
+            );
           } else {
             errors[s.size] = s.error;
           }
@@ -2736,7 +2769,7 @@ function registerPreviewWidget(server: McpServer, ctx: McpContext): void {
     {
       title: "Show MC previews",
       description:
-        "Render MC preview screenshots as an inline image GALLERY (OpenAI Apps SDK widget) in ChatGPT / MCP Inspector — a visual card, distinct from get_mc_preview_files (which hands raw image bytes to the model). Identify by EXACTLY ONE of mc_label (PMMID) or mc_number. Narrow with: variant (single) OR variants (a list, e.g. [\"b\",\"c\",\"d\"] to show several cards side by side); audience_key; and sizes. sizes DEFAULTS to [\"300x250\"] (the one shown when omitted) — pass other sizes explicitly (e.g. [\"970x250\",\"300x600\"]) or [\"all\"] for every generated size. Distinct variants are each shown; the same variant fanned out across audiences is collapsed to one (identical creative). Returns structuredContent { name, previews:[{label,size,url}] } with absolute, public preview URLs; non-widget clients still get that data + a text summary.",
+        "Render MC preview screenshots as an inline image GALLERY (OpenAI Apps SDK widget) in ChatGPT / MCP Inspector — a visual card, distinct from get_mc_preview_files (which hands raw image bytes to the model). Identify by EXACTLY ONE of mc_label (PMMID) or mc_number. Narrow with: variant (single) OR variants (a list, e.g. [\"b\",\"c\",\"d\"] to show several cards side by side); audience_key; and sizes. sizes DEFAULTS to [\"300x250\"] (the one shown when omitted) — pass other sizes explicitly (e.g. [\"970x250\",\"300x600\"]) or [\"all\"] for every generated size. Distinct variants are each shown; the same variant fanned out across audiences is collapsed to one (identical creative). Returns structuredContent { name, previews:[{label,size,url}] } with absolute, SIGNED public preview URLs (no auth header needed); non-widget clients still get that data + a text summary.",
       inputSchema: {
         mc_label: z.string().optional(),
         mc_number: z.number().int().optional(),
@@ -2834,6 +2867,7 @@ function registerPreviewWidget(server: McpServer, ctx: McpContext): void {
       // cells renders the identical creative, so collapse it (keeping the newest
       // per above) — but keep DISTINCT variants (b/c/d are different creatives).
       const seen = new Set<string>();
+      const widgetSecret = previewRows.length ? await ensureSecret() : "";
       const previews: { label: string; size: string; url: string; _v: string }[] = [];
       for (const p of previewRows) {
         const meta = metaById.get(p.messageId)!;
@@ -2843,7 +2877,7 @@ function registerPreviewWidget(server: McpServer, ctx: McpContext): void {
         previews.push({
           label: `MC${meta.number}${meta.variant}`,
           size: p.size,
-          url: previewUrl(origin, p.id, p.updatedAt),
+          url: previewUrl(origin, widgetSecret, p.messageId, p.size, p.updatedAt),
           _v: meta.variant,
         });
       }
@@ -2908,13 +2942,21 @@ function draftSummary(d: Message) {
 
 function registerDraftReadTools(server: McpServer, ctx: McpContext): void {
   const origin = ctx.origin ?? "";
-  const previewList = (previews: DraftPreviewRow[], version: number) =>
+  // A draft IS a message row, so the draft id is the message id the signed URL
+  // addresses — DraftPreviewRow carries only the preview row's own id, which is
+  // not what /publicshortcut takes.
+  const previewList = (
+    draftId: number,
+    secret: string,
+    previews: DraftPreviewRow[],
+    version: number,
+  ) =>
     previews
       .slice()
       .sort((a, b) => a.size.localeCompare(b.size))
       .map((p) => ({
         size: p.size,
-        url: draftPreviewUrl(origin, p.id, p.updatedAt),
+        url: draftPreviewUrl(origin, secret, draftId, p.size, p.updatedAt),
         ...(p.messageVersion === version ? {} : { stale: true }),
       }));
 
@@ -2952,7 +2994,12 @@ function registerDraftReadTools(server: McpServer, ctx: McpContext): void {
         draft_id: draft.id,
         mc_label: `MC${draft.number}${draft.variant}`,
         sizes: draftSizes(draft),
-        previews: previewList(previews, draft.version),
+        previews: previewList(
+          draft_id,
+          await ensureSecret(),
+          previews,
+          draft.version,
+        ),
       });
     },
   );
@@ -2975,7 +3022,12 @@ function registerDraftReadTools(server: McpServer, ctx: McpContext): void {
         done_sizes: s.doneSizes,
         percent: s.percent,
         stale_sizes: s.staleSizes,
-        previews: previewList(s.previews, draft?.version ?? 0),
+        previews: previewList(
+          draft_id,
+          await ensureSecret(),
+          s.previews,
+          draft?.version ?? 0,
+        ),
       });
     },
   );
@@ -3005,7 +3057,7 @@ function registerDraftReadTools(server: McpServer, ctx: McpContext): void {
     {
       title: "Show draft previews",
       description:
-        'Render a draft\'s generated PNGs as an inline image GALLERY (OpenAI Apps SDK widget) in ChatGPT / MCP Inspector — same visual card as show_mc_previews, fed from a draft. Required: draft_id. Optional: sizes to narrow (default: every size rendered so far). Returns structuredContent { name, previews:[{label,size,url}] } with absolute, public preview URLs; non-widget clients still get that data + a text summary.',
+        'Render a draft\'s generated PNGs as an inline image GALLERY (OpenAI Apps SDK widget) in ChatGPT / MCP Inspector — same visual card as show_mc_previews, fed from a draft. Required: draft_id. Optional: sizes to narrow (default: every size rendered so far). Returns structuredContent { name, previews:[{label,size,url}] } with absolute, SIGNED public preview URLs (no auth header needed); non-widget clients still get that data + a text summary.',
       inputSchema: {
         draft_id: z.number().int(),
         sizes: z.array(z.string()).optional(),
@@ -3040,11 +3092,12 @@ function registerDraftReadTools(server: McpServer, ctx: McpContext): void {
           ? all.filter((p) => sizes.includes(p.size))
           : all;
       const label = draft.name ?? `MC${draft.number}${draft.variant}`;
+      const draftSecret = wanted.length ? await ensureSecret() : "";
       const previews = wanted
         .map((p) => ({
           label,
           size: p.size,
-          url: draftPreviewUrl(origin, p.id, p.updatedAt),
+          url: draftPreviewUrl(origin, draftSecret, draft_id, p.size, p.updatedAt),
         }))
         .sort((a, b) => a.size.localeCompare(b.size));
       return {

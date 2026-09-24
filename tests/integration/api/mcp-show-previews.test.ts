@@ -85,7 +85,10 @@ describe("show_mc_previews (Apps SDK widget) via real MCP protocol", () => {
     expect(res.structuredContent!.name).toContain("MC244");
     expect(
       res.structuredContent!.previews.every((p) =>
-        p.url.startsWith(`${ORIGIN}/api/previews/`),
+        // Signed, and addressed by message id — see lib/public-shortcut.ts.
+        /^\/publicshortcut\/m\d+\.[0-9a-f]{16}\/\d+x\d+\?v=/.test(
+          p.url.slice(ORIGIN.length),
+        ) && p.url.startsWith(`${ORIGIN}/publicshortcut/`),
       ),
     ).toBe(true);
     expect(res.structuredContent!.previews.every((p) => p.label === "MC244d")).toBe(true);

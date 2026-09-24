@@ -266,19 +266,19 @@ export default function ShareGallery({
   // Fetched on mount (not on toggle) so the Image preview button can carry its
   // count before anyone switches modes.
   const [previewByKey, setPreviewByKey] = useState<
-    Map<string, { previewId: number; updatedAt: string }>
+    Map<string, { url: string; updatedAt: string }>
   >(new Map());
   useEffect(() => {
     let cancelled = false;
     fetch(`/share/${shareId}/previews`)
       .then((r) => (r.ok ? r.json() : Promise.reject(r)))
-      .then((data: { previews: Array<{ messageId: number; size: string; previewId: number; updatedAt: string }> }) => {
+      .then((data: { previews: Array<{ messageId: number; size: string; url: string; updatedAt: string }> }) => {
         if (cancelled) return;
         setPreviewByKey(
           new Map(
             data.previews.map((p) => [
               `${p.messageId}|${p.size}`,
-              { previewId: p.previewId, updatedAt: p.updatedAt },
+              { url: p.url, updatedAt: p.updatedAt },
             ]),
           ),
         );
@@ -304,8 +304,9 @@ export default function ShareGallery({
       if (!it.size) return null;
       const hit = previewByKey.get(`${it.message.id}|${it.size}`);
       if (!hit) return null;
-      // ?v= is load-bearing: /api/previews/[id] is cached on a regen-stable id.
-      return `/api/previews/${hit.previewId}?v=${encodeURIComponent(hit.updatedAt)}`;
+      // The signed URL (?v= included) is built server-side in
+      // /share/[id]/previews — the viewer has no session and no signing secret.
+      return hit.url;
     },
     [previewByKey, shareId],
   );

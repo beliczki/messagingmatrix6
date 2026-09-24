@@ -108,8 +108,19 @@ afterEach(async () => {
   await h.cleanup();
 });
 
-describe("GET /api/previews/[id] (public)", () => {
-  function publicReq(id: number | string) {
+// Session-protected since 2026-09-24. The app reaches this from a logged-in
+// browser (the <img src> carries the cookie); everyone outside gets a signed
+// /publicshortcut URL instead, so the signing secret never reaches a browser.
+describe("GET /api/previews/[id] (session)", () => {
+  function sessionReq(token: string, id: number | string) {
+    const url = `http://localhost/api/previews/${id}`;
+    return [
+      authedReq(token, url),
+      { params: Promise.resolve({ id: String(id) }) },
+    ] as const;
+  }
+
+  function anonReq(id: number | string) {
     const url = `http://localhost/api/previews/${id}`;
     return [
       {
@@ -122,13 +133,32 @@ describe("GET /api/previews/[id] (public)", () => {
     ] as const;
   }
 
-  it("serves without any auth: unknown id is 404, never 401", async () => {
-    const [req, ctx] = publicReq(12345);
+  it("refuses an unauthenticated caller — 401, not 404", async () => {
+    const m = await seedHtmlMessage(1);
+    const [p] = await db
+      .insert(messagePreviews)
+      .values({
+        clientId: erste.id,
+        messageId: m.id,
+        size: "300x250",
+        storageKey: "previews/anything.png",
+        messageVersion: 1,
+      })
+      .returning();
+    const [req, ctx] = anonReq(p.id);
+    const res = await previewGET(req, ctx);
+    expect(res.status).toBe(401);
+  });
+
+  it("unknown id is 404 for a signed-in caller", async () => {
+    const token = await seedUser("admin", "u-prev-404");
+    const [req, ctx] = sessionReq(token, 12345);
     const res = await previewGET(req, ctx);
     expect(res.status).toBe(404);
   });
 
   it("runs past auth to storage for an existing row (410 on missing bytes)", async () => {
+    const token = await seedUser("admin", "u-prev-410");
     const m = await seedHtmlMessage(1);
     const [p] = await db
       .insert(messagePreviews)
@@ -140,12 +170,13 @@ describe("GET /api/previews/[id] (public)", () => {
         messageVersion: 1,
       })
       .returning();
-    const [req, ctx] = publicReq(p.id);
+    const [req, ctx] = sessionReq(token, p.id);
     const res = await previewGET(req, ctx);
     expect(res.status).toBe(410);
   });
 
   it("stays scoped to the active client (other client's preview is 404)", async () => {
+    const token = await seedUser("admin", "u-prev-scope");
     const [telekom] = await db
       .insert(clients)
       .values({ key: "telekom", name: "Telekom" })
@@ -172,7 +203,7 @@ describe("GET /api/previews/[id] (public)", () => {
       })
       .returning();
     // Active client is erste — telekom's preview must not be served here.
-    const [req, ctx] = publicReq(p.id);
+    const [req, ctx] = sessionReq(token, p.id);
     const res = await previewGET(req, ctx);
     expect(res.status).toBe(404);
   });

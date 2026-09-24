@@ -87,7 +87,7 @@ describe("preview_generate via MCP", () => {
     expect(Object.keys(json[0].generated)).toHaveLength(4);
     for (const url of Object.values(json[0].generated)) {
       expect(url).toMatch(
-        /^https:\/\/erste\.messagingmatrix\.ai\/api\/previews\/\d+\?v=.+$/,
+        /^https:\/\/erste\.messagingmatrix\.ai\/publicshortcut\/m\d+\.[0-9a-f]{16}\/\d+x\d+\?v=.+$/,
       );
     }
     expect(json[0].skipped_fresh).toEqual([]);

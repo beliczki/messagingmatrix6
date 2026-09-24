@@ -84,8 +84,9 @@ describe("mc_get via MCP", () => {
     expect(Array.isArray(json)).toBe(true);
     expect(json).toHaveLength(1);
     expect(json[0].pmmid).toBe("PMM-1a");
+    // Signed, and addressed by MESSAGE id + size — see lib/public-shortcut.ts.
     expect(json[0].preview_urls["300x250"]).toMatch(
-      new RegExp(`^/api/previews/${p!.id}\\?v=.+$`),
+      new RegExp(`^/publicshortcut/m${json[0].id}\\.[0-9a-f]{16}/300x250\\?v=.+$`),
     );
   });
 

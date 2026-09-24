@@ -1,26 +1,28 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { messagePreviews } from "@/db/schema";
-import { activeClientId } from "@/lib/active-client";
+import { withSession } from "@/lib/scoped";
 import { readFileBytes } from "@/lib/storage";
 
 type Params = { id: string };
 
-// Serves a generated message-preview PNG by message_previews.id.
-// Deliberately public (user decision, 2026-07-15): the URLs are handed out by
-// MCP list_mc and consumed by agents/tools that can't always attach auth, and
-// the images are previews only. The row lookup stays scoped to the
-// deploy-pinned active client, so this deploy never serves another client's
-// previews. Generation/status routes remain session-protected.
-export async function GET(
-  _req: NextRequest,
-  ctx: { params: Promise<Params> },
-): Promise<NextResponse> {
-  const clientId = await activeClientId();
-
-  const { id } = await ctx.params;
-  const numId = Number(id);
+// Serves a generated message-preview PNG by message_previews.id — for the app
+// itself, which reaches it from a logged-in browser.
+//
+// Public until 2026-09-24, when the user asked for the old route to be signed
+// too. It is session-protected instead of signed: the in-app <img src> carries
+// the auth cookie on its own, so the signing secret never has to reach a
+// browser. Everyone OUTSIDE the app gets a signed /publicshortcut/m<id>.<sig>
+// URL instead, which is the one an agent can compute for itself.
+//
+// This broke every /api/previews/<id> link handed out before that date. That
+// was the point of the decision, not a side effect of it.
+//
+// Cache-Control stays `public` — it describes a shared cache's rights over the
+// bytes, not who may ask for them.
+export const GET = withSession<Params>(async ({ claims, params }) => {
+  const numId = Number(params.id);
   if (!Number.isInteger(numId)) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
@@ -28,7 +30,10 @@ export async function GET(
     .select()
     .from(messagePreviews)
     .where(
-      and(eq(messagePreviews.clientId, clientId), eq(messagePreviews.id, numId)),
+      and(
+        eq(messagePreviews.clientId, claims.cid),
+        eq(messagePreviews.id, numId),
+      ),
     )
     .limit(1);
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -48,4 +53,4 @@ export async function GET(
       "Cache-Control": "public, max-age=300",
     },
   });
-}
+});

@@ -2,12 +2,18 @@ import { NextResponse } from "next/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { messagePreviews, shareGalleries } from "@/db/schema";
+import { ensureSecret, signTokenWith } from "@/lib/public-shortcut";
 
 // Public preview-PNG index for the share viewer. The viewer is
 // unauthenticated, so it cannot hit /api/previews/status; access is gated the
 // same way /share/[id]/file/[fileId] gates file bytes — on the message id being
-// present in THIS share's snapshot metadata. The PNG bytes themselves come from
-// /api/previews/[id], which is already deliberately public.
+// present in THIS share's snapshot metadata.
+//
+// The PNG bytes come from /publicshortcut, and the signed URL is built HERE
+// rather than in the browser: the viewer has no session and must never hold the
+// signing secret. /api/previews/[id] went behind the session on 2026-09-24, so
+// the old `previewId` the client used to assemble a URL from is now useless to
+// it — the row carries a ready `url` instead.
 //
 // The rows are read live rather than frozen into the snapshot: previews are a
 // regenerable derivative, so a share made before `npm run gen:previews` ran
@@ -46,10 +52,11 @@ export async function GET(
   // per template size, so the unbounded form would both build a huge IN and
   // return well over a thousand rows.
   const CHUNK = 500;
+  const secret = await ensureSecret();
   const rows: Array<{
     messageId: number;
     size: string;
-    previewId: number;
+    url: string;
     updatedAt: string;
   }> = [];
   for (let i = 0; i < messageIds.length; i += CHUNK) {
@@ -57,7 +64,6 @@ export async function GET(
       .select({
         messageId: messagePreviews.messageId,
         size: messagePreviews.size,
-        previewId: messagePreviews.id,
         updatedAt: messagePreviews.updatedAt,
       })
       .from(messagePreviews)
@@ -67,7 +73,15 @@ export async function GET(
           inArray(messagePreviews.messageId, messageIds.slice(i, i + CHUNK)),
         ),
       );
-    rows.push(...page);
+    for (const p of page) {
+      // ?v= is load-bearing and stays outside the signature: the address is
+      // stable across reshoots while the bytes are not.
+      const token = signTokenWith(secret, "m", p.messageId);
+      rows.push({
+        ...p,
+        url: `/publicshortcut/${token}/${encodeURIComponent(p.size)}?v=${encodeURIComponent(p.updatedAt)}`,
+      });
+    }
   }
 
   return NextResponse.json(

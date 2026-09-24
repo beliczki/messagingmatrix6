@@ -2318,3 +2318,137 @@ MC386 (öt persona egy betűn) nem oldódik meg ettől: a generátor MC-n belül
 
 **Közben, 15:47 UTC-kor valaki 18 kreatívot töltött fel az élő appon** (MC406, Társasház/
 MediaMarkt). Az egyenleg ezzel jön ki pontosan: 3361 + 18 − 40 = 3339 élő.
+
+## 2026-09-24 — Settings → API tab + `/publicshortcut` aláírt kép-URL (TERV, jóváhagyásra vár)
+
+Két összefüggő szelet: egy API-dokumentációs tab a Settingsben, és benne a HMAC-titok
+beállítása, amivel az agenteknek szánt widget aláírt publikus kép-linkeket tud gyártani.
+
+### Mért kiindulás
+- **96 `route.ts` az `/api` alatt + 5 publikus** (`/share`, `/mcp`) → 95 handler:
+  40 GET, 37 POST, 11 DELETE, 5 PATCH, 2 PUT.
+- **25 `withAdmin`, 47 `withSession`, 24 egyik wrappert sem használja.** Ez utóbbi a tab
+  legértékesebb generált oszlopa — fejben senki nem tartja.
+- **Csak 4 route használ zod-ot**, tehát az input-séma NEM introspektálható (a McpTab azért
+  tudja, mert a `mcp.ts` zod-dal regisztrál). A „mit fogad / mit ad" ezért kézi, egy soros,
+  **egyetlen registry-fájlban** — nem 95 helyre szórva.
+- `previewUrl()` (`src/lib/mcp.ts:295`) ma `${origin}/api/previews/${id}?v=…` alakú, aláíratlan
+  publikus URL-t ad ki a `list_mc` / `get_mc` / `show_mc_previews` kimenetében.
+- A kreatív-azonosítás **nem** mehet `MC+variáns+méret`-en: 2279 hármasból 616 (27%) többértelmű
+  (`MC311a`@480x480 = 7 kép). A `creatives.id` egyedi — ugyanaz a lecke, mint az
+  `export-creatives-for-reading.ts` 2. körében.
+
+### A) Settings → API tab  (user: teljes lista, generált + 1 soros leírások)
+
+- [x] **A1** `GET /api/routes` (`withAdmin`, a `/api/schema` és `/api/mcp/tools` mintájára):
+      bejárja az `src/app/api` (+ `share`, `mcp`) route-fákat, és visszaadja útvonalanként a
+      metódusokat, a dinamikus szegmenseket, és az auth-wrappert (`withAdmin` / `withSession` /
+      egyik sem). A wrapper a forrásból olvasva, nem kézzel karbantartva.
+- [x] **A2** `src/lib/api-docs.ts` — **egyetlen** registry: útvonal → egy soros leírás + csoport.
+      Ami nincs benne, az „—" leírással, de **ott van a listában** (a generált lista a teljesség
+      garanciája, a próza csak dísz rajta).
+- [x] **A3** `settings/_api/ApiTab.tsx` — a `McpTab` design-tokenjeivel (`mcp-tab__section` →
+      `api-tab__section`, `__section-title`, `__group-title`, `text-xs uppercase tracking-wide`
+      fejlécek, `empty-state`, `error-alert`). Csoportosítás + kereső. A 24 wrapper nélküli
+      útvonal kiemelve figyelmeztetésként.
+- [x] **A4** `SettingsView.tsx`: `TABS`-ba `{ key: "api", label: "API" }` az `mcp` mellé.
+- [x] **A5** `tasks/component-inventory.md` — az `api-tab__*` blokknevek felvétele.
+
+### B) `/publicshortcut` — aláírt, agent által generálható kép-URL  (user: B változat)
+
+**User-döntés 2026-09-24 (2):** a régi `/api/previews/[id]` se maradjon aláíratlanul publikus, és
+**nincs `DRAFT`/`PREVIEW` kapu** — épp az a lényeg, hogy az ügyfél-agent aláírt linkeken tudja
+követni, hogyan haladnak a draftok. Az aláírás VÁLTJA KI a státusz-kaput, nem kiegészíti.
+
+A token **aláírás, nem titkosítás**: az id nyíltan látszik, mellette a pecsét.
+
+```
+<kind><id>.<hmac16>      kind: m = message (DCO preview), c = creative (agentic fájl)
+hmac16 = HMAC-SHA256(titok, "<kind><id>") hex első 16 karaktere
+```
+
+| | |
+|---|---|
+| `GET /publicshortcut/m<id>.<sig>/<size>` | a DCO preview PNG (`300x250`, `970x250`, `640x360`, `300x600`) |
+| `GET /publicshortcut/c<id>.<sig>` | az agentic kreatív fájlja, ahogy van (png/jpg/mp4, range-gel) |
+| `…?html=1` | csupasz HTML lap, a kép a bal felső sarokban, pontos px méretre igazítva |
+| `…?v=<updated_at>` | a mai cache-buster, aláíráson kívül, változatlanul |
+
+Rossz aláírás / archivált sor / ismeretlen méret / nincs ilyen preview → **404**, megkülönböztetés
+nélkül. Státusz **nem** számít: `ACTIVE`, `INACTIVE`, `DEAD`, `DRAFT`, `PREVIEW` mind kiszolgálva.
+
+**A címzés `message_id` + méret, nem `preview_id`** — mert az agent a `list_mc`-ből az üzenet
+id-jét kapja, abból ki tudja számolni a linket; a `message_previews.id` belső marad.
+
+- [x] **B1** `src/lib/public-shortcut.ts` — `signToken(kind, id)` / `verifyToken(token)`.
+      Titok: `system_config.public_shortcut_secret` (deploy-szintű, mint a route maga).
+      Nincs titok → minden kérés 404 (fail-closed). Fájlba nem kerül: a boxon hat app-user
+      osztozik a filesystemen.
+- [x] **B2** `src/app/publicshortcut/[...parts]/route.ts` — a `/share/[id]/file/[fileId]` mintájára:
+      publikus route az `/api`-n kívül, `readFileBytes`/`readFileStream`, range-támogatás videóra,
+      kliens-scope `activeClientId()`.
+- [x] **B3** `?html=1` — `margin:0`, `<img>` bal felső sarokban, pontos px méret.
+- [x] **B4** **Titok-kezelés a Settings → API tabon**: felfedés/rotálás az `mcp_tokens` `reveal`
+      mintáját követve (admin-only, külön kattintás). A rotálás figyelmeztet: **minden korábban
+      kiadott link azonnal érvénytelen**.
+- [x] **B5** **`/api/previews/[id]` már nem publikus → `withSession`.** Az appon belüli
+      `<img src="/api/previews/…">` (MessageEditor) a session-sütivel megy tovább, tehát a titok
+      **soha nem kerül a böngészőbe**. Aki kívülről néz, az a `/publicshortcut` aláírt URL-t kapja.
+- [x] **B6** **A link-kibocsátók átírása.** Ma négy helyen készül preview-URL:
+      - `previewUrl()` (`src/lib/mcp.ts:295`) → aláírt `/publicshortcut/m<id>.<sig>/<size>`.
+        Ezzel egy csapásra a `list_mc`, a `get_mc`, a `preview_generate` és a `show_mc_previews`
+        widget is aláírt linket ad — **innen ismerték eddig az agentek a preview-linkeket**.
+      - `/share/[id]/previews` (a nyilvános share-nézegető, nincs sütije) → `previewId` helyett
+        kész aláírt `url` a válaszban; `ShareGallery.tsx:308` azt használja.
+      - `MessageEditor.tsx:2459` → marad `/api/previews/<id>`, most már session mögött.
+      - `scripts/gen-mc-export.ts:162` → helyben aláír (DB-hozzáférése van a titokhoz).
+      - Új: `c<creative_id>` irány az agentic fájlokra, hogy azokra is legyen agent-linkje.
+- [x] **B7** Vitest: aláírás-kör, rossz aláírás → 404, archivált → 404, `DRAFT` → **200**,
+      ismeretlen méret → 404, hiányzó titok → 404, `/api/previews/[id]` süti nélkül → 401.
+- [x] **B8 (a DCO URL-ek kiadása ELŐTT)** A 8176 tárolt preview-ból **1416 elavult**
+      (`message_version` ≠ `messages.version`). Újragenerálás `gen:previews`-zel, **prod buildben** —
+      `next dev` alatt néma törött képeket ír (memória: `project_preview_gen_needs_prod_build`).
+
+**Törő változás, tudatosan:** minden eddig kiadott `/api/previews/<id>` link megszűnik publikusan
+működni. A user ezt választotta, amikor az aláírást kérte a régi útvonalra is.
+
+### Amit tudatosan nem csinálunk
+- Nincs visszavonás egyetlen URL-re; csak a titok rotálható, az meg az összeset megöli.
+- Nincs `MC+variáns+méret` címzés (27% többértelmű). Ha kell ilyen belépő, az külön feloldó
+  végpont legyen, ami a jelölteket **listázza**, nem választ közülük.
+- Nem írunk kézi input/output dokumentációt 95 handlerhez — csak egysorosat, egy helyen.
+
+### LESZÁLLÍTVA 2026-09-24 — `A1`–`A5`, `B1`–`B8`
+
+- **`/publicshortcut`** él: aláírt `m<message_id>.<sig>/<size>` és `c<creative_id>.<sig>`, `?html=1`
+  csupasz lappal. Prod buildben, éles DB-vel és object store-ral végigmérve: valid → 200 PNG
+  300×250, elrontott aláírás → 404, nem generált méret → 404, régi `/api/previews/6390` → **401**.
+- **`/api/previews/[id]` → `withSession`.** Nem aláírást kapott: az appon belüli `<img src>` a
+  sütivel megy, így a titok soha nem kerül böngészőbe. Kívülről az aláírt URL az egyetlen út.
+- **Nyolc link-kibocsátó** állt át (`list_mc`, `mc_get`, `preview_generate`, `show_mc_previews`,
+  `draft_get`, `draft_status`, `show_draft_previews`, `gen-mc-export`), plusz a share-nézegető
+  index-route-ja, ami most kész aláírt `url`-t ad — a nézegetőnek nincs sütije és titka sem.
+- **Settings → API tab**: a lista és az auth-oszlop generált (`/api/routes` → `src/lib/api-docs.ts`),
+  103 kézi egysoros leírás egy helyen. A HMAC-titok kezelése (maszk / reveal / rotate) itt ül.
+- **Korrekció a korábbi méréshez:** nem 24 útvonal van auth-wrapper nélkül, hanem **10**, és mind
+  szándékos. A naiv grep nem látta az `entity-route.ts` factory-jait, amik belül `withSession`-t
+  használnak. Valós kép: 25 admin, 65 session, 2 bearer/signed, 10 nyitott.
+- **`B8`:** 1568 preview újralőve (1416 elavult + 152 sosem volt), **0 hiba**, elavult preview most
+  **0**. Külön `.next-preview-build` buildből, a 6011-es porton — a futó dev szerver érintetlen.
+- **`docs/mc-export.xlsx` újragenerálva**, két lappal: `MC export` (222 MC, 0 preview nélkül) és az
+  új `Creative export` (3339 élő kreatív, ebből **2302 még olvasás nélkül**), aláírt linkekkel és az
+  `image_text` / `image_description` oszlopokkal.
+
+**A Drive-fájl frissítve** (`1XhcbKyFCzM8xg0yo83g4pknayIfwO3OT`, 2026-09-24 14:10 UTC, 3 894 336 B
+— a lokális fájllal bájtra egyező). Ugyanaz az id, mappa és megosztás; a régi verzió a *Verziók
+kezelése* alatt maradt. A Drive MCP nem tud meglévő fájlt felülírni, a „Verziók kezelése" gombja
+pedig natív fájlválasztót nyit, amit nem lehet vezérelni — a járható út a **mappára ejtés** volt
+(`file_upload` egy injektált inputra → valódi `File` → szintetikus `drop` a fájllistára), amire a
+Drive felajánlja az „Upload options → Replace existing file"-t. Ez tartja meg a linket.
+
+**Amit a régi fájlban találtam:** két kézzel hozzáadott oszlop (`preview` + egy névtelen) kép-
+képletekkel, amik a régi `/api/previews/<id>` URL-ekre mutattak — azok most 401-et adnak, tehát már
+nem rendereltek volna. Az új verzióban nincsenek benne. Ha kell inline kép-oszlop, azt a scriptnek
+kell kiírnia, a mostani aláírt linkekkel.
+
+**Verzió:** `6.114.0` → `6.115.0`, `CHANGELOG.md` megírva.

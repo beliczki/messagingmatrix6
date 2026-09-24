@@ -1,7 +1,15 @@
-// Build docs/mc-export.xlsx — one row per DCO messaging card (MC number +
-// variant) that is currently in a serving status (ACTIVE or INACTIVE), with its
-// product, the PMMIDs it was trafficked under, the ACTIVE/INACTIVE split and a
-// public link to every generated preview PNG.
+// Build docs/mc-export.xlsx — two sheets.
+//
+// "MC export": one row per DCO messaging card (MC number + variant) currently in
+// a serving status (ACTIVE or INACTIVE), with its product, the PMMIDs it was
+// trafficked under, the ACTIVE/INACTIVE split and a signed link to every
+// generated preview PNG.
+//
+// "Creative export": one row per live agentic creative FILE, with its signed
+// link and whatever has been read off the picture so far (image_text /
+// image_description). One row per file rather than per MC, because a single
+// MC+variant+size holds several different pictures in 27% of cases — the
+// creative id is the only token that is unique by construction.
 //
 // One card lives on many audiences (the same creative copied across placements),
 // so the 2000-odd message rows collapse into a couple of hundred cards. Product,
@@ -15,7 +23,9 @@
 //   npm run export:mc
 //
 // MC_EXPORT_ORIGIN overrides the host the links are built against (default: the
-// live Erste deploy — /api/previews/[id] is deliberately public, see the route).
+// live Erste deploy). The links are SIGNED /publicshortcut URLs — the export is
+// read by people and agents outside the app, and /api/previews/[id] went behind
+// the session on 2026-09-24.
 import { config as loadEnv } from "dotenv";
 loadEnv({ path: ".env.local" });
 loadEnv({ path: ".env" });
@@ -28,11 +38,13 @@ import { db } from "../src/db";
 import {
   audiences,
   channels,
+  creatives,
   messagePreviews,
   messages,
   topics,
 } from "../src/db/schema";
 import { getActiveClient } from "../src/lib/active-client";
+import { ensureSecret, signTokenWith } from "../src/lib/public-shortcut";
 
 // The two statuses that mean "this card is in a feed" — same set the export
 // panel serves from (FeedExportPanel.tsx SERVING_STATUSES).
@@ -138,11 +150,11 @@ async function fetchPreviews(
     number,
     Map<string, { url: string; updatedAt: string }>
   >();
+  const secret = await ensureSecret();
   for (let i = 0; i < messageIds.length; i += PAGE_SIZE) {
     const chunk = messageIds.slice(i, i + PAGE_SIZE);
     const rows = await db
       .select({
-        id: messagePreviews.id,
         messageId: messagePreviews.messageId,
         size: messagePreviews.size,
         updatedAt: messagePreviews.updatedAt,
@@ -156,10 +168,11 @@ async function fetchPreviews(
       );
     for (const p of rows) {
       const sizes = byMessage.get(p.messageId) ?? new Map();
-      // Same URL shape as list_mc / MessageEditor: stable row id, updated_at as
-      // the cache-buster so a reshoot is not served from a stale cache.
+      // Same URL shape as list_mc: the signed message token, the size in the
+      // path, updated_at as the cache-buster so a reshoot is not served from a
+      // stale cache.
       sizes.set(p.size, {
-        url: `${ORIGIN}/api/previews/${p.id}?v=${encodeURIComponent(p.updatedAt)}`,
+        url: `${ORIGIN}/publicshortcut/${signTokenWith(secret, "m", p.messageId)}/${encodeURIComponent(p.size)}?v=${encodeURIComponent(p.updatedAt)}`,
         updatedAt: p.updatedAt,
       });
       byMessage.set(p.messageId, sizes);
@@ -170,6 +183,74 @@ async function fetchPreviews(
 
 // "300x250" → sortable [width, height]; keeps the preview columns in a stable,
 // human order instead of alphabetical ("1080x1080" before "300x250").
+type CreativeRow = {
+  id: number;
+  mcNumber: number | null;
+  mcVariant: string | null;
+  brand: string | null;
+  product: string | null;
+  type: string | null;
+  visualKeyword: string | null;
+  copyKeyword: string | null;
+  bannerVersion: string | null;
+  fileName: string | null;
+  fileFormat: string | null;
+  fileDimensions: string | null;
+  fileSize: string | null;
+  driveFolderName: string | null;
+  imageText: string | null;
+  imageDescription: string | null;
+  imageReadAt: string | null;
+  imageReadModel: string | null;
+  updatedAt: string;
+};
+
+// Every live creative, keyset-paged: the table is past 3300 rows and a plain
+// select would be silently truncated at the client's 1000-row cap.
+async function fetchCreativeRows(clientId: number): Promise<CreativeRow[]> {
+  const out: CreativeRow[] = [];
+  let lastId = 0;
+  for (;;) {
+    const page = await db
+      .select({
+        id: creatives.id,
+        mcNumber: creatives.mcNumber,
+        mcVariant: creatives.mcVariant,
+        brand: creatives.brand,
+        product: creatives.product,
+        type: creatives.type,
+        visualKeyword: creatives.visualKeyword,
+        copyKeyword: creatives.copyKeyword,
+        bannerVersion: creatives.bannerVersion,
+        fileName: creatives.fileName,
+        fileFormat: creatives.fileFormat,
+        fileDimensions: creatives.fileDimensions,
+        fileSize: creatives.fileSize,
+        driveFolderName: creatives.driveFolderName,
+        imageText: creatives.imageText,
+        imageDescription: creatives.imageDescription,
+        imageReadAt: creatives.imageReadAt,
+        imageReadModel: creatives.imageReadModel,
+        updatedAt: creatives.updatedAt,
+      })
+      .from(creatives)
+      .where(
+        and(
+          eq(creatives.clientId, clientId),
+          isNull(creatives.archivedAt),
+          gt(creatives.id, lastId),
+        ),
+      )
+      .orderBy(creatives.id)
+      .limit(PAGE_SIZE);
+    if (page.length === 0) break;
+    out.push(...page);
+    lastId = page[page.length - 1]!.id;
+    if (page.length < PAGE_SIZE) break;
+  }
+  return out;
+}
+
 function sizeOrder(size: string): [number, number] {
   const [w, h] = size.split("x").map((n) => Number(n));
   return [Number.isFinite(w) ? w : 0, Number.isFinite(h) ? h : 0];
@@ -287,12 +368,73 @@ async function main() {
     ];
   });
 
-  const buf = xlsx.build([{ name: "MC export", data: [header, ...data], options: {} }]);
+  // Sheet 2 — the agentic creatives, one row per FILE.
+  const secret = await ensureSecret();
+  const creativeRows = await fetchCreativeRows(client.id);
+  const creativeHeader = [
+    "creative_id",
+    "mc",
+    "mc_number",
+    "variant",
+    "product",
+    "brand",
+    "type",
+    "visual_keyword",
+    "copy_keyword",
+    "banner_version",
+    "file_name",
+    "format",
+    "dimensions",
+    "file_size",
+    "drive_folder",
+    "link",
+    "image_text",
+    "image_description",
+    "image_read_at",
+    "image_read_model",
+    "updated_at",
+  ];
+  const creativeData = creativeRows.map((c) => [
+    c.id,
+    c.mcNumber === null ? "" : `MC${c.mcNumber}${c.mcVariant ?? ""}`,
+    c.mcNumber ?? "",
+    c.mcVariant ?? "",
+    c.product ?? "",
+    c.brand ?? "",
+    c.type ?? "",
+    c.visualKeyword ?? "",
+    c.copyKeyword ?? "",
+    c.bannerVersion ?? "",
+    c.fileName ?? "",
+    c.fileFormat ?? "",
+    c.fileDimensions ?? "",
+    c.fileSize ?? "",
+    c.driveFolderName ?? "",
+    `${ORIGIN}/publicshortcut/${signTokenWith(secret, "c", c.id)}`,
+    c.imageText ?? "",
+    c.imageDescription ?? "",
+    c.imageReadAt ?? "",
+    c.imageReadModel ?? "",
+    c.updatedAt,
+  ]);
+  const unread = creativeRows.filter((c) => !c.imageDescription).length;
+
+  const buf = xlsx.build([
+    { name: "MC export", data: [header, ...data], options: {} },
+    {
+      name: "Creative export",
+      data: [creativeHeader, ...creativeData],
+      options: {},
+    },
+  ]);
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
   fs.writeFileSync(OUT, buf);
   console.log(
     `wrote ${OUT} — ${cards.length} MC (${rows.length} message rows), ` +
       `sizes: ${sizes.join(", ")}, ${cardsWithoutPreview} MC without any preview`,
+  );
+  console.log(
+    `  Creative export: ${creativeRows.length} live creatives, ${unread} without an image reading`,
   );
   console.log(`preview links point at ${ORIGIN}`);
 }

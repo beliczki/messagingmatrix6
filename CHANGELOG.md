@@ -5,6 +5,47 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.115.0] — 2026-09-24
+
+### Added
+- **Signed public image URLs — `/publicshortcut`.** `m<message_id>.<sig>/<size>`
+  serves a rendered DCO preview, `c<creative_id>.<sig>` an agentic creative
+  file, `?html=1` puts either on a bare page in the top-left corner. The id
+  travels in the clear and the HMAC beside it is what cannot be forged, so the
+  link is **computable from outside**: an agent holding a message id can build
+  one for any size without asking. Addressed by message id rather than by
+  preview row id for exactly that reason — and creatives by `creatives.id`,
+  because `MC+variant+size` names several different pictures in 616 of 2279
+  cases (27%), `MC311a`@480x480 alone holding seven.
+- **Settings → API tab.** Every HTTP route the deploy serves, with its methods
+  and how it is authenticated — both read off the source tree at request time
+  (`/api/routes` → `src/lib/api-docs.ts`), so the list cannot drift from the
+  code. Only the one-line descriptions are hand-written, in one registry: four
+  of the ~100 handlers declare a zod schema, so unlike the MCP tools there is no
+  contract to render. The HMAC secret is managed here too — masked, revealed on
+  a click (audit-logged), rotated behind a dialog that says what rotating costs.
+- `Creative export` sheet in `docs/mc-export.xlsx`: one row per live agentic
+  creative file with its signed link and whatever has been read off the picture
+  (`image_text` / `image_description`). 3339 rows, 2302 of them still unread.
+
+### Changed
+- **`/api/previews/[id]` is no longer public — it now requires a session.** It
+  was deliberately open since 2026-07-15; the signature scheme replaces that.
+  Session rather than a signature, because the in-app `<img src>` carries the
+  auth cookie by itself and the signing secret then never reaches a browser.
+  **Every `/api/previews/<id>` link handed out before this stops working.**
+- All eight preview-link emitters now hand out signed URLs: `list_mc`,
+  `mc_get`, `preview_generate`, `show_mc_previews`, `draft_get`, `draft_status`,
+  `show_draft_previews` and `scripts/gen-mc-export.ts`. The share viewer's
+  index route builds the signed URL server-side — the viewer has no session and
+  must never hold the secret.
+- **No status gate on the signed route.** `DRAFT` and `PREVIEW` previews are
+  served like any other: watching a draft take shape is what a client's agent is
+  given a link for. Archived rows stay 404 — gone is not private, but it is gone.
+  Every refusal answers the same 404, so a probe cannot tell them apart.
+- 1568 DCO previews reshot (1416 stale, 152 never taken), 0 failures. Stale
+  previews: 1416 → 0.
+
 ## [6.114.0] — 2026-09-23
 
 ### Fixed

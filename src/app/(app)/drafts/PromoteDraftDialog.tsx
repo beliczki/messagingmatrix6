@@ -119,12 +119,15 @@ export default function PromoteDraftDialog({
   // A card is briefed for ONE product, and its DCO row belongs in that
   // product's matrix — offering every product's audiences made SZK work one
   // misclick away from the HK grid (user, 2026-09-30). Channels carry no
-  // product, so the Agentic side is unaffected.
+  // product, so the Agentic side is unaffected. INACTIVE cells are left out
+  // too: the grid hides them by default, so a promote into one looked like a
+  // promote into nothing (user, 2026-09-30, MC410 → Whitelist Általános).
   const dcoAudiences = useMemo(
     () =>
       audiences.filter(
         (a) =>
           a.channel == null &&
+          a.status !== "INACTIVE" &&
           (!product || (a.product ?? "").toUpperCase() === product.toUpperCase()),
       ),
     [audiences, product],

@@ -5,6 +5,12 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.116.3] — 2026-09-30
+
+### Changed
+- **The promote dialog no longer offers INACTIVE audiences.** The grid hides
+  them by default, so a card promoted into one seemed to vanish.
+
 ## [6.116.2] — 2026-09-30
 
 ### Fixed

@@ -5,6 +5,23 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.116.0] — 2026-09-30
+
+### Added
+- **Promote can create the topic the brief planned.** The Topic select offers
+  „＋ Create new topic" built from the draft's product + tag1–4 when no topic
+  carries those tags yet; a required Topic name becomes the DCO row name. Tags
+  are read server-side off the draft; an existing tag set is refused (409).
+
+### Changed
+- **The promote dialog offers only the draft product's DCO audiences** — an SZK
+  card lists the SZK matrix's cells, not every product's.
+
+### Fixed
+- **A Both card's Agentic cells land in the draft's topic.** Promoting onto a DCO
+  row used to place the delivered files under a filename-derived topic, so one MC
+  sat under two topics on the two axes.
+
 ## [6.115.1] — 2026-09-24
 
 ### Fixed

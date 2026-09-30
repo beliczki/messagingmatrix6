@@ -312,7 +312,7 @@ function topicFromCreative(creative: Creative): string {
 export async function ensureAgenticMc(
   clientId: number,
   creative: Creative,
-  opts: { channel?: string } = {},
+  opts: { channel?: string; topic?: string } = {},
 ): Promise<MirrorResult> {
   if (creative.mcNumber == null) {
     return { created: false, reason: "no-mc-number", message: null, audience: null };
@@ -460,8 +460,13 @@ export async function ensureAgenticMc(
     };
   }
 
+  // A promoted draft names the topic its cells belong in: a Both card promoted
+  // onto a DCO row used to scatter its files into a filename-derived topic, so
+  // the same MC sat under two different topics on the two axes (user,
+  // 2026-09-30). The filename is the answer only when nobody decided.
   const topic =
     (await agenticTopicForNumber(clientId, number, channelKeys)) ??
+    opts.topic ??
     topicFromCreative(creative);
 
   const audienceList = [
@@ -533,11 +538,13 @@ export async function placeAgenticSiblings(
   clientId: number,
   number: number,
   variant: string,
+  /** The promoted row's topic — where cells land when no sibling pins one. */
+  topic?: string,
 ): Promise<MirrorResult[]> {
   const files = await listCreativesByMc(clientId, number, variant);
   const out: MirrorResult[] = [];
   for (const creative of files) {
-    out.push(await ensureAgenticMc(clientId, creative));
+    out.push(await ensureAgenticMc(clientId, creative, { topic }));
   }
   return out;
 }

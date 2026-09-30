@@ -27,6 +27,15 @@ import {
   channelCodeForSize,
   splitAgenticTopic,
 } from "@/lib/agentic-topic";
+import {
+  hasTopicTags,
+  joinTopic,
+  plannedTopicTags,
+  type TopicTags,
+} from "@/lib/planned-topic";
+
+/** The topic select's value for "create the one the brief planned". */
+const NEW_TOPIC = "__new__";
 
 /**
  * The cell work arrives in. A draft that has not been placed yet belongs on the
@@ -107,9 +116,18 @@ export default function PromoteDraftDialog({
     (files.length > 0 ? "agentic" : "dco");
   const isAgentic = target === "agentic";
 
+  // A card is briefed for ONE product, and its DCO row belongs in that
+  // product's matrix — offering every product's audiences made SZK work one
+  // misclick away from the HK grid (user, 2026-09-30). Channels carry no
+  // product, so the Agentic side is unaffected.
   const dcoAudiences = useMemo(
-    () => audiences.filter((a) => a.channel == null),
-    [audiences],
+    () =>
+      audiences.filter(
+        (a) =>
+          a.channel == null &&
+          (!product || (a.product ?? "").toUpperCase() === product.toUpperCase()),
+      ),
+    [audiences, product],
   );
   const channelAudiences = useMemo(
     () => audiences.filter((a) => a.channel != null),
@@ -119,7 +137,7 @@ export default function PromoteDraftDialog({
   const [audienceKey, setAudienceKey] = useState(() =>
     isAgentic
       ? defaultChannelKey(channelAudiences, files)
-      : defaultAudienceKey(audiences, product),
+      : defaultAudienceKey(dcoAudiences, product),
   );
   const [status, setStatus] = useState<string>(PROMOTED_STATUS);
   // The planned topic is a working TITLE and usually names nothing real, but
@@ -171,11 +189,27 @@ export default function PromoteDraftDialog({
     if (agentic && planned?.trim()) return planned.trim();
     return "";
   });
+  // The topic the brief's tags describe, when the dimension does not hold it
+  // yet. Promoting a Both card is exactly when that row is first needed: its
+  // DCO cell needs a topics row, and its Agentic cells follow the same key.
+  const plannedTags = useMemo<TopicTags | null>(() => {
+    if (isAgentic) return null;
+    const tags = plannedTopicTags(
+      rows.find((r) => r.topic)?.topic ?? null,
+      product,
+    );
+    return tags && !topics.some((t) => hasTopicTags(t, tags)) ? tags : null;
+  }, [isAgentic, rows, product, topics]);
+  const [newTopicName, setNewTopicName] = useState("");
+  const creating = topicKey === NEW_TOPIC;
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const staying = rows.filter((r) => !selected.has(r.id));
-  const ready = selected.size > 0 && !!audienceKey && !!topicKey;
+  const ready =
+    selected.size > 0 &&
+    !!audienceKey &&
+    (creating ? newTopicName.trim() !== "" : !!topicKey);
 
   function toggle(id: number) {
     setSelected((prev) => {
@@ -197,7 +231,9 @@ export default function PromoteDraftDialog({
         body: JSON.stringify({
           ids: rows.filter((x) => selected.has(x.id)).map((x) => x.id),
           audienceKey,
-          topicKey,
+          ...(creating
+            ? { newTopic: { name: newTopicName.trim() } }
+            : { topicKey }),
           status,
           archiveRest,
         }),
@@ -295,6 +331,16 @@ export default function PromoteDraftDialog({
               className="input-box custom-dropdown w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
             >
               <option value="">— pick a topic —</option>
+              {plannedTags ? (
+                <option value={NEW_TOPIC}>
+                  ＋ Create new topic · {joinTopic(product, {
+                    tag1: plannedTags.tag1 ?? "",
+                    tag2: plannedTags.tag2 ?? "",
+                    tag3: plannedTags.tag3 ?? "",
+                    tag4: plannedTags.tag4 ?? "",
+                  })}
+                </option>
+              ) : null}
               {suggestions.length > 0 ? (
                 <optgroup label="From this card">
                   {suggestions.map((sug) => (
@@ -312,6 +358,19 @@ export default function PromoteDraftDialog({
                 ))}
               </optgroup>
             </select>
+            {creating && plannedTags ? (
+              <p className="form-field__hint mt-1 text-[11px] text-slate-500">
+                Creates a topic from the brief&apos;s tags — product{" "}
+                <b>{plannedTags.product ?? "—"}</b>, tags{" "}
+                <b>
+                  {[plannedTags.tag1, plannedTags.tag2, plannedTags.tag3, plannedTags.tag4]
+                    .map((t) => t ?? "—")
+                    .join(" / ")}
+                </b>
+                . The key follows the client&apos;s topic pattern; the Agentic
+                cells land in this same topic.
+              </p>
+            ) : null}
             {isAgentic ? (
               <p className="form-field__hint mt-1 text-[11px] text-slate-500">
                 The Agentic axis has no topics dimension — its rows are the
@@ -320,6 +379,21 @@ export default function PromoteDraftDialog({
               </p>
             ) : null}
           </label>
+
+          {creating ? (
+            <label className="form-field promote-dialog__field mb-3 block">
+              <div className="form-field__label mb-1 text-xs font-medium text-slate-700">
+                Topic name
+              </div>
+              <input
+                type="text"
+                value={newTopicName}
+                onChange={(e) => setNewTopicName(e.target.value)}
+                placeholder="the row name in the DCO matrix"
+                className="input-box w-full rounded-md border border-slate-300 px-2 py-1.5 text-xs focus:border-slate-500 focus:outline-none"
+              />
+            </label>
+          ) : null}
 
           <label className="form-field promote-dialog__field mb-3 block">
             <div className="form-field__label mb-1 text-xs font-medium text-slate-700">

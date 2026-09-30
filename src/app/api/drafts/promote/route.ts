@@ -7,6 +7,8 @@ import {
   promoteDraft,
 } from "@/lib/entities/messages";
 import { placeAgenticSiblings } from "@/lib/entities/promote";
+import { createTopic, listTopics } from "@/lib/entities/topics";
+import { hasTopicTags, plannedTopicTags } from "@/lib/planned-topic";
 import { denyDemo, withSession } from "@/lib/scoped";
 import { writeAudit } from "@/lib/audit";
 
@@ -31,6 +33,11 @@ import { writeAudit } from "@/lib/audit";
 // key is an Agentic placement — promoteDraft resolves both through the same
 // lookup). The "both" fan-out lives on /api/drafts/[id]/promote, which is
 // untouched and still serves MCP and the single-card path.
+//
+// `newTopic: { name }` instead of a topicKey creates the topic the brief
+// planned and promotes into it. Only the NAME comes from the caller: product
+// and tags are read off the draft rows, so what gets created is what the Brief
+// tab shows, not whatever a client sends.
 export const POST = withSession(async ({ req, claims }) => {
   const denial = denyDemo(claims);
   if (denial) return denial;
@@ -38,10 +45,8 @@ export const POST = withSession(async ({ req, claims }) => {
   if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "bad_body" }, { status: 400 });
   }
-  const { ids, audienceKey, topicKey, status, archiveRest } = body as Record<
-    string,
-    unknown
-  >;
+  const { ids, audienceKey, topicKey, newTopic, status, archiveRest } =
+    body as Record<string, unknown>;
   if (
     !Array.isArray(ids) ||
     ids.length === 0 ||
@@ -49,9 +54,22 @@ export const POST = withSession(async ({ req, claims }) => {
   ) {
     return NextResponse.json({ error: "ids are required" }, { status: 400 });
   }
-  if (typeof audienceKey !== "string" || typeof topicKey !== "string") {
+  const newTopicName =
+    newTopic && typeof newTopic === "object"
+      ? String((newTopic as Record<string, unknown>).name ?? "").trim()
+      : null;
+  if (
+    typeof audienceKey !== "string" ||
+    (typeof topicKey !== "string" && newTopicName === null)
+  ) {
     return NextResponse.json(
-      { error: "audienceKey and topicKey are required" },
+      { error: "audienceKey and topicKey (or newTopic) are required" },
+      { status: 400 },
+    );
+  }
+  if (newTopicName === "") {
+    return NextResponse.json(
+      { error: "the new topic needs a name" },
       { status: 400 },
     );
   }
@@ -80,12 +98,48 @@ export const POST = withSession(async ({ req, claims }) => {
   }
   rows.sort((a, b) => a.variant.localeCompare(b.variant));
 
+  let targetTopicKey = topicKey as string;
+  if (newTopicName !== null) {
+    const product = rows.find((r) => r.draftProduct)?.draftProduct ?? null;
+    const planned = rows.find((r) => r.topic)?.topic ?? null;
+    const tags = plannedTopicTags(planned, product);
+    if (!tags) {
+      return NextResponse.json(
+        { error: "the brief has no planned topic tags to create a topic from" },
+        { status: 400 },
+      );
+    }
+    // Same tags twice is a near-duplicate row in a dimension that is curated by
+    // hand — refuse and name the one that exists, rather than suffixing a key.
+    const existing = (await listTopics(claims.cid)).find((t) =>
+      hasTopicTags(t, tags),
+    );
+    if (existing) {
+      return NextResponse.json(
+        {
+          error: `topic '${existing.key}' already has these tags — pick it instead`,
+        },
+        { status: 409 },
+      );
+    }
+    const created = await createTopic(claims.cid, { name: newTopicName, ...tags });
+    await writeAudit({
+      clientId: claims.cid,
+      userId: claims.sub,
+      entityType: "topics",
+      entityId: created.id,
+      action: "create",
+      after: created,
+    });
+    targetTopicKey = created.key;
+  }
+
   const promoted = [];
   try {
     for (const row of rows) {
       const result = await promoteDraft(claims.cid, row.id, {
         audienceKey,
-        topicKey,
+        topicKey: targetTopicKey,
         expectedVersion: row.version,
         status: typeof status === "string" ? status : undefined,
       });
@@ -104,7 +158,12 @@ export const POST = withSession(async ({ req, claims }) => {
       // files that arrived in the meantime have to land too — each size on the
       // channel it belongs to. A DCO promote finds no channel for its files and
       // this is a no-op.
-      await placeAgenticSiblings(claims.cid, result.number, result.variant);
+      await placeAgenticSiblings(
+        claims.cid,
+        result.number,
+        result.variant,
+        result.topic!,
+      );
     }
 
     let archived = 0;

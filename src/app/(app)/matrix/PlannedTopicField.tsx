@@ -28,42 +28,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Field from "./EditorField";
 import { useKeywordOptions } from "../_components/useKeywordOptions";
 import type { TopicRow } from "./BriefTab";
+import { joinTopic, splitTopic, type Parts } from "@/lib/planned-topic";
 
-export type Parts = { tag1: string; tag2: string; tag3: string; tag4: string };
-
-export function splitTopic(value: string | null, product: string | null): Parts {
-  const empty = { tag1: "", tag2: "", tag3: "", tag4: "" };
-  if (!value) return empty;
-  let rest = value;
-  // The product prefix belongs to the key, not to the tags — drop it so the
-  // pickers show what the user actually chose.
-  if (product && rest.toUpperCase().startsWith(`${product.toUpperCase()}_`)) {
-    rest = rest.slice(product.length + 1);
-  }
-  const parts = rest.split("_");
-  return {
-    tag1: parts[0] ?? "",
-    tag2: parts[1] ?? "",
-    tag3: parts[2] ?? "",
-    // Everything left, joined back: tag4 is free text and may carry underscores
-    // of its own.
-    tag4: parts.slice(3).join("_"),
-  };
-}
-
-// POSITION-PRESERVING, and that is not a detail: dropping the empty parts made
-// "tag4 = t" compose to `MARKET_t`, which reads back as tag1 = "t" — the
-// character typed into the last field reappeared in the first one, and the
-// caret went with it. Empty slots stay as empty segments (`MARKET____t`), which
-// is also exactly what the stored key pattern produces for the same input.
-// Trailing empties are dropped, since nothing follows them to hold a position.
-export function joinTopic(product: string | null, p: Parts): string {
-  const parts = [product ?? "", p.tag1, p.tag2, p.tag3, p.tag4].map((s) =>
-    (s ?? "").trim(),
-  );
-  while (parts.length > 0 && parts[parts.length - 1] === "") parts.pop();
-  return parts.join("_");
-}
+export { splitTopic, joinTopic, type Parts } from "@/lib/planned-topic";
 
 /**
  * What a tag picker offers: the CURATED list first (Settings → Keywords →

@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { audiences, channels, clients, messages, topics, users } from "@/db/schema";
 import { hashPassword, signSession } from "@/lib/auth";
 import { createDraft, createDraftVariant } from "@/lib/entities/messages";
+import { createCreativeWithMirror } from "@/lib/entities/promote";
 import { createTestDb, withActiveClientKey, type TestDb } from "../../helpers/test-db";
 
 // One decision, one call: which variants of an MC go, where, and what happens
@@ -203,6 +204,73 @@ describe("POST /api/drafts/promote", () => {
     });
     expect(status).toBe(409);
     expect(body.error).toMatch(/already in the matrix/);
+  });
+
+  // A Both card (user, 2026-09-30): its DCO row needs a topics row the brief
+  // planned but nobody created, and its delivered files used to land in a
+  // topic derived from their filenames instead of that one.
+  it("creates the brief's topic and lands the Agentic cells in it too", async () => {
+    const a = await createDraft(erste.id, {
+      name: "a",
+      draftProduct: "SZK",
+      draftTarget: "both",
+      topic: "SZK_edukacio_kamat_NA_thmcsokkentes",
+    });
+    await createCreativeWithMirror(erste.id, {
+      fileName: `ERSTE_SZK_MC${a.number}_a_kamatcsokkentes_n1_300x250.png`,
+      product: "SZK",
+      mcNumber: a.number,
+      mcVariant: "a",
+    });
+
+    const { status, body } = await post({
+      ids: [a.id],
+      audienceKey: "SZK_INCOMING",
+      newTopic: { name: "Kamatcsökkentés" },
+    });
+    expect(status).toBe(200);
+
+    const [created] = await db
+      .select()
+      .from(topics)
+      .where(eq(topics.name, "Kamatcsökkentés"));
+    expect([created!.product, created!.tag1, created!.tag2, created!.tag3, created!.tag4])
+      .toEqual(["SZK", "edukacio", "kamat", "NA", "thmcsokkentes"]);
+    expect(body.promoted[0].topic).toBe(created!.key);
+
+    const cells = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.number, a.number));
+    const agentic = cells.filter((c) => c.audience === "ch_disp");
+    expect(agentic).toHaveLength(1);
+    expect(agentic[0]!.topic).toBe(created!.key);
+  });
+
+  it("refuses to create a topic whose tags already exist", async () => {
+    await db.insert(topics).values({
+      clientId: erste.id,
+      key: "SZK_edukacio_kamat_NA_x",
+      name: "Existing",
+      product: "SZK",
+      tag1: "edukacio",
+      tag2: "kamat",
+      tag3: "NA",
+      tag4: "x",
+      orderIndex: 2,
+    });
+    const a = await createDraft(erste.id, {
+      name: "a",
+      draftProduct: "SZK",
+      topic: "SZK_edukacio_kamat_NA_x",
+    });
+    const { status, body } = await post({
+      ids: [a.id],
+      audienceKey: "SZK_INCOMING",
+      newTopic: { name: "Dup" },
+    });
+    expect(status).toBe(409);
+    expect(body.error).toMatch(/SZK_edukacio_kamat_NA_x/);
   });
 
   it("refuses an empty selection", async () => {

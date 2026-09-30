@@ -86,7 +86,7 @@ export const POST = withSession<Params>(async ({ req, claims, params }) => {
 
     // Same gate as the bulk route: while the draft was open, uploads created no
     // cell, so the delivered files land now — each size on its own channel.
-    await placeAgenticSiblings(claims.cid, row.number, row.variant);
+    await placeAgenticSiblings(claims.cid, row.number, row.variant, row.topic!);
 
     if (target !== "both") {
       return NextResponse.json({ message: row });

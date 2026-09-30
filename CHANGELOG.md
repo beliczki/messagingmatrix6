@@ -5,6 +5,13 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.116.1] — 2026-09-30
+
+### Fixed
+- **The promote dialog preselects the topic the brief's tags describe**, even
+  when its key is spelled differently — e.g. one an earlier „Create new topic"
+  made before its promote failed.
+
 ## [6.116.0] — 2026-09-30
 
 ### Added

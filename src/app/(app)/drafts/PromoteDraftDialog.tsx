@@ -181,6 +181,12 @@ export default function PromoteDraftDialog({
   const [topicKey, setTopicKey] = useState(() => {
     const planned = rows.find((r) => r.topic)?.topic ?? null;
     if (planned && topics.some((t) => t.key === planned)) return planned;
+    // Keys can drift from their tags, so the tags are asked too: the topic the
+    // brief describes — one an earlier "Create new topic" already made, say —
+    // is the answer even when its key spells it differently.
+    const tags = plannedTopicTags(planned, product);
+    const byTags = tags ? topics.find((t) => hasTopicTags(t, tags)) : undefined;
+    if (!isAgentic && byTags) return byTags.key;
     // Agentic: the string is the topic, so a suggestion can be the answer.
     const agentic =
       rows.find((r) => r.draftTarget)?.draftTarget === "agentic" ||

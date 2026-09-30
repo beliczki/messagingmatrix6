@@ -675,8 +675,11 @@ export default function GridView({
     </div>
   );
 
-  if (!editMode) return grid;
-
+  // ALWAYS inside the DndContext, even outside edit mode: returning the bare
+  // grid there gave the two modes different trees, so entering edit mode
+  // remounted `.matrix-grid` — the scroll container — and the view jumped back
+  // to 0,0 (user, 2026-09-30). With nothing draggable rendered, the context is
+  // inert, and the overlay above is already null without edit mode.
   return (
     <DndContext sensors={sensors} onDragStart={onDragStart} onDragEnd={onDragEnd}>
       {grid}

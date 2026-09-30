@@ -148,28 +148,18 @@ export default function PreviewPane({
     <div className="preview-pane flex h-full flex-col">
       <div className="preview-pane__toolbar flex h-10 shrink-0 items-center justify-between border-b border-border bg-surface px-3">
         <div className="flex items-center gap-2">
-          {/* Static-image MCs (Agentic creatives) list the creative's REAL sizes
-              (same MC number+variant, one row per stored size); switching shows
-              that size's file. No template/animation, so the skip-animation +
-              image-preview toggles are hidden — the viewport is a plain
-              Creative-Library-style image box. */}
-          {sizes.length > 0 ? (
-            <select
-              value={size ?? ""}
-              onChange={(e) => onSizeChange(e.target.value)}
-              className="custom-dropdown preview-pane__size-select rounded border border-border bg-surface px-2 py-1 text-xs"
-              disabled={sizes.length === 0}
+          {/* Refresh on the left and the size picker on the far right (user,
+              2026-09-30): the size select is the control reached for most,
+              and pinned to the edge it stays in one place whether the pane
+              sits beside the form or under it. */}
+          {onRefresh ? (
+            <button
+              onClick={handleRefresh}
+              className="preview-pane__refresh rounded border border-border bg-surface p-1 text-text-primary hover:bg-surface-alt"
+              title="Refresh preview"
             >
-              {sizes.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          ) : showStatic ? (
-            <span className="preview-pane__static-label text-xs text-text-secondary">
-              {staticImage}
-            </span>
+              <Icon name="refresh" className="size-3.5" />
+            </button>
           ) : null}
           {!showStatic ? (
             <button
@@ -232,16 +222,30 @@ export default function PreviewPane({
               <Icon name="moon" className="size-3.5" />
             </BgBtn>
           </div>
-          {onRefresh ? (
-            <button
-              onClick={handleRefresh}
-              className="preview-pane__refresh rounded border border-border bg-surface p-1 text-text-primary hover:bg-surface-alt"
-              title="Refresh preview"
-            >
-              <Icon name="refresh" className="size-3.5" />
-            </button>
-          ) : null}
           {rightExtras}
+          {/* Static-image MCs (Agentic creatives) list the creative's REAL sizes
+              (same MC number+variant, one row per stored size); switching shows
+              that size's file. No template/animation, so the skip-animation +
+              image-preview toggles are hidden — the viewport is a plain
+              Creative-Library-style image box. */}
+          {sizes.length > 0 ? (
+            <select
+              value={size ?? ""}
+              onChange={(e) => onSizeChange(e.target.value)}
+              className="custom-dropdown preview-pane__size-select rounded border border-border bg-surface px-2 py-1 text-xs"
+              disabled={sizes.length === 0}
+            >
+              {sizes.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          ) : showStatic ? (
+            <span className="preview-pane__static-label text-xs text-text-secondary">
+              {staticImage}
+            </span>
+          ) : null}
         </div>
       </div>
       <div

@@ -5,6 +5,20 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.117.1] — 2026-09-30
+
+### Changed
+- **Preview panels: the size picker sits on the far right, refresh on the left**,
+  so the size select is in one place in both the stacked and side-by-side layouts.
+- **Matrix header dialog: the MC stepper is pinned to the right** (counter, ‹ MC ›);
+  the MC name — now larger and bold — and its status sit on the left.
+
+### Fixed
+- **Entering edit mode keeps the matrix scroll position** instead of jumping to
+  0,0 — the grid's scroll container is no longer remounted.
+- **Feed export mode switch: the active option's description is readable in dark
+  mode.**
+
 ## [6.117.0] — 2026-09-30
 
 ### Changed

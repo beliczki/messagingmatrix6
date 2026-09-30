@@ -955,35 +955,17 @@ function StepperStrip({
     ? `MC${currentMc.number}${currentMc.variant ?? ""}`
     : "—";
   return (
+    // Name + status on the left, the stepper pinned to the right edge (user,
+    // 2026-09-30): the arrows stay under the cursor whatever the name's length,
+    // in the stacked and the side-by-side layout alike.
     <div className="matrix-header-dialog__stepper flex h-10 shrink-0 items-center gap-2 border-b border-slate-200 bg-white px-3">
-      <button
-        onClick={() => setStepIndex(Math.max(0, stepIndex - 1))}
-        disabled={stepIndex <= 0}
-        aria-label="Previous"
-        className="matrix-header-dialog__nav-prev rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
-      >
-        <Icon name="chevron-left" className="size-4" />
-      </button>
-      <span className="matrix-header-dialog__mc-label font-mono text-sm font-semibold text-slate-900">
-        {mcLabel}
-      </span>
-      <button
-        onClick={() =>
-          setStepIndex(Math.min(steppable.length - 1, stepIndex + 1))
-        }
-        disabled={stepIndex >= steppable.length - 1}
-        aria-label="Next"
-        className="matrix-header-dialog__nav-next rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
-      >
-        <Icon name="chevron-right" className="size-4" />
-      </button>
-      {steppable.length > 0 ? (
-        <span className="matrix-header-dialog__nav-counter text-xs text-slate-500">
-          {stepIndex + 1}/{steppable.length}
+      {currentMc?.name ? (
+        <span className="matrix-header-dialog__mc-name min-w-0 truncate text-sm font-semibold text-slate-900">
+          {currentMc.name}
         </span>
       ) : null}
       {currentMc?.status ? (
-        <span className="status-badge ml-2 inline-flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-700">
+        <span className="status-badge inline-flex shrink-0 items-center gap-1.5 rounded border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-700">
           <span
             className={clsx(
               "status-dot size-1.5 rounded-full",
@@ -993,11 +975,34 @@ function StepperStrip({
           {currentMc.status}
         </span>
       ) : null}
-      {currentMc?.name ? (
-        <span className="matrix-header-dialog__mc-name ml-1 truncate text-xs text-slate-500">
-          {currentMc.name}
+      <div className="matrix-header-dialog__nav ml-auto flex shrink-0 items-center gap-2">
+        {steppable.length > 0 ? (
+          <span className="matrix-header-dialog__nav-counter text-xs text-slate-500">
+            {stepIndex + 1}/{steppable.length}
+          </span>
+        ) : null}
+        <button
+          onClick={() => setStepIndex(Math.max(0, stepIndex - 1))}
+          disabled={stepIndex <= 0}
+          aria-label="Previous"
+          className="matrix-header-dialog__nav-prev rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+        >
+          <Icon name="chevron-left" className="size-4" />
+        </button>
+        <span className="matrix-header-dialog__mc-label font-mono text-sm font-semibold text-slate-900">
+          {mcLabel}
         </span>
-      ) : null}
+        <button
+          onClick={() =>
+            setStepIndex(Math.min(steppable.length - 1, stepIndex + 1))
+          }
+          disabled={stepIndex >= steppable.length - 1}
+          aria-label="Next"
+          className="matrix-header-dialog__nav-next rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+        >
+          <Icon name="chevron-right" className="size-4" />
+        </button>
+      </div>
     </div>
   );
 }

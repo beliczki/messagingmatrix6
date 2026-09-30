@@ -468,7 +468,10 @@ function PreEmitForm({
                   <span
                     className={clsx(
                       "mode-switch__desc mt-0.5 block text-[11px] leading-snug",
-                      on ? "text-slate-300" : "text-slate-500",
+                      // Inherit the button's colour, dimmed: a fixed slate-300
+                      // stayed light when dark mode flips the filled button to
+                      // a light fill, and the line vanished.
+                      on ? "opacity-70" : "text-slate-500",
                     )}
                   >
                     {m.desc}

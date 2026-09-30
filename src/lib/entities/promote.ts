@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   messages,
@@ -375,6 +375,9 @@ export async function ensureAgenticMc(
   // of a bulk promote the moment the next one's siblings were placed, and left
   // the promoted cells without their files (user, 2026-09-24, MC407). It falls
   // through to ordinary placement, where the topic comes from the live sibling.
+  // On EITHER axis: a Both card promoted onto a DCO row is placed too, only not
+  // on a channel, and asking about channels alone re-drafted every letter of it
+  // and placed none of its files (user, 2026-09-30, MC410).
   const channelList = await listChannels(clientId);
   const channelKeys = channelList.map((c) => c.key);
   const placed = (
@@ -386,7 +389,7 @@ export async function ensureAgenticMc(
           eq(messages.clientId, clientId),
           eq(messages.number, number),
           eq(messages.variant, variant),
-          inArray(messages.audience, channelKeys),
+          isNotNull(messages.audience),
         ),
       )
   ).some(isLive);

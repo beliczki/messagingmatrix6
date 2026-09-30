@@ -5,6 +5,14 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.116.2] — 2026-09-30
+
+### Fixed
+- **A Both card promoted onto a DCO row no longer re-drafts itself.** The
+  sibling pass only counted a letter as placed when it sat on a channel, so each
+  DCO-promoted letter came back as an Untitled draft and none of its delivered
+  files reached the Agentic axis (MC410). A letter live on either axis counts.
+
 ## [6.116.1] — 2026-09-30
 
 ### Fixed

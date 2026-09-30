@@ -247,6 +247,46 @@ describe("POST /api/drafts/promote", () => {
     expect(agentic[0]!.topic).toBe(created!.key);
   });
 
+  // MC410, 2026-09-30: a Both card promoted onto a DCO row. The sibling pass
+  // after `a` saw `b` and `c` still drafted and `a` not placed on a CHANNEL, so
+  // it re-drafted `a` as a letter the brief never named — then `b`, then `c`.
+  // Three Untitled drafts, and no Agentic cell at all.
+  it("a Both card promoted onto DCO leaves no draft and places its files", async () => {
+    const a = await createDraft(erste.id, {
+      name: "a",
+      draftProduct: "SZK",
+      draftTarget: "both",
+      topic: "SZK_brand",
+    });
+    const b = await createDraftVariant(erste.id, a.id, "duplicate");
+    for (const v of ["a", "b"]) {
+      await createCreativeWithMirror(erste.id, {
+        fileName: `ERSTE_SZK_MC${a.number}_${v}_kamat_n1_300x250.png`,
+        product: "SZK",
+        mcNumber: a.number,
+        mcVariant: v,
+      });
+    }
+
+    const { status } = await post({
+      ids: [a.id, b.id],
+      audienceKey: "SZK_INCOMING",
+      topicKey: "SZK_brand",
+    });
+    expect(status).toBe(200);
+
+    const cells = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.number, a.number));
+    expect(cells.filter((c) => c.status === "DRAFT")).toHaveLength(0);
+    const agentic = cells.filter((c) => c.audience === "ch_disp");
+    expect(agentic.map((c) => [c.variant, c.topic])).toEqual([
+      ["a", "SZK_brand"],
+      ["b", "SZK_brand"],
+    ]);
+  });
+
   it("refuses to create a topic whose tags already exist", async () => {
     await db.insert(topics).values({
       clientId: erste.id,

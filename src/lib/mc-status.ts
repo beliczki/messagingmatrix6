@@ -44,13 +44,12 @@ export const MATRIX_STATUSES: readonly McStatus[] = MC_STATUSES.filter(
 // The status a matrix card is born in — see PREVIEW above.
 export const BIRTH_STATUS: McStatus = "PREVIEW";
 
-// What a PROMOTED draft lands on (user, 2026-09-23). Deliberately not
-// BIRTH_STATUS: a card created straight into the matrix still has to be built
-// and looked at, but a draft has already been through the brief and the
-// delivered files, so PREVIEW was a stop everyone clicked past. Note the cost,
-// because it is real — ACTIVE is measurement-locked, so a card promoted this
-// way can no longer be moved to another cell (MEASUREMENT_LOCKED_STATUSES).
-export const PROMOTED_STATUS: McStatus = "ACTIVE";
+// What a PROMOTED draft lands on. It was ACTIVE (user, 2026-09-23) and went
+// back to PREVIEW (user, 2026-09-30): ACTIVE is measurement-locked, so a card
+// promoted into the wrong cell could no longer be moved out of it — MC410 sat
+// stuck in an INACTIVE audience. A promote is where a card is PLACED, and
+// placement is only final once someone has looked at it in the grid.
+export const PROMOTED_STATUS: McStatus = BIRTH_STATUS;
 
 // Placement- and delete-locked: the PMMID is a live or historical measurement
 // key, so moving the row would make that key describe a cell it never ran in.

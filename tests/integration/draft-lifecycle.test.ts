@@ -382,10 +382,9 @@ describe("promoteDraft", () => {
     expect(promoted).toMatchObject({
       id: d.id, // the same row — promotion is not a re-creation
       number: d.number, // the promise made at intake
-      // ACTIVE, not the BIRTH_STATUS a card created straight into the matrix
-      // gets (user, 2026-09-23): a draft has already been through the brief and
-      // its delivered files, so PREVIEW was a stop everyone clicked past.
-      status: "ACTIVE",
+      // PREVIEW (user, 2026-09-30): ACTIVE is measurement-locked, and a card
+      // promoted into the wrong cell must still be movable.
+      status: "PREVIEW",
       audience: "SZK_visitors",
       topic: "SZK_brand",
       headline: "Hello",

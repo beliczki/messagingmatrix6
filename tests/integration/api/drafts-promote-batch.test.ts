@@ -100,7 +100,7 @@ describe("POST /api/drafts/promote", () => {
       "b",
       "c",
     ]);
-    expect(body.promoted.every((p: { status: string }) => p.status === "ACTIVE")).toBe(
+    expect(body.promoted.every((p: { status: string }) => p.status === "PREVIEW")).toBe(
       true,
     );
     expect(body.promoted.every((p: { pmmid: string }) => !!p.pmmid)).toBe(true);
@@ -151,7 +151,7 @@ describe("POST /api/drafts/promote", () => {
     const rows = await db.select().from(messages);
     const byId = new Map(rows.map((r) => [r.id, r]));
     expect(byId.get(a!.id)!.archivedAt).toBeNull();
-    expect(byId.get(a!.id)!.status).toBe("ACTIVE");
+    expect(byId.get(a!.id)!.status).toBe("PREVIEW");
     expect(byId.get(b!.id)!.archivedAt).not.toBeNull();
     expect(byId.get(c!.id)!.archivedAt).not.toBeNull();
   });

@@ -5,6 +5,15 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.117.0] — 2026-09-30
+
+### Changed
+- **A promoted draft lands as PREVIEW, not ACTIVE** (UI, API and MCP). ACTIVE
+  is measurement-locked, so a card promoted into the wrong cell could not be
+  moved out of it again.
+- **The promote dialog offers only ACTIVE audiences of the draft's product** —
+  INACTIVE ones are hidden in the grid, and INCOMING is a holding column.
+
 ## [6.116.3] — 2026-09-30
 
 ### Changed

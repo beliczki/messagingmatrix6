@@ -2671,3 +2671,9 @@ Döntés (user ok): title/`generatedAt` marad, csak `updatedAt` frissül; videó
 - Picker saját query key: `["share-galleries","picker"]` (más shape, mint a Shares tábla).
 - `tests/integration/api/share-add-items.test.ts` 4/4 zöld, tsc tiszta. Böngészőben nem
   ellenőrizve (dev = éles DB + login kell) — élesítés után kézzel kipróbálni.
+
+### DEPLOYOLVA 6.118.0 — mindkét tenant (`32be0a2`, 2026-10-09)
+`mm6-deploy erste` + `telekom`, mindkettő „up after 1s". Séma-migráció nincs. Az új route él
+(`POST /api/share-galleries/x/items` hitelesítés nélkül → 401, nem 404). Dialog böngészőben még
+nincs kipróbálva. Box-drift: `mm6-erste/templates/html/thm.json` nem commitolt új sort hordoz
+(`2026-09-21 00:01: THM: 13,17%`) — repóba kell vinni, különben egy jövőbeli ütköző pull megakad.

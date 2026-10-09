@@ -1,6 +1,6 @@
 {
   "name": "messagingmatrix",
-  "version": "6.119.0",
+  "version": "6.119.1",
   "private": true,
   "scripts": {
     "dev": "PORT=6001 ACTIVE_CLIENT_KEY=erste next dev",
@@ -60,7 +60,7 @@
     "postgres": "^3.4.9",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.5",
     "zod": "^4.4.1"
   },
   "devDependencies": {

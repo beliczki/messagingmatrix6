@@ -18,7 +18,7 @@ let h: TestDb;
 let erste: { id: number };
 
 const TINY_PNG_B64 =
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgAAIAAAUAAeImBZsAAAAASUVORK5CYII=";
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAAbitOmMAAAAASUVORK5CYII=";
 
 type Handler = (args: Record<string, unknown>) => Promise<{
   content: { type: string; text: string }[];

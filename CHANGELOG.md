@@ -5,6 +5,17 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.119.1] — 2026-10-09
+
+### Changed
+- **sharp 0.34.5 → 0.35.5** (libvips/libheif/librsvg advisories). `npm audit` on the
+  production dependencies is now clean. Probed against 400 stored images (png/jpeg): all
+  still resize.
+
+### Fixed
+- Test fixture: the "smallest valid PNG" in five integration tests had a bad IDAT CRC;
+  sharp 0.35 rightly rejects it as corrupt. Replaced with a valid 1×1 PNG.
+
 ## [6.119.0] — 2026-10-09
 
 ### Changed

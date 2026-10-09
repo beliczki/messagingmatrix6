@@ -2689,3 +2689,6 @@ tételek ki vannak-e jelölve → 10 kijelölt ≥ 9 szűrt = letiltva. És a `s
 - [x] A gomb a szűrt, még NEM kijelölt tételeket számolja (`k`): felirat
       „Add all filtered (k) to selection"; ha `k = 0` → letiltva, „All N filtered selected".
       Collapsed ikon title-je ugyanígy.
+
+### DEPLOYOLVA 6.118.1 — mindkét tenant (`52a12c7`, 2026-10-09)
+Select-all-filtered fix; mindkét deploy „up after 1s", /login 200. Böngészőben még nincs kipróbálva.

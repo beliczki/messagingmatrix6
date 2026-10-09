@@ -21,7 +21,15 @@ PORT=$(grep '^PORT=' .env | cut -d= -f2)
 [ -n "$PORT" ] || { echo "no PORT in $DIR/.env" >&2; exit 1; }
 
 echo "==> git pull"
+BEFORE=$(git rev-parse HEAD)
 git pull --ff-only
+
+# A dependency bump must reach node_modules, or the build silently uses the old
+# versions. Only when the lockfile moved — a plain deploy stays a plain build.
+if ! git diff --quiet "$BEFORE" HEAD -- package-lock.json; then
+    echo "==> package-lock.json changed: npm ci"
+    npm ci --no-audit --no-fund
+fi
 
 echo "==> build into .next-build (app stays up and serving)"
 rm -rf .next-build

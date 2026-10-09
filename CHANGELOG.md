@@ -5,6 +5,18 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.118.2] — 2026-10-09
+
+### Changed
+- **Next 15.5.15 → 15.5.27, React 19.0.0 → 19.0.8**, plus `npm audit fix` on the
+  transitive dependencies (MCP SDK, nanoid, shell-quote, proxy-addr, qs, …). Closes the
+  15.5.x advisories, including the critical AVIF image-optimizer RCE. Rollback point
+  before the Next 16 move.
+
+### Fixed
+- **`mm6-deploy` runs `npm ci` when `package-lock.json` changed in the pull.** A
+  dependency bump used to build against the old `node_modules`.
+
 ## [6.118.1] — 2026-10-09
 
 ### Fixed

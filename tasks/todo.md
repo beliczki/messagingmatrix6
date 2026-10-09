@@ -2708,7 +2708,9 @@ Select-all-filtered fix; mindkét deploy „up after 1s", /login 200. Böngész�
       (`set-state-in-effect` 52, `refs`, `immutability`, `preserve-manual-memoization`) **warn**-ra
       állítva → TECH-ADÓSSÁG. Lokális `next start` smoke bejelentkezve: dashboard, mátrix, MC-editor
       preview iframe, Creative Library, Drafts, Monitoring, publikus share (27/27 sharp thumb) — konzolhiba nincs.
-- [ ] **6.119.0 deploy** mindkét tenantra (`git pull` → `npm ci` → `mm6-deploy`).
+- [x] **DEPLOYOLVA 6.119.0 — mindkét tenant** (`e678af6`, next 16.4.0 a boxon), kézi `npm ci` + `mm6-deploy`,
+      mindkettő „up after 1s", a box working tree tiszta (tsconfig nem íródott át). `/login` 200, `/matrix` 307,
+      `/mcp` + `/api/templates` 401. Élesben bejelentkezve: mátrix (Agentic) + Creative Library, konzolhiba nincs.
 - [ ] sharp 0.34.5 → 0.35.5 (high, libvips/libheif/librsvg) — külön szelet, thumb/still útvonal-teszttel.
 - [ ] TECH-ADÓSSÁG: react-hooks 7 findingok egyesével; 31 Turbopack trace-warning (dinamikus `fs`-utak,
       `turbopackIgnore` vagy statikus scope); `EBH_SELFIE_ONBOARDING_CSEMPÉK_20221207-03.jpg` hiányzik

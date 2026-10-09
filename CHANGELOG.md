@@ -5,6 +5,16 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.119.0] — 2026-10-09
+
+### Changed
+- **Next 15.5.27 → 16.4.0, React 19.0.8 → 19.3.0.** Turbopack is now the build
+  bundler; `tsconfig.json` takes Next 16's `jsx: react-jsx` and the `dev/types`
+  includes, so the box build no longer rewrites it. Closes the remaining Next and
+  PostCSS advisories.
+- ESLint uses `eslint-config-next`'s native flat config (no `FlatCompat`). The new
+  React Compiler rules of `eslint-plugin-react-hooks` 7 run as warnings for now.
+
 ## [6.118.2] — 2026-10-09
 
 ### Changed

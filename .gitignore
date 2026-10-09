@@ -45,6 +45,10 @@ test-results
 scripts/recon/bundle.json
 scripts/recon/resid_C.json
 scripts/recon/meta_*.json
+scripts/recon/creatives.json
+scripts/recon/messages.json
 # common.py is imported by the other scripts, so a run leaves bytecode behind.
 __pycache__/
 *.pyc
+scripts/recon/*.bak
+scripts/recon/*.bak2

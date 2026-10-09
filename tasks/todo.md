@@ -2503,6 +2503,142 @@ sibling pass újrafuttatva → a/b/c DISP cellák `image1`-et kaptak, és létre
 
 - [x] commit + deploy (erste, telekom) — 6.115.1
 
+---
+
+## 2026-09-26 — Riport-egyeztetés II. kör: n=109, a KÉP mint második fokozat
+
+**Tanulmány: `docs/REPORT_RECONCILIATION_STUDY.md` II. rész.** Az I. kör 20 mintán futott; azóta a
+riportban 109 kreatív-szöveg és 90 képleírás áll, és megszületett a szöveg-matcher
+(`text_match.py` + `verdict.py`). Ez a kör a **képet** teszi hozzá.
+
+### Mi épült
+- `scripts/recon/image_match.py` — IDF-koszinusz a riport képleírása ↔ `creatives.image_description`
+  (mind az 1037 beolvasott kreatívra megvan), saját `BOILER` stoplistával (mindkét oldal generált
+  próza, tele közös sablonszóval).
+- `scripts/recon/verdict2.py` — kétfokozatú verdikt: **a szöveg adja a SZÁMOT, a kép a VARIÁNST**,
+  plusz a riport saját `Prospecting/ remarketing` és `Topic` oszlopa tanúként.
+- `scripts/recon/addcol.py::set_column` — meglévő oszlop felülírása (az `add_column` mindig újat
+  fűzött volna); ugyanaz a zip-sebészet, a 407 cellába ágyazott kép sértetlen.
+
+### Miért kellett
+Egy DCO-családon belül **minden variáns ugyanazt a szöveget hordozza** (MC365a/b/c azonos copy).
+A szöveg tehát a számot vissza tudja hozni, a variánst soha — a `verdict.py` ezt maga is kiírta
+(„a képleírás dönti el"), csak nem volt mivel. Két Cseperedő-sor emiatt **ugyanazt a
+„PONTOS — MC366a (1.00)" verdiktet** kapta, pedig más a képük: az egyik biztosan téves volt.
+
+### Két szabály, amit ez a kör tanított
+1. **A kép is cáfolni tud, jelölni nem** — pont mint a topic az I. körben. Szűkítés nélkül a
+   Visa-kártyás sor a 3. helyre esett (0.156), a szöveg-jelöltekre szűkítve nyer (0.157 vs 0.082).
+2. **A riport saját oszlopai ingyen tanúk.** A `pro/rem` + `Topic` a 25 duplikált MC-párból 9-et
+   önmagában szétválaszt.
+
+### Eredmény
+Egyértelmű találat **27/90 (30%) → 37/90 (41%)**; „TÖBB JELÖLT" 42 → 27.
+A `Mátrix találat` oszlop mind a 109 sorra visszaírva (AO_PRG.xlsx `U`, mentés `.bak2`).
+
+### A kör fő lelete — nem a matcher a szűk keresztmetszet
+A 48 nyitott sor oka: **36 duplikált MC-pár** (10,7M megj.) · 5 beolvasatlan kreatív (18,2M megj.) ·
+9 DCO kártya beolvasott kép nélkül (1,0M) · 3 egyéb.
+
+**131 tartalom-szövegből 25 él egynél több MC-szám alatt; 50 MC-szám a 313-ból (16%) érintett.**
+9 pár feloldható a riport oszlopaiból, **16 valódi duplikátum**.
+A legbeszédesebb: **tökéletes +11 eltolású sorozat — MC305→316, 306→317, 307→318, 308→319,
+309→320.** A kalkulátor-mockup család kétszer van bent: egy tömeges átszámozás **másolt, nem
+mozgatott** (ugyanaz a mintázat, mint a `D7.2` invariáns-sértésnél).
+
+### H13–H16 (a H1–H12 mellé)
+- [ ] **H13 (adattisztítás, ELSŐ — nulla kockázat)** **MC305–309 archiválása.** Létrehozva
+      2026-05-01, **0 aktív cella, 0 megjelenés**, elgépelt topic (`caclulatorMockup`); a
+      2026-07-12-i MC316–320 az élő utód (mind aktív, 63–80e megj.). 16-ból 5 feloldhatatlan pár
+      szűnik meg. Utána a maradék 11 pár egyenkénti döntése (218/219, 91/126, 301/302, 257/258,
+      128/131, 140/141, 144/145, 108/112, 109/113, 111/127, 117/120) — ezek futottak, valódi mérlegelés.
+- [ ] **H14 (minor)** A kétfokozatú matcher megtartása. Regressziós korlát: a 3 kép-döntötte és a
+      7 oszlop-döntötte sor; a szűkítési szabály és a `BOILER` lista nélkül ront.
+- [ ] **H15 (adat)** `Kép / illusztráció leírása` kitöltése a maradék 19 soron (109-ből 90 kész).
+- [ ] **H16 (közepes)** DCO-previewk renderelése + beolvasása, hogy a DCO-kártyáknak is legyen
+      képleírásuk. A 18 blokkolt MC-nek **nulla kreatív-sora** van (a kreatív a feedből renderelődik);
+      beolvasott kép nálunk 1037/3393 (31%), 54 MC-szám. Csak H13 után éri meg — 9 sor vs 36.
+
+**Sorrend:** H13 → H15 → H14 → H16. Kód az appban nem változott (csak `scripts/recon/` + `docs/`),
+verzió-bump nem indokolt.
+
+---
+
+## 2026-09-30 — Promote: „Create new topic" a brief tagjeiből + Agentic cellák a draft topicját kapják
+
+**Kérés:** Both (DCO+Agentic) draft promótálásakor a Topic lenyílóban legyen „Create new topic"
+opció a Brief-en már beállított tagekből (product + tag1–4), mellette kötelező **Topic name**
+mező (ez lesz a DCO mátrix sor-neve). Az Agentic cellák ne a filenévből kapjanak topicot,
+hanem ugyanazt, amit a draft.
+
+**Mai állapot (gyökérok):** a bulk promote egy audience-re visz. DCO cellát választva a
+`placeAgenticSiblings` → `ensureAgenticMc` nem talál élő Agentic testvért, így
+`topicFromCreative()`-re esik → filename-alapú topic string. Ezért tér el a két mátrix.
+
+- [x] **1. Agentic cellák = draft topic** — `ensureAgenticMc` kap egy opcionális `topic`
+      fallbacket: `agenticTopicForNumber ?? opts.topic ?? topicFromCreative`.
+      `placeAgenticSiblings(clientId, number, variant, topic?)` továbbadja; mindkét promote
+      route (`/api/drafts/promote`, `/api/drafts/[id]/promote`) a promótált sor topicját adja.
+      Upload-út (nincs draft) változatlan: filename-alapú marad.
+- [x] **2. „Create new topic" opció** (`PromoteDraftDialog.tsx`) — csak ha a target nem
+      `agentic`, a planned topic szétbontható tagekre (`splitTopic`), és a kulcs még nem
+      létező topic. Opció: `＋ Create new topic · SZK_edukacio_kamat_NA_thmcsokkentes`.
+      Választásakor alatta: **Topic name** input (kötelező) + hint, ami kiírja, mit hoz létre
+      (product / tag1–4 → kulcs a kliens key-patternje szerint).
+- [x] **3. API** — `/api/drafts/promote` elfogad `newTopic: { name }`-t; a tageket **a draft
+      soraiból** olvassa (nem a klienstől), `createTopic`-kal létrehozza (audit `create`),
+      majd az így kapott kulccsal promótál. Ha a kulcs közben létrejött → azt használja.
+- [x] **3b. Audience lista szűrése** — a DCO optgroup csak a draft productjához tartozó
+      audience-eket mutatja (`audience.product === draftProduct`); product nélkül mind.
+      (user, 2026-09-30: egy audience, de csak az SZK mátrixéi.)
+- [x] **4. Teszt** — integrációs teszt: Both draft + fájlok → DCO-ra promote új topiccal →
+      topics sor létrejön, Agentic cellák topicja = DCO topic kulcs.
+- [ ] Verzió-bump javaslat a végén (minor: új viselkedés).
+
+**Döntés (user):** egy audience marad, az Agentic cellák fájlméret szerint landolnak.
+
+### Review
+- `ensureAgenticMc` topic-sorrend: élő Agentic testvér → promótált sor topicja → filenév.
+  A sima feltöltés (nincs draft) változatlan.
+- `splitTopic`/`joinTopic` átköltözött `src/lib/planned-topic.ts`-be (a route nem hívhat
+  `"use client"` modult); a `PlannedTopicField` re-exportálja, a unit teszt változatlan.
+- „Már létezik" = azonos product+tag1–4 (nem kulcs — a kulcs befagyhat), ilyenkor 409.
+- Ismert él: a topic a promote ELŐTT jön létre; ha a promote elbukik, a topic megmarad
+  (a dialog legközelebb már nem ajánlja újra, hanem a listában kiválasztható).
+- Tesztek: 2 új integrációs (`drafts-promote-batch`), teljes suite 1034/1034 zöld.
+
+### DEPLOYOLVA 6.116.0 → 6.116.2 — erste (2026-09-30)
+- 6.116.0 feature, 6.116.1 tag-alapú topic-preselect, 6.116.2 fix: DCO-ra promótált Both kártya
+  betűit a sibling-pass újradraftolta (a MC407-gate csak channel-cellát nézett) → 3 üres
+  „Untitled" draft, 0 Agentic cella (MC410). Most bármely tengelyen élő sor = elhelyezett.
+- Adatjavítás: `scripts/fix-mc410-redrafts.ts` — 36124–36126 archiválva, 6 Agentic cella
+  (DISP+SOC × a/b/c) az új topicban. Eredeti tartalom (36114–6) érintetlen volt.
+- [x] 6.116.3: a Promote dialog kiszűri az INACTIVE audience-eket (MC410 a „Whitelist Általános"
+      INACTIVE audience-be ment → hideInactive mellett rejtett volt).
+- **Mindkét tenant 6.116.3 (`b30c3e0`), ellenőrizve a boxon.**
+
+### DEPLOYOLVA 6.117.0 — mindkét tenant (2026-09-30)
+Promote default státusz PREVIEW (ACTIVE mérés-zárolt → rossz cellából nem mozgatható volt);
+dialog csak ACTIVE, product szerinti audience-eket kínál.
+
+## 2026-09-30 — Preview panel elrendezés + edit mode scroll
+
+- [x] **1. Size lehulló ↔ refresh csere** (`_components/PreviewPane.tsx`, minden preview panelt
+      érint): bal: `[refresh] [Skip animation] [Image preview]`; jobb: `[bg ☀▦☾] [extras] [size ▾]`
+      — a size mindig a jobb szélen, stacked és side-by-side elrendezésben is ugyanott.
+- [x] **2. MC léptető** (`HeaderDetailDialog.tsx` stepper): bal: **név** (félkövér, fehér/primer,
+      `text-sm`) + status-badge; jobb: `1/20` counter + `‹ MC94a ›` — a léptető mindig jobb szélen.
+- [x] **3. Edit mode ne ugorjon 0,0-ra** (`GridView.tsx`): gyökérok — `if (!editMode) return grid`
+      vs. `<DndContext>{grid}…` más fát ad → a `.matrix-grid` scroll-konténer újramountol.
+      Fix: a `DndContext` mindig ott van (overlay úgyis null edit mode nélkül).
+- [x] **4. Feed export mode-switch** dark módban: az aktív opció leírása `text-slate-300` volt a
+      világosra forduló gombon → most örökli a gomb színét `opacity-70`-nel.
+
+### DEPLOYOLVA 6.117.1 — mindkét tenant (`bcd7bb3`)
+Élesben ellenőrizve: léptető + toolbar elrendezés, edit mode-nál a `.matrix-grid` ugyanaz az elem,
+scroll nem mozdul (a mérés csak 27px-es görgethető tartományban történt a szűrők miatt).
+MC410 rendezve (user, mátrixban): a/b/c 22 aktív SZK audience-ben + 6 Agentic cella, egy topicban.
+
 ## 2026-10-09 — Creative Library: „Add to shared" (meglévő share bővítése)
 
 Cél: a jobb toolbar Share gombja alatt **Add to shared** gomb → dialog, ahol kiválasztom a

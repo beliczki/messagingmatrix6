@@ -5,6 +5,14 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.118.0] — 2026-10-09
+
+### Added
+- **Creative Library: "Add to shared"** under Share — adds the selection to an
+  existing share, picked from a searchable list with the first four thumbnails of
+  each share. Items already in the share are skipped; new ones go at the end.
+- `POST /api/share-galleries/[id]/items`, and `?thumbs=1` on the shares list.
+
 ## [6.117.1] — 2026-09-30
 
 ### Changed

@@ -48,6 +48,7 @@ import CreativeDetailDialog from "./CreativeDetailDialog";
 import DriveHealthCheck from "./DriveHealthCheck";
 import MatrixDetailDialog from "./MatrixDetailDialog";
 import ShareCreateDialog from "./ShareCreateDialog";
+import ShareAddDialog from "./ShareAddDialog";
 import { useLongPress } from "@/app/_components/useLongPress";
 import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import {
@@ -262,6 +263,7 @@ export default function CreativeLibrary() {
   const [selectorMode, setSelectorMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [shareOpen, setShareOpen] = useState(false);
+  const [shareAddOpen, setShareAddOpen] = useState(false);
 
   const clearSelection = useCallback(() => {
     setSelectorMode(false);
@@ -945,6 +947,14 @@ export default function CreativeLibrary() {
           onCreated={clearSelection}
         />
 
+        <ShareAddDialog
+          open={shareAddOpen}
+          matrix={selectedMatrixPairs}
+          creativeIds={selectedCreativeIds}
+          onClose={() => setShareAddOpen(false)}
+          onAdded={clearSelection}
+        />
+
         {detailId !== null
           ? (() => {
               const c =
@@ -990,6 +1000,7 @@ export default function CreativeLibrary() {
               filteredCount={filtered.length}
               onSelectAll={() => selectAllFiltered(filtered.map((c) => c.id))}
               onShare={() => setShareOpen(true)}
+              onAddToShared={() => setShareAddOpen(true)}
               onCancel={clearSelection}
             />
           ) : null;
@@ -1445,6 +1456,7 @@ function SelectionActions({
   filteredCount,
   onSelectAll,
   onShare,
+  onAddToShared,
   onCancel,
 }: {
   collapsed: boolean;
@@ -1452,6 +1464,7 @@ function SelectionActions({
   filteredCount: number;
   onSelectAll: () => void;
   onShare: () => void;
+  onAddToShared: () => void;
   onCancel: () => void;
 }) {
   // Nothing left to add once the whole filtered set is in — the button stays
@@ -1487,6 +1500,15 @@ function SelectionActions({
         </button>
         <button
           type="button"
+          onClick={onAddToShared}
+          title="Add selected to an existing share"
+          aria-label="Add selected to an existing share"
+          className="toolbar-btn selection-actions__btn--add-to-shared flex size-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
+        >
+          <Icon name="copy-add" className="size-4" />
+        </button>
+        <button
+          type="button"
           onClick={onCancel}
           title="Cancel selection"
           aria-label="Cancel selection"
@@ -1519,6 +1541,15 @@ function SelectionActions({
       >
         <Icon name="share" className="size-3.5" />
         Share
+      </button>
+      <button
+        type="button"
+        onClick={onAddToShared}
+        title="Add the selection to an existing share"
+        className="toolbar-btn selection-actions__btn--add-to-shared inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+      >
+        <Icon name="copy-add" className="size-3.5" />
+        Add to shared
       </button>
       <button
         type="button"

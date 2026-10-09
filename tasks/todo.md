@@ -2502,3 +2502,36 @@ sibling pass újrafuttatva → a/b/c DISP cellák `image1`-et kaptak, és létre
 (36121–36123, 1080x1080) ugyanabban a topicban.
 
 - [x] commit + deploy (erste, telekom) — 6.115.1
+
+## 2026-10-09 — Creative Library: „Add to shared" (meglévő share bővítése)
+
+Cél: a jobb toolbar Share gombja alatt **Add to shared** gomb → dialog, ahol kiválasztom a
+meglévő (nem archivált) share-t, soronként thumbnail-csíkkal, és a kijelölt tételek a share
+végére kerülnek.
+
+- [x] **1. Közös snapshot-felépítés** — a `POST /api/share-galleries` mostani feloldó logikáját
+      (matrix párok + legacy mcIds → messages, creatives sorrendben, files) kiemelem
+      `src/lib/share-snapshot.ts`-be (két hívó lesz: create + append), viselkedés változatlan.
+- [x] **2. `POST /api/share-galleries/[id]/items`** — `{ matrix, creativeIds }`; client-scope +
+      nem archivált ellenőrzés; a meglévő snapshothoz fűz (messages / matrixItems / creatives /
+      files dedupe: `messageId|size`, creative id, file id), a régi sorrend megmarad, az új a végére.
+      `updatedAt` frissül, video stills warm az új fájlokra, audit `action: "add_items"`.
+      Válasz: `{ added, skipped }` (skipped = már benne volt).
+- [x] **3. Thumbnail a listában** — `GET /api/share-galleries?thumbs=1` soronként `thumbs: string[]`
+      (első 4 tétel): creative-kép → `/share/{id}/file/{fileId}?thumb=200`, matrix →
+      signed `/publicshortcut/...` URL (egy batch-elt `message_previews` lekérés, chunkolva, mint a
+      `/share/[id]/previews`); videó / preview nélküli tétel → üres placeholder.
+- [x] **4. `ShareAddDialog.tsx`** (a `ShareCreateDialog` mintájára, `share-add-dialog` class):
+      kereső title-re, sorok: thumb-csík + title + dátum + darabszám + létrehozó, kattintás = kijelölés,
+      „Add N items" gomb. Siker után: „X added (Y already in share)" + link copy/open, mint create-nél.
+- [x] **5. `SelectionActions`** — „Add to shared" gomb (expanded + collapsed ikon), Share alatt.
+- [x] **6. Teszt** — integrációs teszt az append route-ra (dedupe + sorrend).
+
+Döntés (user ok): title/`generatedAt` marad, csak `updatedAt` frissül; videó/preview nélküli tétel = üres hely.
+
+### Review
+- Párhuzamos hozzáadás: `addToShare` tranzakcióban, `SELECT … FOR UPDATE` → nincs elveszett írás.
+- Audit `action: "update"` (`after.added/skipped`) — nem új AuditAction.
+- Picker saját query key: `["share-galleries","picker"]` (más shape, mint a Shares tábla).
+- `tests/integration/api/share-add-items.test.ts` 4/4 zöld, tsc tiszta. Böngészőben nem
+  ellenőrizve (dev = éles DB + login kell) — élesítés után kézzel kipróbálni.

@@ -2692,3 +2692,24 @@ tételek ki vannak-e jelölve → 10 kijelölt ≥ 9 szűrt = letiltva. És a `s
 
 ### DEPLOYOLVA 6.118.1 — mindkét tenant (`52a12c7`, 2026-10-09)
 Select-all-filtered fix; mindkét deploy „up after 1s", /login 200. Böngészőben még nincs kipróbálva.
+
+## 2026-10-09 — Függőségek: 15.5.27 patch, majd Next 16
+
+- [x] `thm.json` box-drift a repóba (`3be299c`; a box fájl hash-e = repo blob, `bde59fa`).
+      Gyökérok (nem javítva): az erste `TEMPLATES_ROOT`-ja a checkouton belül van, az app oda ír
+      (`src/lib/templates.ts` `writeFileSync`) — a telekomé már kívül. → TECH-ADÓSSÁG.
+- [x] **6.118.2** — next 15.5.27, react 19.0.8, `npm audit fix` (MCP SDK, nanoid, shell-quote, …).
+      `mm6-deploy` mostantól `npm ci`-t futtat, ha a pull a `package-lock.json`-t mozgatta.
+      **DEPLOYOLVA mindkét tenant** (`515d73a`), kézi `npm ci` előtte; `/login` 200, next 15.5.27 a boxon.
+      Ez a rollback-pont.
+- [x] **6.119.0** — Next 16.4.0 + React 19.3.0 (`1c8b78a`, main-en). tsc tiszta, 1039/1039 teszt,
+      Turbopack build OK, `tsconfig.json`: `jsx: react-jsx` + `.next/dev/types` / `.next-build/dev/types`
+      include (különben a boxos build átírná). ESLint natív flat config; a react-hooks 7 új szabályai
+      (`set-state-in-effect` 52, `refs`, `immutability`, `preserve-manual-memoization`) **warn**-ra
+      állítva → TECH-ADÓSSÁG. Lokális `next start` smoke bejelentkezve: dashboard, mátrix, MC-editor
+      preview iframe, Creative Library, Drafts, Monitoring, publikus share (27/27 sharp thumb) — konzolhiba nincs.
+- [ ] **6.119.0 deploy** mindkét tenantra (`git pull` → `npm ci` → `mm6-deploy`).
+- [ ] sharp 0.34.5 → 0.35.5 (high, libvips/libheif/librsvg) — külön szelet, thumb/still útvonal-teszttel.
+- [ ] TECH-ADÓSSÁG: react-hooks 7 findingok egyesével; 31 Turbopack trace-warning (dinamikus `fs`-utak,
+      `turbopackIgnore` vagy statikus scope); `EBH_SELFIE_ONBOARDING_CSEMPÉK_20221207-03.jpg` hiányzik
+      (`/api/drive/proxy` 404 élesben is — adat, nem regresszió).

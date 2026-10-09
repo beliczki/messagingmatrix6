@@ -2714,6 +2714,7 @@ Select-all-filtered fix; mindkét deploy „up after 1s", /login 200. Böngész�
 - [x] **6.119.1** sharp 0.34.5 → 0.35.5 → prod `npm audit` 0. Az 5 tesztfájl „legkisebb érvényes PNG"-je
       valójában hibás IDAT CRC-jű volt — a 0.35 jogosan dobja; érvényes 1×1 PNG-re cserélve. Valós adaton:
       400 tárolt kép (257 png / 143 jpg) resize-pipeline-on, 0 hiba. 1039/1039, build OK.
+      **DEPLOYOLVA mindkét tenant** (`67a87a2`, sharp 0.35.5 a boxon); `/login` 200, share-thumb új szélességgel 200.
 - [ ] TECH-ADÓSSÁG: react-hooks 7 findingok egyesével; 31 Turbopack trace-warning (dinamikus `fs`-utak,
       `turbopackIgnore` vagy statikus scope); `EBH_SELFIE_ONBOARDING_CSEMPÉK_20221207-03.jpg` hiányzik
       (`/api/drive/proxy` 404 élesben is — adat, nem regresszió).

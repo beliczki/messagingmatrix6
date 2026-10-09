@@ -5,6 +5,15 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.118.1] — 2026-10-09
+
+### Fixed
+- **Creative Library: "Select all filtered" works again after changing the filter.**
+  It compared the selection's size with the filtered count, so a selection carried
+  over from an earlier filter disabled it; it now counts the filtered items not yet
+  selected ("Add all filtered (k) to selection") and adds them instead of replacing
+  the selection.
+
 ## [6.118.0] — 2026-10-09
 
 ### Added

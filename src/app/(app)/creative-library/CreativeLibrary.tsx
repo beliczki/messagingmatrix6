@@ -279,12 +279,13 @@ export default function CreativeLibrary() {
     });
   }, []);
 
-  // Selects the whole filtered set, not just the ~200 rows the infinite
+  // Adds the whole filtered set, not just the ~200 rows the infinite
   // scroller has materialised — the toolbar count and the share dialog both
-  // work off ids, so there is no reason to make the user scroll first.
+  // work off ids, so there is no reason to make the user scroll first. It adds
+  // rather than replaces: a selection is often built across several filters.
   const selectAllFiltered = useCallback((ids: number[]) => {
     setSelectorMode(true);
-    setSelectedIds(new Set(ids));
+    setSelectedIds((prev) => new Set([...prev, ...ids]));
   }, []);
 
   const beginSelection = useCallback((id: number) => {
@@ -998,6 +999,9 @@ export default function CreativeLibrary() {
               collapsed={collapsed}
               count={selectedIds.size}
               filteredCount={filtered.length}
+              unselectedFilteredCount={
+                filtered.filter((c) => !selectedIds.has(c.id)).length
+              }
               onSelectAll={() => selectAllFiltered(filtered.map((c) => c.id))}
               onShare={() => setShareOpen(true)}
               onAddToShared={() => setShareAddOpen(true)}
@@ -1454,6 +1458,7 @@ function SelectionActions({
   collapsed,
   count,
   filteredCount,
+  unselectedFilteredCount,
   onSelectAll,
   onShare,
   onAddToShared,
@@ -1462,14 +1467,21 @@ function SelectionActions({
   collapsed: boolean;
   count: number;
   filteredCount: number;
+  /** Filtered items not yet in the selection — what the button would add. */
+  unselectedFilteredCount: number;
   onSelectAll: () => void;
   onShare: () => void;
   onAddToShared: () => void;
   onCancel: () => void;
 }) {
   // Nothing left to add once the whole filtered set is in — the button stays
-  // put (so the toolbar does not reflow) but says so.
-  const allSelected = count >= filteredCount;
+  // put (so the toolbar does not reflow) but says so. Judged by membership, not
+  // by comparing counts: a selection carried over from an earlier filter can
+  // outnumber the current one while most of it is still unselected.
+  const allSelected = unselectedFilteredCount === 0;
+  const selectAllLabel = allSelected
+    ? `All ${filteredCount} filtered selected`
+    : `Add all filtered (${unselectedFilteredCount}) to selection`;
   if (collapsed) {
     return (
       <div className="selection-actions selection-actions--collapsed flex flex-col items-center gap-2 border-b border-slate-200 pb-2">
@@ -1483,8 +1495,8 @@ function SelectionActions({
           type="button"
           onClick={onSelectAll}
           disabled={allSelected}
-          title={`Select all ${filteredCount} filtered`}
-          aria-label={`Select all ${filteredCount} filtered`}
+          title={selectAllLabel}
+          aria-label={selectAllLabel}
           className="toolbar-btn flex size-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Icon name="check-double" className="size-4" />
@@ -1528,11 +1540,11 @@ function SelectionActions({
         type="button"
         onClick={onSelectAll}
         disabled={allSelected}
-        title={`Select every creative the current filters match (${filteredCount})`}
+        title={`Add every creative the current filters match (${filteredCount}) to the selection`}
         className="toolbar-btn inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
       >
         <Icon name="check-double" className="size-3.5" />
-        Select all filtered ({filteredCount})
+        {selectAllLabel}
       </button>
       <button
         type="button"

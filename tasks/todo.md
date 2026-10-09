@@ -2677,3 +2677,15 @@ Döntés (user ok): title/`generatedAt` marad, csak `updatedAt` frissül; videó
 (`POST /api/share-galleries/x/items` hitelesítés nélkül → 401, nem 404). Dialog böngészőben még
 nincs kipróbálva. Box-drift: `mm6-erste/templates/html/thm.json` nem commitolt új sort hordoz
 (`2026-09-21 00:01: THM: 13,17%`) — repóba kell vinni, különben egy jövőbeli ütköző pull megakad.
+
+## 2026-10-09 — Creative Library: „Select all filtered" új szűrő után
+
+Gyökérok (két hiba, egy mechanizmus): a gomb a kijelölés **darabszámát** veti össze a szűrt
+darabszámmal (`count >= filteredCount`, `CreativeLibrary.tsx:1472`), nem azt nézi, hogy a szűrt
+tételek ki vannak-e jelölve → 10 kijelölt ≥ 9 szűrt = letiltva. És a `selectAllFiltered`
+**lecseréli** a kijelölést (`new Set(ids)`), tehát ha engedné, az előző szűrő tételei elvesznének.
+
+- [x] `selectAllFiltered` uniót képez (a meglévő kijelölés marad).
+- [x] A gomb a szűrt, még NEM kijelölt tételeket számolja (`k`): felirat
+      „Add all filtered (k) to selection"; ha `k = 0` → letiltva, „All N filtered selected".
+      Collapsed ikon title-je ugyanígy.

@@ -2718,3 +2718,11 @@ Select-all-filtered fix; mindkét deploy „up after 1s", /login 200. Böngész�
 - [ ] TECH-ADÓSSÁG: react-hooks 7 findingok egyesével; 31 Turbopack trace-warning (dinamikus `fs`-utak,
       `turbopackIgnore` vagy statikus scope); `EBH_SELFIE_ONBOARDING_CSEMPÉK_20221207-03.jpg` hiányzik
       (`/api/drive/proxy` 404 élesben is — adat, nem regresszió).
+
+## 2026-10-11 — Draft preview: „HTML preview" kapcsoló Agentic draftokon
+
+Agentic draftnál (`wantsLibrary`) a preview a leszállított n1/n2 fájlt mutatja, a Content-fül élő renderje nem látható.
+- [x] `PreviewPane`: új opcionális `htmlPreview` / `onHtmlPreviewChange` prop → pipás gomb (`preview-pane__html-toggle`, a Skip animation/Image preview gomb mintájára) a reload mellett; csak ha a prop meg van adva.
+- [x] `MessageEditor` (`MessagePreview`): `htmlPreview` state; csak `wantsLibrary` + van template esetén adja át. Bekapcsolva: `staticImage=null` (→ élő iframe), `sizes` = template méretei, verzió-dropdown rejtve.
+- [x] Böngészőben (lokál, MC411a): pipa be → élő render + Skip animation/Image preview visszajön, verzió-dropdown eltűnik; pipa ki → n2 · latest kép. Konzolhiba nincs. tsc + eslint 0 hiba.
+- **6.120.0** — commitolva. Review: alapból kikapcsolva, nincs perzisztálva. Szűk panelen a három pipás gomb felirata kétsorosra törik (a meglévő két gombé is) — nem nyúltam hozzá.

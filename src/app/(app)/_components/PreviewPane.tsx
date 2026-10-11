@@ -47,6 +47,10 @@ type Props = {
    *  When set, the viewport shows the image via /api/drive/proxy instead of the
    *  size-driven HTML iframe (which has no template/size to render). */
   staticImage?: string | null;
+  /** Agentic draft: show the live Content-tab render instead of the delivered
+   *  file. The toggle renders only when onHtmlPreviewChange is provided. */
+  htmlPreview?: boolean;
+  onHtmlPreviewChange?: (v: boolean) => void;
 };
 
 export default function PreviewPane({
@@ -66,6 +70,8 @@ export default function PreviewPane({
   templateMeta,
   templateName,
   staticImage,
+  htmlPreview,
+  onHtmlPreviewChange,
 }: Props) {
   const showStatic = !!staticImage;
   const staticKind = staticImage ? mediaKindFromFilename(staticImage) : null;
@@ -159,6 +165,30 @@ export default function PreviewPane({
               title="Refresh preview"
             >
               <Icon name="refresh" className="size-3.5" />
+            </button>
+          ) : null}
+          {onHtmlPreviewChange ? (
+            <button
+              onClick={() => onHtmlPreviewChange(!htmlPreview)}
+              className={clsx(
+                "preview-pane__html-toggle flex items-center gap-1 rounded border px-2 py-1 text-xs",
+                htmlPreview
+                  ? "preview-pane__html-toggle--active border-text-primary bg-text-primary text-background"
+                  : "border-border bg-surface text-text-primary hover:bg-surface-alt",
+              )}
+              title="Show the live render of the Content tab instead of the delivered file"
+            >
+              <span
+                className={clsx(
+                  "flex size-3.5 items-center justify-center rounded-sm border",
+                  htmlPreview
+                    ? "border-background bg-background text-text-primary"
+                    : "border-border-subtle",
+                )}
+              >
+                {htmlPreview && <Icon name="check" className="size-2.5" bold />}
+              </span>
+              HTML preview
             </button>
           ) : null}
           {!showStatic ? (

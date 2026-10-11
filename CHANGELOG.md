@@ -5,6 +5,13 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.120.0] — 2026-10-11
+
+### Added
+- **"HTML preview" toggle on Agentic drafts.** The draft editor's preview shows the delivered
+  file (n1/n2); a checkbox next to reload now swaps in the live Content-tab render, with the
+  template's sizes and the skip-animation / image-preview toggles.
+
 ## [6.119.1] — 2026-10-09
 
 ### Changed

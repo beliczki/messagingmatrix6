@@ -2349,10 +2349,15 @@ function MessagePreview({
   // which is what a draft should open on: the question the preview answers is
   // "what is delivered now", and the ladder below lets you look back.
   const [libVersionId, setLibVersionId] = useState<number | null>(null);
+  // "HTML preview" on an Agentic draft: look at the Content-tab render instead
+  // of the delivered file. The render can only produce the template's sizes,
+  // so the size list follows it.
+  const [htmlPreview, setHtmlPreview] = useState<boolean>(false);
+  const showLibrary = wantsLibrary && !htmlPreview;
 
   const sizes = isStatic
     ? staticSizes
-    : wantsLibrary && librarySizes.length > 0
+    : showLibrary && librarySizes.length > 0
       ? librarySizes
       : templateSizes;
   const [size, setSize] = useState<string>(templateSizes[0] ?? "300x250");
@@ -2545,12 +2550,19 @@ function MessagePreview({
       staticImage={
         isStatic
           ? (staticSizeMap.get(size) ?? draftImage1)
-          : wantsLibrary
+          : showLibrary
             ? (libraryFile?.fileName ?? null)
             : null
       }
+      htmlPreview={htmlPreview}
+      onHtmlPreviewChange={
+        // No template = nothing to render; refresh() leaves the html empty.
+        wantsLibrary && (draft.template ?? message.template)
+          ? setHtmlPreview
+          : undefined
+      }
       rightExtras={
-        libraryLadder.length > 1 ? (
+        showLibrary && libraryLadder.length > 1 ? (
           <label className="preview-pane__version flex items-center gap-1 text-xs text-slate-500">
             <span className="sr-only">Creative version</span>
             <select

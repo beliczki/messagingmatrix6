@@ -2726,3 +2726,5 @@ Agentic draftnál (`wantsLibrary`) a preview a leszállított n1/n2 fájlt mutat
 - [x] `MessageEditor` (`MessagePreview`): `htmlPreview` state; csak `wantsLibrary` + van template esetén adja át. Bekapcsolva: `staticImage=null` (→ élő iframe), `sizes` = template méretei, verzió-dropdown rejtve.
 - [x] Böngészőben (lokál, MC411a): pipa be → élő render + Skip animation/Image preview visszajön, verzió-dropdown eltűnik; pipa ki → n2 · latest kép. Konzolhiba nincs. tsc + eslint 0 hiba.
 - **6.120.0** — commitolva. Review: alapból kikapcsolva, nincs perzisztálva. Szűk panelen a három pipás gomb felirata kétsorosra törik (a meglévő két gombé is) — nem nyúltam hozzá.
+- [x] **DEPLOYOLVA 6.120.0 — mindkét tenant** (`266b0a9`), `mm6-deploy erste` + `telekom`, mindkettő „up after 1s".
+      `/login` 200 mindkettőn; az erste build chunkjában benne a `preview-pane__html-toggle`. Böngészőben élesen még nincs kipróbálva.

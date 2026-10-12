@@ -2829,3 +2829,6 @@ Biztonság: a share-iframe-ek `srcDoc` + `allow-same-origin`, és minden ugyanaz
       Valós futás: `~/Downloads/bird --variant b` → 4 zip `ERSTE_SZA_MC411_b_beerste_bankvaltas_bird_html5_n1_<méret>.zip`. A Library parsere MC411b/SZA/n1/méret-re olvassa, az `inspectHtml5Package` átengedi; a 300x250-es kézi CSS-sor benne maradt.
       **8 kész:** a `rebuild-creatives` 0. és 1. lépése (cellák `image1`, creatives, uploaded_files) kihagyja a `.zip`-et, mert nem importálja vissza; az SZA dry-run lefut. Az `export-creatives-for-reading` kihagyja a csomagokat (NULL-biztos `or(isNull, ne)`).
 - [x] **9.** Inventory (új blokknevek), CHANGELOG, minor bump; böngészős ellenőrzés: MC411a `_cleanup` zipjei feltöltve → Library, share, Drafts.
+- [x] **DEPLOYOLVA 6.121.0 — mindkét tenant** (`8da9c0d`), „up after 1s". `/login` 200; `/pkg` rossz tokenre 404; `/api/files/package-url` session nélkül 401; share-fájl CSP sandbox megvan.
+      A boxon a Playwright 1.61.1 + Chromium 1228 megvan (poszter), az nginx `location /` a `/pkg`-t is továbbítja.
+      **Következő (felhasználó):** a `~/Downloads/bird/_cleanup/*.zip` feltöltése élesben a Creative Library-be → nyitott 411a mellett 411b draft-variáns. Élesben böngészőben még nincs kipróbálva.

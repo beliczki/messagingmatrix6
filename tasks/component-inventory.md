@@ -712,6 +712,10 @@ The Edit toggle and the entire selection-actions block moved out of the top `mat
 
 **Új BEM block-ok:**
 - `template-preview-image` — wrapper for non-HTML template preview (matches the matrix-iframe-preview chrome — `thumb-checker` background, identical layout modes).
+- `html5-package-frame` (`__frame`, `__click-shield`, `__placeholder`) — live uploaded HTML5 package (Html5PackageFrame.tsx; `LibraryPackageFrame` = signed /pkg link). Same layout modes + thumb-checker chrome as `matrix-iframe-preview`, but loads by URL in a sandbox WITHOUT allow-same-origin; `interactive` drops the click shield.
+- `scaled-preview__restart` — "Restart" button over a detail dialog's live HTML5 package (ScaledMediaPreview); remounts the frame.
+- `share-package-stage` (`__restart`) — share detail dialog's stage for a live HTML5 package (ShareDetailDialog `PackagePreviewStage`); same scaled box + AnnotationLayer as the DCO stage.
+- `package-poster` (`--pending`) — an HTML5 package's poster by filename only (Html5PackageFrame.tsx `PackagePoster`): MC editor Image 1 field, matrix detail asset rows.
 - `template-preview-image__img` — the `<img>` itself; `object-contain` so banners letterbox cleanly.
 - `template-preview-image__empty` — empty-state when the template has no preview file (`ImageOff` icon, slate-300).
 - `template-preview-image__link` — wraps the image in an `<a target=_blank>` when `kind=figma` and `figma_url` is set (so click → opens in Figma).

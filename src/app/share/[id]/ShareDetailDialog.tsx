@@ -12,6 +12,8 @@ import AnnotationLayer, {
   type CommentAnnotation,
 } from "./AnnotationLayer";
 import ModalBackdrop from "@/app/(app)/_components/ModalBackdrop";
+import { Html5PackageFrame } from "../../(app)/_components/Html5PackageFrame";
+import { creativeMediaKind } from "@/lib/creative-media-kind";
 
 
 export type DialogItem =
@@ -62,6 +64,7 @@ export type DialogItem =
             id: string;
             filename: string;
             mimeType: string | null;
+            dimensions: string | null;
           }
         | undefined;
     };
@@ -624,9 +627,25 @@ function CreativePreviewStage({
       <div className="text-xs text-slate-400">no file</div>
     );
   }
-  const isImage = file.mimeType?.startsWith("image/") ?? false;
-  const isVideo = file.mimeType?.startsWith("video/") ?? false;
+  const kind = creativeMediaKind(file.mimeType, item.creative.fileName);
+  const isImage = kind === "image";
+  const isVideo = kind === "video";
   const fullSrc = `/share/${shareId}/file/${file.id}`;
+  if (kind === "html5") {
+    return (
+      <PackagePreviewStage
+        src={`/share/${shareId}/pkg/${file.id}/index.html`}
+        size={file.dimensions}
+        title={item.creative.fileName ?? file.filename}
+        overlays={overlays}
+        pending={pending}
+        annotationMode={annotationMode}
+        highlightId={highlightId}
+        setHighlightId={setHighlightId}
+        onDraw={onDraw}
+      />
+    );
+  }
   if (isImage) {
     return (
       <AnnotationLayer
@@ -669,6 +688,92 @@ function CreativePreviewStage({
   }
   return (
     <div className="text-xs text-slate-400">{file.mimeType ?? "binary"}</div>
+  );
+}
+
+// A live HTML5 package on the stage — the same scaled box and AnnotationLayer
+// the DCO stage uses, so pins and boxes land on the banner the same way. It is
+// interactive (the clickTag opens the landing page) while annotation is off;
+// Restart plays it again from the top.
+function PackagePreviewStage({
+  src,
+  size,
+  title,
+  overlays,
+  pending,
+  annotationMode,
+  highlightId,
+  setHighlightId,
+  onDraw,
+}: {
+  src: string;
+  size: string | null;
+  title: string;
+  overlays: CommentAnnotation[];
+  pending: Annotation | null;
+  annotationMode: AnnotationMode;
+  highlightId: string | null;
+  setHighlightId: (id: string | null) => void;
+  onDraw: (a: Annotation) => void;
+}) {
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ w: 0, h: 0 });
+  const [restartKey, setRestartKey] = useState(0);
+  const dims = size ? parseSize(size) : null;
+
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const cr = entries[0]?.contentRect;
+      if (cr) setBox({ w: cr.width, h: cr.height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const margin = 16;
+  const scale =
+    dims && box.w > 0 && box.h > 0
+      ? Math.min(1, (box.w - margin * 2) / dims.w, (box.h - margin * 2) / dims.h)
+      : 0;
+
+  return (
+    <div ref={stageRef} className="share-package-stage relative flex size-full items-center justify-center">
+      <button
+        type="button"
+        onClick={() => setRestartKey((k) => k + 1)}
+        title="Play the HTML5 creative again from the start"
+        className="share-package-stage__restart toolbar-btn absolute right-2 top-2 z-30 flex items-center gap-1 rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary hover:bg-surface-alt"
+      >
+        <Icon name="refresh" className="size-3.5" />
+        Restart
+      </button>
+      {!dims ? (
+        <div className="text-xs text-slate-400">HTML5 · unknown size</div>
+      ) : scale > 0 ? (
+        // Computed: the banner's native size times the fitted scale.
+        <div style={{ width: dims.w * scale, height: dims.h * scale, position: "relative" }}>
+          <AnnotationLayer
+            annotations={overlays}
+            pending={pending}
+            mode={annotationMode}
+            highlightId={highlightId}
+            onAnnotationHover={setHighlightId}
+            onDraw={onDraw}
+          >
+            <Html5PackageFrame
+              src={src}
+              size={size}
+              mode="fit-rect"
+              title={title}
+              interactive
+              restartKey={restartKey}
+            />
+          </AnnotationLayer>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

@@ -7,7 +7,8 @@
 //   0. hard-delete the product's existing Agentic messages (image1 ERSTE_<PROD>_%
 //      on a channel audience) so a re-run doesn't duplicate them.
 //   1. hard-delete the product's `creatives` rows + `uploaded_files`
-//      (ERSTE_<PROD>_%). MinIO bytes are LEFT intact (safety net; the caller has
+//      (ERSTE_<PROD>_%), except HTML5 packages (.zip) — they are not in the
+//      ground truth and step 3 never reimports them. MinIO bytes are LEFT intact (safety net; the caller has
 //      dumped both tables to a restorable CSV).
 //   2. hard-delete the product's Adobe PSD DCO MCs (template='Adobe PSD',
 //      audience.product = PROD) — these static creatives move to Agentic.
@@ -35,7 +36,7 @@ loadEnv({ path: ".env" });
 
 import fs from "node:fs";
 import path from "node:path";
-import { and, eq, like, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, like, notIlike, or, sql } from "drizzle-orm";
 import { db } from "../src/db";
 import {
   creatives,
@@ -385,6 +386,10 @@ async function main() {
       and(
         eq(messages.clientId, clientId),
         like(messages.image1, `ERSTE_${product}_%`),
+        // HTML5 packages are not in the ground-truth folder and this rebuild
+        // never reimports them (images/videos only), so their cells, rows and
+        // files are left alone rather than deleted for good.
+        notIlike(messages.image1, "%.zip"),
         inArray(messages.audience, CHANNEL_AUDS),
       ),
     )
@@ -397,7 +402,13 @@ async function main() {
   //    a dead file_id (happened to 3 SZK assets on 2026-08-17).
   const delC = await db
     .delete(creatives)
-    .where(and(eq(creatives.clientId, clientId), eq(creatives.product, product)))
+    .where(
+      and(
+        eq(creatives.clientId, clientId),
+        eq(creatives.product, product),
+        or(isNull(creatives.fileName), notIlike(creatives.fileName, "%.zip")),
+      ),
+    )
     .returning({ id: creatives.id });
   const delF = await db
     .delete(uploadedFiles)
@@ -406,6 +417,7 @@ async function main() {
         eq(uploadedFiles.clientId, clientId),
         eq(uploadedFiles.category, "creative"),
         like(uploadedFiles.filename, `ERSTE_${product}_%`),
+        notIlike(uploadedFiles.filename, "%.zip"),
       ),
     )
     .returning({ id: uploadedFiles.id });

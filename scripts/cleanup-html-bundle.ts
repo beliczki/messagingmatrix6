@@ -1,6 +1,7 @@
 // Clean the bundles `export:bundle` wrote into hand-off copies.
 //
 //   npm run cleanup:bundle -- ~/Downloads/bird
+//   npm run cleanup:bundle -- ~/Downloads/bird --variant b
 //
 // Reads every <size>/ folder under the given dir and writes a cleaned copy to
 // <dir>/_cleanup/<size>/ — the source folders stay as they are, so the export
@@ -12,7 +13,15 @@
 //     #videoWrapper element;
 //   - dynamic.content.js, thm.json and emptyvideo.mp4 are not copied;
 //   - manifest.json gets width/height from the size, title from the MC's topic,
-//     description "MC<n><v> <size>". The clicktag stays as the template has it.
+//     description "MC<n><v> <size>". The clicktag stays as the template has it;
+//   - each size is also zipped beside the folders, named the way the Creative
+//     Library parses a creative — ERSTE_SZA_MC411_b_<topic tags>_html5_n1_300x250.zip
+//     — so the zips upload as HTML5 packages straight onto that MC and variant.
+//
+// --variant re-letters the bundle (advert_variant meta, manifest, zip name):
+// an HTML5 version of MC411a delivered as MC411b sits in its own draft variant
+// instead of joining the image ladder of the `a` it was rendered from. --n sets
+// the _nN version token (default 1).
 // Every cut is anchored on exact template markup. A marker that is missing
 // means a different template, and the script stops rather than ship a
 // half-cleaned file.
@@ -24,6 +33,7 @@ loadEnv({ path: ".env.local" });
 loadEnv({ path: ".env" });
 
 import fs from "node:fs";
+import JSZip from "jszip";
 import os from "node:os";
 import path from "node:path";
 import { and, eq } from "drizzle-orm";
@@ -70,9 +80,13 @@ function metaContent(html: string, name: string): string {
   return m[1];
 }
 
-async function topicOf(clientId: number, number: number, variant: string): Promise<string> {
+async function mcInfo(
+  clientId: number,
+  number: number,
+  variant: string,
+): Promise<{ topic: string; product: string }> {
   const rows = await db
-    .select({ topic: messages.topic })
+    .select({ topic: messages.topic, draftProduct: messages.draftProduct })
     .from(messages)
     .where(
       and(
@@ -87,13 +101,50 @@ async function topicOf(clientId: number, number: number, variant: string): Promi
   if (topics.length > 1) {
     throw new Error(`MC${number}${variant} rows disagree on topic: ${topics.join(", ")}`);
   }
-  return topics[0]!;
+  const topic = topics[0];
+  if (!topic) throw new Error(`MC${number}${variant} has no topic to name the bundle by`);
+  // A draft names its product; a placed card's topic starts with it.
+  const product = rows.find((r) => r.draftProduct)?.draftProduct ?? topic.split("_")[0]!;
+  return { topic, product };
+}
+
+// The library's creative-name convention (parse-creative-filename.ts): brand,
+// product, MC<n>, variant, keywords, _nN, _WxH. Keywords are the topic's tags
+// after the product, minus the "NA" placeholder; "html5" marks the deliverable.
+function packageZipName(o: {
+  brand: string;
+  product: string;
+  number: number;
+  variant: string;
+  topic: string;
+  n: number;
+  size: string;
+}): string {
+  const tags = o.topic
+    .split("_")
+    .slice(1)
+    .filter((t) => t && t.toUpperCase() !== "NA");
+  return [o.brand, o.product, `MC${o.number}`, o.variant, ...tags, "html5", `n${o.n}`, o.size].join("_") + ".zip";
+}
+
+function parseArgs(argv: string[]) {
+  let dir: string | null = null;
+  let variant: string | null = null;
+  let n = 1;
+  for (let i = 0; i < argv.length; i += 1) {
+    const a = argv[i]!;
+    if (a === "--variant") variant = (argv[++i] ?? "").toLowerCase();
+    else if (a === "--n") n = Number(argv[++i]);
+    else dir = a;
+  }
+  if (!dir) throw new Error("usage: cleanup-html-bundle <bundle dir> [--variant b] [--n 1]");
+  if (variant !== null && !/^[a-z]$/.test(variant)) throw new Error(`--variant must be one letter, got "${variant}"`);
+  if (!Number.isInteger(n) || n < 1) throw new Error(`--n must be a positive integer`);
+  return { root: path.resolve(dir.replace(/^~(?=\/|$)/, os.homedir())), variant, n };
 }
 
 async function main() {
-  const arg = process.argv[2];
-  if (!arg) throw new Error("usage: cleanup-html-bundle <bundle dir>");
-  const root = path.resolve(arg.replace(/^~(?=\/|$)/, os.homedir()));
+  const { root, variant: newVariant, n } = parseArgs(process.argv.slice(2));
   const sizes = fs
     .readdirSync(root, { withFileTypes: true })
     .filter((e) => e.isDirectory() && SIZE_DIR_RE.test(e.name))
@@ -101,7 +152,7 @@ async function main() {
   if (sizes.length === 0) throw new Error(`no <W>x<H>/ folders in ${root}`);
 
   const client = await getActiveClient();
-  const topicCache = new Map<string, string>();
+  const infoCache = new Map<string, { topic: string; product: string }>();
 
   for (const size of sizes) {
     const src = path.join(root, size);
@@ -117,14 +168,26 @@ async function main() {
     }
 
     const number = Number(metaContent(html, "advert_mc"));
-    const variant = metaContent(html, "advert_variant");
-    const key = `${number}${variant}`;
-    if (!topicCache.has(key)) topicCache.set(key, await topicOf(client.id, number, variant));
+    const sourceVariant = metaContent(html, "advert_variant");
+    // The topic belongs to the NUMBER (it never spans topics), so the source
+    // letter answers for the new one too — which may not exist yet.
+    const sourceKey = `${number}${sourceVariant}`;
+    if (!infoCache.has(sourceKey)) {
+      infoCache.set(sourceKey, await mcInfo(client.id, number, sourceVariant));
+    }
+    const { topic, product } = infoCache.get(sourceKey)!;
+    const variant = newVariant ?? sourceVariant;
+    if (variant !== sourceVariant) {
+      html = html.replace(
+        `<meta name="advert_variant" content="${sourceVariant}">`,
+        `<meta name="advert_variant" content="${variant}">`,
+      );
+    }
     const [, w, h] = size.match(SIZE_DIR_RE)!;
 
     const manifest = JSON.parse(fs.readFileSync(path.join(src, "manifest.json"), "utf8"));
-    manifest.title = topicCache.get(key);
-    manifest.description = `MC${key} ${size}`;
+    manifest.title = topic;
+    manifest.description = `MC${number}${variant} ${size}`;
     manifest.width = Number(w);
     manifest.height = Number(h);
 
@@ -137,7 +200,25 @@ async function main() {
     }
     fs.writeFileSync(path.join(dst, "index.html"), html);
     fs.writeFileSync(path.join(dst, "manifest.json"), JSON.stringify(manifest, null, 4) + "\n");
-    console.log(`${size}: index.html + manifest.json + ${copied.join(", ")}`);
+
+    // The folder's contents at the zip's top level: index.html at the root is
+    // what the library's package check (and every ad server) expects.
+    const zip = new JSZip();
+    for (const f of fs.readdirSync(dst)) zip.file(f, fs.readFileSync(path.join(dst, f)));
+    const zipName = packageZipName({
+      brand: client.key.toUpperCase(),
+      product,
+      number,
+      variant,
+      topic,
+      n,
+      size,
+    });
+    fs.writeFileSync(
+      path.join(root, "_cleanup", zipName),
+      await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }),
+    );
+    console.log(`${size}: index.html + manifest.json + ${copied.join(", ")} → ${zipName}`);
   }
   console.log(`wrote ${sizes.length} cleaned bundle(s) → ${path.join(root, "_cleanup")}`);
 }

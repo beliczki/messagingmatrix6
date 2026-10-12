@@ -17,6 +17,7 @@ import { readTemplate } from "@/lib/templates";
 import { getActiveClient } from "@/lib/active-client";
 import { warmStills } from "@/lib/video-stills";
 import { ensureSecret, signTokenWith } from "@/lib/public-shortcut";
+import { creativeMediaKind } from "@/lib/creative-media-kind";
 
 type SnapshotFile = {
   id: string;
@@ -401,8 +402,8 @@ export async function shareThumbs(
           return `/publicshortcut/${token}/${encodeURIComponent(p.size)}?v=${encodeURIComponent(v)}`;
         }
         if (p.kind === "file") {
-          const visual =
-            p.mimeType?.startsWith("image/") || p.mimeType?.startsWith("video/");
+          // An HTML5 package's ?thumb= is its poster, so it pictures too.
+          const visual = creativeMediaKind(p.mimeType) !== "other";
           return visual ? `/share/${shareId}/file/${p.fileId}?thumb=200` : null;
         }
         return null;

@@ -2,6 +2,12 @@ import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { uploadFile } from "@/lib/entities/files";
 import { writeAudit } from "@/lib/audit";
+import {
+  HTML5_PACKAGE_MIME,
+  Html5PackageError,
+  inspectHtml5Package,
+  isHtml5PackageUpload,
+} from "@/lib/html5-package";
 import { denyDemo, withSession } from "@/lib/scoped";
 import type { StorageCategory } from "@/lib/storage";
 
@@ -42,10 +48,27 @@ export const POST = withSession(async ({ req, claims }) => {
   const buffer = Buffer.from(await file.arrayBuffer());
   const originalFilename =
     (file as File).name ?? form.get("filename")?.toString() ?? "unnamed";
-  const mimeType = (file as File).type || "application/octet-stream";
+  let mimeType = (file as File).type || "application/octet-stream";
 
   let dimensions: string | undefined;
-  if (mimeType.startsWith("image/")) {
+  // An HTML5 package is validated before anything is stored: a zip with no
+  // index.html, or one that climbs out of its folder, is refused here instead
+  // of landing in the library as a creative nothing can play.
+  let pkg: { sizeSource: string | null; warnings: string[] } | undefined;
+  if (category === "creative" && isHtml5PackageUpload(originalFilename, mimeType)) {
+    try {
+      const info = await inspectHtml5Package(buffer, originalFilename);
+      mimeType = HTML5_PACKAGE_MIME;
+      if (info.width && info.height) dimensions = `${info.width}x${info.height}`;
+      pkg = { sizeSource: info.sizeSource, warnings: info.warnings };
+    } catch (e) {
+      if (!(e instanceof Html5PackageError)) throw e;
+      return NextResponse.json(
+        { error: "invalid_html5_package", code: e.code, message: e.message },
+        { status: 400 },
+      );
+    }
+  } else if (mimeType.startsWith("image/")) {
     try {
       const meta = await sharp(buffer).metadata();
       if (meta.width && meta.height) {
@@ -80,5 +103,5 @@ export const POST = withSession(async ({ req, claims }) => {
     },
   });
 
-  return NextResponse.json({ file: row }, { status: 201 });
+  return NextResponse.json({ file: row, package: pkg }, { status: 201 });
 });

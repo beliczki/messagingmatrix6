@@ -115,6 +115,12 @@ import {
   MC_PREVIEWS_WIDGET_HTML,
 } from "@/lib/mcp-widget";
 import { writeAudit } from "@/lib/audit";
+import {
+  HTML5_PACKAGE_MIME,
+  Html5PackageError,
+  inspectHtml5Package,
+  isHtml5PackageUpload,
+} from "@/lib/html5-package";
 
 /** Token scopes, widest last. Stored verbatim in `mcp_tokens.scope`. */
 export type McpScope = "read" | "draft" | "full";
@@ -2058,7 +2064,7 @@ function registerCreativeWriteTools(server: McpServer, ctx: McpContext): void {
     "creative_upload",
     {
       description:
-        "Upload a rendered creative file (banner / HTML5 export / static image) and create a Creative Library row for it — the creatives-table analog of asset_upload (which targets the SEPARATE Assets library, not this one). Provide the file via EXACTLY ONE of: data_base64 (base64 bytes, max 10MB decoded — small images) or source_url (a public http(s) URL the server downloads, max 50MB — larger files/videos; private/internal addresses are refused). The library tile renders from the stored file by fileId, so a row without an uploaded file would be blank — that's why this uploads bytes rather than taking a bare fileId. brand/product/type/visual_keyword are auto-derived from the filename via the client's parsing rules; explicit values override. Link the creative to a matrix cell by passing mc_number + mc_variant. Returns { creative, file, parsed_fields }. Counts as one write against the rate limit. To edit an existing creative's metadata (re-link, tag, comment) use creative_update instead.",
+        "Upload a rendered creative file (banner / HTML5 export / static image) and create a Creative Library row for it — the creatives-table analog of asset_upload (which targets the SEPARATE Assets library, not this one). Provide the file via EXACTLY ONE of: data_base64 (base64 bytes, max 10MB decoded — small images) or source_url (a public http(s) URL the server downloads, max 50MB — larger files/videos; private/internal addresses are refused). The library tile renders from the stored file by fileId, so a row without an uploaded file would be blank — that's why this uploads bytes rather than taking a bare fileId. brand/product/type/visual_keyword are auto-derived from the filename via the client's parsing rules; explicit values override. Link the creative to a matrix cell by passing mc_number + mc_variant. An HTML5 package is a .zip with index.html at its top (or in its one top folder): it is validated before anything is stored (no index, an entry escaping the folder, or an oversized unpack is refused), and its size is read from the package's ad.size meta, then manifest.json, then the filename's _WxH. Returns { creative, file, parsed_fields }. Counts as one write against the rate limit. To edit an existing creative's metadata (re-link, tag, comment) use creative_update instead.",
       inputSchema: {
         filename: z.string().min(1),
         data_base64: z.string().optional(),
@@ -2108,11 +2114,24 @@ function registerCreativeWriteTools(server: McpServer, ctx: McpContext): void {
       }
 
       const ext = extFromFilename(args.filename).toLowerCase();
-      const mimeType =
+      let mimeType =
         EXT_MIME[ext] ?? remoteContentType ?? "application/octet-stream";
 
       let dimensions: string | undefined;
-      if (mimeType.startsWith("image/")) {
+      // Same gate as /api/files/upload: a package is validated before it is
+      // stored, and its size comes from the package, not from sharp.
+      if (isHtml5PackageUpload(args.filename, mimeType)) {
+        try {
+          const info = await inspectHtml5Package(buffer, args.filename);
+          mimeType = HTML5_PACKAGE_MIME;
+          if (info.width && info.height) dimensions = `${info.width}x${info.height}`;
+        } catch (e) {
+          if (!(e instanceof Html5PackageError)) throw e;
+          return errorResult(
+            `not a playable HTML5 package (${e.code}): ${e.message} — nothing was stored`,
+          );
+        }
+      } else if (mimeType.startsWith("image/")) {
         // Full decode (stats), not just metadata(): the header parses fine on a
         // TRUNCATED file, which is exactly how a clipped base64 payload stores a
         // broken image.

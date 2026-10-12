@@ -5,6 +5,29 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.121.0] — 2026-10-12
+
+### Added
+- **HTML5 creative packages.** A .zip with index.html (an mm6 bundle, an Adform/DV360 bundle, an
+  agency HTML5) uploads to the Creative Library — through the UI or MCP `creative_upload` — and is
+  validated first (no index, an entry escaping its folder, or a zip bomb is refused with a readable
+  message). Its size comes from the package (`ad.size` meta → manifest → filename).
+- **Live playback** in the library grid and detail dialog, the share gallery and its detail stage
+  (with comment pins), the draft / MC editor preview and the matrix cell — sandboxed without
+  same-origin, so the package's code can't reach the page or the viewer's session. Detail views
+  are clickable and have Restart; the share download is the original zip.
+- **Posters** (one frame, finite animations finished) for every thumbnail surface: draft covers,
+  list rows, the share picker, the editor's Image 1 field.
+- `/pkg/<signed>/…` and `/share/[id]/pkg/[fileId]/…` serve package entries; `GET
+  /api/files/package-url` hands out the signed link.
+- `npm run export:bundle` / `cleanup:bundle` — standalone per-size HTML bundles of an MC's render,
+  cleaned for hand-off; `--variant b` re-letters them and writes library-named zips.
+
+### Changed
+- A zip keeps its own version ladder — it never displaces the picture family of the same name.
+- `rebuild-creatives` no longer deletes HTML5 packages (it never reimported them);
+  `export-creatives-for-reading` skips them.
+
 ## [6.120.1] — 2026-10-12
 
 ### Fixed

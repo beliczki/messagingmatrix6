@@ -34,8 +34,13 @@ export function versionFamilyKey(
 ): { key: string; version: number } | null {
   const parsed = parseCreativeFilename(fileName);
   if (!parsed.familyKey) return null;
+  // An HTML5 package is its own ladder. The stem drops the extension (a jpg →
+  // png re-delivery IS a new version of a picture), but a zip beside a picture
+  // of the same name is a different deliverable: as one family its _n2 would
+  // become the slot's "latest" and push the picture out of every cover.
+  const media = parsed.ext === "zip" ? "|html5" : "";
   return {
-    key: `${parsed.familyKey.toLowerCase()}|${parsed.declaredDimensions ?? ""}`,
+    key: `${parsed.familyKey.toLowerCase()}|${parsed.declaredDimensions ?? ""}${media}`,
     version: parsed.version,
   };
 }

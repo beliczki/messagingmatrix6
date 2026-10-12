@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "@/app/_icons/Icon";
+import { creativeMediaKind } from "@/lib/creative-media-kind";
+import { LibraryPackageFrame } from "./Html5PackageFrame";
 import type { Message } from "../matrix/types";
 import { LIST_GRID_TEMPLATE_VERSIONS, formatListDate } from "./ListSortHeader";
 import {
@@ -92,6 +94,17 @@ export function MatrixIframePreview({
   // against a missing template dir and 404). Requires image1 so a half-set-up
   // DCO MC (null template, no image) still falls through to the placeholder.
   if (!message.template && message.image1) {
+    // A delivered HTML5 package plays in the cell, like a DCO render does.
+    if (creativeMediaKind(null, message.image1) === "html5") {
+      return (
+        <LibraryPackageFrame
+          filename={message.image1}
+          size={null}
+          mode={mode}
+          title={`MC${message.number}${message.variant ?? ""}`}
+        />
+      );
+    }
     return (
       <StaticImagePreview
         image={message.image1}

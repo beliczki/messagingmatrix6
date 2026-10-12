@@ -13,6 +13,8 @@ import clsx from "clsx";
 import { usePersistent, type Codec } from "../_components/usePersistent";
 import ModalBackdrop from "../_components/ModalBackdrop";
 import type { Message } from "../matrix/types";
+import { PackagePoster } from "../_components/Html5PackageFrame";
+import { creativeMediaKind } from "@/lib/creative-media-kind";
 
 type PreviewBg = "light" | "dark" | "checker";
 
@@ -436,7 +438,9 @@ function AssetRow({
       </div>
       <div className="matrix-detail-dialog__asset-row flex items-center gap-2">
         <div className="thumb-checker size-12 shrink-0 overflow-hidden rounded border border-slate-200">
-          {kind === "image" ? (
+          {creativeMediaKind(null, filename) === "html5" ? (
+            <PackagePoster filename={filename} width={80} />
+          ) : kind === "image" ? (
             <img
               src={src}
               alt={label}

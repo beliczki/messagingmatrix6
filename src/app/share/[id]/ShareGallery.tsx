@@ -18,6 +18,8 @@ import { bgClassFor, type PreviewBg } from "./preview-bg";
 import { Masonry, aspectEstimate } from "../../(app)/_components/Masonry";
 import { parseSearchQuery, type SearchFields } from "@/lib/search-query";
 import VideoThumb from "../../(app)/_components/VideoThumb";
+import { Html5PackageFrame } from "../../(app)/_components/Html5PackageFrame";
+import { creativeMediaKind } from "@/lib/creative-media-kind";
 import ShareDetailDialog, {
   type DialogItem,
   type ShareCommentRow,
@@ -1466,12 +1468,32 @@ function CreativeMedia({
       </div>
     );
   }
-  const isImage = file.mimeType?.startsWith("image/") ?? false;
-  const isVideo = file.mimeType?.startsWith("video/") ?? false;
+  const kind = creativeMediaKind(file.mimeType, item.creative.fileName);
+  const isImage = kind === "image";
+  const isVideo = kind === "video";
   // 800px is the largest thumbnail tier the public file proxy serves (see
   // ALLOWED_THUMB_WIDTHS); use it for non-compact tiles so retina displays
   // don't render a soft 400px upscale. Compact = list-view 64px thumb.
   const thumbSrc = `/share/${shareId}/file/${file.id}?thumb=${compact ? 200 : 800}`;
+  if (kind === "html5") {
+    // Live in the grid, like a DCO tile; the list's small thumb is its poster.
+    return compact ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={thumbSrc}
+        alt={item.creative.fileName ?? file.filename}
+        className="size-full object-contain"
+        loading="lazy"
+      />
+    ) : (
+      <Html5PackageFrame
+        src={`/share/${shareId}/pkg/${file.id}/index.html`}
+        size={file.dimensions}
+        mode="fill-width"
+        title={item.creative.fileName ?? file.filename}
+      />
+    );
+  }
   if (isImage) {
     return (
       // eslint-disable-next-line @next/next/no-img-element

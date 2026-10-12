@@ -12,6 +12,8 @@ import {
   STATUS_COLOR,
 } from "./types";
 import PreviewPane, { type PreviewBg } from "../_components/PreviewPane";
+import { PackagePoster } from "../_components/Html5PackageFrame";
+import { creativeMediaKind } from "@/lib/creative-media-kind";
 import { templateMetaFor } from "../_components/MatrixIframeTile";
 import ModalBackdrop from "../_components/ModalBackdrop";
 import EntityHistoryDrawer from "../_components/EntityHistoryDrawer";
@@ -1829,7 +1831,9 @@ function MediaField({
       </div>
       <div className="media-field__control flex items-center gap-2">
         <div className="media-field__thumb thumb-checker size-9 shrink-0 overflow-hidden rounded border border-slate-200">
-          {thumbSrc && kind === "image" ? (
+          {thumbSrc && creativeMediaKind(null, value) === "html5" ? (
+            <PackagePoster filename={value} width={80} />
+          ) : thumbSrc && kind === "image" ? (
             <img src={thumbSrc} alt={value} className="size-full object-contain" loading="lazy" />
           ) : thumbSrc && kind === "video" ? (
             <video

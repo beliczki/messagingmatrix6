@@ -155,7 +155,19 @@ export function useUploadQueue({
           credentials: "include",
           body: fd,
         });
-        if (!r.ok) throw new Error(await r.text());
+        if (!r.ok) {
+          // A refusal that explains itself (e.g. an HTML5 package with no
+          // index.html) says so in `message`; anything else shows as sent.
+          const text = await r.text();
+          let message = text;
+          try {
+            const parsed = JSON.parse(text) as { message?: unknown };
+            if (typeof parsed.message === "string") message = parsed.message;
+          } catch {
+            // not JSON — keep the raw body
+          }
+          throw new Error(message);
+        }
         const body = (await r.json()) as {
           file: {
             id: string;

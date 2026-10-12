@@ -18,6 +18,8 @@ import { Masonry, aspectEstimate } from "../_components/Masonry";
 import { versionFamilyKey } from "@/lib/group-creative-versions";
 import ToolbarUpload from "../_components/ToolbarUpload";
 import VideoThumb from "../_components/VideoThumb";
+import { LibraryPackageFrame } from "../_components/Html5PackageFrame";
+import { creativeMediaKind } from "@/lib/creative-media-kind";
 import UploadQueuePanel, {
   useDropTarget,
   useUploadQueue,
@@ -1154,8 +1156,9 @@ function Card({
   file: UploadedFile | undefined;
   onOpen: () => void;
 }) {
-  const isImage = file?.mimeType?.startsWith("image/");
-  const isVideo = file?.mimeType?.startsWith("video/");
+  const kind = creativeMediaKind(file?.mimeType, creative.fileName);
+  const isImage = kind === "image";
+  const isVideo = kind === "video";
   const mcLabel =
     creative.mcNumber !== null
       ? `MC${creative.mcNumber}${creative.mcVariant ?? ""}`
@@ -1171,7 +1174,14 @@ function Card({
       )}
     >
       <div className="creative-card__thumb thumb-checker relative aspect-[4/3]">
-        {isImage && creative.fileId ? (
+        {kind === "html5" && creative.fileId ? (
+          <LibraryPackageFrame
+            fileId={creative.fileId}
+            size={creative.fileDimensions}
+            mode="fit-rect"
+            title={creative.fileName ?? "HTML5 creative"}
+          />
+        ) : isImage && creative.fileId ? (
           <img
             src={`/api/files/${creative.fileId}/thumbnail?w=240`}
             alt={creative.fileName ?? "creative"}
@@ -1222,8 +1232,9 @@ function ImageTile({
   file: UploadedFile | undefined;
   onOpen: () => void;
 }) {
-  const isImage = file?.mimeType?.startsWith("image/");
-  const isVideo = file?.mimeType?.startsWith("video/");
+  const kind = creativeMediaKind(file?.mimeType, creative.fileName);
+  const isImage = kind === "image";
+  const isVideo = kind === "video";
   const archived = creative.archivedAt !== null;
   return (
     <button
@@ -1234,7 +1245,14 @@ function ImageTile({
         archived && "row--archived",
       )}
     >
-      {isImage && creative.fileId ? (
+      {kind === "html5" && creative.fileId ? (
+        <LibraryPackageFrame
+          fileId={creative.fileId}
+          size={creative.fileDimensions}
+          mode="fill-width"
+          title={creative.fileName ?? "HTML5 creative"}
+        />
+      ) : isImage && creative.fileId ? (
         <img
           src={`/api/files/${creative.fileId}/thumbnail?w=320`}
           alt={creative.fileName ?? "creative"}
@@ -1267,8 +1285,11 @@ function ListRow({
   file: UploadedFile | undefined;
   onOpen: () => void;
 }) {
-  const isImage = file?.mimeType?.startsWith("image/");
-  const isVideo = file?.mimeType?.startsWith("video/");
+  const kind = creativeMediaKind(file?.mimeType, creative.fileName);
+  // A 40px row thumb shows a package's poster — the thumbnail route answers
+  // one for it — rather than running the banner at a sixth of its size.
+  const isImage = kind === "image" || kind === "html5";
+  const isVideo = kind === "video";
   const mcLabel =
     creative.mcNumber !== null
       ? `MC${creative.mcNumber}${creative.mcVariant ?? ""}`

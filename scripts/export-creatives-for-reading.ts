@@ -16,11 +16,12 @@
 //   --dir       subdirectory under "problematic creatives" (default: round2)
 import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
-import { and, eq, inArray, isNull, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, isNotNull, ne, or } from "drizzle-orm";
 import { db } from "@/db";
 import { clients, creatives, uploadedFiles } from "@/db/schema";
 import { readFileBytes } from "@/lib/storage";
 import { parseCreativeFilename } from "@/lib/parse-creative-filename";
+import { HTML5_PACKAGE_MIME } from "@/lib/creative-media-kind";
 
 const BASE = join(process.env.HOME!, "ERSTE Addressable AI Agent", "problematic creatives");
 
@@ -51,6 +52,8 @@ async function main() {
       eq(creatives.clientId, client.id),
       isNull(creatives.archivedAt),
       isNotNull(creatives.mcNumber),
+      // The reader looks at pictures; an HTML5 package is a zip it cannot open.
+      or(isNull(uploadedFiles.mimeType), ne(uploadedFiles.mimeType, HTML5_PACKAGE_MIME)),
       ...(mcs.length ? [inArray(creatives.mcNumber, mcs)] : []),
       ...(onlyMissing ? [isNull(creatives.imageText)] : []),
     ));

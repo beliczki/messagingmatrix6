@@ -13,6 +13,8 @@ import {
 } from "@/lib/video-stills";
 import { withSession } from "@/lib/scoped";
 import { getActiveClient } from "@/lib/active-client";
+import { isHtml5PackageFile } from "@/lib/html5-poster";
+import { posterResponse } from "@/lib/html5-package-response";
 
 type Params = { id: string };
 
@@ -26,6 +28,19 @@ const ALLOWED_OUTPUT = new Set(["image/jpeg", "image/png", "image/webp", "image/
 export const GET = withSession<Params>(async ({ req, claims, params }) => {
   const row = await getFile(claims.cid, params.id);
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
+
+  // An HTML5 package's thumbnail is its poster — one shot frame — so draft
+  // covers and list rows show the banner without running it.
+  if (isHtml5PackageFile(row)) {
+    const wRaw = Number(new URL(req.url).searchParams.get("w") ?? "200");
+    return posterResponse({
+      req,
+      clientKey: (await getActiveClient()).key,
+      file: row,
+      width: ALLOWED_WIDTHS.find((n) => n >= wRaw) ?? ALLOWED_WIDTHS[ALLOWED_WIDTHS.length - 1]!,
+      cacheControl: "private, no-cache",
+    });
+  }
 
   const isImage = row.mimeType?.startsWith("image/") ?? false;
   const isVideo = row.mimeType?.startsWith("video/") ?? false;

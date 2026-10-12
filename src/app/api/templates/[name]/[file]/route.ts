@@ -1,39 +1,18 @@
 import { NextResponse } from "next/server";
-import path from "node:path";
 import { readTemplateFile, writeTemplateFile } from "@/lib/templates";
 import { withSession, withAdmin } from "@/lib/scoped";
+import { mimeByExt } from "@/lib/mime-by-ext";
 
 type Params = { name: string; file: string };
-
-const MIME: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".js": "application/javascript",
-  ".json": "application/json",
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".webp": "image/webp",
-  ".svg": "image/svg+xml",
-  ".mp4": "video/mp4",
-  // Self-hosted webfonts. A template that ships its own faces serves them from
-  // here, and octet-stream works only because the @font-face format() hint
-  // carries the type — name it properly instead of relying on that.
-  ".woff2": "font/woff2",
-  ".woff": "font/woff",
-  ".otf": "font/otf",
-  ".ttf": "font/ttf",
-};
 
 export const GET = withSession<Params>(async ({ params }) => {
   const buf = readTemplateFile(params.name, params.file);
   if (!buf) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-  const ext = path.extname(params.file).toLowerCase();
   return new NextResponse(new Uint8Array(buf), {
     headers: {
-      "Content-Type": MIME[ext] ?? "application/octet-stream",
+      "Content-Type": mimeByExt(params.file),
       "Cache-Control": "private, max-age=60",
     },
   });

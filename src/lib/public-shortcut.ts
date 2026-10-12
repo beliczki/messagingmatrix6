@@ -69,6 +69,33 @@ export function verifyTokenWith(
   return { kind: kind as ShortcutKind, id };
 }
 
+// An HTML5 package's entries, served at /pkg/<token>/<path>. The package runs
+// sandboxed in an opaque origin, so the browser sends no session cookie with
+// the requests it makes for its own assets — a session-gated route would serve
+// index.html and then 401 every image and script. The capability travels in
+// the path instead, signed with the same secret, under a payload prefix ("p")
+// no other kind uses, so a package token can never verify as an m/c one.
+// Same exposure as a `c` link to the creative's zip, which already serves the
+// whole package's bytes.
+const PACKAGE_TOKEN_RE = /^([A-Za-z0-9_-]{1,64})\.([0-9a-f]{16})$/;
+
+/** fileId -> `<fileId>.<sig>` */
+export function signPackageTokenWith(secret: string, fileId: string): string {
+  return `${fileId}.${signPayload(secret, `p${fileId}`)}`;
+}
+
+/** The uploaded file id a package token names, or null if it does not verify. */
+export function verifyPackageTokenWith(secret: string, token: string): string | null {
+  const m = PACKAGE_TOKEN_RE.exec(token);
+  if (!m) return null;
+  const [, fileId, sig] = m;
+  const expected = signPayload(secret, `p${fileId}`);
+  if (!crypto.timingSafeEqual(Buffer.from(sig!, "hex"), Buffer.from(expected, "hex"))) {
+    return null;
+  }
+  return fileId!;
+}
+
 /** Same mask format Settings → MCP uses for bearer tokens. */
 export function maskSecret(secret: string): string {
   if (secret.length <= 8) return "••••";
@@ -106,6 +133,16 @@ export async function verifyToken(
 ): Promise<{ kind: ShortcutKind; id: number } | null> {
   const secret = await readSecret();
   return secret ? verifyTokenWith(secret, token) : null;
+}
+
+/** Hands out a package link, so — like every other link handed out — it may mint the secret. */
+export async function signPackageToken(fileId: string): Promise<string> {
+  return signPackageTokenWith(await ensureSecret(), fileId);
+}
+
+export async function verifyPackageToken(token: string): Promise<string | null> {
+  const secret = await readSecret();
+  return secret ? verifyPackageTokenWith(secret, token) : null;
 }
 
 /**

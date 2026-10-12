@@ -69,6 +69,19 @@ describe("groupCreativeVersions", () => {
 // The draft card and the draft editor both ask "which file is current in this
 // slot". They used to answer with whatever landed first, so a delivered n2 sat
 // in the library while every draft still showed the n1 it replaced.
+describe("HTML5 packages keep their own ladder", () => {
+  it("a zip never joins the picture family of the same name and size", () => {
+    const rows = [
+      { id: 1, fileName: "ERSTE_SZA_MC411_a_bird_n1_300x250.png", createdAt: "2026-10-01" },
+      { id: 2, fileName: "ERSTE_SZA_MC411_a_bird_n2_300x250.png", createdAt: "2026-10-02" },
+      { id: 3, fileName: "ERSTE_SZA_MC411_a_bird_n3_300x250.zip", createdAt: "2026-10-03" },
+    ];
+    const groups = groupCreativeVersions(rows);
+    expect(groups.map((g) => g.latest.id).sort()).toEqual([2, 3]);
+    expect(versionLadder(rows).map((r) => r.id)).toEqual([1, 2]);
+  });
+});
+
 describe("versionLadder", () => {
   const f = (id: number, fileName: string | null) => ({ id, fileName });
 

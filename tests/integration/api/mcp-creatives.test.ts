@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { eq } from "drizzle-orm";
+import JSZip from "jszip";
 import { db } from "@/db";
 import { creatives, clients, uploadedFiles } from "@/db/schema";
 import { buildMcpServer, _resetMcpRateLimitForTests } from "@/lib/mcp";
@@ -186,6 +187,37 @@ describe("creative write tools via MCP", () => {
     const listed = await callTool(erste.id, "list_creatives", {});
     expect(listed.json).toHaveLength(1);
     expect(listed.json[0].fileId).toBe(res.json.file.id);
+  });
+
+  it("creative_upload stores an HTML5 package as application/zip, sized from the package", async () => {
+    const zip = new JSZip();
+    zip.file(
+      "banner/index.html",
+      '<html><head><meta name="ad.size" content="width=300,height=250"></head></html>',
+    );
+    zip.file("banner/img/bg.jpg", "jpg");
+    const res = await callTool(erste.id, "creative_upload", {
+      // The filename says 970x250; the package's own ad.size wins.
+      filename: "ERSTE_SZA_MC411_b_bird_html5_n1_970x250.zip",
+      data_base64: (await zip.generateAsync({ type: "nodebuffer" })).toString("base64"),
+    });
+    expect(res.isError).toBe(false);
+    expect(res.json.file.mime_type).toBe("application/zip");
+    expect(res.json.file.dimensions).toBe("300x250");
+    expect(res.json.creative.fileDimensions).toBe("300x250");
+  });
+
+  it("creative_upload refuses a zip that is not a playable package — nothing is stored", async () => {
+    const zip = new JSZip();
+    zip.file("readme.txt", "no index here");
+    const res = await callTool(erste.id, "creative_upload", {
+      filename: "broken_300x250.zip",
+      data_base64: (await zip.generateAsync({ type: "nodebuffer" })).toString("base64"),
+    });
+    expect(res.isError).toBe(true);
+    expect(res.text).toContain("no_index");
+    expect(await db.select().from(uploadedFiles)).toHaveLength(0);
+    expect(await db.select().from(creatives)).toHaveLength(0);
   });
 
   it("creative_upload requires exactly one of data_base64 / source_url", async () => {

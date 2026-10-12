@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   generateSecret,
+  signPackageTokenWith,
   signTokenWith,
+  verifyPackageTokenWith,
   verifyTokenWith,
 } from "@/lib/public-shortcut";
 
@@ -57,5 +59,30 @@ describe("public shortcut tokens", () => {
     const a = generateSecret();
     expect(a).toMatch(/^[A-Za-z0-9_-]+$/);
     expect(a).not.toBe(generateSecret());
+  });
+});
+
+describe("package tokens", () => {
+  const secret = "Magic123!";
+  const fileId = "AqtSQ11YWwuAH11H-vuxQ";
+
+  it("round-trips an uploaded file id", () => {
+    expect(verifyPackageTokenWith(secret, signPackageTokenWith(secret, fileId))).toBe(fileId);
+  });
+
+  it("refuses a tampered id, a foreign secret and a malformed token", () => {
+    const token = signPackageTokenWith(secret, fileId);
+    const sig = token.split(".")[1];
+    expect(verifyPackageTokenWith(secret, `OtherFileId1234567890.${sig}`)).toBeNull();
+    expect(verifyPackageTokenWith("other-secret", token)).toBeNull();
+    expect(verifyPackageTokenWith(secret, fileId)).toBeNull();
+    expect(verifyPackageTokenWith(secret, `../x.${sig}`)).toBeNull();
+  });
+
+  it("never verifies as a message or creative token, nor the other way round", () => {
+    // Different payload prefix: a package token for file "c12" is not c12.
+    const pkg = signPackageTokenWith(secret, "c12");
+    expect(verifyTokenWith(secret, pkg)).toBeNull();
+    expect(verifyPackageTokenWith(secret, signTokenWith(secret, "c", 12))).toBeNull();
   });
 });

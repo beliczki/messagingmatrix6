@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/app/_icons/Icon";
+import { creativeMediaKind } from "@/lib/creative-media-kind";
+import { LibraryPackageFrame } from "./Html5PackageFrame";
 
 // Renders a file thumbnail at its natural pixel size when the container has
 // room, or transform-scales it down to fit. Mirrors PreviewPane's iframe
@@ -32,9 +34,14 @@ export default function ScaledMediaPreview({
     return () => ro.disconnect();
   }, []);
 
-  const isImage = mimeType?.startsWith("image/");
-  const isVideo = mimeType?.startsWith("video/");
-  const hasFile = !!fileId && (isImage || isVideo);
+  const kind = creativeMediaKind(mimeType, alt);
+  const isImage = kind === "image";
+  const isVideo = kind === "video";
+  const isPackage = kind === "html5";
+  const hasFile = !!fileId && (isImage || isVideo || isPackage);
+  // Bumped by the restart button: remounts the package's frame so its
+  // animation plays again from the top.
+  const [restartKey, setRestartKey] = useState(0);
   const knownDims = !!(naturalW && naturalH && naturalW > 0 && naturalH > 0);
 
   const margin = 16;
@@ -50,8 +57,19 @@ export default function ScaledMediaPreview({
   return (
     <div
       ref={boxRef}
-      className="scaled-preview flex size-full items-center justify-center overflow-hidden"
+      className="scaled-preview relative flex size-full items-center justify-center overflow-hidden"
     >
+      {isPackage && hasFile ? (
+        <button
+          type="button"
+          onClick={() => setRestartKey((k) => k + 1)}
+          title="Play the HTML5 creative again from the start"
+          className="scaled-preview__restart toolbar-btn absolute right-2 top-2 z-20 flex items-center gap-1 rounded border border-border bg-surface px-2 py-1 text-xs text-text-primary hover:bg-surface-alt"
+        >
+          <Icon name="refresh" className="size-3.5" />
+          Restart
+        </button>
+      ) : null}
       {!hasFile ? (
         <div className="flex size-full items-center justify-center text-slate-400">
           <Icon name="image" className="size-12" />
@@ -66,7 +84,16 @@ export default function ScaledMediaPreview({
             flexShrink: 0,
           }}
         >
-          {isImage ? (
+          {isPackage ? (
+            <LibraryPackageFrame
+              fileId={fileId}
+              size={`${naturalW}x${naturalH}`}
+              mode="fit-rect"
+              title={alt}
+              interactive
+              restartKey={restartKey}
+            />
+          ) : isImage ? (
             <img
               src={`/api/files/${fileId}/thumbnail?w=800`}
               alt={alt}
@@ -84,6 +111,9 @@ export default function ScaledMediaPreview({
             />
           )}
         </div>
+      ) : isPackage ? (
+        // Validated packages always carry a size; one without cannot be framed.
+        <LibraryPackageFrame fileId={fileId} size={null} mode="fit-rect" title={alt} interactive />
       ) : isImage ? (
         <img
           src={`/api/files/${fileId}/thumbnail?w=800`}

@@ -17,6 +17,9 @@
 // Persistence lives on the item (`persist` callback): message previews upsert
 // message_previews (shootPreviews below), drafts insert draft_previews. The
 // shooter itself only renders, screenshots, and hands over the PNG.
+//
+// `shootUrl` is the other mode: a frame of a page that already exists at a URL
+// (an HTML5 package's poster), on the same mutex.
 import { and, eq, isNull } from "drizzle-orm";
 import { chromium } from "playwright";
 import { db } from "@/db";
@@ -63,7 +66,7 @@ export async function mintPreviewToken(clientId: number): Promise<string> {
   return signSession(user);
 }
 
-function defaultBaseUrl(): string {
+export function defaultBaseUrl(): string {
   return (
     process.env.PREVIEW_BASE_URL ??
     `http://127.0.0.1:${process.env.PORT ?? "6001"}`
@@ -82,6 +85,49 @@ export async function shootItems(
   const run = chain.catch(() => {}).then(() => shootRun(clientId, items, opts));
   chain = run.catch(() => {});
   return run;
+}
+
+/**
+ * One frame of an arbitrary page — an uploaded HTML5 package's poster. Runs on
+ * the same mutex as the preview shoots, so a poster never launches a second
+ * Chromium beside a batch. The URL must be self-authorizing (a signed /pkg
+ * link): no session cookie is set, and a sandboxed package would not send one
+ * for its assets anyway.
+ */
+export async function shootUrl(url: string, width: number, height: number): Promise<Buffer> {
+  const run = chain.catch(() => {}).then(() => shootUrlRun(url, width, height));
+  chain = run.catch(() => {});
+  return run;
+}
+
+async function shootUrlRun(url: string, width: number, height: number): Promise<Buffer> {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage({ viewport: { width, height } });
+    await page.goto(url, { waitUntil: "load" });
+    // An mm6-built package (export:bundle) hides behind a preloader until its
+    // images are in; the frame before that is the logo on a flat colour.
+    if (await page.$("#preloader")) {
+      await page.waitForSelector("#preloader", {
+        state: "detached",
+        timeout: PRELOADER_TIMEOUT_MS,
+      });
+    }
+    // The poster is the package at rest: every finite CSS/Web animation is
+    // jumped to its end state rather than waited for. Waiting cannot tell an
+    // intro from a slow ambient loop (a sticker wobbling 3.5 × 10 s is finite
+    // too), while finish() lands each one where its author made it stop —
+    // instantly, the same frame every time. Infinite loops are left running;
+    // JS-driven animation is shot as it stands.
+    await page.evaluate(() => {
+      for (const a of document.getAnimations()) {
+        if (a.effect?.getComputedTiming().iterations !== Infinity) a.finish();
+      }
+    });
+    return await page.screenshot({ clip: { x: 0, y: 0, width, height } });
+  } finally {
+    await browser.close();
+  }
 }
 
 // Message-preview shooting: wraps shootItems with the message_previews

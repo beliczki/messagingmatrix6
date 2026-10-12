@@ -4,10 +4,13 @@ import fs from "node:fs/promises";
 import sharp from "sharp";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { clients, shareGalleries, uploadedFiles } from "@/db/schema";
+import { shareGalleries } from "@/db/schema";
 import { readFileBytes, readFileStream, resolveStoragePath } from "@/lib/storage";
 import { parseRangeHeader } from "@/lib/http-range";
 import { storedFileHeaders } from "@/lib/stored-file-headers";
+import { loadSharedFile } from "@/lib/share-file";
+import { isHtml5PackageFile } from "@/lib/html5-poster";
+import { posterResponse } from "@/lib/html5-package-response";
 import {
   StillsUnavailableError,
   ensureStills,
@@ -17,10 +20,8 @@ import {
 } from "@/lib/video-stills";
 
 // Public file proxy used by the share viewer. The viewer is unauthenticated,
-// so we cannot hit /api/files/{id}. Instead, we gate access on the file id
-// being referenced in this specific share gallery's snapshot metadata. That
-// keeps the file private to anyone who has the share link, without exposing
-// other files in the client.
+// so we cannot hit /api/files/{id}; access is gated on the file being listed in
+// this share's snapshot (loadSharedFile).
 
 type Params = { id: string; fileId: string };
 
@@ -31,38 +32,11 @@ export async function GET(
   { params }: { params: Promise<Params> },
 ) {
   const { id, fileId } = await params;
-  const [share] = await db
-    .select()
-    .from(shareGalleries)
-    .where(eq(shareGalleries.id, id))
-    .limit(1);
-  if (!share || share.archivedAt !== null) {
+  const shared = await loadSharedFile(id, fileId);
+  if (!shared) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-
-  let referenced = false;
-  if (share.metadata) {
-    try {
-      const meta = JSON.parse(share.metadata) as {
-        files?: Array<{ id?: string }>;
-      };
-      referenced = (meta.files ?? []).some((f) => f?.id === fileId);
-    } catch {
-      // fall through to 404
-    }
-  }
-  if (!referenced) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
-
-  const [file] = await db
-    .select()
-    .from(uploadedFiles)
-    .where(eq(uploadedFiles.id, fileId))
-    .limit(1);
-  if (!file || file.clientId !== share.clientId) {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
+  const { file, clientKey: key } = shared;
 
   const url = new URL(req.url);
   const thumbRaw = url.searchParams.get("thumb");
@@ -70,23 +44,27 @@ export async function GET(
   const isImage = file.mimeType?.startsWith("image/") ?? false;
   const isVideo = file.mimeType?.startsWith("video/") ?? false;
 
-  const clientKey = async () => {
-    const [client] = await db
-      .select({ key: clients.key })
-      .from(clients)
-      .where(eq(clients.id, file.clientId))
-      .limit(1);
-    return client?.key ?? null;
-  };
-
   // A video's stills, same strip the signed-in library scrubs — the viewer here
   // is unauthenticated and cannot reach /api/files, so it comes through this
   // proxy instead. `?stills` is the manifest, `?still=N` one frame, and a
   // `?thumb=` on a video is frame 0, so the gallery's existing poster URL works
   // for video without the caller knowing the difference.
+  // A package's thumbnail is its poster; the full-file serve below stays the
+  // original zip, which is the share's download.
+  if (wantThumb && isHtml5PackageFile(file)) {
+    const wRaw = Number(thumbRaw) || 200;
+    return posterResponse({
+      req,
+      clientKey: key,
+      file,
+      width:
+        ALLOWED_THUMB_WIDTHS.find((n) => n >= wRaw) ??
+        ALLOWED_THUMB_WIDTHS[ALLOWED_THUMB_WIDTHS.length - 1]!,
+      cacheControl: "public, no-cache",
+    });
+  }
+
   if (isVideo && (wantThumb || url.searchParams.has("stills") || url.searchParams.has("still"))) {
-    const key = await clientKey();
-    if (!key) return NextResponse.json({ error: "not_found" }, { status: 404 });
     try {
       if (url.searchParams.has("stills")) {
         const manifest = await ensureStills(key, file.id, file.storagePath);
@@ -137,10 +115,6 @@ export async function GET(
     const w =
       ALLOWED_THUMB_WIDTHS.find((n) => n >= wRaw) ??
       ALLOWED_THUMB_WIDTHS[ALLOWED_THUMB_WIDTHS.length - 1];
-    const key = await clientKey();
-    if (!key) {
-      return NextResponse.json({ error: "not_found" }, { status: 404 });
-    }
     const client = { key };
     const ext = path.extname(file.storagePath) || ".jpg";
     const thumbRel = path.join(client.key, ".thumbs", `${file.id}-${w}${ext}`);

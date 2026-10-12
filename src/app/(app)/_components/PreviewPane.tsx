@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
-import { mediaKindFromFilename } from "@/lib/parse-filename";
+import { creativeMediaKind } from "@/lib/creative-media-kind";
+import { LibraryPackageFrame } from "./Html5PackageFrame";
 import { TemplatePreviewImage } from "./TemplatePreviewImage";
 import type { TemplatePreviewMeta } from "./MatrixIframeTile";
 
@@ -74,7 +75,7 @@ export default function PreviewPane({
   onHtmlPreviewChange,
 }: Props) {
   const showStatic = !!staticImage;
-  const staticKind = staticImage ? mediaKindFromFilename(staticImage) : null;
+  const staticKind = staticImage ? creativeMediaKind(null, staticImage) : null;
   const showImage =
     !showStatic &&
     templateMeta &&
@@ -292,7 +293,18 @@ export default function PreviewPane({
             {/* An Agentic creative is whatever file was delivered, and plenty of
                 them are .mp4 — an <img> would render the alt text on the
                 checkerboard. Same treatment the asset previews use. */}
-            {staticKind === "video" ? (
+            {staticKind === "html5" ? (
+              // A delivered HTML5 package plays here, clickable; the toolbar's
+              // refresh restarts it.
+              <LibraryPackageFrame
+                filename={staticImage!}
+                size={null}
+                mode="fit-rect"
+                title={staticImage!}
+                interactive
+                restartKey={reloadKey}
+              />
+            ) : staticKind === "video" ? (
               <video
                 src={`/api/drive/proxy/${encodeURIComponent(staticImage!)}#t=0.1`}
                 className="preview-pane__static-video max-h-full max-w-full object-contain"

@@ -2772,7 +2772,7 @@ Biztonság: a share-iframe-ek `srcDoc` + `allow-same-origin`, és minden ugyanaz
       A rés valós volt: egy publikusan megosztott feltöltött html/svg az app-originen futott volna. Kihasználva nem volt: 0 html van élesben, 24 svg, mind belső asset.
       Ellenőrzés: unit teszt; élő share-fájlon `curl` (Range 0-0, hogy ne számoljon letöltést) → `content-security-policy: sandbox` + `nosniff`. Böngészőben: share-rács, Drafts, MC411a statikus kép + HTML preview a drive-proxy képekkel, konzolhiba nincs.
       A Drafts második sorának fekete brief-csempéi stash-sel összevetve a javítás nélkül is ugyanilyenek (Google Slides embed).
-      **6.120.1** — commit + deploy mindkét tenantra (patch-first).
+      **DEPLOYOLVA 6.120.1 — mindkét tenant** (`b0a2577`), „up after 1s"; `/login` 200 mindkettőn, élő share-fájlon `content-security-policy: sandbox` + `nosniff`.
 - [ ] **1. `src/lib/html5-package.ts`:** zip-validálás jszip-pel. Az `index.html` a gyökérben vagy egyetlen felső mappában; a méret az `ad.size` metából, a `manifest.json` width/height-ból vagy a fájlnév `_WxH`-jából. Korlátok: bejegyzés-szám, kicsomagolt összméret (zip-bomb), `..`/abszolút út tiltva.
       Kicsomagolás a cache-be, bejegyzés-feloldás, MIME-térkép (a `/api/templates` route-é újrahasznosítva), a fejlécek egy helyen.
       Unit tesztek: traversal, bomb, mappás/mappa nélküli zip, méretforrások sorrendje.

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { archiveFile, getFile } from "@/lib/entities/files";
 import { readFileStream } from "@/lib/storage";
 import { parseRangeHeader } from "@/lib/http-range";
+import { storedFileHeaders } from "@/lib/stored-file-headers";
 import { writeAudit } from "@/lib/audit";
 import { denyDemo, withSession } from "@/lib/scoped";
 
@@ -15,7 +16,6 @@ export const GET = withSession<Params>(async ({ req, claims, params }) => {
   const row = await getFile(claims.cid, params.id);
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
 
-  const contentType = row.mimeType ?? "application/octet-stream";
   const total = row.sizeBytes ?? 0;
   const range = parseRangeHeader(req.headers.get("range"), total);
 
@@ -40,7 +40,7 @@ export const GET = withSession<Params>(async ({ req, claims, params }) => {
     return new NextResponse(stream.body, {
       status: 206,
       headers: {
-        "Content-Type": contentType,
+        ...storedFileHeaders(row.mimeType),
         "Content-Length": String(stream.contentLength),
         "Content-Range": `bytes ${range.start}-${range.end}/${total}`,
         "Accept-Ranges": "bytes",
@@ -51,7 +51,7 @@ export const GET = withSession<Params>(async ({ req, claims, params }) => {
 
   return new NextResponse(stream.body, {
     headers: {
-      "Content-Type": contentType,
+      ...storedFileHeaders(row.mimeType),
       "Content-Length": String(stream.contentLength),
       "Accept-Ranges": "bytes",
       "Cache-Control": "private, max-age=300",

@@ -5,6 +5,14 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.120.1] — 2026-10-12
+
+### Fixed
+- **Uploaded files can no longer run as a page on the app's origin.** Every route that serves
+  stored bytes (file, thumbnail, drive proxy, share file, public shortcut) now sends
+  `X-Content-Type-Options: nosniff` and `Content-Security-Policy: sandbox` (PDF excepted), so an
+  uploaded HTML or SVG opened by its URL — e.g. from a public share — runs scriptless in an opaque origin.
+
 ## [6.120.0] — 2026-10-11
 
 ### Added

@@ -2751,3 +2751,44 @@ Cél: egy MC (pl. MC411a draft) Content-renderje méretenként önállóan futó
 - [x] Futtatás + mind a 4 méret böngészőben (helyi http-szerverről), mind egyezik a previewval, konzolhiba nincs.
       A manifest `description` = `MC411a <méret>`, a clickTAG marad `https://erstebank.hu/`. A width/height szám, nem string.
 - Review: tooling-scriptek, az appot nem érintik → nincs verzióemelés. Commit a felhasználó jelére.
+
+## 2026-10-12 — HTML5 kreatív-csomagok a Creative Library-ben + élő lejátszás a share-ben (TERV — döntések 2026-10-12: CSP-sandbox origin OK; a rácsban élőben; mátrixban is; a HTML-változat új variáns (411b); 50 MB marad)
+
+**Cél:** zip-csomag (index.html + assetek, bármilyen forrásból: mm6 export, Adform/DV360 bundle, ügynökségi HTML5) feltölthető, a Library-ben és a share-ben élőben fut, a share-ből az eredeti zip letölthető. A DCO-renderektől eltér: a csomag fix, az app csak lejátssza (saját clickTag, fontok, manifest a csomagban marad).
+
+**Mai állapot (3 feltérképezés):** a zip ma is feltölthető, de egyetlen opak blob: `type="html"`, mime a böngészőtől, dimenzió null, nincs kicsomagolás, a thumbnail 415.
+A fájlnév-család (`versionFamilyKey`) kiterjesztés nélkül képez kulcsot, ezért egy `…_n2_300x250.zip` **beáll a PNG-verziólétrába**: a Library-csempe placeholder lesz, a Drafts-kártya borítója és a MessageEditor preview **törött `<img>`**. Az `ensureAgenticMc` `image1 = <zip>` Agentic cellát is csinálna.
+Biztonság: a share-iframe-ek `srcDoc` + `allow-same-origin`, és minden ugyanazon az originen fut. Egy idegen HTML5 így olvashatná a szülő DOM-ot, és a néző `auth_token`-jével hívhatná az `/api`-t.
+**Már ma is létező rés:** a `/share/[id]/file/[fileId]` inline szolgál ki feltöltött `.html`/`.svg`-t, `nosniff` és CSP nélkül.
+
+**Mechanizmus-szintű döntések (nem tünetenként foltozva):**
+1. **Egy forrás a média-típusra:** `creativeMediaKind(mime, filename)` → `image | video | html5 | other`. Minden fogyasztó (Library-csempe, Drafts-borító, PreviewPane, share, thumbnail route) ebből ágazik, nem `startsWith("image/")`-ből. A „nem videó = kép” feltételezés így egy helyen szűnik meg, minden felületen egyszerre.
+2. **A verziócsalád kulcsa tartalmazza a média-osztályt** (`…|300x250|html5` ≠ `…|300x250|image`). A zip így sosem tolja félre a PNG-létrát; az n1/n2/… a saját családján belül számít.
+3. **Idegen HTML sosem fut az app-originen:** minden csomag-fájl `Content-Security-Policy: sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox` + `X-Content-Type-Options: nosniff` fejléccel megy ki. Opak origin akkor is, ha valaki közvetlenül megnyitja az URL-t; az iframe `sandbox="allow-scripts allow-popups…"`, **`allow-same-origin` nélkül**. Nem kell hozzá új domain, DNS vagy nginx.
+4. **A forrás a zip, a kicsomagolt fájlok gyorsítótárban:** a csomagot az első kéréskor kicsomagolja a helyi `.pkgs/{fileId}/` mappába, ugyanúgy, ahogy a video-stillek a `.thumbs`-ba kerülnek. Bármikor újraépíthető, a storage-ban nem kell prefix/lista művelet, és séma sem kell a bejegyzésekhez.
+
+**Lépések:**
+- [x] **0. Patch először** (külön commit, rollback-pont): új `src/lib/stored-file-headers.ts` (`Content-Type` + `nosniff` + `CSP: sandbox`, PDF kivétel). Mind az 5 kiszolgálási pont ezt használja: `/api/files/[id]`, `/api/files/[id]/thumbnail` (svg), `/api/drive/proxy/[filename]`, `/share/[id]/file/[fileId]` (thumb + teljes), `/publicshortcut` `c`.
+      A rés valós volt: egy publikusan megosztott feltöltött html/svg az app-originen futott volna. Kihasználva nem volt: 0 html van élesben, 24 svg, mind belső asset.
+      Ellenőrzés: unit teszt; élő share-fájlon `curl` (Range 0-0, hogy ne számoljon letöltést) → `content-security-policy: sandbox` + `nosniff`. Böngészőben: share-rács, Drafts, MC411a statikus kép + HTML preview a drive-proxy képekkel, konzolhiba nincs.
+      A Drafts második sorának fekete brief-csempéi stash-sel összevetve a javítás nélkül is ugyanilyenek (Google Slides embed).
+      **6.120.1** — commit + deploy mindkét tenantra (patch-first).
+- [ ] **1. `src/lib/html5-package.ts`:** zip-validálás jszip-pel. Az `index.html` a gyökérben vagy egyetlen felső mappában; a méret az `ad.size` metából, a `manifest.json` width/height-ból vagy a fájlnév `_WxH`-jából. Korlátok: bejegyzés-szám, kicsomagolt összméret (zip-bomb), `..`/abszolút út tiltva.
+      Kicsomagolás a cache-be, bejegyzés-feloldás, MIME-térkép (a `/api/templates` route-é újrahasznosítva), a fejlécek egy helyen.
+      Unit tesztek: traversal, bomb, mappás/mappa nélküli zip, méretforrások sorrendje.
+- [ ] **2. Upload:** a `/api/files/upload` zip esetén validál (hibás csomag → 400, érthető üzenettel), a dimenziót a csomagból tölti, a mime-ot normalizálja (`application/zip`). Az MCP `creative_upload` `EXT_MIME`-ja `.zip`-pel bővül.
+- [ ] **3. Kiszolgáló route-ok** (egy közös handlerrel):
+      - `/api/files/[id]/pkg/[...path]` — session, a Library-nek.
+      - `/share/[id]/pkg/[fileId]/[...path]` — publikus, a `snapshot.files` allow-listje alapján, ami a csomag összes fájljára vonatkozik.
+- [ ] **4. Poszterkép:** `preview-shooter.ts` URL-módban (Playwright, a meglévő mutex/böngésző) → első képkocka a helyi `.thumbs`-ba. A thumbnail route-nak lesz `html5` ága, így minden `?thumbnail` (Library, Drafts, share-picker) kap képet.
+- [ ] **5. Library:** a rácsban is **élőben** fut, ahogy a DCO-csempék (lazy, IntersectionObserver, natív méret skálázva, kattintás-pajzs). A részletek-dialógusban interaktív, újraindító gombbal. A poszter csak ott kell, ahol nincs iframe (thumbnail, picker). Egy közös `Html5PackageFrame` komponens a Library-nek és a share-nek.
+- [ ] **6. Share:** a rácsban élőben fut (ugyanaz a `Html5PackageFrame`, a share-route-on át); a részletek-dialógusban interaktív (a clickTag popupot nyithat). A letöltés az eredeti zip, ami ma is működik. A `shareThumbs` a posztert adja.
+- [ ] **7. Mátrix + Drafts + MC editor:** az `ensureAgenticMc` a `html5` creative-ból is Agentic cellát csinál (`image1 = <zip>`), ahogy a képből. Minden `image1`-felület a `creativeMediaKind`-ből ágazik:
+      - a `MatrixIframeTile` `StaticImagePreview`-ja és a `PreviewPane` `staticImage` ága élő iframe-et ad;
+      - a `MediaField` „Image 1” bélyege és a `MatrixDetailDialog` AssetRow-ja posztert;
+      - a Drafts-borító posztert.
+      A párosítás MC-szám + variáns szerint megy (`listCreativeMatchesForMcs`), így egy 411b csomag csak a 411b-hez kötődik, a 411a PNG-létrájához nem.
+      **Draft + mátrix (a+b) a meglévő kapuval:** ha az MC-nek nyitott Agentic draftja van (MC411a), az `ensureAgenticMc` nem tesz le cellát. Ehelyett a 411b feltöltése **magától létrehoz egy 411b draft-variánst** a 411a mellé, a brieffel együtt (`promote.ts` „draft-open” ág). A mátrix-cella a promotáláskor jön, `image1 = <zip>`-pel. Új számozási logika nem kell, a promote/placeAgenticSiblings útnak kell kezelnie a `html5`-öt.
+- [ ] **7b. `cleanup:bundle --variant b`:** a csomagok új variánst kapnak (`advert_variant` meta, manifest `description`), és Library-névkonvenciós zipek lesznek: `ERSTE_<termék>_MC<n>_<variáns>_<kulcsszavak>_html5_n1_<méret>.zip`. A termék a draftból, a kulcsszavak a topicból jönnek.
+- [ ] **8. Scriptek őrei:** az `export-creatives-for-reading` kihagyja a zipet. A `rebuild-creatives` ma törli a termék összes creative-ját, a zipeket is, de csak képet/videót importál vissza → a `html5`-öt ne törölje.
+- [ ] **9.** Inventory (új blokknevek), CHANGELOG, minor bump; böngészős ellenőrzés: MC411a `_cleanup` zipjei feltöltve → Library, share, Drafts.

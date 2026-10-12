@@ -7,6 +7,7 @@ import { db } from "@/db";
 import { clients, shareGalleries, uploadedFiles } from "@/db/schema";
 import { readFileBytes, readFileStream, resolveStoragePath } from "@/lib/storage";
 import { parseRangeHeader } from "@/lib/http-range";
+import { storedFileHeaders } from "@/lib/stored-file-headers";
 import {
   StillsUnavailableError,
   ensureStills,
@@ -157,7 +158,7 @@ export async function GET(
     }
     return new NextResponse(new Uint8Array(bytes), {
       headers: {
-        "Content-Type": file.mimeType ?? "application/octet-stream",
+        ...storedFileHeaders(file.mimeType),
         "Content-Length": String(bytes.length),
         "Cache-Control": "public, max-age=86400",
       },
@@ -198,7 +199,7 @@ export async function GET(
   }
 
   const headers: Record<string, string> = {
-    "Content-Type": file.mimeType ?? "application/octet-stream",
+    ...storedFileHeaders(file.mimeType),
     "Content-Length": String(stream.contentLength),
     "Accept-Ranges": "bytes",
     "Cache-Control": "public, max-age=86400",

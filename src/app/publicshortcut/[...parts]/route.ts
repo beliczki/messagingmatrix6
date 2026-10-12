@@ -5,6 +5,7 @@ import { creatives, messagePreviews, uploadedFiles } from "@/db/schema";
 import { activeClientId } from "@/lib/active-client";
 import { readFileBytes, readFileStream } from "@/lib/storage";
 import { parseRangeHeader } from "@/lib/http-range";
+import { storedFileHeaders } from "@/lib/stored-file-headers";
 import { verifyToken } from "@/lib/public-shortcut";
 
 // The public image surface. Everything here is reachable without a session,
@@ -146,7 +147,6 @@ export async function GET(
 
   // Streamed with Range support, like /share/[id]/file/[fileId]: a video served
   // without it forces the whole clip down before the browser paints a frame.
-  const contentType = file.mimeType ?? "application/octet-stream";
   const total = file.sizeBytes ?? 0;
   const range = parseRangeHeader(req.headers.get("range"), total);
   if (range.kind === "unsatisfiable") {
@@ -170,7 +170,7 @@ export async function GET(
     return new NextResponse(stream.body, {
       status: 206,
       headers: {
-        "Content-Type": contentType,
+        ...storedFileHeaders(file.mimeType),
         "Content-Length": String(stream.contentLength),
         "Content-Range": `bytes ${range.start}-${range.end}/${total}`,
         "Accept-Ranges": "bytes",
@@ -181,7 +181,7 @@ export async function GET(
 
   return new NextResponse(stream.body, {
     headers: {
-      "Content-Type": contentType,
+      ...storedFileHeaders(file.mimeType),
       "Content-Length": String(stream.contentLength),
       "Accept-Ranges": "bytes",
       "Cache-Control": "public, max-age=300",

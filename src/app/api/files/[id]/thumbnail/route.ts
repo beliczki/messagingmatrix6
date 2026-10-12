@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { storedFileHeaders } from "@/lib/stored-file-headers";
 import path from "node:path";
 import fs from "node:fs/promises";
 import sharp from "sharp";
@@ -37,7 +38,7 @@ export const GET = withSession<Params>(async ({ req, claims, params }) => {
     const src = await readFileBytes(row.storagePath);
     return new NextResponse(new Uint8Array(src), {
       headers: {
-        "Content-Type": "image/svg+xml",
+        ...storedFileHeaders("image/svg+xml"),
         "Content-Length": String(src.length),
         "Cache-Control": "private, max-age=86400",
       },

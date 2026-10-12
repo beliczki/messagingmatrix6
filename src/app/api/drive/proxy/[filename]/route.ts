@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getFileByFilename } from "@/lib/entities/files";
 import { readFileBytes } from "@/lib/storage";
 import { withSession } from "@/lib/scoped";
+import { storedFileHeaders } from "@/lib/stored-file-headers";
 
 type Params = { filename: string };
 
@@ -24,7 +25,7 @@ export const GET = withSession<Params>(async ({ claims, params }) => {
 
   return new NextResponse(new Uint8Array(bytes), {
     headers: {
-      "Content-Type": row.mimeType ?? "application/octet-stream",
+      ...storedFileHeaders(row.mimeType),
       "Content-Length": String(row.sizeBytes ?? bytes.length),
       "Cache-Control": "private, max-age=300",
     },

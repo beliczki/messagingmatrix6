@@ -32,6 +32,8 @@
     "reimport:media:erste": "ACTIVE_CLIENT_KEY=erste tsx scripts/reimport-media.ts",
     "scan:creatives:erste": "ACTIVE_CLIENT_KEY=erste tsx scripts/scan-creatives.ts",
     "export:mc": "ACTIVE_CLIENT_KEY=erste tsx scripts/gen-mc-export.ts",
+    "export:bundle": "ACTIVE_CLIENT_KEY=erste tsx scripts/export-html-bundle.ts",
+    "cleanup:bundle": "ACTIVE_CLIENT_KEY=erste tsx scripts/cleanup-html-bundle.ts",
     "status:cleanup": "ACTIVE_CLIENT_KEY=erste tsx scripts/status-cleanup.ts"
   },
   "dependencies": {

@@ -2728,3 +2728,26 @@ Agentic draftnál (`wantsLibrary`) a preview a leszállított n1/n2 fájlt mutat
 - **6.120.0** — commitolva. Review: alapból kikapcsolva, nincs perzisztálva. Szűk panelen a három pipás gomb felirata kétsorosra törik (a meglévő két gombé is) — nem nyúltam hozzá.
 - [x] **DEPLOYOLVA 6.120.0 — mindkét tenant** (`266b0a9`), `mm6-deploy erste` + `telekom`, mindkettő „up after 1s".
       `/login` 200 mindkettőn; az erste build chunkjában benne a `preview-pane__html-toggle`. Böngészőben élesen még nincs kipróbálva.
+
+## 2026-10-12 — Standalone HTML bundle export (MC → méretenkénti mappa, assetekkel)
+
+Cél: egy MC (pl. MC411a draft) Content-renderje méretenként önállóan futó mappába, az assetek mellé másolva. Agentként futtatható repo-script.
+- [x] `scripts/export-html-bundle.ts` + `npm run export:bundle -- MC411a --out ~/Downloads/bird` (ACTIVE_CLIENT_KEY=erste, a `gen-mc-export.ts` mintájára).
+      Üzenet-sor client+number+variant alapján (ha több sor → hiba az id-listával, `--id` választ). A `text_formatting` a klienstől.
+- [x] Méretenként `renderTemplate({ inline: true })`, utána: a beinjektált `<base href>` ki, a `/api/drive/proxy/<f>` → `<f>`, a fájl bájtjai `getFileByFilename` + `readFileBytes` alapján mellé.
+      A template mappa többi fájlja (`dynamic.content.js`, `thm.json`, svg/png, …) mellé kerül; a `main.css` és a méret-CSS inline-olva van.
+- [x] Futtatás MC411a-ra → `~/Downloads/bird/{300x250,300x600,640x360,970x250}/` (index.html + 6 template-fájl + 4 creative).
+      Ellenőrzés helyi http-szerverről (a Chrome-bővítmény nem nyit `file://`-t): mind a 4 méret egyezik a previewval, konzolhiba nincs.
+      `file://`-ből a `thm.json` fetch-et a böngésző blokkolja — a template elkapja, és ez a draft nem is használja (nincs SZK/HK PMMID).
+- Review: tooling-script, az appot nem érinti → nem kell hozzá verzióemelés.
+
+## 2026-10-12 — Bundle cleanup script (`bird/_cleanup/<méret>`)
+
+- [x] `scripts/cleanup-html-bundle.ts` + `npm run cleanup:bundle -- ~/Downloads/bird` → `~/Downloads/bird/_cleanup/<méret>/`, a forrás mappák változatlanok.
+      Az MC-t a HTML `advert_mc` / `advert_variant` metájából olvassa, a topicot a DB-ből (MC411a → `SZA_beerste_NA_bankvaltas_bird`).
+- [x] index.html: a `dynamic.content.js` és az `Adform.DynAdsHelper` script-tag ki (a `replaceContent` csak Adform-kontextusban hívódik); a THM fej-blokk (`thm.json` fetch), a PHASE 5 THM-függvények és a 4. lépés (THM-hívás) ki; a `#videoWrapper` elem ki.
+      Minden kivágás pontos jelölőre megy; ha egy jelölő hiányzik → hiba, nem csendes kihagyás.
+- [x] Nem másolja: `dynamic.content.js`, `thm.json`, `emptyvideo.mp4`. A `manifest.json`: `width`/`height` a méretből, a `title` a topic neve.
+- [x] Futtatás + mind a 4 méret böngészőben (helyi http-szerverről), mind egyezik a previewval, konzolhiba nincs.
+      A manifest `description` = `MC411a <méret>`, a clickTAG marad `https://erstebank.hu/`. A width/height szám, nem string.
+- Review: tooling-scriptek, az appot nem érintik → nincs verzióemelés. Commit a felhasználó jelére.

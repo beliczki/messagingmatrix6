@@ -42,10 +42,11 @@ html {
 body {
   padding: 0px;
   margin: 0px;
+  background: rgba(0, 0, 0, 1);
 }
 
 #adContainer {
-  background-color: #efefef;
+  background: rgba(0, 0, 0, 0);
   position: relative;
   transition: all 0.5s;
   cursor: pointer;

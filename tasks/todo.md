@@ -2845,6 +2845,8 @@ Mechanizmus: a snapshot `messages` / `creatives` / `files` tömbje csak lookup-t
 - [x] Teszt: `refreshShare` integrációs teszt (változott message frissül, törölt marad, az elemek sorrendje változatlan).
 - [x] CHANGELOG `[Unreleased]` megírva; bump: 6.121.0 → 6.122.0.
       Teszt: `share-add-items.test.ts` 6/6 zöld (2 új), `tsc` tiszta. Böngészőben helyben nem kattintottam (a dev az éles DB-t éri el a tunnelen).
-- [ ] Deploy után: a `VjmGi_DRdqik` frissítése és ellenőrzése a 3 MC-n.
+- [x] **DEPLOYOLVA 6.122.0 — mindkét tenant** (`589dd51`), „up after 1s"; `/login` 200, `/refresh` session nélkül 401.
+      A `VjmGi_DRdqik` frissítve (`refreshShare`, 3 MC változott: 235a, 273a, 251a); utána 0 eltérés az élő sorokhoz, 44 elem változatlan, a share oldal 200.
+      Megj.: ez a frissítés tsx-ből futott (audit-sor nélkül), nem a gombról; a gomb élesben még nincs kattintva.
 
 Külön, javasolt pont (a felhasználó dönt): a `scripts/cleanup-html-bundle.ts` kommentben hagyja az Adform `DHTML.js`-t, emiatt a bird zipek nem voltak kattinthatók az adserverben (kézzel javítva, `_n2`). Gyökérok-javítás: a cleanup cserélje a kommentezett blokkot a referencia `document.write` loaderére (`window.API_URL || …Adform.DHTML.js`), és a `clickTAG` alapértéke a manifest URL-je legyen.

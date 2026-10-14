@@ -106,6 +106,27 @@ export function SharesView() {
     },
   });
 
+  const refreshM = useMutation({
+    mutationFn: async (id: string) => {
+      const r = await fetch(`/api/share-galleries/${id}/refresh`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error ?? "refresh failed");
+      }
+    },
+    onError: async (err) => {
+      await dialog.alert({
+        title: "Couldn't refresh share",
+        message: err instanceof Error ? err.message : String(err),
+        variant: "danger",
+      });
+    },
+  });
+
   const rows = sharesQ.data ?? [];
 
   const filtered = useMemo(() => {
@@ -211,6 +232,20 @@ export function SharesView() {
     });
     if (!ok) return;
     for (const r of targets) archiveM.mutate(r.id);
+  }
+
+  async function refreshSelected() {
+    const targets = selectedRows.filter((r) => r.archivedAt === null);
+    if (targets.length === 0) return;
+    const ok = await dialog.confirm({
+      title: `Refresh ${targets.length} share${targets.length === 1 ? "" : "s"}?`,
+      message:
+        "The public link will show the current content, text styles and custom CSS of its creatives. Items and comments stay.",
+      confirmLabel: "Refresh",
+      variant: "info",
+    });
+    if (!ok) return;
+    for (const r of targets) refreshM.mutate(r.id);
   }
 
   async function restoreSelected() {
@@ -475,6 +510,25 @@ export function SharesView() {
                     {selectedCount}
                   </span>
                 )}
+
+                <button
+                  type="button"
+                  onClick={refreshSelected}
+                  disabled={refreshM.isPending || selectedActiveCount === 0}
+                  title={
+                    selectedActiveCount === 0
+                      ? "Archived shares can't be refreshed"
+                      : `Refresh ${selectedActiveCount} share${selectedActiveCount === 1 ? "" : "s"} to the current creatives`
+                  }
+                  aria-label="Refresh selected"
+                  className={clsx(
+                    "toolbar-btn inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40",
+                    collapsed ? "size-9" : "px-3 py-1.5 text-xs font-medium",
+                  )}
+                >
+                  <Icon name="refresh" className="size-3.5" />
+                  {!collapsed ? "Refresh" : null}
+                </button>
 
                 <button
                   type="button"

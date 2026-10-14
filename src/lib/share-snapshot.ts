@@ -285,6 +285,88 @@ export async function addToShare(
   });
 }
 
+export type RefreshShareResult =
+  | { ok: true; changed: number; title: string | null }
+  | { ok: false; status: 404 | 409; error: string };
+
+/**
+ * Brings a share's frozen rows up to what the MCs and creatives are now — the
+ * content, text styles and custom CSS edited since the share was made. Only the
+ * lookup rows (messages, creatives, files) are swapped, by id: the items, their
+ * order and the comments keyed by them stay. A row that no longer exists keeps
+ * its frozen copy, so a deletion never punches a hole in a sent link. Locked
+ * like addToShare, so a refresh and an add cannot drop each other's write.
+ */
+export async function refreshShare(
+  clientId: number,
+  shareId: string,
+): Promise<RefreshShareResult> {
+  return db.transaction(async (tx) => {
+    const [share] = await tx
+      .select()
+      .from(shareGalleries)
+      .where(and(eq(shareGalleries.clientId, clientId), eq(shareGalleries.id, shareId)))
+      .for("update");
+    if (!share) return { ok: false, status: 404, error: "share not found" };
+    if (share.archivedAt !== null) {
+      return { ok: false, status: 409, error: "share is archived" };
+    }
+    const existing = JSON.parse(share.metadata ?? "null") as SnapshotMetadata | null;
+    if (!existing) return { ok: false, status: 409, error: "share has no snapshot" };
+
+    const messageIds = existing.messages.map((m) => m.id);
+    const liveMessages = messageIds.length
+      ? await tx
+          .select()
+          .from(messages)
+          .where(and(eq(messages.clientId, clientId), inArray(messages.id, messageIds)))
+      : [];
+    const creativeIds = (existing.creatives ?? []).map((c) => c.id);
+    const liveCreatives = creativeIds.length
+      ? await tx
+          .select()
+          .from(creatives)
+          .where(and(eq(creatives.clientId, clientId), inArray(creatives.id, creativeIds)))
+      : [];
+    const fileIds = (existing.files ?? []).map((f) => f.id);
+    const liveFiles = fileIds.length
+      ? await tx
+          .select({
+            id: uploadedFiles.id,
+            filename: uploadedFiles.filename,
+            mimeType: uploadedFiles.mimeType,
+            sizeBytes: uploadedFiles.sizeBytes,
+            dimensions: uploadedFiles.dimensions,
+          })
+          .from(uploadedFiles)
+          .where(and(eq(uploadedFiles.clientId, clientId), inArray(uploadedFiles.id, fileIds)))
+      : [];
+
+    let changed = 0;
+    function overlay<T extends { id: number | string }>(frozen: T[], live: T[]): T[] {
+      const byId = new Map(live.map((r) => [r.id, r]));
+      return frozen.map((row) => {
+        const now = byId.get(row.id);
+        if (!now) return row;
+        if (JSON.stringify(now) !== JSON.stringify(row)) changed++;
+        return now;
+      });
+    }
+    const metadata: SnapshotMetadata = {
+      generatedAt: new Date().toISOString(),
+      messages: overlay(existing.messages, liveMessages),
+      matrixItems: existing.matrixItems,
+      creatives: overlay(existing.creatives ?? [], liveCreatives),
+      files: overlay(existing.files ?? [], liveFiles),
+    };
+    await tx
+      .update(shareGalleries)
+      .set({ metadata: JSON.stringify(metadata), updatedAt: nowUtc })
+      .where(eq(shareGalleries.id, shareId));
+    return { ok: true, changed, title: share.title };
+  });
+}
+
 /**
  * Cut the video strips now rather than leaving them to whoever opens the link.
  * They are a shared on-disk cache, so this is one pass for everybody — but

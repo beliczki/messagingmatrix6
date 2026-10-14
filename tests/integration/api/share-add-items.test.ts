@@ -10,6 +10,7 @@ import {
 } from "@/db/schema";
 import {
   addToShare,
+  refreshShare,
   resolveShareSelection,
   shareThumbs,
   type SnapshotMetadata,
@@ -122,6 +123,51 @@ describe("addToShare", () => {
       .set({ archivedAt: "2026-10-02 00:00:00" })
       .where(eq(shareGalleries.id, "s1"));
     expect(await addToShare(erste.id, "s1", add)).toMatchObject({ ok: false, status: 409 });
+  });
+});
+
+describe("refreshShare", () => {
+  it("swaps frozen rows for the live ones and keeps items, order and deleted rows", async () => {
+    await seedShare("s1", {
+      mcIds: [],
+      matrix: [
+        { messageId: 2, size: "300x250" },
+        { messageId: 1, size: "970x250" },
+      ],
+      creativeIds: [creativeIds[1], creativeIds[0]],
+    });
+    const before = await readSnapshot("s1");
+    await db
+      .update(messages)
+      .set({ customCss: ".x{color:red}", headlineStyle: "font-size:2rem;" })
+      .where(eq(messages.id, 1));
+    await db.update(creatives).set({ comment: "new" }).where(eq(creatives.id, creativeIds[0]));
+    await db.delete(messages).where(eq(messages.id, 2));
+
+    expect(await refreshShare(erste.id, "s1")).toMatchObject({ ok: true, changed: 2 });
+
+    const snap = await readSnapshot("s1");
+    expect(snap.matrixItems).toEqual(before.matrixItems);
+    expect(snap.creatives!.map((c) => c.id)).toEqual([creativeIds[1], creativeIds[0]]);
+    const m1 = snap.messages.find((m) => m.id === 1)!;
+    expect(m1.customCss).toBe(".x{color:red}");
+    expect(m1.headlineStyle).toBe("font-size:2rem;");
+    // Deleted live — the frozen copy stays so the link has no hole.
+    expect(snap.messages.find((m) => m.id === 2)).toEqual(
+      before.messages.find((m) => m.id === 2),
+    );
+    expect(snap.creatives!.find((c) => c.id === creativeIds[0])!.comment).toBe("new");
+    expect(snap.generatedAt).not.toBe(before.generatedAt);
+  });
+
+  it("refuses an archived share and another client's share", async () => {
+    await seedShare("s1", { mcIds: [], matrix: [], creativeIds: [creativeIds[0]] });
+    expect(await refreshShare(telekom.id, "s1")).toMatchObject({ ok: false, status: 404 });
+    await db
+      .update(shareGalleries)
+      .set({ archivedAt: "2026-10-02 00:00:00" })
+      .where(eq(shareGalleries.id, "s1"));
+    expect(await refreshShare(erste.id, "s1")).toMatchObject({ ok: false, status: 409 });
   });
 });
 

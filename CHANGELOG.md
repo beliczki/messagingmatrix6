@@ -5,6 +5,13 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.122.0] — 2026-10-14
+
+### Added
+- **Share Refresh.** Shares → select → Refresh brings a share up to its creatives' current content,
+  text styles and custom CSS (`POST /api/share-galleries/[id]/refresh`). Items, order, comments and
+  the link stay; an MC or creative deleted since keeps its frozen copy.
+
 ## [6.121.0] — 2026-10-12
 
 ### Added

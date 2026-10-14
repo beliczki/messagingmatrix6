@@ -2832,3 +2832,19 @@ Biztonság: a share-iframe-ek `srcDoc` + `allow-same-origin`, és minden ugyanaz
 - [x] **DEPLOYOLVA 6.121.0 — mindkét tenant** (`8da9c0d`), „up after 1s". `/login` 200; `/pkg` rossz tokenre 404; `/api/files/package-url` session nélkül 401; share-fájl CSP sandbox megvan.
       A boxon a Playwright 1.61.1 + Chromium 1228 megvan (poszter), az nginx `location /` a `/pkg`-t is továbbítja.
       **Következő (felhasználó):** a `~/Downloads/bird/_cleanup/*.zip` feltöltése élesben a Creative Library-be → nyitott 411a mellett 411b draft-variáns. Élesben böngészőben még nincs kipróbálva.
+
+## 2026-10-14 — Share „Refresh” (snapshot frissítése a live MC-kre)
+
+Igény: a `VjmGi_DRdqik` share 3 MC-je (235a, 273a, 251a) azóta változott (custom CSS, szövegformázás, variant classok, flash, image6). A share a létrehozáskori sorokat mutatja (`share_galleries.metadata`), és nincs mód frissíteni.
+
+Mechanizmus: a snapshot `messages` / `creatives` / `files` tömbje csak lookup-tábla a `matrixItems` és `creatives` elemekhez. A frissítés **csak a lookup-sorokat** cseréli az élő sorra (id alapján), az elemlista, a sorrend és a kommentek nem változnak. Ha egy sor élőben már nincs meg (törölve), a fagyasztott példány marad, hogy ne törjön a share.
+
+- [x] `src/lib/share-snapshot.ts`: `refreshShare(clientId, shareId)`, ugyanaz a zárolt tranzakció-minta, mint az `addToShare`-nél. Az élő `messages` / `creatives` / `uploaded_files` sorokat id-re rátölti, a `generatedAt` = most; visszaadja, hány sor változott.
+- [x] `POST /api/share-galleries/[id]/refresh` (a `restore` route mintájára, `withSession`, audit `update`). Archivált share-re 409.
+- [x] `SharesView`: „Refresh” gomb a selection-actions sávban az Archive/Restore mellett (ugyanaz a `toolbar-btn` stílus, ikon: `refresh`/`rotate`, ha van). Több kijelölt share-re is működik.
+- [x] Teszt: `refreshShare` integrációs teszt (változott message frissül, törölt marad, az elemek sorrendje változatlan).
+- [x] CHANGELOG `[Unreleased]` megírva; bump: 6.121.0 → 6.122.0.
+      Teszt: `share-add-items.test.ts` 6/6 zöld (2 új), `tsc` tiszta. Böngészőben helyben nem kattintottam (a dev az éles DB-t éri el a tunnelen).
+- [ ] Deploy után: a `VjmGi_DRdqik` frissítése és ellenőrzése a 3 MC-n.
+
+Külön, javasolt pont (a felhasználó dönt): a `scripts/cleanup-html-bundle.ts` kommentben hagyja az Adform `DHTML.js`-t, emiatt a bird zipek nem voltak kattinthatók az adserverben (kézzel javítva, `_n2`). Gyökérok-javítás: a cleanup cserélje a kommentezett blokkot a referencia `document.write` loaderére (`window.API_URL || …Adform.DHTML.js`), és a `clickTAG` alapértéke a manifest URL-je legyen.

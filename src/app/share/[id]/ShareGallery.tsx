@@ -20,6 +20,7 @@ import { parseSearchQuery, type SearchFields } from "@/lib/search-query";
 import VideoThumb from "../../(app)/_components/VideoThumb";
 import { Html5PackageFrame } from "../../(app)/_components/Html5PackageFrame";
 import { creativeMediaKind } from "@/lib/creative-media-kind";
+import { fetchMatrixDownload } from "./matrix-download";
 import ShareDetailDialog, {
   type DialogItem,
   type ShareCommentRow,
@@ -439,19 +440,8 @@ export default function ShareGallery({
               }
             }
           } else if (it.kind === "matrix") {
-            const r = await fetch("/api/render/public", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                shareId,
-                messageId: it.message.id,
-                size: it.size,
-              }),
-            });
-            if (r.ok) {
-              const text = await r.text();
-              zip.file(downloadFilenameFor(it), text);
-            }
+            const { blob, filename } = await fetchMatrixDownload(shareId, it.message, it.size);
+            if (blob) zip.file(filename, blob);
           } else if (it.file) {
             const r = await fetch(`/share/${shareId}/file/${it.file.id}`);
             if (r.ok) {

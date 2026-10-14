@@ -2850,3 +2850,26 @@ Mechanizmus: a snapshot `messages` / `creatives` / `files` tömbje csak lookup-t
       Megj.: ez a frissítés tsx-ből futott (audit-sor nélkül), nem a gombról; a gomb élesben még nincs kattintva.
 
 Külön, javasolt pont (a felhasználó dönt): a `scripts/cleanup-html-bundle.ts` kommentben hagyja az Adform `DHTML.js`-t, emiatt a bird zipek nem voltak kattinthatók az adserverben (kézzel javítva, `_n2`). Gyökérok-javítás: a cleanup cserélje a kommentezett blokkot a referencia `document.write` loaderére (`window.API_URL || …Adform.DHTML.js`), és a `clickTAG` alapértéke a manifest URL-je legyen.
+
+## 2026-10-14 — Kattintható Adform-bundle: cleanup javítás + share-letöltés
+
+Gyökérok: a `cleanup:bundle` kommentben hagyja az Adform `DHTML.js`-t, így a `dhtml` nem létezik, a `clickTAG` üres → `'#'` → a kattintás nem csinál semmit (a bird zipek ezért nem voltak kattinthatók; kézzel javítva `_n2`-ként).
+A share-ben a DCO (matrix) elem letöltése ma egyetlen `.html` (a `/api/render/public` válasza) abszolút app-URL-ekkel: adserverbe nem tölthető fel.
+
+Mechanizmus-javítás: az export + cleanup logika a scriptekből egy közös lib-be kerül, és ugyanazt használja a script és a share-letöltés is. Így egy javítás mindkét helyen érvényes, és nem csúszhatnak szét.
+
+- [x] `src/lib/html5-bundle.ts`: `buildAdformBundle({ clientId, message, size, variant?, n })` → `{ zipName, files }`.
+      Lépések: render (inline) → `<base>` le → `/api/drive/proxy/` refek relatívra + bájtok a storage-ból → template-fájlok (a `dynamic.content.js` / `emptyvideo.mp4` nélkül; **a `thm.json` marad**) → a CUTS (dynamic.content.js, DynAdsHelper, videoWrapper) → **az Adform-blokk helyére a `document.write` loader** (`window.API_URL || …Adform.DHTML.js`) → `clickTAG` alapértéke + `window.clickTAG` → manifest (méret, cím, leírás, `clicktags.clickTAG`).
+      A `clickTAG` alapértéke: az MC `finalTraffickedUrl`-je, ha nincs, a template manifest (`https://erstebank.hu/`); az adserver felülírja.
+      **A THM marad, a betöltésével együtt** (a felhasználó kérése, 2026-10-14): a `<head>` `thm.json` fetch-e (`document.interestsReady`), a PHASE 5 THM-függvények és az `onAdInitialized` PMMID-lépése. Mind a hármat érintetlenül hagyjuk. a HK/SZK kreatívok a `thm.json`-ból írják ki a dátumfüggő THM-et a pmmid (`_HK_` / `_SZK_`) alapján. Más kreatívoknál ez nem csinál semmit („skipping THM update”), ezért mindig benne hagyjuk, nincs külön ág. A `thm.json` a template aktuális fájlja.
+- [x] A két script (`export:bundle`, `cleanup:bundle`) a lib-et hívja; a kimenet (mappák + `_cleanup/*.zip`, névkonvenció) változatlan.
+- [x] Új publikus route: `GET /share/[id]/bundle/[messageId]/[size]` → a zip. A `render/public`-hoz hasonlóan kapuzva: a message legyen a share snapshotjában, és a share ne legyen archivált.
+- [x] Share UI: a DCO elem „Download”-ja a zipet adja (`ERSTE_<termék>_MC<n>_<v>_…_html5_n1_<méret>.zip`); a „Download all” HTML-módban elemenként egy zipet tesz a share-bundle-be. A képmód (PNG) nem változik.
+- [x] Tesztek: unit a HTML-átalakításra (a loader benne van, a kommentezett blokk nincs; nem marad proxy-ref és `dynamic.content.js`; **a THM-blokk és a `thm.json` megvan**; a `clickTAG` alapérték).
+- [x] **Kattinthatósági ellenőrzés** (Playwright, helyben): egy DCO MC **minden méretének** bundle-je + a bird `_n2` zipek. Valódi `Adform.DHTML.js`-sel, a `window.open` elkapva: a kattintás az elvárt URL-re nyit-e; a HK MC-n a THM-szöveg is megjelenik-e.
+      **Eredmény (Playwright, valódi `Adform.DHTML.js`):** MC235a 4/4 méret és a bird `_n2` 5/5 kattintható; a DHTML betölt, a `window.open` az MC landingjére (UTM-ekkel), illetve az `erstebank.hu`-ra nyit; MC235a-n a THM kiíródik („THM: 44,49%”).
+      Teljes suite: 114 fájl / 1082 teszt zöld, `tsc` tiszta. Eltérés a tervtől: a click handler JS-ét nem kellett módosítani, mert a render a `<meta name="click_url">`-be már beírja a `finalTraffickedUrl`-t; csak az üres meta kap tartalékot a manifestből.
+      A zip neve a share-ből `n<versionNo>`, a scriptből `--n` (alapból 1).
+- [x] CHANGELOG, bump 6.123.0.
+- [ ] Deploy mindkét tenantra + élesben egy share-ről letöltött zip ellenőrzése.
+- [x] Mellékes kérés: az MC411b draftba átmásolva az MC411a teljes tartalma, template-je és stílusai (14 mező, `updateMessage` + audit). Utána 0 eltérés.

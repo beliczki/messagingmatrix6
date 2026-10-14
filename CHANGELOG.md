@@ -5,6 +5,24 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.123.0] — 2026-10-14
+
+### Added
+- **Share download of DCO creatives is an ad-server-ready HTML5 zip.** A shared matrix cell's
+  Download (and Download all) gives the Adform bundle — assets alongside, manifest, Library-style
+  name — instead of a single HTML file pointing back at the app (`GET /share/[id]/bundle/[messageId]/[size]`).
+  A template the bundle does not know still downloads as HTML.
+
+### Fixed
+- **HTML5 bundles were not clickable on the ad server.** The Adform DHTML library stayed commented
+  out, so `clickTAG` never resolved and the click went nowhere. `cleanup:bundle` and the share
+  download now load it the way Adform's own templates do, and the click falls back to the
+  template's clickTAG when an MC has no landing URL.
+
+### Changed
+- `cleanup:bundle` keeps the THM layer (thm.json and its loading) — HK/SZK creatives need it.
+  Export and cleanup share one transform (`src/lib/html5-bundle.ts`) with the share download.
+
 ## [6.122.0] — 2026-10-14
 
 ### Added

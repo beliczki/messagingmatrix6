@@ -5,6 +5,7 @@ import { Icon } from "@/app/_icons/Icon";
 import { briefKey, type ShareBriefs } from "@/lib/share-briefs";
 import clsx from "clsx";
 import ImagePreviewToggle from "./ImagePreviewToggle";
+import { fetchMatrixDownload } from "./matrix-download";
 import { bgClassFor, type PreviewBg } from "./preview-bg";
 import AnnotationLayer, {
   type Annotation,
@@ -1060,22 +1061,12 @@ function MatrixDownload({
   shareId: string;
 }) {
   async function go() {
-    const r = await fetch("/api/render/public", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        shareId,
-        messageId: item.message.id,
-        size: item.size,
-        download: true,
-      }),
-    });
-    if (!r.ok) return;
-    const blob = await r.blob();
+    const { blob, filename } = await fetchMatrixDownload(shareId, item.message, item.size);
+    if (!blob) return;
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `MC${item.message.number}${item.message.variant}-${item.size}.html`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();

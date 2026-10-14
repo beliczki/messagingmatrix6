@@ -4,15 +4,10 @@
 //   npm run export:bundle -- MC411a --out ~/Downloads/bird
 //   npm run export:bundle -- --id 36201 --out ~/Downloads/bird
 //
-// The HTML is the same render the editor's HTML preview shows (renderTemplate,
-// inline mode: main.css + the size CSS inlined, the client's text_formatting
-// applied, the message's custom CSS in). Two things make it standalone:
-//   - the <base href> inline mode injects (an absolute /api/templates/<name>/
-//     URL, so srcDoc can resolve relative refs) is dropped — the template's
-//     own files (dynamic.content.js, thm.json, …) are copied next to it;
-//   - /api/drive/proxy/<file> refs become plain relative <file>, and the bytes
-//     come from storage (the same lookup the proxy route does).
-// External refs (Google Fonts, the commented-out Adform libs) stay as they are.
+// The HTML is the same render the editor's HTML preview shows, made standalone
+// by renderBundle (src/lib/html5-bundle.ts — the share gallery's Download uses
+// the same transform). External refs (Google Fonts, the commented-out Adform
+// libs) stay as they are; cleanup:bundle makes the hand-off copy.
 //
 // One MC can live on several audience rows; then --id picks the row.
 // Read-only against the DB. ACTIVE_CLIENT_KEY picks the client (npm script: erste).
@@ -27,13 +22,9 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../src/db";
 import { messages } from "../src/db/schema";
 import { getActiveClient } from "../src/lib/active-client";
-import { renderTemplate } from "../src/lib/render";
-import { listTemplateFiles, readTemplate, readTemplateFile } from "../src/lib/templates";
+import { readTemplate } from "../src/lib/templates";
 import { listTextFormatting } from "../src/lib/entities/text-formatting";
-import { getFileByFilename } from "../src/lib/entities/files";
-import { readFileBytes } from "../src/lib/storage";
-
-const PROXY_PREFIX = "/api/drive/proxy/";
+import { renderBundle } from "../src/lib/html5-bundle";
 
 function parseArgs(argv: string[]) {
   let mc: string | null = null;
@@ -89,60 +80,16 @@ async function main() {
   const client = await getActiveClient();
   const message = await loadMessage(client.id, args.mc, args.id);
   const label = `MC${message.number}${message.variant}`;
-  if (!message.template) throw new Error(`${label} has no template — nothing to render`);
-  const template = readTemplate(message.template);
-  if (!template || template.kind !== "html") {
-    throw new Error(`template "${message.template}" is missing or not an html template`);
-  }
-  // main.css and the size CSS are inlined by the render; index.html and
-  // template.json are inputs, not part of the bundle.
-  const templateFiles = listTemplateFiles(message.template)!.filter(
-    (f) =>
-      !f.size &&
-      f.name !== "index.html" &&
-      f.name !== "template.json" &&
-      f.name !== "main.css",
-  );
+  const template = message.template ? readTemplate(message.template) : null;
+  if (!template) throw new Error(`${label} has no template — nothing to render`);
   const textFormatting = await listTextFormatting(client.id);
 
   for (const size of template.sizes) {
     const dir = path.join(args.out, size);
     fs.mkdirSync(dir, { recursive: true });
-
-    let { html } = renderTemplate({
-      templateName: message.template,
-      size,
-      message: message as unknown as Record<string, unknown>,
-      textFormatting,
-      inline: true,
-    });
-    html = html.replace(/<base\s+href="[^"]*\/api\/templates\/[^"]*">\s*/i, "");
-
-    for (const f of templateFiles) {
-      fs.writeFileSync(path.join(dir, f.name), readTemplateFile(message.template, f.name)!);
-    }
-
-    // Every proxied creative file the render references — collected from the
-    // HTML itself, so whatever placeholder emitted it is covered.
-    const proxied = new Set<string>();
-    html = html.replace(/\/api\/drive\/proxy\/([^"'()\s]+)/g, (_, enc: string) => {
-      const name = decodeURIComponent(enc);
-      proxied.add(name);
-      return encodeURI(name);
-    });
-    for (const name of proxied) {
-      const file = await getFileByFilename(client.id, name);
-      if (!file) throw new Error(`${label} ${size}: ${name} is not an uploaded file in this client`);
-      fs.writeFileSync(path.join(dir, name), await readFileBytes(file.storagePath));
-    }
-    if (html.includes(PROXY_PREFIX)) {
-      throw new Error(`${label} ${size}: a ${PROXY_PREFIX} ref survived the rewrite`);
-    }
-
-    fs.writeFileSync(path.join(dir, "index.html"), html);
-    console.log(
-      `${size}: index.html + ${templateFiles.length} template file(s) + ${proxied.size} creative file(s)`,
-    );
+    const files = await renderBundle({ clientId: client.id, message, size, textFormatting });
+    for (const [name, bytes] of files) fs.writeFileSync(path.join(dir, name), bytes);
+    console.log(`${size}: ${[...files.keys()].join(", ")}`);
   }
   console.log(`wrote ${label} (${message.template}) → ${args.out}`);
 }

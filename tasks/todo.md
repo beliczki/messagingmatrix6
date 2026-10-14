@@ -2871,5 +2871,6 @@ Mechanizmus-javítás: az export + cleanup logika a scriptekből egy közös lib
       Teljes suite: 114 fájl / 1082 teszt zöld, `tsc` tiszta. Eltérés a tervtől: a click handler JS-ét nem kellett módosítani, mert a render a `<meta name="click_url">`-be már beírja a `finalTraffickedUrl`-t; csak az üres meta kap tartalékot a manifestből.
       A zip neve a share-ből `n<versionNo>`, a scriptből `--n` (alapból 1).
 - [x] CHANGELOG, bump 6.123.0.
-- [ ] Deploy mindkét tenantra + élesben egy share-ről letöltött zip ellenőrzése.
+- [x] **DEPLOYOLVA 6.123.0 — mindkét tenant** (`71f60d7`), „up after 1s”. Éles `GET /share/VjmGi_DRdqik/bundle/32022/<méret>` 200, zip, név `ERSTE_HK_MC235_a_…_html5_n2_<méret>.zip`; ami nem eleme a share-nek, arra 404.
+      Az élesből letöltött 4 méret Playwrightban kattintható (DHTML betölt, a landingre nyit, THM 44,49%). A share UI Download gombját böngészőben nem nyomtam meg.
 - [x] Mellékes kérés: az MC411b draftba átmásolva az MC411a teljes tartalma, template-je és stílusai (14 mező, `updateMessage` + audit). Utána 0 eltérés.

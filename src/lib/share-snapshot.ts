@@ -6,6 +6,7 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  assets,
   creatives,
   messagePreviews,
   messages,
@@ -33,6 +34,8 @@ export type SnapshotMetadata = {
   /** (messageId, size) pairs the user picked — drives the public renderer. */
   matrixItems?: Array<{ messageId: number; size: string }>;
   creatives?: Array<typeof creatives.$inferSelect>;
+  /** Library assets (logos, backgrounds, clips) — shown after the creatives. */
+  assets?: Array<typeof assets.$inferSelect>;
   files?: SnapshotFile[];
 };
 
@@ -40,6 +43,7 @@ export type ShareSelectionInput = {
   mcIds: number[];
   matrix: Array<{ messageId: number; size: string }>;
   creativeIds: number[];
+  assetIds: number[];
 };
 
 /** Reads the selection fields of a create / add-items request body. */
@@ -68,17 +72,26 @@ export function parseShareSelection(body: unknown): ShareSelectionInput {
   const creativeIds = Array.isArray(o.creativeIds)
     ? o.creativeIds.map((v) => Number(v)).filter((n) => Number.isFinite(n))
     : [];
-  return { mcIds, matrix, creativeIds };
+  const assetIds = Array.isArray(o.assetIds)
+    ? o.assetIds.map((v) => Number(v)).filter((n) => Number.isFinite(n))
+    : [];
+  return { mcIds, matrix, creativeIds, assetIds };
 }
 
 export function isEmptySelection(s: ShareSelectionInput): boolean {
-  return s.mcIds.length === 0 && s.matrix.length === 0 && s.creativeIds.length === 0;
+  return (
+    s.mcIds.length === 0 &&
+    s.matrix.length === 0 &&
+    s.creativeIds.length === 0 &&
+    s.assetIds.length === 0
+  );
 }
 
 /** A selection resolved against this client's rows — the snapshot's parts. */
 export type ResolvedSelection = Omit<SnapshotMetadata, "generatedAt"> & {
   matrixItems: Array<{ messageId: number; size: string }>;
   creatives: Array<typeof creatives.$inferSelect>;
+  assets: Array<typeof assets.$inferSelect>;
   files: SnapshotFile[];
 };
 
@@ -86,7 +99,7 @@ export async function resolveShareSelection(
   clientId: number,
   input: ShareSelectionInput,
 ): Promise<ResolvedSelection> {
-  const { mcIds, matrix: matrixPairsIn, creativeIds } = input;
+  const { mcIds, matrix: matrixPairsIn, creativeIds, assetIds } = input;
 
   // Resolve all referenced message ids — both the size-aware `matrix` pairs
   // and the legacy `mcIds` (which need a default size resolved server-side
@@ -143,11 +156,25 @@ export async function resolveShareSelection(
       (creativePosition.get(a.id) ?? 0) - (creativePosition.get(b.id) ?? 0),
   );
 
-  // Snapshot file metadata for any creative that references one — the public
-  // share viewer cannot hit the auth-gated /api/files endpoints, so we expose
-  // these via a share-scoped proxy that checks the file id is in this list.
+  // Same ordering problem and answer as the creatives above.
+  const assetRowsUnordered = assetIds.length
+    ? await db
+        .select()
+        .from(assets)
+        .where(and(eq(assets.clientId, clientId), inArray(assets.id, assetIds)))
+    : [];
+  const assetPosition = new Map(assetIds.map((id, i) => [id, i]));
+  const assetRows = assetRowsUnordered.sort(
+    (a, b) => (assetPosition.get(a.id) ?? 0) - (assetPosition.get(b.id) ?? 0),
+  );
+
+  // Snapshot file metadata for any creative or asset that references one — the
+  // public share viewer cannot hit the auth-gated /api/files endpoints, so we
+  // expose these via a share-scoped proxy that checks the file id is in this list.
   const fileIds = Array.from(
-    new Set(creativeRows.map((c) => c.fileId).filter((s): s is string => !!s)),
+    new Set(
+      [...creativeRows, ...assetRows].map((c) => c.fileId).filter((s): s is string => !!s),
+    ),
   );
   const fileRows = fileIds.length
     ? await db
@@ -168,6 +195,7 @@ export async function resolveShareSelection(
     messages: messageRows,
     matrixItems,
     creatives: creativeRows,
+    assets: assetRows,
     files: fileRows,
   };
 }
@@ -208,6 +236,17 @@ export function appendToSnapshot(
     creativeRows.push(c);
     added++;
   }
+  const assetRows = [...(existing.assets ?? [])];
+  const assetSeen = new Set(assetRows.map((a) => a.id));
+  for (const a of add.assets) {
+    if (assetSeen.has(a.id)) {
+      skipped++;
+      continue;
+    }
+    assetSeen.add(a.id);
+    assetRows.push(a);
+    added++;
+  }
 
   // Message and file rows are lookup tables for the items above, so they only
   // need to be present once — the existing (frozen) row wins.
@@ -232,6 +271,7 @@ export function appendToSnapshot(
       messages: messageRows,
       matrixItems,
       creatives: creativeRows,
+      assets: assetRows,
       files: fileRows,
     },
     added,
@@ -292,7 +332,7 @@ export type RefreshShareResult =
 /**
  * Brings a share's frozen rows up to what the MCs and creatives are now — the
  * content, text styles and custom CSS edited since the share was made. Only the
- * lookup rows (messages, creatives, files) are swapped, by id: the items, their
+ * lookup rows (messages, creatives, assets, files) are swapped, by id: the items, their
  * order and the comments keyed by them stay. A row that no longer exists keeps
  * its frozen copy, so a deletion never punches a hole in a sent link. Locked
  * like addToShare, so a refresh and an add cannot drop each other's write.
@@ -328,6 +368,13 @@ export async function refreshShare(
           .from(creatives)
           .where(and(eq(creatives.clientId, clientId), inArray(creatives.id, creativeIds)))
       : [];
+    const assetIds = (existing.assets ?? []).map((a) => a.id);
+    const liveAssets = assetIds.length
+      ? await tx
+          .select()
+          .from(assets)
+          .where(and(eq(assets.clientId, clientId), inArray(assets.id, assetIds)))
+      : [];
     const fileIds = (existing.files ?? []).map((f) => f.id);
     const liveFiles = fileIds.length
       ? await tx
@@ -357,6 +404,7 @@ export async function refreshShare(
       messages: overlay(existing.messages, liveMessages),
       matrixItems: existing.matrixItems,
       creatives: overlay(existing.creatives ?? [], liveCreatives),
+      assets: overlay(existing.assets ?? [], liveAssets),
       files: overlay(existing.files ?? [], liveFiles),
     };
     await tx
@@ -409,7 +457,7 @@ const THUMBS_PER_SHARE = 4;
 
 /**
  * The first few items of each share as image URLs, in the order the viewer
- * shows them (matrix cells, then creatives) — so a picker can show which share
+ * shows them (matrix cells, then creatives, then assets) — so a picker can show which share
  * is which. They are the share's own public URLs, the ones its viewer loads:
  * a creative through /share/{id}/file (`?thumb=` is frame 0 on a video), a
  * matrix cell through a signed /publicshortcut preview. `null` = nothing to
@@ -438,7 +486,7 @@ export async function shareThumbs(
       out.push({ kind: "matrix", messageId: p.messageId, size: p.size });
       messageIds.add(p.messageId);
     }
-    for (const c of meta.creatives ?? []) {
+    for (const c of [...(meta.creatives ?? []), ...(meta.assets ?? [])]) {
       if (out.length >= THUMBS_PER_SHARE) break;
       const file = c.fileId ? filesById.get(c.fileId) : undefined;
       out.push(

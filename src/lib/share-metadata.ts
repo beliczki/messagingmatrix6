@@ -7,9 +7,10 @@ type SnapshotShape = {
   messages?: unknown;
   matrixItems?: unknown;
   creatives?: unknown;
+  assets?: unknown;
 };
 
-/** Items captured in a share: matrix cells (or plain messages) plus creatives. */
+/** Items captured in a share: matrix cells (or plain messages), creatives and assets. */
 export function shareItemCount(raw: string | null): number {
   if (!raw) return 0;
   try {
@@ -20,7 +21,8 @@ export function shareItemCount(raw: string | null): number {
         ? parsed.messages.length
         : 0;
     const c = Array.isArray(parsed.creatives) ? parsed.creatives.length : 0;
-    return m + c;
+    const a = Array.isArray(parsed.assets) ? parsed.assets.length : 0;
+    return m + c + a;
   } catch {
     return 0;
   }
@@ -48,9 +50,13 @@ export function shareProducts(raw: string | null): string[] {
   try {
     const parsed = JSON.parse(raw) as {
       creatives?: { product?: unknown }[];
+      assets?: { product?: unknown }[];
       messages?: { product?: unknown; topic?: unknown }[];
     };
-    for (const c of Array.isArray(parsed.creatives) ? parsed.creatives : []) {
+    for (const c of [
+      ...(Array.isArray(parsed.creatives) ? parsed.creatives : []),
+      ...(Array.isArray(parsed.assets) ? parsed.assets : []),
+    ]) {
       if (typeof c?.product === "string" && c.product) out.add(c.product);
     }
     for (const m of Array.isArray(parsed.messages) ? parsed.messages : []) {

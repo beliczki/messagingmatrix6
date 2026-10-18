@@ -18,6 +18,7 @@ import {
 } from "@/lib/share-briefs";
 import ShareGallery, {
   type LiveDriveFolders,
+  type SnapshotAsset,
   type SnapshotCreative,
   type SnapshotFile,
   type SnapshotMatrixItem,
@@ -29,6 +30,7 @@ type SnapshotMetadata = {
   messages?: SnapshotMessage[];
   matrixItems?: SnapshotMatrixItem[];
   creatives?: SnapshotCreative[];
+  assets?: SnapshotAsset[];
   files?: SnapshotFile[];
 };
 
@@ -83,6 +85,7 @@ export default async function SharePage({
     })
     .filter((x): x is { messageId: number; size: string; message: SnapshotMessage } => x !== null);
   const creativeRows = (meta.creatives ?? []) as SnapshotCreative[];
+  const assetRows = meta.assets ?? [];
   const fileRows = (meta.files ?? []) as SnapshotFile[];
 
   const briefs = await resolveBriefs(client.id, creativeRows, matrixItems);
@@ -109,6 +112,7 @@ export default async function SharePage({
           generatedAt={generated}
           matrixItems={matrixItems}
           creatives={creativeRows}
+          assets={assetRows}
           files={fileRows}
           briefs={briefs}
           liveDriveFolders={driveFolders}

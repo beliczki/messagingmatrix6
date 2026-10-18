@@ -56,6 +56,20 @@ export type SnapshotMatrixItem = {
   message?: SnapshotMessage;
 };
 
+/** A library asset in the snapshot — a delivered file with no card behind it. */
+export type SnapshotAsset = {
+  id: number;
+  brand: string | null;
+  product: string | null;
+  type: string | null;
+  visualKeyword: string | null;
+  fileId: string | null;
+  fileName: string | null;
+  fileFormat: string | null;
+  fileDimensions: string | null;
+  comment: string | null;
+};
+
 /** Live delivery folders by creative id, resolved at view time. */
 export type LiveDriveFolders = Record<number, { id: string; name: string | null }>;
 
@@ -100,6 +114,7 @@ type Props = {
   generatedAt: string | null;
   matrixItems: Array<{ messageId: number; size: string; message: SnapshotMessage }>;
   creatives: SnapshotCreative[];
+  assets: SnapshotAsset[];
   /** Current delivery folders, keyed by creative id — see resolveDriveFolders. */
   liveDriveFolders?: LiveDriveFolders;
   files: SnapshotFile[];
@@ -118,6 +133,7 @@ export default function ShareGallery({
   generatedAt,
   matrixItems,
   creatives,
+  assets,
   liveDriveFolders,
   files,
   briefs,
@@ -145,8 +161,22 @@ export default function ShareGallery({
         file: c.fileId ? filesById.get(c.fileId) : undefined,
       });
     }
+    // An asset shows the way a delivered creative file does (image, video,
+    // HTML5 by mime), so it rides the creative rendering. Its keys are its own:
+    // assets and creatives are separate tables, and asset 5 is not creative 5
+    // for comments or history.
+    for (const a of assets) {
+      out.push({
+        kind: "creative",
+        key: `a-${a.id}`,
+        itemKey: `asset:${a.id}`,
+        size: a.fileDimensions,
+        creative: { ...a, template: null, mcNumber: null, mcVariant: null },
+        file: a.fileId ? filesById.get(a.fileId) : undefined,
+      });
+    }
     return out;
-  }, [matrixItems, creatives, filesById]);
+  }, [matrixItems, creatives, assets, filesById]);
 
   // Where these creatives are delivered, and which MCs sit in each folder —
   // with more than one folder in a share, "which one holds what" is the only

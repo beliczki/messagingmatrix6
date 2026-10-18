@@ -10,6 +10,8 @@ type Props = {
   matrix: Array<{ messageId: number; size: string }>;
   /** Creative ids resolved from selected uploaded items. */
   creativeIds: number[];
+  /** Asset ids, from the Assets page. */
+  assetIds: number[];
   onClose: () => void;
   /** Called after a successful create so caller can clear selection. */
   onCreated?: () => void;
@@ -23,10 +25,17 @@ export default function ShareCreateDialog({
   open,
   matrix,
   creativeIds,
+  assetIds,
   onClose,
   onCreated,
 }: Props) {
-  const totalCount = matrix.length + creativeIds.length;
+  const totalCount = matrix.length + creativeIds.length + assetIds.length;
+  // The breakdown is worth showing only when the selection mixes kinds.
+  const breakdown = [
+    matrix.length > 0 ? `${matrix.length} matrix` : null,
+    creativeIds.length > 0 ? `${creativeIds.length} uploaded` : null,
+    assetIds.length > 0 ? `${assetIds.length} assets` : null,
+  ].filter((part): part is string => part !== null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -76,6 +85,7 @@ export default function ShareCreateDialog({
         body: JSON.stringify({
           matrix,
           creativeIds,
+          assetIds,
           title: title.trim(),
           description: description.trim() || null,
         }),
@@ -165,11 +175,8 @@ export default function ShareCreateDialog({
             <form onSubmit={onSubmit} className="share-create-dialog__form space-y-3">
               <div className="share-create-dialog__count text-xs text-slate-500">
                 {totalCount} {totalCount === 1 ? "item" : "items"} selected
-                {matrix.length > 0 && creativeIds.length > 0 ? (
-                  <span className="text-slate-400">
-                    {" "}
-                    ({matrix.length} matrix · {creativeIds.length} uploaded)
-                  </span>
+                {breakdown.length > 1 ? (
+                  <span className="text-slate-400"> ({breakdown.join(" · ")})</span>
                 ) : null}
               </div>
               <label className="form-field block">

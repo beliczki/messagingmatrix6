@@ -13,6 +13,9 @@ import ArchiveToggle from "../_components/ArchiveToggle";
 import RightToolbar from "../_components/RightToolbar";
 import ToolbarUpload from "../_components/ToolbarUpload";
 import AssetDetailDialog from "./AssetDetailDialog";
+import ShareCreateDialog from "../creative-library/ShareCreateDialog";
+import ShareAddDialog from "../creative-library/ShareAddDialog";
+import { SelectableItem, SelectionActions, useSelection } from "../_components/Selection";
 import {
   LibraryViewSwitcher,
   LIBRARY_VIEW_CODEC,
@@ -89,6 +92,9 @@ export default function AssetsLibrary() {
   const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
   const [showArchived, setShowArchived] = useState(false);
   const [detailId, setDetailId] = useState<number | null>(null);
+  const selection = useSelection();
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareAddOpen, setShareAddOpen] = useState(false);
   const [view, setView] = usePersistent<LibraryViewMode>(
     "mm6_assets_library_view",
     "masonry",
@@ -191,6 +197,16 @@ export default function AssetsLibrary() {
   }, [assets, products, types, predicate]);
 
   const sorted = useMemo(() => sortListRows(filtered, sort), [filtered, sort]);
+
+  // In the order the person is looking at; `assets` follows so a selection made
+  // under an earlier filter does not quietly shrink.
+  const selectedAssetIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const a of [...sorted, ...assets]) {
+      if (selection.selectedIds.has(a.id)) ids.add(a.id);
+    }
+    return Array.from(ids);
+  }, [sorted, assets, selection.selectedIds]);
 
   const qc = useQueryClient();
 
@@ -296,35 +312,59 @@ export default function AssetsLibrary() {
               items={sorted}
               itemKey={(a) => a.id}
               render={(a) => (
-                <ImageTile
-                  asset={a}
-                  file={a.fileId ? filesById.get(a.fileId) : undefined}
-                  onOpen={() => setDetailId(a.id)}
-                />
+                <SelectableItem
+                  id={a.id}
+                  selectorMode={selection.selectorMode}
+                  selected={selection.selectedIds.has(a.id)}
+                  onLongPress={selection.begin}
+                  onSelect={selection.toggle}
+                >
+                  <ImageTile
+                    asset={a}
+                    file={a.fileId ? filesById.get(a.fileId) : undefined}
+                    onOpen={() => setDetailId(a.id)}
+                  />
+                </SelectableItem>
               )}
             />
           </div>
         ) : view === "grid" ? (
           <div className="assets-library__view assets-library__view--grid grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {sorted.map((a) => (
-              <Card
+              <SelectableItem
                 key={a.id}
-                asset={a}
-                file={a.fileId ? filesById.get(a.fileId) : undefined}
-                onOpen={() => setDetailId(a.id)}
-              />
+                id={a.id}
+                selectorMode={selection.selectorMode}
+                selected={selection.selectedIds.has(a.id)}
+                onLongPress={selection.begin}
+                onSelect={selection.toggle}
+              >
+                <Card
+                  asset={a}
+                  file={a.fileId ? filesById.get(a.fileId) : undefined}
+                  onOpen={() => setDetailId(a.id)}
+                />
+              </SelectableItem>
             ))}
           </div>
         ) : (
           <div className="assets-library__view assets-library__view--list flex flex-col">
             <ListSortHeader sort={sort} onChange={setSort} />
             {sorted.map((a) => (
-              <ListRow
+              <SelectableItem
                 key={a.id}
-                asset={a}
-                file={a.fileId ? filesById.get(a.fileId) : undefined}
-                onOpen={() => setDetailId(a.id)}
-              />
+                id={a.id}
+                selectorMode={selection.selectorMode}
+                selected={selection.selectedIds.has(a.id)}
+                onLongPress={selection.begin}
+                onSelect={selection.toggle}
+              >
+                <ListRow
+                  asset={a}
+                  file={a.fileId ? filesById.get(a.fileId) : undefined}
+                  onOpen={() => setDetailId(a.id)}
+                />
+              </SelectableItem>
             ))}
           </div>
         )}
@@ -345,6 +385,24 @@ export default function AssetsLibrary() {
           setUploadOpen(false);
           setDroppedFiles([]);
         }}
+      />
+
+      <ShareCreateDialog
+        open={shareOpen}
+        matrix={[]}
+        creativeIds={[]}
+        assetIds={selectedAssetIds}
+        onClose={() => setShareOpen(false)}
+        onCreated={selection.clear}
+      />
+
+      <ShareAddDialog
+        open={shareAddOpen}
+        matrix={[]}
+        creativeIds={[]}
+        assetIds={selectedAssetIds}
+        onClose={() => setShareAddOpen(false)}
+        onAdded={selection.clear}
       />
 
       {detailId !== null
@@ -370,6 +428,21 @@ export default function AssetsLibrary() {
         {(collapsed) => {
           const content = (
             <>
+              <SelectionActions
+                collapsed={collapsed}
+                selectorMode={selection.selectorMode}
+                count={selection.selectedIds.size}
+                filteredCount={filtered.length}
+                unselectedFilteredCount={
+                  filtered.filter((a) => !selection.selectedIds.has(a.id)).length
+                }
+                noun="asset"
+                onEnter={selection.enter}
+                onSelectAll={() => selection.selectAll(filtered.map((a) => a.id))}
+                onShare={() => setShareOpen(true)}
+                onAddToShared={() => setShareAddOpen(true)}
+                onCancel={selection.clear}
+              />
               <LibraryViewSwitcher view={view} setView={setView} collapsed={collapsed} />
               <ArchiveToggle
                 showArchived={showArchived}

@@ -5,6 +5,16 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.124.0] — 2026-10-18
+
+### Added
+- **Assets can be selected and shared.** The Assets page has the Creative Library's select mode —
+  Select all (filtered), Share, Add to shared — and a share can now hold assets next to matrix
+  cells and creatives: the viewer shows them like a delivered file (image / video), with their own
+  comments, history and Download; Refresh and the share thumbnails cover them too.
+- **Select button** on the Creative Library and Assets toolbars, next to long-press, to enter select
+  mode. Select mode now lasts until Cancel / Esc / a finished share.
+
 ## [6.123.0] — 2026-10-14
 
 ### Added

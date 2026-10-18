@@ -97,7 +97,7 @@ export const POST = withSession(async ({ req, claims }) => {
     return NextResponse.json(
       {
         error:
-          "matrix, mcIds, or creativeIds (at least one non-empty) required",
+          "matrix, mcIds, creativeIds or assetIds (at least one non-empty) required",
       },
       { status: 400 },
     );
@@ -111,9 +111,13 @@ export const POST = withSession(async ({ req, claims }) => {
     typeof body?.description === "string" ? body.description.trim() : null;
 
   const resolved = await resolveShareSelection(claims.cid, selection);
-  if (resolved.messages.length === 0 && resolved.creatives.length === 0) {
+  if (
+    resolved.messages.length === 0 &&
+    resolved.creatives.length === 0 &&
+    resolved.assets.length === 0
+  ) {
     return NextResponse.json(
-      { error: "no matching messages or creatives found in this client" },
+      { error: "no matching messages, creatives or assets found in this client" },
       { status: 400 },
     );
   }

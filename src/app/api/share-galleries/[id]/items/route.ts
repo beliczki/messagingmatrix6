@@ -10,19 +10,23 @@ import {
 } from "@/lib/share-snapshot";
 
 // Adds the creative library's selection to an existing share. Items already in
-// the share are skipped; the rest go at the end. Body: { matrix, creativeIds }.
+// the share are skipped; the rest go at the end. Body: { matrix, creativeIds, assetIds }.
 export const POST = withSession<{ id: string }>(async ({ req, claims, params }) => {
   const selection = parseShareSelection(await req.json().catch(() => null));
   if (isEmptySelection(selection)) {
     return NextResponse.json(
-      { error: "matrix or creativeIds (at least one non-empty) required" },
+      { error: "matrix, creativeIds or assetIds (at least one non-empty) required" },
       { status: 400 },
     );
   }
   const resolved = await resolveShareSelection(claims.cid, selection);
-  if (resolved.matrixItems.length === 0 && resolved.creatives.length === 0) {
+  if (
+    resolved.matrixItems.length === 0 &&
+    resolved.creatives.length === 0 &&
+    resolved.assets.length === 0
+  ) {
     return NextResponse.json(
-      { error: "no matching messages or creatives found in this client" },
+      { error: "no matching messages, creatives or assets found in this client" },
       { status: 400 },
     );
   }

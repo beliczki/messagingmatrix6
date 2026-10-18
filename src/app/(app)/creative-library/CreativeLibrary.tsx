@@ -51,7 +51,7 @@ import DriveHealthCheck from "./DriveHealthCheck";
 import MatrixDetailDialog from "./MatrixDetailDialog";
 import ShareCreateDialog from "./ShareCreateDialog";
 import ShareAddDialog from "./ShareAddDialog";
-import { useLongPress } from "@/app/_components/useLongPress";
+import { SelectableItem, SelectionActions, useSelection } from "../_components/Selection";
 import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import {
   MatrixIframeTile,
@@ -262,62 +262,17 @@ export default function CreativeLibrary() {
     DEFAULT_SORT,
     LIST_SORT_CODEC,
   );
-  const [selectorMode, setSelectorMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const {
+    selectorMode,
+    selectedIds,
+    enter: enterSelection,
+    clear: clearSelection,
+    toggle: toggleSelected,
+    selectAll: selectAllFiltered,
+    begin: beginSelection,
+  } = useSelection();
   const [shareOpen, setShareOpen] = useState(false);
   const [shareAddOpen, setShareAddOpen] = useState(false);
-
-  const clearSelection = useCallback(() => {
-    setSelectorMode(false);
-    setSelectedIds(new Set());
-  }, []);
-
-  const toggleSelected = useCallback((id: number) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }, []);
-
-  // Adds the whole filtered set, not just the ~200 rows the infinite
-  // scroller has materialised — the toolbar count and the share dialog both
-  // work off ids, so there is no reason to make the user scroll first. It adds
-  // rather than replaces: a selection is often built across several filters.
-  const selectAllFiltered = useCallback((ids: number[]) => {
-    setSelectorMode(true);
-    setSelectedIds((prev) => new Set([...prev, ...ids]));
-  }, []);
-
-  const beginSelection = useCallback((id: number) => {
-    setSelectorMode(true);
-    setSelectedIds((prev) => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
-  }, []);
-
-  // Esc clears selection (only when not editing in an input).
-  useEffect(() => {
-    if (!selectorMode) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== "Escape") return;
-      const tag = (e.target as HTMLElement | null)?.tagName?.toLowerCase();
-      if (tag === "input" || tag === "textarea" || tag === "select") return;
-      clearSelection();
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [selectorMode, clearSelection]);
-
-  // Toggling off the last selected item should exit selectorMode so the
-  // toolbar reverts and clicks resume opening the detail dialog.
-  useEffect(() => {
-    if (selectorMode && selectedIds.size === 0) setSelectorMode(false);
-  }, [selectorMode, selectedIds]);
 
   const debouncedSearch = useDebouncedValue(search, 200);
   const [visibleCount, setVisibleCount] = useState(200);
@@ -946,6 +901,7 @@ export default function CreativeLibrary() {
           open={shareOpen}
           matrix={selectedMatrixPairs}
           creativeIds={selectedCreativeIds}
+          assetIds={[]}
           onClose={() => setShareOpen(false)}
           onCreated={clearSelection}
         />
@@ -954,6 +910,7 @@ export default function CreativeLibrary() {
           open={shareAddOpen}
           matrix={selectedMatrixPairs}
           creativeIds={selectedCreativeIds}
+          assetIds={[]}
           onClose={() => setShareAddOpen(false)}
           onAdded={clearSelection}
         />
@@ -996,20 +953,23 @@ export default function CreativeLibrary() {
 
       <RightToolbar storageKey="mm6_creative_library_right_toolbar_open">
         {(collapsed) => {
-          const selectionBlock = selectedIds.size > 0 ? (
+          const selectionBlock = (
             <SelectionActions
               collapsed={collapsed}
+              selectorMode={selectorMode}
               count={selectedIds.size}
               filteredCount={filtered.length}
               unselectedFilteredCount={
                 filtered.filter((c) => !selectedIds.has(c.id)).length
               }
+              noun="creative"
+              onEnter={enterSelection}
               onSelectAll={() => selectAllFiltered(filtered.map((c) => c.id))}
               onShare={() => setShareOpen(true)}
               onAddToShared={() => setShareAddOpen(true)}
               onCancel={clearSelection}
             />
-          ) : null;
+          );
           const content = (
             <>
               {selectionBlock}
@@ -1472,194 +1432,6 @@ function Field({
       </div>
       {children}
     </label>
-  );
-}
-
-function SelectionActions({
-  collapsed,
-  count,
-  filteredCount,
-  unselectedFilteredCount,
-  onSelectAll,
-  onShare,
-  onAddToShared,
-  onCancel,
-}: {
-  collapsed: boolean;
-  count: number;
-  filteredCount: number;
-  /** Filtered items not yet in the selection — what the button would add. */
-  unselectedFilteredCount: number;
-  onSelectAll: () => void;
-  onShare: () => void;
-  onAddToShared: () => void;
-  onCancel: () => void;
-}) {
-  // Nothing left to add once the whole filtered set is in — the button stays
-  // put (so the toolbar does not reflow) but says so. Judged by membership, not
-  // by comparing counts: a selection carried over from an earlier filter can
-  // outnumber the current one while most of it is still unselected.
-  const allSelected = unselectedFilteredCount === 0;
-  const selectAllLabel = allSelected
-    ? `All ${filteredCount} filtered selected`
-    : `Add all filtered (${unselectedFilteredCount}) to selection`;
-  if (collapsed) {
-    return (
-      <div className="selection-actions selection-actions--collapsed flex flex-col items-center gap-2 border-b border-slate-200 pb-2">
-        <span
-          className="selection-actions__count flex size-9 items-center justify-center rounded-md bg-slate-900 text-xs font-semibold text-white"
-          title={`${count} selected`}
-        >
-          {count}
-        </span>
-        <button
-          type="button"
-          onClick={onSelectAll}
-          disabled={allSelected}
-          title={selectAllLabel}
-          aria-label={selectAllLabel}
-          className="toolbar-btn flex size-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Icon name="check-double" className="size-4" />
-        </button>
-        <button
-          type="button"
-          onClick={onShare}
-          title="Share selected"
-          aria-label="Share selected"
-          className="toolbar-btn--primary flex size-9 items-center justify-center rounded-md bg-slate-900 text-white hover:bg-slate-800"
-        >
-          <Icon name="share" className="size-4" />
-        </button>
-        <button
-          type="button"
-          onClick={onAddToShared}
-          title="Add selected to an existing share"
-          aria-label="Add selected to an existing share"
-          className="toolbar-btn selection-actions__btn--add-to-shared flex size-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-        >
-          <Icon name="copy-add" className="size-4" />
-        </button>
-        <button
-          type="button"
-          onClick={onCancel}
-          title="Cancel selection"
-          aria-label="Cancel selection"
-          className="toolbar-btn flex size-9 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100"
-        >
-          <Icon name="close" className="size-4" />
-        </button>
-      </div>
-    );
-  }
-  return (
-    <div className="selection-actions flex flex-col gap-2 border-b border-slate-200 pb-3">
-      <div className="selection-actions__count text-xs font-semibold text-slate-700">
-        {count} selected
-      </div>
-      <button
-        type="button"
-        onClick={onSelectAll}
-        disabled={allSelected}
-        title={`Add every creative the current filters match (${filteredCount}) to the selection`}
-        className="toolbar-btn inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-      >
-        <Icon name="check-double" className="size-3.5" />
-        {selectAllLabel}
-      </button>
-      <button
-        type="button"
-        onClick={onShare}
-        className="toolbar-btn--primary inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800"
-      >
-        <Icon name="share" className="size-3.5" />
-        Share
-      </button>
-      <button
-        type="button"
-        onClick={onAddToShared}
-        title="Add the selection to an existing share"
-        className="toolbar-btn selection-actions__btn--add-to-shared inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-      >
-        <Icon name="copy-add" className="size-3.5" />
-        Add to shared
-      </button>
-      <button
-        type="button"
-        onClick={onCancel}
-        className="toolbar-btn inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-      >
-        <Icon name="close" className="size-3" />
-        Cancel
-      </button>
-    </div>
-  );
-}
-
-function SelectableItem({
-  id,
-  selectorMode,
-  selected,
-  onLongPress,
-  onSelect,
-  children,
-}: {
-  id: number;
-  selectorMode: boolean;
-  selected: boolean;
-  onLongPress: (id: number) => void;
-  onSelect: (id: number) => void;
-  children: ReactNode;
-}) {
-  const longPress = useLongPress(() => onLongPress(id));
-  return (
-    <div
-      className={clsx(
-        // `isolate` keeps the ring and the checkbox below inside this tile's own
-        // stacking context. Without it their z-20 competes with the whole page,
-        // so a selected tile painted over the sticky toolbar (z-10) and through
-        // any filter dropdown open above it.
-        "selectable-item relative isolate",
-        selected && "selectable-item--selected",
-      )}
-      onPointerDown={longPress.onPointerDown}
-      onPointerUp={longPress.onPointerUp}
-      onPointerLeave={longPress.onPointerLeave}
-      onPointerMove={longPress.onPointerMove}
-      onClickCapture={(e) => {
-        if (longPress.consumeNextClick()) {
-          e.stopPropagation();
-          e.preventDefault();
-          return;
-        }
-        if (selectorMode) {
-          e.stopPropagation();
-          e.preventDefault();
-          onSelect(id);
-        }
-      }}
-    >
-      {children}
-      {selectorMode ? (
-        <span
-          aria-hidden
-          className={clsx(
-            "selector-checkbox pointer-events-none absolute right-2 top-2 z-20 flex size-5 items-center justify-center rounded-full border shadow-sm",
-            selected
-              ? "border-slate-900 bg-slate-900 text-white"
-              : "border-slate-400 bg-white/80 text-transparent",
-          )}
-        >
-          <Icon name="check" className="size-3" bold />
-        </span>
-      ) : null}
-      {selected ? (
-        <span
-          aria-hidden
-          className="selectable-item__ring pointer-events-none absolute inset-0 z-10 rounded-md ring-2 ring-slate-900"
-        />
-      ) : null}
-    </div>
   );
 }
 

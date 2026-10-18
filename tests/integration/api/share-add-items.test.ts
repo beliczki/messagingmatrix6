@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  assets,
   clients,
   creatives,
   messagePreviews,
@@ -15,6 +16,9 @@ import {
   shareThumbs,
   type SnapshotMetadata,
 } from "@/lib/share-snapshot";
+import { loadSharedFile } from "@/lib/share-file";
+import { shareItemCount } from "@/lib/share-metadata";
+import { uploadedFiles } from "@/db/schema";
 import { createTestDb, type TestDb } from "../../helpers/test-db";
 
 let h: TestDb;
@@ -64,12 +68,12 @@ afterEach(async () => {
 describe("addToShare", () => {
   it("appends new items at the end and skips what the share already holds", async () => {
     await seedShare("s1", {
-      mcIds: [],
+      mcIds: [], assetIds: [],
       matrix: [{ messageId: 1, size: "300x250" }],
       creativeIds: [creativeIds[0]],
     });
     const add = await resolveShareSelection(erste.id, {
-      mcIds: [],
+      mcIds: [], assetIds: [],
       matrix: [
         { messageId: 1, size: "300x250" }, // already in
         { messageId: 1, size: "970x250" },
@@ -98,10 +102,10 @@ describe("addToShare", () => {
   });
 
   it("writes nothing when every item is already in", async () => {
-    await seedShare("s1", { mcIds: [], matrix: [], creativeIds: [creativeIds[0]] });
+    await seedShare("s1", { mcIds: [], assetIds: [], matrix: [], creativeIds: [creativeIds[0]] });
     const [before] = await db.select().from(shareGalleries).where(eq(shareGalleries.id, "s1"));
     const add = await resolveShareSelection(erste.id, {
-      mcIds: [],
+      mcIds: [], assetIds: [],
       matrix: [],
       creativeIds: [creativeIds[0]],
     });
@@ -111,9 +115,9 @@ describe("addToShare", () => {
   });
 
   it("refuses an archived share and another client's share", async () => {
-    await seedShare("s1", { mcIds: [], matrix: [], creativeIds: [creativeIds[0]] });
+    await seedShare("s1", { mcIds: [], assetIds: [], matrix: [], creativeIds: [creativeIds[0]] });
     const add = await resolveShareSelection(erste.id, {
-      mcIds: [],
+      mcIds: [], assetIds: [],
       matrix: [],
       creativeIds: [creativeIds[1]],
     });
@@ -129,7 +133,7 @@ describe("addToShare", () => {
 describe("refreshShare", () => {
   it("swaps frozen rows for the live ones and keeps items, order and deleted rows", async () => {
     await seedShare("s1", {
-      mcIds: [],
+      mcIds: [], assetIds: [],
       matrix: [
         { messageId: 2, size: "300x250" },
         { messageId: 1, size: "970x250" },
@@ -161,13 +165,66 @@ describe("refreshShare", () => {
   });
 
   it("refuses an archived share and another client's share", async () => {
-    await seedShare("s1", { mcIds: [], matrix: [], creativeIds: [creativeIds[0]] });
+    await seedShare("s1", { mcIds: [], assetIds: [], matrix: [], creativeIds: [creativeIds[0]] });
     expect(await refreshShare(telekom.id, "s1")).toMatchObject({ ok: false, status: 404 });
     await db
       .update(shareGalleries)
       .set({ archivedAt: "2026-10-02 00:00:00" })
       .where(eq(shareGalleries.id, "s1"));
     expect(await refreshShare(erste.id, "s1")).toMatchObject({ ok: false, status: 409 });
+  });
+});
+
+describe("assets in a share", () => {
+  async function seedAssets() {
+    await db.insert(uploadedFiles).values([
+      { id: "f-logo", clientId: erste.id, filename: "logo.png", originalFilename: "logo.png", storagePath: "x/logo.png", mimeType: "image/png", category: "asset" },
+      { id: "f-bg", clientId: erste.id, filename: "bg.jpg", originalFilename: "bg.jpg", storagePath: "x/bg.jpg", mimeType: "image/jpeg", category: "asset" },
+    ]);
+    const rows = await db
+      .insert(assets)
+      .values([
+        { clientId: erste.id, fileId: "f-logo", fileName: "logo.png", product: "SZA" },
+        { clientId: erste.id, fileId: "f-bg", fileName: "bg.jpg", product: "HK" },
+      ])
+      .returning();
+    return rows.map((r) => r.id);
+  }
+
+  it("creates an assets-only share whose files pass the share's file gate", async () => {
+    const [logo, bg] = await seedAssets();
+    const resolved = await resolveShareSelection(erste.id, {
+      mcIds: [], assetIds: [bg!, logo!],
+      matrix: [],
+      creativeIds: [],
+    });
+    // In the order sent, not the order the rows came back in.
+    expect(resolved.assets.map((a) => a.id)).toEqual([bg, logo]);
+    expect(resolved.files.map((f) => f.id).sort()).toEqual(["f-bg", "f-logo"]);
+    const metadata: SnapshotMetadata = { generatedAt: "2026-10-18T00:00:00Z", ...resolved };
+    await db.insert(shareGalleries).values({ id: "sa", clientId: erste.id, metadata: JSON.stringify(metadata) });
+
+    expect(await loadSharedFile("sa", "f-logo")).toMatchObject({ file: { id: "f-logo" }, clientKey: "erste" });
+    const [row] = await db.select().from(shareGalleries).where(eq(shareGalleries.id, "sa"));
+    expect(shareItemCount(row.metadata)).toBe(2);
+    const thumbs = (await shareThumbs(erste.id, [row])).get("sa")!;
+    expect(thumbs).toEqual(["/share/sa/file/f-bg?thumb=200", "/share/sa/file/f-logo?thumb=200"]);
+  });
+
+  it("adds assets to an existing share and refreshes them", async () => {
+    const [logo, bg] = await seedAssets();
+    await seedShare("s1", { mcIds: [], assetIds: [logo!], matrix: [], creativeIds: [creativeIds[0]] });
+    const add = await resolveShareSelection(erste.id, {
+      mcIds: [], assetIds: [logo!, bg!],
+      matrix: [],
+      creativeIds: [],
+    });
+    expect(await addToShare(erste.id, "s1", add)).toMatchObject({ ok: true, added: 1, skipped: 1, newFileIds: ["f-bg"] });
+    expect((await readSnapshot("s1")).assets!.map((a) => a.id)).toEqual([logo, bg]);
+
+    await db.update(assets).set({ comment: "new" }).where(eq(assets.id, logo!));
+    expect(await refreshShare(erste.id, "s1")).toMatchObject({ ok: true, changed: 1 });
+    expect((await readSnapshot("s1")).assets!.find((a) => a.id === logo)!.comment).toBe("new");
   });
 });
 
@@ -181,7 +238,7 @@ describe("shareThumbs", () => {
       messageVersion: 1,
     });
     await seedShare("s1", {
-      mcIds: [],
+      mcIds: [], assetIds: [],
       matrix: [
         { messageId: 1, size: "300x250" },
         { messageId: 2, size: "300x250" },

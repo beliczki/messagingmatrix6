@@ -2874,3 +2874,18 @@ Mechanizmus-javítás: az export + cleanup logika a scriptekből egy közös lib
 - [x] **DEPLOYOLVA 6.123.0 — mindkét tenant** (`71f60d7`), „up after 1s”. Éles `GET /share/VjmGi_DRdqik/bundle/32022/<méret>` 200, zip, név `ERSTE_HK_MC235_a_…_html5_n2_<méret>.zip`; ami nem eleme a share-nek, arra 404.
       Az élesből letöltött 4 méret Playwrightban kattintható (DHTML betölt, a landingre nyit, THM 44,49%). A share UI Download gombját böngészőben nem nyomtam meg.
 - [x] Mellékes kérés: az MC411b draftba átmásolva az MC411a teljes tartalma, template-je és stílusai (14 mező, `updateMessage` + audit). Utána 0 eltérés.
+
+## 2026-10-18 — Assets: kijelölés + Share (a Creative Library mintájára)
+
+Igény: az Assets oldalon is legyen kijelölés, Select all és Share / Add to shared, ahogy a Creative Library-ben.
+Tény: az asset az `assets` tábla, nem `creatives`-sor, ezért a share ma nem tud assetet tartani. A snapshot csak `matrixItems` + `creatives` elemekből áll, a `files` csak a creative-okból jön, és a nézet is csak ezt a kettőt rajzolja. Ehhez új elemfajta kell a share-ben.
+
+- [x] Kiemelés: a CL helyi `SelectableItem` és `SelectionActions` komponense → `_components/` (a CL viselkedése nem változik). A long-press (`useLongPress`) marad a belépés.
+- [x] Assets oldal: kijelölés-state, long-press, Select all (szűrtekre), a RightToolbar tetején `selection-actions` (Share / Add to shared / Cancel), Esc törli.
+- [x] Share backend: `assetIds` a kiválasztásban (`parseShareSelection`, `isEmptySelection`, `resolveShareSelection`); `assets` a snapshotban, a fájljuk bekerül a `files`-ba (így a `/share/[id]/file` kapu átengedi); `appendToSnapshot`, `refreshShare`, `shareThumbs`, `shareItemCount` ismeri; a két POST route nem dob el egy csak-asset share-t.
+- [x] Share nézet: `kind: "asset"` elem a creative fájl-alapú megjelenítésével (kép / videó), komment-kulcs `asset:<id>`, a Download az eredeti fájl.
+- [x] `ShareCreateDialog` / `ShareAddDialog`: `assetIds` prop és a POST-ban; a számláló szövege az asseteket is mutatja.
+- [x] Integrációs teszt (asset a share-ben: létrehozás, hozzáadás, refresh, fájlkapu), inventory, CHANGELOG, minor bump, deploy.
+      Kész: közös `_components/Selection.tsx` (`useSelection`, `SelectableItem`, `SelectionActions` + Select gomb), a CL és az Assets is ezt használja. A snapshot `assets` mezőt kapott; a nézetben az asset a creative fájl-renderelését kapja `a-<id>` / `asset:<id>` kulccsal, a history-route `asset:<id>` ágat. A share-számláló és a termékszűrő (`share-metadata.ts`) is számol velük.
+      Teszt: 114 fájl / 1084 teszt zöld (2 új asset-share integrációs), `tsc` tiszta, eslint új figyelmeztetés nélkül. Bump 6.124.0.
+- [ ] Deploy + élesben az Assets oldal Select módjának megnézése.

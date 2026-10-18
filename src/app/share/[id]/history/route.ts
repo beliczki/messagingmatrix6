@@ -34,7 +34,7 @@ const IGNORED_FIELDS = new Set(["updatedAt", "createdAt", "id", "clientId"]);
 const MAX_FIELDS = 6;
 
 type Target = {
-  key: "creative" | "card" | "creatives";
+  key: "creative" | "card" | "creatives" | "asset";
   label: string;
   entityType: string;
   entityIds: string[];
@@ -112,6 +112,7 @@ type Snapshot = {
     mcNumber?: unknown;
     mcVariant?: unknown;
   }[];
+  assets?: { id?: unknown }[];
   matrixItems?: { messageId?: unknown }[];
   messages?: { id?: unknown; number?: unknown; variant?: unknown }[];
 };
@@ -160,6 +161,16 @@ async function resolveTargets(
       });
     }
     return targets;
+  }
+
+  // An asset belongs to no card: its own record is the whole history.
+  const asset = itemKey.match(/^asset:(\d+)$/);
+  if (asset) {
+    const wanted = Number(asset[1]);
+    if (!(snap.assets ?? []).some((a) => a.id === wanted)) return null;
+    return [
+      { key: "asset", label: "Asset file", entityType: "assets", entityIds: [String(wanted)] },
+    ];
   }
 
   // matrix:<messageId>:<size> — the history belongs to the card, not to the

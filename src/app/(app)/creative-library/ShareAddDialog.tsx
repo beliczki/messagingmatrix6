@@ -12,6 +12,8 @@ type Props = {
   matrix: Array<{ messageId: number; size: string }>;
   /** Creative ids resolved from selected uploaded items. */
   creativeIds: number[];
+  /** Asset ids, from the Assets page. */
+  assetIds: number[];
   onClose: () => void;
   /** Called after a successful add so caller can clear selection. */
   onAdded?: () => void;
@@ -36,11 +38,18 @@ export default function ShareAddDialog({
   open,
   matrix,
   creativeIds,
+  assetIds,
   onClose,
   onAdded,
 }: Props) {
   const qc = useQueryClient();
-  const totalCount = matrix.length + creativeIds.length;
+  const totalCount = matrix.length + creativeIds.length + assetIds.length;
+  // The breakdown is worth showing only when the selection mixes kinds.
+  const breakdown = [
+    matrix.length > 0 ? `${matrix.length} matrix` : null,
+    creativeIds.length > 0 ? `${creativeIds.length} uploaded` : null,
+    assetIds.length > 0 ? `${assetIds.length} assets` : null,
+  ].filter((part): part is string => part !== null);
   const [search, setSearch] = useState("");
   const [pickedId, setPickedId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -103,7 +112,7 @@ export default function ShareAddDialog({
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ matrix, creativeIds }),
+        body: JSON.stringify({ matrix, creativeIds, assetIds }),
       });
       if (!r.ok) {
         const body = (await r.json().catch(() => null)) as { error?: string } | null;
@@ -199,11 +208,8 @@ export default function ShareAddDialog({
             <div className="share-add-dialog__toolbar shrink-0 space-y-2 border-b border-slate-100 px-5 py-3">
               <div className="share-add-dialog__count text-xs text-slate-500">
                 {totalCount} {totalCount === 1 ? "item" : "items"} selected
-                {matrix.length > 0 && creativeIds.length > 0 ? (
-                  <span className="text-slate-400">
-                    {" "}
-                    ({matrix.length} matrix · {creativeIds.length} uploaded)
-                  </span>
+                {breakdown.length > 1 ? (
+                  <span className="text-slate-400"> ({breakdown.join(" · ")})</span>
                 ) : null}
               </div>
               <div className="input-box input-box--with-icon relative">

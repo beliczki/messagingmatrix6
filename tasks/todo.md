@@ -2888,4 +2888,5 @@ Tény: az asset az `assets` tábla, nem `creatives`-sor, ezért a share ma nem t
 - [x] Integrációs teszt (asset a share-ben: létrehozás, hozzáadás, refresh, fájlkapu), inventory, CHANGELOG, minor bump, deploy.
       Kész: közös `_components/Selection.tsx` (`useSelection`, `SelectableItem`, `SelectionActions` + Select gomb), a CL és az Assets is ezt használja. A snapshot `assets` mezőt kapott; a nézetben az asset a creative fájl-renderelését kapja `a-<id>` / `asset:<id>` kulccsal, a history-route `asset:<id>` ágat. A share-számláló és a termékszűrő (`share-metadata.ts`) is számol velük.
       Teszt: 114 fájl / 1084 teszt zöld (2 új asset-share integrációs), `tsc` tiszta, eslint új figyelmeztetés nélkül. Bump 6.124.0.
-- [ ] Deploy + élesben az Assets oldal Select módjának megnézése.
+- [x] **DEPLOYOLVA 6.124.0 — mindkét tenant** (`4234af0`), „up after 1s”; `/login` 200 mindkettőn, a `VjmGi_DRdqik` share 200.
+- [ ] Élesben böngészőben még nincs megnézve: a Chrome-fül a login oldalra dobott, a belépést a felhasználó végzi. Ellenőrizendő: Assets → Select → 2 elem → Share; a share-ben az asset megjelenik, kommentelhető, letölthető.

@@ -2905,3 +2905,4 @@ Külön, adatkérdés (a felhasználó dönt): a típusban `Image` (8) és `imag
 - [x] Adat: a 8 `Image` típusú asset (1120, 1121, 1170–1172, 1222–1224) → `image`, `updateAsset` + audit; utána 0 `Image`.
       Teszt: `multi-pill-selection.test.ts` +2 (az üres opció), unit suite zöld, `tsc` tiszta. A szűrők opciólistája külön (`*FilterOptions`), a feltöltő dialógus javaslatai nem kapják meg a „(none)”-t.
 - [x] Bump 6.124.1 (patch), CHANGELOG.
+- [x] **DEPLOYOLVA 6.124.1 — mindkét tenant** (`7f1a5f5`), „up after 1s”; `/login` 200. Böngészőben élesben még nincs megnézve.

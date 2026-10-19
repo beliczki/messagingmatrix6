@@ -2906,3 +2906,15 @@ Külön, adatkérdés (a felhasználó dönt): a típusban `Image` (8) és `imag
       Teszt: `multi-pill-selection.test.ts` +2 (az üres opció), unit suite zöld, `tsc` tiszta. A szűrők opciólistája külön (`*FilterOptions`), a feltöltő dialógus javaslatai nem kapják meg a „(none)”-t.
 - [x] Bump 6.124.1 (patch), CHANGELOG.
 - [x] **DEPLOYOLVA 6.124.1 — mindkét tenant** (`7f1a5f5`), „up after 1s”; `/login` 200. Böngészőben élesben még nincs megnézve.
+
+## 2026-10-19 — Méret nélküli videók eltűnnek a draftból (MC417a)
+
+Ok: a draft (editor-előnézet + kártya-borító) a leszállított fájlokat MÉRET szerint teszi helyre (`libraryVersionsBySize`, `match.cover` = 300x250). A méret a fájlnév `_WxH`-jából vagy a mért méretből jön. Az upload route (`/api/files/upload`) csak képet mér (sharp), videót nem, ezért a `ERSTE_HK_MC417_a_Wizzair_Tiktok_01_04_261014_n4.mp4` (nincs `_WxH`) méret nélkül maradt, és sehol nem jelenik meg. Élesben 6 méret nélküli videó van; a régiek a rebuild scriptből a fájlnév alapján kaptak méretet.
+
+- [x] Mérés egy helyen: ma három feltöltési út méri külön a méretet (`/api/files/upload`, és két MCP tool az `mcp.ts`-ben: sharp képre, a html5 csomag a manifestből), és egyik sem mér videót. Új közös `measureUpload(buffer, mime, filename)` (kép → sharp, html5 → csomag, **videó → ffprobe** `stream=width,height`, temp fájlon át; a box és a gép is tud ffprobe-ot). Mindhárom út ezt hívja, így a videó mindenhol méretet kap. A méret az `uploaded_files.dimensions`-ből jut a creative-ba, ahogy eddig is.
+- [x] Backfill: a 6 méret nélküli videó megmérése a storage-ból, majd az `uploaded_files.dimensions` és a hozzá tartozó `creatives.fileDimensions` kitöltése (egyszeri script, auditnaplóval).
+- [ ] ~~Draft-kártya borító~~ — **visszavonva, a felhasználó dönt:** a 6.73.0-ban szándékosan „300x250 vagy őszinte »még nincs 300x250-es agentic előnézet«” lett a szabály (`creative-matches.test.ts` rögzíti). Eredeti terv: ha nincs 300x250-es fájl, a legnagyobb meglévő méret legújabb verziója legyen a borító (ma üres marad, pl. egy 1080x1920-as TikTok-videónál).
+- [x] Teszt: `video-dimensions.test.ts` (álló, elforgatott, nem-videó; valódi ffmpeg/ffprobe), unit suite zöld, `tsc` tiszta.
+      Eltérés a tervtől: nem egy teljes közös `measureUpload` lett, mert a három út a hibás képet eltérően kezeli (a route átengedi, az MCP elutasítja), és ezt nem akartam csendben egységesíteni. Közös a `videoDimensions()`, mindhárom út videó-ága ezt hívja; olvashatatlan videó: route 400 `invalid_video`, MCP errorResult.
+      Backfill élesben (audittal): ERSTE_Tiktok_01_04_261014.mp4 és MC417a n4 → 1080x1920 (creative 18097, 18098); MC130a/b → 1080x1080 (creative 17830). A két `emptyvideo.mp4`-ben nincs videósáv, méret nélkül maradt.
+- [x] Bump 6.124.2.

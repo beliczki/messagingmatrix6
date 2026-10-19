@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, max, ne, sql } from "drizzle-orm";
 import sharp from "sharp";
+import { videoDimensions } from "@/lib/video-dimensions";
 import { z } from "zod";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { db } from "@/db";
@@ -1986,6 +1987,15 @@ function registerAssetWriteTools(server: McpServer, ctx: McpContext): void {
             `image data is corrupt or truncated (${(e as Error).message}) — nothing was stored. If you sent data_base64, the payload was likely clipped in transit; re-encode and retry, or use source_url instead`,
           );
         }
+      } else if (mimeType.startsWith("video/")) {
+        // Same as /api/files/upload: a draft places delivered files by size.
+        try {
+          dimensions = (await videoDimensions(buffer)) ?? undefined;
+        } catch (e) {
+          return errorResult(
+            `video data is unreadable (${(e as Error).message}) — nothing was stored. If you sent data_base64, the payload was likely clipped in transit; re-encode and retry, or use source_url instead`,
+          );
+        }
       }
 
       const file = await uploadFile(ctx.clientId, {
@@ -2145,6 +2155,15 @@ function registerCreativeWriteTools(server: McpServer, ctx: McpContext): void {
         } catch (e) {
           return errorResult(
             `image data is corrupt or truncated (${(e as Error).message}) — nothing was stored. If you sent data_base64, the payload was likely clipped in transit; re-encode and retry, or use source_url instead`,
+          );
+        }
+      } else if (mimeType.startsWith("video/")) {
+        // Same as /api/files/upload: a draft places delivered files by size.
+        try {
+          dimensions = (await videoDimensions(buffer)) ?? undefined;
+        } catch (e) {
+          return errorResult(
+            `video data is unreadable (${(e as Error).message}) — nothing was stored. If you sent data_base64, the payload was likely clipped in transit; re-encode and retry, or use source_url instead`,
           );
         }
       }

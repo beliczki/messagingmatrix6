@@ -5,6 +5,14 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.124.2] — 2026-10-19
+
+### Fixed
+- **A video with no size in its name never showed on its draft.** Uploads measured images only,
+  and a draft places delivered files by size. Every upload path (UI and both MCP upload tools) now
+  measures a video with ffprobe, at the size it plays (rotation included); the four sizeless
+  videos already in the library were measured in place.
+
 ## [6.124.1] — 2026-10-19
 
 ### Fixed

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { uploadFile } from "@/lib/entities/files";
+import { videoDimensions } from "@/lib/video-dimensions";
 import { writeAudit } from "@/lib/audit";
 import {
   HTML5_PACKAGE_MIME,
@@ -76,6 +77,17 @@ export const POST = withSession(async ({ req, claims }) => {
       }
     } catch {
       // Non-image or corrupt image — leave dimensions undefined.
+    }
+  } else if (mimeType.startsWith("video/")) {
+    // A draft places delivered files by size, so a video without one never
+    // shows. A file ffprobe cannot read is refused, not stored sizeless.
+    try {
+      dimensions = (await videoDimensions(buffer)) ?? undefined;
+    } catch (e) {
+      return NextResponse.json(
+        { error: "invalid_video", message: (e as Error).message },
+        { status: 400 },
+      );
     }
   }
 

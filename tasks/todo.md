@@ -2918,3 +2918,4 @@ Ok: a draft (editor-előnézet + kártya-borító) a leszállított fájlokat M�
       Eltérés a tervtől: nem egy teljes közös `measureUpload` lett, mert a három út a hibás képet eltérően kezeli (a route átengedi, az MCP elutasítja), és ezt nem akartam csendben egységesíteni. Közös a `videoDimensions()`, mindhárom út videó-ága ezt hívja; olvashatatlan videó: route 400 `invalid_video`, MCP errorResult.
       Backfill élesben (audittal): ERSTE_Tiktok_01_04_261014.mp4 és MC417a n4 → 1080x1920 (creative 18097, 18098); MC130a/b → 1080x1080 (creative 17830). A két `emptyvideo.mp4`-ben nincs videósáv, méret nélkül maradt.
 - [x] Bump 6.124.2.
+- [x] **DEPLOYOLVA 6.124.2 — mindkét tenant** (`f702d08`), „up after 1s”; `/login` 200. Böngészőben élesben még nincs megnézve.

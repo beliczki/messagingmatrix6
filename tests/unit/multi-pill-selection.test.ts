@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { describeSelection } from "@/app/(app)/_components/MultiPill";
+import {
+  EMPTY_OPTION,
+  describeSelection,
+  optionValue,
+  withEmptyOption,
+} from "@/app/(app)/_components/MultiPill";
 
 // The closed filter pill: one or two picks name themselves, three or more fall
 // back to the count. The boundary is the whole point of the helper, so it is
@@ -50,5 +55,22 @@ describe("describeSelection", () => {
   it("orders several orphans deterministically", () => {
     const label = describeSelection(new Set(["ZZZ", "HK", "AAA"]), products);
     expect(label).toEqual({ kind: "count", text: "3", full: "HK, AAA, ZZZ" });
+  });
+});
+
+describe("empty option", () => {
+  it("lets every row satisfy 'select all' — an empty field filters under (none)", () => {
+    const rows = [{ product: "SZK" }, { product: null }, { product: "" }];
+    const options = withEmptyOption(["SZK"], rows.some((r) => !r.product));
+    expect(options).toEqual(["SZK", EMPTY_OPTION]);
+    const all = new Set(options);
+    expect(rows.filter((r) => all.has(optionValue(r.product)))).toHaveLength(3);
+    // Only the untagged ones when (none) alone is picked.
+    const none = new Set([EMPTY_OPTION]);
+    expect(rows.filter((r) => none.has(optionValue(r.product)))).toHaveLength(2);
+  });
+
+  it("adds no (none) option when every row has a value", () => {
+    expect(withEmptyOption(["HK", "SZK"], false)).toEqual(["HK", "SZK"]);
   });
 });

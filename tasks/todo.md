@@ -2890,3 +2890,18 @@ Tény: az asset az `assets` tábla, nem `creatives`-sor, ezért a share ma nem t
       Teszt: 114 fájl / 1084 teszt zöld (2 új asset-share integrációs), `tsc` tiszta, eslint új figyelmeztetés nélkül. Bump 6.124.0.
 - [x] **DEPLOYOLVA 6.124.0 — mindkét tenant** (`4234af0`), „up after 1s”; `/login` 200 mindkettőn, a `VjmGi_DRdqik` share 200.
 - [ ] Élesben böngészőben még nincs megnézve: a Chrome-fül a login oldalra dobott, a belépést a felhasználó végzi. Ellenőrizendő: Assets → Select → 2 elem → Share; a share-ben az asset megjelenik, kommentelhető, letölthető.
+
+## 2026-10-19 — Assets: eltűnő assetek + Type „Select all / none”
+
+Ok (éles adatból): 205 assetből 53-nak üres a `product` mezője (51 teljesen tageletlen, 1 `brand` típusú: `EBH_Logo_screen_white.png`), 1-nek üres a `type` mezője. A szűrő (`products.size > 0 && (!a.product || …)`) az üres értékű sort **minden** kijelölésnél kidobja, akkor is, ha minden opció be van pipálva. Ezért látszik 152/205, és ezért 0 a „brand” típus. Ugyanez a mechanizmus van a Creative Library Product szűrőjében is.
+
+Mechanizmus-javítás: az üres érték saját opció lesz a szűrőben („(none)”). Így a „Select all” tényleg mindent mutat, és a tageletlen elemekre külön is lehet szűrni.
+- [x] `MultiPill`: közös `EMPTY_OPTION` konstans + `optionValue(v)` (üres → „(none)”), a lista végén jelenik meg.
+- [x] Assets: Product és Type szűrő ezt használja (opciók, számlálók, predikátum); a Type kap `ALL_NONE_QUICK_SELECT`-et, mint a Product.
+- [x] Creative Library Product szűrő: ugyanez (ugyanaz a bug).
+- Megjegyzés: az elmentett szűrők (localStorage) nem tartalmazzák a „(none)”-t, ezért egyszer újra rá kell nyomni a „Select all”-ra.
+
+Külön, adatkérdés (a felhasználó dönt): a típusban `Image` (8) és `image` (48) kétszer szerepel; ez feltöltéskori kézi tagelésből jön. Javaslat: az éles adatban a 8 `Image` → `image`.
+- [x] Adat: a 8 `Image` típusú asset (1120, 1121, 1170–1172, 1222–1224) → `image`, `updateAsset` + audit; utána 0 `Image`.
+      Teszt: `multi-pill-selection.test.ts` +2 (az üres opció), unit suite zöld, `tsc` tiszta. A szűrők opciólistája külön (`*FilterOptions`), a feltöltő dialógus javaslatai nem kapják meg a „(none)”-t.
+- [x] Bump 6.124.1 (patch), CHANGELOG.

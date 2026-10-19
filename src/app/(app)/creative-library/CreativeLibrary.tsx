@@ -30,6 +30,8 @@ import BatchUploadDialog, {
 } from "../_components/BatchUploadDialog";
 import MultiPill, {
   ALL_NONE_QUICK_SELECT,
+  optionValue,
+  withEmptyOption,
   type QuickPreset,
 } from "../_components/MultiPill";
 
@@ -531,13 +533,18 @@ export default function CreativeLibrary() {
   const productCounts = useMemo(() => {
     const out: Record<string, number[]> = {};
     for (const c of items) {
-      if (!c.product) continue;
-      const cur = out[c.product] ?? [0, 0];
+      const v = optionValue(c.product);
+      const cur = out[v] ?? [0, 0];
       cur[c.kind === "matrix" ? 0 : 1] += 1;
-      out[c.product] = cur;
+      out[v] = cur;
     }
     return trimEmptyCountSegments(out, [AXIS_DCO, AXIS_AGENTIC]);
   }, [items]);
+  // The pill's list; the upload window's suggestions below stay value-only.
+  const productFilterOptions = useMemo(
+    () => withEmptyOption(productOptions, items.some((c) => !c.product)),
+    [productOptions, items],
+  );
   const typeOptions = useMemo(() => {
     const s = new Set<string>();
     for (const c of items) if (c.type) s.add(c.type);
@@ -578,7 +585,7 @@ export default function CreativeLibrary() {
         if (c.kind !== "uploaded") return false;
         if (!c.versions.some((v) => lastUpload.has(String(v.id)))) return false;
       }
-      if (products.size > 0 && (!c.product || !products.has(c.product))) {
+      if (products.size > 0 && !products.has(optionValue(c.product))) {
         return false;
       }
       if (axes.size > 0 && !axes.has(axisOf(c))) {
@@ -710,7 +717,7 @@ export default function CreativeLibrary() {
         <Toolbar
           search={search}
           setSearch={setSearch}
-          productOptions={productOptions}
+          productOptions={productFilterOptions}
           productCounts={productCounts.counts}
           productCountLabels={productCounts.labels}
           products={products}

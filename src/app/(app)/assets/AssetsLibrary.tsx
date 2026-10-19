@@ -8,7 +8,11 @@ import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import { Masonry } from "../_components/Masonry";
 import AssetUploadDialog from "./AssetUploadDialog";
 import { useDropTarget, type QueueItem } from "../_components/UploadQueue";
-import MultiPill, { ALL_NONE_QUICK_SELECT } from "../_components/MultiPill";
+import MultiPill, {
+  ALL_NONE_QUICK_SELECT,
+  optionValue,
+  withEmptyOption,
+} from "../_components/MultiPill";
 import ArchiveToggle from "../_components/ArchiveToggle";
 import RightToolbar from "../_components/RightToolbar";
 import ToolbarUpload from "../_components/ToolbarUpload";
@@ -166,7 +170,10 @@ export default function AssetsLibrary() {
   // Counted over the whole set: the product filter is this pill's own.
   const productCounts = useMemo(() => {
     const out: Record<string, number> = {};
-    for (const a of assets) if (a.product) out[a.product] = (out[a.product] ?? 0) + 1;
+    for (const a of assets) {
+      const v = optionValue(a.product);
+      out[v] = (out[v] ?? 0) + 1;
+    }
     return out;
   }, [assets]);
   const typeOptions = useMemo(() => {
@@ -174,12 +181,21 @@ export default function AssetsLibrary() {
     for (const a of assets) if (a.type) s.add(a.type);
     return [...s].sort();
   }, [assets]);
+  // The pills' lists: the upload dialog's suggestions above stay value-only.
+  const productFilterOptions = useMemo(
+    () => withEmptyOption(productOptions, assets.some((a) => !a.product)),
+    [productOptions, assets],
+  );
+  const typeFilterOptions = useMemo(
+    () => withEmptyOption(typeOptions, assets.some((a) => !a.type)),
+    [typeOptions, assets],
+  );
 
   const predicate = useMemo(() => parseSearchQuery(search), [search]);
   const filtered = useMemo(() => {
     return assets.filter((a) => {
-      if (products.size > 0 && (!a.product || !products.has(a.product))) return false;
-      if (types.size > 0 && (!a.type || !types.has(a.type))) return false;
+      if (products.size > 0 && !products.has(optionValue(a.product))) return false;
+      if (types.size > 0 && !types.has(optionValue(a.type))) return false;
       const free =
         `${a.fileName ?? ""} ${a.brand ?? ""} ${a.product ?? ""} ${a.type ?? ""} ${a.visualKeyword ?? ""} ${a.comment ?? ""}`.toLowerCase();
       return predicate({
@@ -234,12 +250,18 @@ export default function AssetsLibrary() {
         <MultiPill
           label="Product"
           values={products}
-          options={productOptions}
+          options={productFilterOptions}
           optionCounts={productCounts}
           quickSelect={ALL_NONE_QUICK_SELECT}
           onChange={setProducts}
         />
-        <MultiPill label="Type" values={types} options={typeOptions} onChange={setTypes} />
+        <MultiPill
+          label="Type"
+          values={types}
+          options={typeFilterOptions}
+          quickSelect={ALL_NONE_QUICK_SELECT}
+          onChange={setTypes}
+        />
 
         {(products.size > 0 || types.size > 0 || search) ? (
           <button

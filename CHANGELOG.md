@@ -5,6 +5,14 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.124.1] — 2026-10-19
+
+### Fixed
+- **Untagged items vanished behind any filter.** A row with an empty product or type matched no
+  selection — not even every option ticked — so 53 of 205 assets (the logo among them) never
+  showed. Filters now list such rows under "(none)", on the Assets Product/Type and the Creative
+  Library Product pills; the Assets Type pill also gets Select all / none.
+
 ## [6.124.0] — 2026-10-18
 
 ### Added

@@ -21,6 +21,21 @@ export const ALL_NONE_QUICK_SELECT = {
   ],
 } satisfies { prefix?: string; presets: QuickPreset[] };
 
+// The option a row with an EMPTY field filters under. Without it such a row
+// can satisfy no selection — not even every option ticked — so "Select all"
+// quietly hid every untagged item (53 of 205 assets, the logo among them).
+export const EMPTY_OPTION = "(none)";
+
+/** A row's value as the filter sees it: an empty field is EMPTY_OPTION. */
+export function optionValue(v: string | null): string {
+  return v ? v : EMPTY_OPTION;
+}
+
+/** Filter options: the sorted values, then EMPTY_OPTION when a row has none. */
+export function withEmptyOption(options: string[], hasEmpty: boolean): string[] {
+  return hasEmpty ? [...options, EMPTY_OPTION] : options;
+}
+
 type Props = {
   label: string;
   values: Set<string>;

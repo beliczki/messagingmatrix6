@@ -588,6 +588,25 @@ function DraftTile({
   const target = draft.draftTarget ?? (match && match.total > 0 ? "agentic" : "dco");
   const wantsLibrary = target === "agentic" || target === "both";
   const cover = wantsLibrary ? (match?.cover ?? null) : null;
+  // No 300x250 to stand in for the card, but other sizes delivered: name what
+  // the preview window will show, so the card says what is there rather than
+  // only how many (user, 2026-10-19). A file with no size never reaches the
+  // preview, so it is not listed.
+  const deliveredLabel = (() => {
+    if (!wantsLibrary || cover !== null || !match) return null;
+    const seen = new Map<string, { area: number; label: string }>();
+    for (const i of match.items) {
+      const m = i.dimensions?.match(/^(\d+)x(\d+)$/);
+      if (!m) continue;
+      const label = `${m[1]}×${m[2]} ${i.isVideo ? "video" : "image"}`;
+      seen.set(label, { area: +m[1]! * +m[2]!, label });
+    }
+    if (seen.size === 0) return null;
+    return [...seen.values()]
+      .sort((a, b) => b.area - a.area)
+      .map((e) => e.label)
+      .join(" · ");
+  })();
 
   // A DCO draft only renders once it has copy; before that the template would
   // draw an empty card (see the note above).
@@ -667,14 +686,23 @@ function DraftTile({
               loading="lazy"
               className="drafts-tile__brief-frame pointer-events-none absolute left-0 top-0 aspect-video h-full w-auto max-w-none border-0"
             />
+            {deliveredLabel !== null ? (
+              <div className="drafts-tile__delivered absolute inset-x-0 bottom-0 bg-white/90 px-2 py-1 text-[10px] leading-snug text-slate-600">
+                In the preview: {deliveredLabel}
+              </div>
+            ) : null}
           </div>
         ) : wantsLibrary ? (
           <div className="drafts-tile__placeholder flex aspect-[300/250] w-full items-center justify-center p-6 text-center text-[11px] leading-relaxed text-slate-400">
             No 300×250 agentic preview yet —
             <br />
-            {match && match.total > 0
-              ? `${match.total} other file${match.total === 1 ? "" : "s"} delivered.`
-              : "nothing delivered to the library."}
+            {deliveredLabel !== null ? (
+              <span className="drafts-tile__delivered">In the preview: {deliveredLabel}</span>
+            ) : match && match.total > 0 ? (
+              `${match.total} other file${match.total === 1 ? "" : "s"} delivered.`
+            ) : (
+              "nothing delivered to the library."
+            )}
           </div>
         ) : rendersTemplate && draft.template ? (
           <MatrixIframePreview

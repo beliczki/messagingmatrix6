@@ -5,6 +5,18 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.124.3] — 2026-10-19
+
+### Changed
+- **A draft card with no 300×250 names what it does have.** Instead of "N other files delivered" it
+  lists the sizes and types the preview window shows ("In the preview: 1080×1920 video · 160×600
+  image"), also as a strip over a brief slide.
+
+### Fixed
+- **Shared videos stuck on "Preparing the video preview".** On the server-rendered share page the
+  poster could finish loading before hydration attached its onLoad, so the tile never noticed it;
+  it now reads the image's own state once mounted.
+
 ## [6.124.2] — 2026-10-19
 
 ### Fixed

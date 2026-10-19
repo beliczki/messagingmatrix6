@@ -45,6 +45,11 @@ export default function VideoThumb({
 }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
+  // On a server-rendered page (the public share) the poster can finish loading
+  // BEFORE hydration attaches onLoad — the event is gone, and the tile sat on
+  // "Preparing the video preview" over a poster that was already there. So the
+  // element's own state is read once it is ours.
+  const posterRef = useRef<HTMLImageElement>(null);
   const [hovering, setHovering] = useState(false);
   // `index` is where the POINTER is; `shown` is the frame actually on screen.
   // They differ while a frame is still downloading — a mounted <img> with no
@@ -63,6 +68,12 @@ export default function VideoThumb({
     ? `${base}?thumb=${width}`
     : `${base}/thumbnail?w=${width}`;
   const manifestSrc = shareId ? `${base}?stills=1` : `${base}/still?manifest=1`;
+  useEffect(() => {
+    const img = posterRef.current;
+    if (!img || !img.complete) return;
+    if (img.naturalWidth > 0) setLoaded(true);
+    else setFailed(true);
+  }, [posterSrc]);
   const frameUrl = (i: number, v: number) =>
     shareId
       ? `${base}?still=${i}&w=${width}&v=${v}`
@@ -144,6 +155,7 @@ export default function VideoThumb({
           height, so it stays mounted and keeps the box from collapsing. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
+        ref={posterRef}
         src={posterSrc}
         alt={alt}
         className={clsx(imgClassName, !loaded && "absolute inset-0 opacity-0")}

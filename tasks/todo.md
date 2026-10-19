@@ -2919,3 +2919,11 @@ Ok: a draft (editor-előnézet + kártya-borító) a leszállított fájlokat M�
       Backfill élesben (audittal): ERSTE_Tiktok_01_04_261014.mp4 és MC417a n4 → 1080x1920 (creative 18097, 18098); MC130a/b → 1080x1080 (creative 17830). A két `emptyvideo.mp4`-ben nincs videósáv, méret nélkül maradt.
 - [x] Bump 6.124.2.
 - [x] **DEPLOYOLVA 6.124.2 — mindkét tenant** (`f702d08`), „up after 1s”; `/login` 200. Böngészőben élesben még nincs megnézve.
+
+## 2026-10-19 — Draft-kártya: a nem 300x250-es fájlok listája a borítón
+
+Igény: a 300x250-es borító szabály marad (jogos), de ha más méret van leszállítva, a kártya írja ki, milyen méretek és típusok (image / video) láthatók a preview ablakban.
+- [x] `DraftsView` `drafts-tile__placeholder` (wantsLibrary ág): az „N other files delivered” helyett a méretek és típusok, méret szerint csökkenő sorrendben, pl. „In the preview: 1080×1920 video · 160×600 image”. Forrás a `match.items` (méret nélküli fájl nincs a preview-ban, kimarad). A csempe a `drafts-tile__delivered` elemen.
+- [x] Ha a draftnak van brief-slide-ja, ma a brief látszik a borítón. Ott ugyanez a lista egy alsó sávban a brief fölött.
+- [x] Inventory, CHANGELOG, patch bump, deploy.
+- [x] Mellékes hiba (share `i17_51v2m7lY`): a videó-csempe a „Preparing the video preview”-n ragadt, pedig a poszter betöltött (Playwright: `complete: true`, `naturalWidth 400`). Ok: a share oldal SSR, a poszter a hidratálás előtt betölt, az `onLoad` elvész. Javítás: a `VideoThumb` felcsatoláskor kiolvassa az `img.complete` / `naturalWidth` állapotot (nem timeout). Bump 6.124.3.

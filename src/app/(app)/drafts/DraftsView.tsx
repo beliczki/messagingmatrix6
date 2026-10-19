@@ -686,11 +686,6 @@ function DraftTile({
               loading="lazy"
               className="drafts-tile__brief-frame pointer-events-none absolute left-0 top-0 aspect-video h-full w-auto max-w-none border-0"
             />
-            {deliveredLabel !== null ? (
-              <div className="drafts-tile__delivered absolute inset-x-0 bottom-0 bg-white/90 px-2 py-1 text-[10px] leading-snug text-slate-600">
-                In the preview: {deliveredLabel}
-              </div>
-            ) : null}
           </div>
         ) : wantsLibrary ? (
           <div className="drafts-tile__placeholder flex aspect-[300/250] w-full items-center justify-center p-6 text-center text-[11px] leading-relaxed text-slate-400">

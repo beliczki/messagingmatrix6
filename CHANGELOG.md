@@ -5,6 +5,12 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.124.4] — 2026-10-19
+
+### Changed
+- A draft card showing its brief slide no longer adds the "In the preview" strip — the line stays on
+  the card only when there is no brief to show.
+
 ## [6.124.3] — 2026-10-19
 
 ### Changed

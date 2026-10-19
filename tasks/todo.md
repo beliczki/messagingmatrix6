@@ -2928,3 +2928,4 @@ Igény: a 300x250-es borító szabály marad (jogos), de ha más méret van lesz
 - [x] Inventory, CHANGELOG, patch bump, deploy.
 - [x] Mellékes hiba (share `i17_51v2m7lY`): a videó-csempe a „Preparing the video preview”-n ragadt, pedig a poszter betöltött (Playwright: `complete: true`, `naturalWidth 400`). Ok: a share oldal SSR, a poszter a hidratálás előtt betölt, az `onLoad` elvész. Javítás: a `VideoThumb` felcsatoláskor kiolvassa az `img.complete` / `naturalWidth` állapotot (nem timeout). Bump 6.124.3.
 - [x] **DEPLOYOLVA 6.124.3 — mindkét tenant** (`8873922`). Élesben Playwright, `i17_51v2m7lY` 3 betöltés: a poszter látszik, nincs „Preparing” és nincs „failed”. A draft-kártya szövegét böngészőben nem láttam (belépés kell).
+- [x] Visszavéve (felhasználó): brief-slide fölött nem kell az „In the preview” sáv, csak a placeholderben marad. Bump 6.124.4.

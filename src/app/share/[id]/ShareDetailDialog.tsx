@@ -5,7 +5,7 @@ import { Icon } from "@/app/_icons/Icon";
 import { briefKey, type ShareBriefs } from "@/lib/share-briefs";
 import clsx from "clsx";
 import ImagePreviewToggle from "./ImagePreviewToggle";
-import { fetchMatrixDownload } from "./matrix-download";
+import { ItemDownloadMenu } from "./DownloadMenu";
 import { bgClassFor, type PreviewBg } from "./preview-bg";
 import AnnotationLayer, {
   type Annotation,
@@ -245,6 +245,17 @@ export default function ShareDetailDialog({
           >
             <Icon name="chevron-left" className="size-4" />
           </button>
+          <button
+            onClick={navigateNext}
+            disabled={navIndex < 0 || navIndex >= navItems.length - 1}
+            aria-label="Next"
+            className="share-detail-dialog__nav-next rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
+          >
+            <Icon name="chevron-right" className="size-4" />
+          </button>
+          <span className="share-detail-dialog__nav-counter shrink-0 text-xs tabular-nums text-slate-500">
+            {navIndex + 1}/{navItems.length}
+          </span>
           <div className="share-detail-dialog__title-block flex min-w-0 items-baseline gap-2">
             <span className="share-detail-dialog__title font-mono text-sm font-semibold text-slate-900">
               {labelFor(item)}
@@ -260,17 +271,6 @@ export default function ShareDetailDialog({
               </span>
             ) : null}
           </div>
-          <button
-            onClick={navigateNext}
-            disabled={navIndex < 0 || navIndex >= navItems.length - 1}
-            aria-label="Next"
-            className="share-detail-dialog__nav-next rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
-          >
-            <Icon name="chevron-right" className="size-4" />
-          </button>
-          <span className="share-detail-dialog__nav-counter text-xs text-slate-500">
-            {navIndex + 1}/{navItems.length}
-          </span>
           <div className="share-detail-dialog__header-actions ml-auto flex items-center gap-2">
             {item.kind === "matrix" ? (
               <ImagePreviewToggle
@@ -280,7 +280,7 @@ export default function ShareDetailDialog({
               />
             ) : null}
             <BgToggle bg={bg} setBg={setBg} />
-            <DownloadAction item={item} shareId={shareId} />
+            <ItemDownloadMenu item={item} shareId={shareId} previewSrc={imageSrc} />
             {item.kind === "creative" && item.creative.driveFolderId ? (
               <a
                 href={`https://drive.google.com/drive/folders/${item.creative.driveFolderId}`}
@@ -1025,65 +1025,6 @@ function BgToggle({
     </div>
   );
 }
-
-function DownloadAction({ item, shareId }: { item: DialogItem; shareId: string }) {
-  if (item.kind === "creative") {
-    return <CreativeDownload item={item} shareId={shareId} />;
-  }
-  return <MatrixDownload item={item} shareId={shareId} />;
-}
-
-function CreativeDownload({
-  item,
-  shareId,
-}: {
-  item: Extract<DialogItem, { kind: "creative" }>;
-  shareId: string;
-}) {
-  if (!item.file) return null;
-  return (
-    <a
-      href={`/share/${shareId}/file/${item.file.id}`}
-      download={item.creative.fileName ?? item.file.filename}
-      className="toolbar-btn inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
-    >
-      <Icon name="download" className="size-3" />
-      Download
-    </a>
-  );
-}
-
-function MatrixDownload({
-  item,
-  shareId,
-}: {
-  item: Extract<DialogItem, { kind: "matrix" }>;
-  shareId: string;
-}) {
-  async function go() {
-    const { blob, filename } = await fetchMatrixDownload(shareId, item.message, item.size);
-    if (!blob) return;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-  return (
-    <button
-      type="button"
-      onClick={go}
-      className="toolbar-btn inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
-    >
-      <Icon name="download" className="size-3" />
-      Download
-    </button>
-  );
-}
-
 
 type HistoryEntry = {
   id: number;

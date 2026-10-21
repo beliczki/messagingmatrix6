@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { useThemeSwitch } from "@/app/_components/useThemeSwitch";
+import { BulkDownloadRows, type BulkDownload } from "./DownloadMenu";
 
 // On a phone the action row wraps into three cramped lines of icon buttons with
 // no labels. Here they live in one menu instead: full-width rows, each one
@@ -28,7 +29,9 @@ export default function ShareActionsMenu({
   canImagePreview,
   imageReadyCount,
   totalCount,
-  downloadCount,
+  hasMatrix,
+  htmlCount,
+  imageCount,
   zipping,
   zipProgress,
   onDownloadAll,
@@ -45,10 +48,12 @@ export default function ShareActionsMenu({
   canImagePreview: boolean;
   imageReadyCount: number;
   totalCount: number;
-  downloadCount: number;
+  hasMatrix: boolean;
+  htmlCount: number;
+  imageCount: number;
   zipping: boolean;
   zipProgress: number;
-  onDownloadAll: () => void;
+  onDownloadAll: (choice: BulkDownload) => void;
   commentedOnly: boolean;
   setCommentedOnly: (v: boolean) => void;
   driveFolders: DriveFolder[];
@@ -99,25 +104,18 @@ export default function ShareActionsMenu({
             </Row>
           </Section>
 
-          <Section label="Download">
-            <Row
-              onClick={() => {
-                onDownloadAll();
-                setOpen(false);
-              }}
-              disabled={zipping || downloadCount === 0}
-              icon={
-                zipping ? (
-                  <Icon name="spinner" className="size-4 animate-spin" />
-                ) : (
-                  <Icon name="download" className="size-4" />
-                )
-              }
-            >
-              {zipping
-                ? `Bundling… ${zipProgress}%`
-                : `Download all (${downloadCount})`}
-            </Row>
+          <Section label={zipping ? `Download all · bundling… ${zipProgress}%` : "Download all"}>
+            {zipping ? null : (
+              <BulkDownloadRows
+                hasMatrix={hasMatrix}
+                htmlCount={htmlCount}
+                imageCount={imageCount}
+                onPick={(choice) => {
+                  onDownloadAll(choice);
+                  setOpen(false);
+                }}
+              />
+            )}
           </Section>
 
           {driveFolders.length > 0 ? (

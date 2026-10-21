@@ -7,6 +7,8 @@ import { readFileBytes, readFileStream } from "@/lib/storage";
 import { parseRangeHeader } from "@/lib/http-range";
 import { storedFileHeaders } from "@/lib/stored-file-headers";
 import { verifyToken } from "@/lib/public-shortcut";
+import { parseImageFormat, parseJpgQuality } from "@/lib/image-formats";
+import { convertImage } from "@/lib/image-convert";
 
 // The public image surface. Everything here is reachable without a session,
 // and the SIGNATURE in the token is what stands in for one — see
@@ -16,6 +18,7 @@ import { verifyToken } from "@/lib/public-shortcut";
 //   /publicshortcut/c<creative_id>.<sig>         the agentic creative file
 //   ...?html=1                                   the same image on a bare page
 //   ...?v=<updated_at>                           cache-buster, outside the signature
+//   .../<size>?as=jpg&q=70                       the preview PNG in another format
 //
 // No status gate: a DRAFT preview is served like any other, because watching a
 // draft take shape is exactly what a client's agent is handed a link for
@@ -92,6 +95,21 @@ export async function GET(
       bytes = await readFileBytes(row.storageKey);
     } catch {
       return NextResponse.json({ error: "storage_missing" }, { status: 410 });
+    }
+    // `?as=jpg&q=70` — the share viewer's download menu asking for the preview
+    // in another format (see /share/[id]/file for the same parameter).
+    const asRaw = url.searchParams.get("as");
+    if (asRaw !== null) {
+      const format = parseImageFormat(asRaw);
+      if (!format) return NextResponse.json({ error: "not_convertible" }, { status: 400 });
+      const out = await convertImage(bytes, format, parseJpgQuality(url.searchParams.get("q")));
+      return new NextResponse(new Uint8Array(out.bytes), {
+        headers: {
+          "Content-Type": out.contentType,
+          "Content-Length": String(out.bytes.length),
+          "Cache-Control": "public, max-age=300",
+        },
+      });
     }
     return new NextResponse(new Uint8Array(bytes), {
       headers: {

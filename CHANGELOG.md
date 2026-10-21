@@ -5,6 +5,20 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.125.0] — 2026-10-21
+
+### Added
+- **Download as a menu in shares.** The detail view and every card offer the original (with its real
+  extension) or the picture as JPG (quality, default 70%, remembered), PNG, WebP or AVIF — the
+  original's own format left out. Converted on the server (`?as=` on the share file route and the
+  preview PNG). An MC's original is its HTML package; its images come from the stored preview.
+- **Download all as a menu.** "as HTML packages" when the share holds MCs, then the preview images —
+  original or in any of the four formats. Replaces the old coupling to the Image preview toggle.
+
+### Changed
+- Share detail header reads `‹ › 4/11 MC411a 480x480 file name` — the stepper first.
+- The share's theme switch moved to the top row, after the capture date.
+
 ## [6.124.4] — 2026-10-19
 
 ### Changed

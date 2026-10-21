@@ -21,6 +21,14 @@ import VideoThumb from "../../(app)/_components/VideoThumb";
 import { Html5PackageFrame } from "../../(app)/_components/Html5PackageFrame";
 import { creativeMediaKind } from "@/lib/creative-media-kind";
 import { fetchMatrixDownload } from "./matrix-download";
+import {
+  DownloadMenu,
+  BulkDownloadRows,
+  ItemDownloadMenu,
+  saveBlob,
+  type BulkDownload,
+} from "./DownloadMenu";
+import { isConvertibleImage, withImageFormat } from "@/lib/image-formats";
 import ShareDetailDialog, {
   type DialogItem,
   type ShareCommentRow,
@@ -442,58 +450,49 @@ export default function ShareGallery({
   const [zipping, setZipping] = useState(false);
   const [zipProgress, setZipProgress] = useState(0);
 
-  // In image mode only the items that actually have a stored image are
-  // downloadable; the rest are labelled "no preview" in the gallery and stay
-  // out of the zip rather than silently arriving as HTML.
+  // Items with a stored image — the Image preview toggle's count.
   const imageReady = useMemo(
     () => filtered.filter((it) => imageSrcFor(it) !== null),
     [filtered, imageSrcFor],
   );
-  const downloadTargets = imagePreview ? imageReady : filtered;
 
-  async function downloadAll() {
-    if (downloadTargets.length === 0 || zipping) return;
+  // Download all, per the menu row picked. "html": every MC as its HTML
+  // package, every creative as its file. "image": every MC as its stored
+  // preview (an MC without one is left out, and the row's count says so), every
+  // creative as its file — converted when it is a raster picture, as it is
+  // otherwise (a video has no other format to arrive in).
+  const hasMatrix = filtered.some((it) => it.kind === "matrix");
+  const imageCount = filtered.filter((it) =>
+    it.kind === "matrix" ? imageSrcFor(it) !== null : it.file !== undefined,
+  ).length;
+
+  async function downloadAll(choice: BulkDownload) {
+    if (zipping) return;
     setZipping(true);
     setZipProgress(0);
     try {
       const { default: JSZip } = await import("jszip");
       const zip = new JSZip();
       let done = 0;
-      for (const it of downloadTargets) {
+      for (const it of filtered) {
         try {
-          if (imagePreview) {
-            const src = imageSrcFor(it);
-            if (src) {
-              const r = await fetch(src);
-              if (r.ok) {
-                zip.file(downloadFilenameFor(it, true), await r.blob());
-              }
-            }
-          } else if (it.kind === "matrix") {
+          if (it.kind === "matrix" && choice.mode === "html") {
             const { blob, filename } = await fetchMatrixDownload(shareId, it.message, it.size);
             if (blob) zip.file(filename, blob);
-          } else if (it.file) {
-            const r = await fetch(`/share/${shareId}/file/${it.file.id}`);
-            if (r.ok) {
-              const blob = await r.blob();
-              zip.file(downloadFilenameFor(it), blob);
+          } else {
+            const entry = bulkEntry(it, choice, shareId, imageSrcFor(it));
+            if (entry) {
+              const r = await fetch(entry.url);
+              if (r.ok) zip.file(entry.name, await r.blob());
             }
           }
         } catch {
           // skip the failing item; continue with the rest
         }
         done += 1;
-        setZipProgress(Math.round((done / downloadTargets.length) * 100));
+        setZipProgress(Math.round((done / filtered.length) * 100));
       }
-      const blob = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "share-bundle.zip";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      saveBlob(await zip.generateAsync({ type: "blob" }), "share-bundle.zip");
     } finally {
       setZipping(false);
       setZipProgress(0);
@@ -587,6 +586,10 @@ export default function ShareGallery({
               <span className="text-slate-300">·</span>
             ) : null}
             {generatedAt ? <span>captured {generatedAt}</span> : null}
+            {/* Narrow: the theme lives in the Actions menu. */}
+            <span className="share-gallery__theme hidden sm:inline-flex">
+              <ThemeToggle />
+            </span>
           </div>
         </div>
         {shareDescription ? (
@@ -654,15 +657,16 @@ export default function ShareGallery({
             canImagePreview={canImagePreview}
             imageReadyCount={imageReady.length}
             totalCount={filtered.length}
-            downloadCount={downloadTargets.length}
+            hasMatrix={hasMatrix}
+            htmlCount={filtered.length}
+            imageCount={imageCount}
             zipping={zipping}
             zipProgress={zipProgress}
-            onDownloadAll={downloadAll}
+            onDownloadAll={(choice) => void downloadAll(choice)}
             driveFolders={driveFolders}
             briefDecks={briefDecks}
           />
           <div className="share-gallery__control-actions ml-auto hidden flex-wrap items-center gap-2 sm:flex">
-            <ThemeToggle />
             <ViewSwitcher view={view} setView={setView} />
             {canImagePreview ? (
               <ImagePreviewToggle
@@ -672,26 +676,26 @@ export default function ShareGallery({
                 total={filtered.length}
               />
             ) : null}
-            <button
-              type="button"
-              onClick={downloadAll}
-              disabled={zipping || downloadTargets.length === 0}
-              title={
-                imagePreview
-                  ? "Bundle the stored preview PNGs"
-                  : "Bundle the rendered HTML creatives"
-              }
-              className="toolbar-btn--primary inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+<DownloadMenu
+              className="share-gallery__download-all"
+              label={zipping ? `Bundling… ${zipProgress}%` : `Download all (${filtered.length})`}
+              busy={zipping}
+              disabled={zipping || filtered.length === 0}
+              iconClassName="size-3.5"
+              triggerClassName="toolbar-btn--primary inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {zipping ? (
-                <Icon name="spinner" className="size-3.5 animate-spin" />
-              ) : (
-                <Icon name="download" className="size-3.5" />
+              {(close) => (
+                <BulkDownloadRows
+                  hasMatrix={hasMatrix}
+                  htmlCount={filtered.length}
+                  imageCount={imageCount}
+                  onPick={(choice) => {
+                    close();
+                    void downloadAll(choice);
+                  }}
+                />
               )}
-              {zipping
-                ? `Bundling… ${zipProgress}%`
-                : `Download all (${downloadTargets.length})`}
-            </button>
+            </DownloadMenu>
             <DriveFolderButton folders={driveFolders} />
             <BriefDeckButton decks={briefDecks} />
           </div>
@@ -1152,14 +1156,31 @@ function StoredPreview({
   );
 }
 
-function downloadFilenameFor(it: Item, asImage = false): string {
-  if (it.kind === "creative") {
-    // A creative's own file is already the image — its name is unchanged in
-    // both modes.
-    return it.creative.fileName ?? it.file?.filename ?? `creative-${it.creative.id}`;
+/** Where one item's image-mode download comes from, and its name in the zip. */
+function bulkEntry(
+  it: Item,
+  choice: BulkDownload,
+  shareId: string,
+  previewSrc: string | null,
+): { url: string; name: string } | null {
+  if (it.kind === "matrix") {
+    if (choice.mode !== "image" || !previewSrc) return null;
+    const base = `MC${it.message.number}${it.message.variant}-${it.size}`;
+    return choice.as
+      ? { url: withImageFormat(previewSrc, choice.as, choice.quality), name: `${base}.${choice.as}` }
+      : { url: previewSrc, name: `${base}.png` };
   }
-  const ext = asImage ? "png" : "html";
-  return `MC${it.message.number}${it.message.variant}-${it.size ?? "default"}.${ext}`;
+  if (!it.file) return null;
+  const name = it.creative.fileName ?? it.file.filename;
+  const url = `/share/${shareId}/file/${it.file.id}`;
+  if (choice.mode !== "image" || !choice.as || !isConvertibleImage(it.file.mimeType)) {
+    return { url, name };
+  }
+  const dot = name.lastIndexOf(".");
+  return {
+    url: withImageFormat(url, choice.as, choice.quality),
+    name: `${dot > 0 ? name.slice(0, dot) : name}.${choice.as}`,
+  };
 }
 
 function labelFor(it: Item): string {
@@ -1188,76 +1209,6 @@ function CommentBadge({
       <Icon name="comment" className="size-3" />
       {count}
     </span>
-  );
-}
-
-function DownloadButtonForItem({ it, shareId }: { it: Item; shareId: string }) {
-  if (it.kind === "creative") {
-    return <CardDownloadCreative it={it} shareId={shareId} />;
-  }
-  return <CardDownloadMatrix it={it} shareId={shareId} />;
-}
-
-function CardDownloadCreative({
-  it,
-  shareId,
-}: {
-  it: Extract<Item, { kind: "creative" }>;
-  shareId: string;
-}) {
-  if (!it.file) return null;
-  return (
-    <a
-      href={`/share/${shareId}/file/${it.file.id}`}
-      download={it.creative.fileName ?? it.file.filename}
-      onClick={(e) => e.stopPropagation()}
-      className="toolbar-btn inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
-    >
-      <Icon name="download" className="size-3" />
-      Download
-    </a>
-  );
-}
-
-function CardDownloadMatrix({
-  it,
-  shareId,
-}: {
-  it: Extract<Item, { kind: "matrix" }>;
-  shareId: string;
-}) {
-  async function go(e: React.MouseEvent) {
-    e.stopPropagation();
-    const r = await fetch("/api/render/public", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        shareId,
-        messageId: it.message.id,
-        size: it.size,
-        download: true,
-      }),
-    });
-    if (!r.ok) return;
-    const blob = await r.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = downloadFilenameFor(it);
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-  return (
-    <button
-      type="button"
-      onClick={go}
-      className="toolbar-btn inline-flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-100"
-    >
-      <Icon name="download" className="size-3" />
-      Download
-    </button>
   );
 }
 
@@ -1333,7 +1284,7 @@ function ItemCard({
         ) : null}
         <div className="ml-auto flex items-center gap-1.5">
           <CommentBadge count={commentCount} loaded={commentsLoaded} />
-          <DownloadButtonForItem it={item} shareId={shareId} />
+          <ItemDownloadMenu item={item} shareId={shareId} previewSrc={imageSrc} />
         </div>
       </div>
     </div>
@@ -1466,7 +1417,7 @@ function ItemRow({
         </div>
       </div>
       <CommentBadge count={commentCount} loaded={commentsLoaded} />
-      <DownloadButtonForItem it={item} shareId={shareId} />
+      <ItemDownloadMenu item={item} shareId={shareId} previewSrc={imageSrc} />
     </div>
   );
 }

@@ -2913,7 +2913,7 @@ Ok: a draft (editor-előnézet + kártya-borító) a leszállított fájlokat M�
 
 - [x] Mérés egy helyen: ma három feltöltési út méri külön a méretet (`/api/files/upload`, és két MCP tool az `mcp.ts`-ben: sharp képre, a html5 csomag a manifestből), és egyik sem mér videót. Új közös `measureUpload(buffer, mime, filename)` (kép → sharp, html5 → csomag, **videó → ffprobe** `stream=width,height`, temp fájlon át; a box és a gép is tud ffprobe-ot). Mindhárom út ezt hívja, így a videó mindenhol méretet kap. A méret az `uploaded_files.dimensions`-ből jut a creative-ba, ahogy eddig is.
 - [x] Backfill: a 6 méret nélküli videó megmérése a storage-ból, majd az `uploaded_files.dimensions` és a hozzá tartozó `creatives.fileDimensions` kitöltése (egyszeri script, auditnaplóval).
-- [ ] ~~Draft-kártya borító~~ — **visszavonva, a felhasználó dönt:** a 6.73.0-ban szándékosan „300x250 vagy őszinte »még nincs 300x250-es agentic előnézet«” lett a szabály (`creative-matches.test.ts` rögzíti). Eredeti terv: ha nincs 300x250-es fájl, a legnagyobb meglévő méret legújabb verziója legyen a borító (ma üres marad, pl. egy 1080x1920-as TikTok-videónál).
+- [x] ~~Draft-kártya borító~~ — **eldöntve (Robi, 2026-10-21): NEM lesz nagyobb borító.** A borító marad: szöveg, brief-slide vagy 300x250. Előzmény: **visszavonva, a felhasználó dönt:** a 6.73.0-ban szándékosan „300x250 vagy őszinte »még nincs 300x250-es agentic előnézet«” lett a szabály (`creative-matches.test.ts` rögzíti). Eredeti terv: ha nincs 300x250-es fájl, a legnagyobb meglévő méret legújabb verziója legyen a borító (ma üres marad, pl. egy 1080x1920-as TikTok-videónál).
 - [x] Teszt: `video-dimensions.test.ts` (álló, elforgatott, nem-videó; valódi ffmpeg/ffprobe), unit suite zöld, `tsc` tiszta.
       Eltérés a tervtől: nem egy teljes közös `measureUpload` lett, mert a három út a hibás képet eltérően kezeli (a route átengedi, az MCP elutasítja), és ezt nem akartam csendben egységesíteni. Közös a `videoDimensions()`, mindhárom út videó-ága ezt hívja; olvashatatlan videó: route 400 `invalid_video`, MCP errorResult.
       Backfill élesben (audittal): ERSTE_Tiktok_01_04_261014.mp4 és MC417a n4 → 1080x1920 (creative 18097, 18098); MC130a/b → 1080x1080 (creative 17830). A két `emptyvideo.mp4`-ben nincs videósáv, méret nélkül maradt.
@@ -2929,3 +2929,44 @@ Igény: a 300x250-es borító szabály marad (jogos), de ha más méret van lesz
 - [x] Mellékes hiba (share `i17_51v2m7lY`): a videó-csempe a „Preparing the video preview”-n ragadt, pedig a poszter betöltött (Playwright: `complete: true`, `naturalWidth 400`). Ok: a share oldal SSR, a poszter a hidratálás előtt betölt, az `onLoad` elvész. Javítás: a `VideoThumb` felcsatoláskor kiolvassa az `img.complete` / `naturalWidth` állapotot (nem timeout). Bump 6.124.3.
 - [x] **DEPLOYOLVA 6.124.3 — mindkét tenant** (`8873922`). Élesben Playwright, `i17_51v2m7lY` 3 betöltés: a poszter látszik, nincs „Preparing” és nincs „failed”. A draft-kártya szövegét böngészőben nem láttam (belépés kell).
 - [x] Visszavéve (felhasználó): brief-slide fölött nem kell az „In the preview” sáv, csak a placeholderben marad. Bump 6.124.4.
+- [x] **DEPLOYOLVA 6.124.4** (Robi, 2026-10-21). Robi élesben megnézte: az asset share működik.
+
+## 2026-10-21 — Share: Download lenyíló menü (formátumok) + fejléc-átrendezés (Robi jóváhagyta: a kártyán is legyen menü, minőség csak a JPG-nél)
+
+Igény (Robi): a share részletes nézetében a Download legyen lenyíló menü (Original és képformátumok); a fejlécben a léptető kerüljön a sor elejére; a galériában a téma-kapcsoló menjen az első sorba, és a Download all is legyen lenyíló menü.
+
+Tények:
+- Képkonverzió csak a szerveren megy jól: a böngésző canvasa AVIF-et nem tud kódolni. A `sharp` 0.35.5 megvan, az AVIF/WebP kódolást helyben kipróbáltam, működik.
+- A képek két úton jönnek: a creative és az asset fájlja a `/share/[id]/file/[fileId]`, az MC előnézeti PNG-je a `/publicshortcut/<token>/<size>`.
+- A Download all ma az „Image preview” kapcsolótól függ (PNG vagy HTML). A menüben ezt a felhasználó választja ki, a kapcsoló a letöltésre többé nem hat.
+
+Terv:
+- [x] **Konverzió egy helyen:** egy közös `convertImage(bytes, as, quality)` (jpg / png / webp / avif, a minőség 1–100). Mindkét útvonal ezt hívja, `?as=jpg&q=70` paraméterrel. A paraméter nélküli kérés változatlan marad. Átlátszó PNG-ből JPG-be fehér hátteret teszünk. SVG-t, videót és HTML5-csomagot nem konvertálunk (400-as hiba).
+- [x] **`share-download-menu`** (új közös komponens, a `share-gallery__drive-menu` mintájára: kívülre kattintás vagy Esc zárja):
+  - Egy elemre: „Original (.png)”, az eredeti kiterjesztéssel. Utána „as JPG [70] %”, „as PNG”, „as WebP”, „as AVIF”. Az eredetivel azonos formátum kimarad a listából.
+  - A JPG minőség egy kis számmező, alapértéke 70. A `mm6_share_jpg_quality` kulcson megjegyezzük.
+  - MC (DCO / HTML) elemnél az „Original” a HTML-csomag (a mai `fetchMatrixDownload`). A képformátumok a tárolt előnézeti PNG-ből készülnek, és csak akkor jelennek meg, ha van ilyen PNG.
+  - Videónál, HTML5-csomagnál és SVG-nél csak az „Original” sor van.
+- [x] **A részletes nézet fejléce:** `‹ ›` `4/11` `MC411a 480x480 fájlnév`. A két nyíl együtt áll a sor elején, utána a számláló, aztán a cím. A Download gomb helyére a menü kerül.
+- [x] **A galéria fejléce:**
+  - Az első sor: `0 comments · captured 2026-10-19` után a `ThemeToggle`, a jobb szélen.
+  - A Download all menüje: ha van DCO vagy HTML elem a listában, első sor „as HTML packages”. Utána elválasztó, „Preview images:” címke, majd Original / JPG / PNG / WebP / AVIF.
+  - Képformátumnál a creative-ok saját képe konvertálódik, az MC-k tárolt PNG-je szintén. Az előnézet nélküli MC kimarad, a számláló ezt mutatja. A videók mindig eredetiben mennek a zipbe.
+- [x] A mobil `ShareActionsMenu` Download szekciója ugyanezeket a sorokat kapja.
+- [x] Tesztek: unit teszt a `convertImage`-re (formátum, minőség, az átlátszó JPG fehér háttere). Integrációs teszt a file route-ra (`?as=` → a megfelelő `Content-Type` és fájlnév).
+- [x] Ezután: inventory, CHANGELOG, minor bump (`6.125.0`), deploy.
+
+Megválaszolva (Robi): 1. a kártya is kap menüt; 2. minőségmező csak a JPG-nél van, a WebP és az AVIF a sharp alapértékével megy.
+
+Review:
+- Kész: `lib/image-formats.ts` (kliensoldalon is használható: formátumlista, paraméterek, `withImageFormat`) és `lib/image-convert.ts` (sharp, a JPG fehér hátteret kap). `?as=` a `/share/[id]/file` és a `/publicshortcut` m-ágán. A `DownloadMenu.tsx`-ben: `DownloadMenu` (portál), `ImageFormatRows`, `ItemDownloadMenu`, `BulkDownloadRows`. A kártya régi `CardDownloadMatrix`-a a renderelt HTML-t adta, most az Original mindenhol a HTML-csomag, ahogy a dialógusban és a Download all-ban is.
+- Helyben, böngészőben néztem meg (`99ZnezihxDMM`):
+  - a Download all menü csak creative-okból álló share-en HTML sor nélkül jelenik meg;
+  - a dialógus fejlécének sorrendje jó, a PNG sor kimarad;
+  - a kártya menüje alul felfelé nyílik, és nem nyitja meg a dialógust;
+  - élesben futó konverziók: AVIF, WebP, és JPG q70 / q30 (eltérő méret).
+- Közben talált hiba: a menü wrapper minden billentyűt elnyelt, ezért az Esc nem zárta be a dialógust, ha a fókusz a Download gombon maradt. Most csak az Entert és a Space-t nyeli el.
+- Mellékhatás: a helyi dev a közös Postgrest használja, ezért az 5 curl-próbaletöltés (1 eredeti + 4 `?as=`) 5-tel növelte a `99ZnezihxDMM` share `downloadCount`-ját.
+- Teszt: 117 + 2 új fájl, 1098 + 9 teszt zöld, `tsc` tiszta, eslint új figyelmeztetés nélkül.
+- Mobilon az Actions menüt nem néztem meg.
+- [x] Bump 6.125.0, CHANGELOG, inventory.

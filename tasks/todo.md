@@ -3022,3 +3022,4 @@ Döntések (Robi):
 - [x] Robi kérése: a zip neve ne `share-bundle.zip` legyen, hanem a share címe. Az ékezetek ASCII-ra cserélődnek (NFD, majd a kombináló jelek törlése), a szóközből `_` lesz, a végére `-bundleOf<N>` kerül. Cím nélkül `share-bundleOf<N>.zip`.
 - [x] Az N a zip tényleges tartalmát mutatja (`Object.keys(zip.files)`), nem a kért elemek számát: a kimaradt elem nem számít, és két azonos nevű fájlból csak egy kerül be.
 - [x] `lib/share-bundle-name.ts` + `share-bundle-name.test.ts` (2 teszt), `tsc` tiszta, nincs új lint-figyelmeztetés. Bump 6.127.0 (látható változás, a heurisztika szerint minor).
+- [x] **DEPLOYOLVA 6.127.0 — mindkét tenant** (`c732b22`, 2026-10-21): build ok, `/login` 200 mindkettőn, a `g8PNWX9U5iMM` share 200. Élesben, böngészőben a letöltést még nem próbáltam ki.

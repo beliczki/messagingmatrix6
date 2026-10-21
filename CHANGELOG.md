@@ -5,6 +5,13 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.125.2] — 2026-10-21
+
+### Changed
+- A shared item's Download menu reads like Download all: "as Original PNG" (the file's own format)
+  instead of "Original (.png)"; an MC offers "as HTML package", then its preview as "as Original PNG"
+  and the other formats.
+
 ## [6.125.1] — 2026-10-21
 
 ### Changed

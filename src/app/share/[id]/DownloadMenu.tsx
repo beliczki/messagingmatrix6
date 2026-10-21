@@ -273,10 +273,10 @@ function baseOf(name: string): string {
 }
 
 /**
- * One shared item's Download. Original first, with its real extension, then
- * the picture in the other formats. An MC's original is its HTML package; its
- * picture is the stored preview PNG (`previewSrc`), so without one the menu
- * offers the package alone. A video, an HTML5 package or an SVG has nothing to
+ * One shared item's Download, worded like Download all: "as Original PNG"
+ * (the format the file is), then the picture in the other formats. An MC
+ * offers its HTML package first; its picture is the stored preview PNG
+ * (`previewSrc`), so without one the menu offers the package alone. A video, an HTML5 package or an SVG has nothing to
  * convert and stays a one-click Download.
  */
 export function ItemDownloadMenu({
@@ -293,6 +293,7 @@ export function ItemDownloadMenu({
     if (!file) return null;
     const name = item.creative.fileName ?? file.filename;
     const src = `/share/${shareId}/file/${file.id}`;
+    const format = formatOfFilename(name);
     if (!isConvertibleImage(file.mimeType)) {
       return (
         <a
@@ -316,10 +317,10 @@ export function ItemDownloadMenu({
                 close();
               }}
             >
-              Original <span className="text-slate-400">(.{extOf(name)})</span>
+              as Original {format ? IMAGE_FORMAT_LABELS[format] : extOf(name).toUpperCase()}
             </MenuRow>
             <ImageFormatRows
-              exclude={formatOfFilename(name)}
+              exclude={format}
               onPick={(as, q) => {
                 saveHref(withImageFormat(src, as, q), `${baseOf(name)}.${as}`);
                 close();
@@ -347,15 +348,27 @@ export function ItemDownloadMenu({
               close();
             }}
           >
-            Original <span className="text-slate-400">(.zip)</span>
+            as HTML package
           </MenuRow>
           {previewSrc ? (
-            <ImageFormatRows
-              onPick={(as, q) => {
-                saveHref(withImageFormat(previewSrc, as, q), `${base}.${as}`);
-                close();
-              }}
-            />
+            <>
+              <MenuDivider />
+              <MenuRow
+                onClick={() => {
+                  saveHref(previewSrc, `${base}.png`);
+                  close();
+                }}
+              >
+                as Original PNG
+              </MenuRow>
+              <ImageFormatRows
+                exclude="png"
+                onPick={(as, q) => {
+                  saveHref(withImageFormat(previewSrc, as, q), `${base}.${as}`);
+                  close();
+                }}
+              />
+            </>
           ) : null}
         </>
       )}

@@ -2979,3 +2979,4 @@ Review:
 - [x] A panel a gomb jobb széléhez igazodik. Ok: a `fixed` doboz `right` értéke a görgetősáv nélküli nézetből számol, az `innerWidth` viszont a görgetősávval együtt mér. Most `documentElement.clientWidth` / `clientHeight` a kiindulás.
 - Helyben, böngészőben megnézve: `VjmGi_DRdqik` (HTML, görgetősávval) és `99ZnezihxDMM` (vegyes képek). Az egyes elemek Download menüje („Original (.png)”) nem változott.
 - [x] Bump 6.125.1, CHANGELOG.
+- [x] Robi: az egyes elemek menüjében is „as Original PNG” legyen. Creative-nál a fájl formátuma szerepel benne, ismeretlen formátumnál a kiterjesztés nagybetűvel. MC-nél a sorrend: „as HTML package”, elválasztó, „as Original PNG” (az előnézet), majd a többi formátum, a PNG nélkül. Bump 6.125.2.

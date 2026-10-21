@@ -3037,3 +3037,4 @@ Döntések (Robi):
   - unit + konverziós: zöld, `tsc` tiszta, eslint új figyelmeztetés nélkül.
 - [x] Helyben, böngészőben megnézve: a „as GIF [256 ▾] colors” sor megjelenik. Valódi share-fájlon a `?as=gif&colors=64` → 200 `image/gif`.
 - [x] Bump 6.128.0, CHANGELOG, inventory.
+- [x] **DEPLOYOLVA 6.128.0 — mindkét tenant** (`b0e536d`, 2026-10-21): build ok, `/login` 200 mindkettőn. Élesben a `?as=gif&colors=32` → `image/gif`, a kimenetben mérve pontosan 32 szín.

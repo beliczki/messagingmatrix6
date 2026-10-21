@@ -5,6 +5,13 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.127.0] — 2026-10-21
+
+### Changed
+- A share's Download all zip is named after the share and says how many files it holds —
+  "Bird VALL és MASS remarketing v2" with two files downloads as
+  `Bird_VALL_es_MASS_remarketing_v2-bundleOf2.zip` instead of `share-bundle.zip`.
+
 ## [6.126.0] — 2026-10-21
 
 ### Added

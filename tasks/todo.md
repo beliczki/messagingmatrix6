@@ -3016,3 +3016,9 @@ Döntések (Robi):
   - újratöltés után ugyanaz a nézet jön vissza.
 - [x] `share-view-params.test.ts` (4 teszt), unit suite zöld, `tsc` tiszta, nincs új lint-figyelmeztetés. Bump 6.126.0, CHANGELOG.
 - [x] **DEPLOYOLVA 6.126.0 — mindkét tenant** (`fb82794`, 2026-10-21): build ok, `/login` 200 mindkettőn, a share oldalon ott az új téma-script. Élesben, böngészőben még nincs megnézve.
+
+## 2026-10-21 — Download all zip neve a share címéből
+
+- [x] Robi kérése: a zip neve ne `share-bundle.zip` legyen, hanem a share címe. Az ékezetek ASCII-ra cserélődnek (NFD, majd a kombináló jelek törlése), a szóközből `_` lesz, a végére `-bundleOf<N>` kerül. Cím nélkül `share-bundleOf<N>.zip`.
+- [x] Az N a zip tényleges tartalmát mutatja (`Object.keys(zip.files)`), nem a kért elemek számát: a kimaradt elem nem számít, és két azonos nevű fájlból csak egy kerül be.
+- [x] `lib/share-bundle-name.ts` + `share-bundle-name.test.ts` (2 teszt), `tsc` tiszta, nincs új lint-figyelmeztetés. Bump 6.127.0 (látható változás, a heurisztika szerint minor).

@@ -20,6 +20,7 @@ import { parseSearchQuery, type SearchFields } from "@/lib/search-query";
 import VideoThumb from "../../(app)/_components/VideoThumb";
 import { Html5PackageFrame } from "../../(app)/_components/Html5PackageFrame";
 import { creativeMediaKind } from "@/lib/creative-media-kind";
+import { shareBundleName } from "@/lib/share-bundle-name";
 import { serializeShareView, type ShareViewState } from "@/lib/share-view-params";
 import { fetchMatrixDownload } from "./matrix-download";
 import {
@@ -556,7 +557,12 @@ export default function ShareGallery({
         done += 1;
         setZipProgress(Math.round((done / filtered.length) * 100));
       }
-      saveBlob(await zip.generateAsync({ type: "blob" }), "share-bundle.zip");
+      saveBlob(
+        await zip.generateAsync({ type: "blob" }),
+        // What the zip holds, not what was asked for: a skipped item or two
+        // files of one name (the later replaces the earlier) count once.
+        shareBundleName(shareTitle, Object.keys(zip.files).length),
+      );
     } finally {
       setZipping(false);
       setZipProgress(0);

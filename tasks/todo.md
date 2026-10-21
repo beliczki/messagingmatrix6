@@ -2970,3 +2970,4 @@ Review:
 - Teszt: 117 + 2 új fájl, 1098 + 9 teszt zöld, `tsc` tiszta, eslint új figyelmeztetés nélkül.
 - Mobilon az Actions menüt nem néztem meg.
 - [x] Bump 6.125.0, CHANGELOG, inventory.
+- [x] **DEPLOYOLVA 6.125.0 — mindkét tenant** (`2bda8fe`, 2026-10-21): build ok, `/login` 200 mindkettőn, a `99ZnezihxDMM` share 200, élesben `?as=avif` → `image/avif`. Böngészőben élesben még nincs megnézve, a mobil Actions menü sem.

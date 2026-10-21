@@ -5,6 +5,17 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.125.1] — 2026-10-21
+
+### Changed
+- Share Download all menu: the Original row names the format the pictures already are ("as Original
+  PNG", or "PNG · JPG" when mixed) and, when they share one format, the row that would only repeat it
+  is gone. The "Preview images" label shows only under "as HTML packages", which lost its count (the
+  button carries it).
+
+### Fixed
+- The share download menus now line up with their button's right edge on a page with a scrollbar.
+
 ## [6.125.0] — 2026-10-21
 
 ### Added

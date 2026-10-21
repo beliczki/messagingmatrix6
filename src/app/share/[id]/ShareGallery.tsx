@@ -28,7 +28,12 @@ import {
   saveBlob,
   type BulkDownload,
 } from "./DownloadMenu";
-import { isConvertibleImage, withImageFormat } from "@/lib/image-formats";
+import {
+  formatOfFilename,
+  isConvertibleImage,
+  withImageFormat,
+  type ImageFormat,
+} from "@/lib/image-formats";
 import ShareDetailDialog, {
   type DialogItem,
   type ShareCommentRow,
@@ -465,6 +470,24 @@ export default function ShareGallery({
   const imageCount = filtered.filter((it) =>
     it.kind === "matrix" ? imageSrcFor(it) !== null : it.file !== undefined,
   ).length;
+  // The formats the original pictures are in, most common first: MC previews
+  // are PNG, a creative is what its file name says (a share of PNGs can hold
+  // one JPG). Null when one of them is in none of the four.
+  const originalFormats = useMemo(() => {
+    const counts = new Map<ImageFormat | null, number>();
+    const add = (f: ImageFormat | null) => counts.set(f, (counts.get(f) ?? 0) + 1);
+    for (const it of filtered) {
+      if (it.kind === "matrix") {
+        if (imageSrcFor(it) !== null) add("png");
+      } else if (it.file && isConvertibleImage(it.file.mimeType)) {
+        add(formatOfFilename(it.creative.fileName ?? it.file.filename));
+      }
+    }
+    if (counts.has(null)) return null;
+    return [...counts.entries()]
+      .sort((x, y) => y[1] - x[1])
+      .map(([f]) => f as ImageFormat);
+  }, [filtered, imageSrcFor]);
 
   async function downloadAll(choice: BulkDownload) {
     if (zipping) return;
@@ -658,7 +681,7 @@ export default function ShareGallery({
             imageReadyCount={imageReady.length}
             totalCount={filtered.length}
             hasMatrix={hasMatrix}
-            htmlCount={filtered.length}
+            originalFormats={originalFormats}
             imageCount={imageCount}
             zipping={zipping}
             zipProgress={zipProgress}
@@ -687,7 +710,7 @@ export default function ShareGallery({
               {(close) => (
                 <BulkDownloadRows
                   hasMatrix={hasMatrix}
-                  htmlCount={filtered.length}
+                  originalFormats={originalFormats}
                   imageCount={imageCount}
                   onPick={(choice) => {
                     close();

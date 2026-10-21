@@ -5,6 +5,7 @@ import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import { useThemeSwitch } from "@/app/_components/useThemeSwitch";
 import { BulkDownloadRows, type BulkDownload } from "./DownloadMenu";
+import type { ImageFormat } from "@/lib/image-formats";
 
 // On a phone the action row wraps into three cramped lines of icon buttons with
 // no labels. Here they live in one menu instead: full-width rows, each one
@@ -30,8 +31,8 @@ export default function ShareActionsMenu({
   imageReadyCount,
   totalCount,
   hasMatrix,
-  htmlCount,
   imageCount,
+  originalFormats,
   zipping,
   zipProgress,
   onDownloadAll,
@@ -49,8 +50,8 @@ export default function ShareActionsMenu({
   imageReadyCount: number;
   totalCount: number;
   hasMatrix: boolean;
-  htmlCount: number;
   imageCount: number;
+  originalFormats: ImageFormat[] | null;
   zipping: boolean;
   zipProgress: number;
   onDownloadAll: (choice: BulkDownload) => void;
@@ -108,8 +109,8 @@ export default function ShareActionsMenu({
             {zipping ? null : (
               <BulkDownloadRows
                 hasMatrix={hasMatrix}
-                htmlCount={htmlCount}
                 imageCount={imageCount}
+                originalFormats={originalFormats}
                 onPick={(choice) => {
                   onDownloadAll(choice);
                   setOpen(false);

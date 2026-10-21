@@ -73,11 +73,15 @@ export function DownloadMenu({
   // would not hold the panel (a card on the last row of the page).
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return;
+    // clientWidth, not innerWidth: `right` on a fixed box counts from the
+    // viewport's edge without the scrollbar, and innerWidth includes it — the
+    // panel sat a scrollbar's width left of the button on a long share.
     const r = triggerRef.current.getBoundingClientRect();
-    const right = window.innerWidth - r.right;
+    const { clientWidth, clientHeight } = document.documentElement;
+    const right = clientWidth - r.right;
     setPos(
-      window.innerHeight - r.bottom < 280
-        ? { right, bottom: window.innerHeight - r.top + 4 }
+      clientHeight - r.bottom < 280
+        ? { right, bottom: clientHeight - r.top + 4 }
         : { right, top: r.bottom + 4 },
     );
   }, [open]);
@@ -364,41 +368,48 @@ export type BulkDownload =
   | { mode: "image"; as: ImageFormat | null; quality: number };
 
 /**
- * Download all's rows: "as HTML packages" when there are MCs to package, then
- * the preview images — the original pictures, or converted. Shared with the
- * phone's Actions menu.
+ * Download all's rows. With MCs in the list: "as HTML packages", then the
+ * preview images under their own label. Without them the pictures are the
+ * creatives themselves, and the label would only repeat the button.
+ * `originalFormats` names what the original pictures are ("as Original PNG",
+ * "as Original PNG · JPG"). When they are all in one format, the row that
+ * would produce the same files again is left out; when mixed, every row
+ * converts something, so all stay.
  */
 export function BulkDownloadRows({
   hasMatrix,
-  htmlCount,
   imageCount,
+  originalFormats,
   onPick,
 }: {
   hasMatrix: boolean;
-  htmlCount: number;
   imageCount: number;
+  originalFormats: ImageFormat[] | null;
   onPick: (choice: BulkDownload) => void;
 }) {
   return (
     <>
       {hasMatrix ? (
         <>
-          <MenuRow onClick={() => onPick({ mode: "html" })}>
-            as HTML packages
-            <span className="ml-auto text-[10px] text-slate-400">{htmlCount}</span>
-          </MenuRow>
+          <MenuRow onClick={() => onPick({ mode: "html" })}>as HTML packages</MenuRow>
           <MenuDivider />
+          <MenuLabel>Preview images · {imageCount}</MenuLabel>
         </>
       ) : null}
-      <MenuLabel>Preview images · {imageCount}</MenuLabel>
       <MenuRow
         disabled={imageCount === 0}
         onClick={() => onPick({ mode: "image", as: null, quality: 0 })}
       >
-        Original
+        as Original
+        {originalFormats && originalFormats.length > 0
+          ? ` ${originalFormats.map((f) => IMAGE_FORMAT_LABELS[f]).join(" · ")}`
+          : ""}
       </MenuRow>
       {imageCount > 0 ? (
-        <ImageFormatRows onPick={(as, quality) => onPick({ mode: "image", as, quality })} />
+        <ImageFormatRows
+          exclude={originalFormats?.length === 1 ? originalFormats[0] : null}
+          onPick={(as, quality) => onPick({ mode: "image", as, quality })}
+        />
       ) : null}
     </>
   );

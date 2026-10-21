@@ -2971,3 +2971,11 @@ Review:
 - Mobilon az Actions menüt nem néztem meg.
 - [x] Bump 6.125.0, CHANGELOG, inventory.
 - [x] **DEPLOYOLVA 6.125.0 — mindkét tenant** (`2bda8fe`, 2026-10-21): build ok, `/login` 200 mindkettőn, a `99ZnezihxDMM` share 200, élesben `?as=avif` → `image/avif`. Böngészőben élesben még nincs megnézve, a mobil Actions menü sem.
+
+## 2026-10-21 — Download all menü: az eredeti formátum a sorban + igazítás (Robi visszajelzése élesből)
+
+- [x] Csak creative-okból álló share-en nincs „Preview images” címke. A címke csak az „as HTML packages” alatt jelenik meg, és az a sor már nem mutat számot, mert az a gombon van.
+- [x] Az Original sor kiírja a képek formátumát: „as Original PNG”, vegyesnél „as Original PNG · JPG”, gyakoriság szerint. Ha minden kép egy formátumú, annak a sora kimarad. Vegyesnél minden sor marad, mert mindegyik átalakít valamit. A `99ZnezihxDMM`-ben 10 PNG és 1 JPG (`…_1680x1200.jpg`) van, ezért ott „PNG · JPG” látszik. Az MC-előnézetek PNG-k.
+- [x] A panel a gomb jobb széléhez igazodik. Ok: a `fixed` doboz `right` értéke a görgetősáv nélküli nézetből számol, az `innerWidth` viszont a görgetősávval együtt mér. Most `documentElement.clientWidth` / `clientHeight` a kiindulás.
+- Helyben, böngészőben megnézve: `VjmGi_DRdqik` (HTML, görgetősávval) és `99ZnezihxDMM` (vegyes képek). Az egyes elemek Download menüje („Original (.png)”) nem változott.
+- [x] Bump 6.125.1, CHANGELOG.

@@ -5,6 +5,15 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.126.0] — 2026-10-21
+
+### Added
+- **A share's view lives in its link**, both ways:
+  `/share/<id>?theme=dark&layout=grid&size=300x250,300x600&q=hitelkártya&commented&image`.
+  The link opens that view (theme without a flash, and without overwriting the viewer's own theme
+  setting); what the viewer changes is written back to the address bar, so a copied link hands on
+  the current view. Only non-default settings appear — a fresh share's link stays bare.
+
 ## [6.125.2] — 2026-10-21
 
 ### Changed

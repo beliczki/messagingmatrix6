@@ -16,6 +16,7 @@ import {
   briefUrl,
   type ShareBriefs,
 } from "@/lib/share-briefs";
+import { parseShareView } from "@/lib/share-view-params";
 import ShareGallery, {
   type LiveDriveFolders,
   type SnapshotAsset,
@@ -38,10 +39,15 @@ export const dynamic = "force-dynamic";
 
 export default async function SharePage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
+  // Parsed here, not in the browser, so the gallery renders the linked view
+  // from the first paint (see share-view-params.ts).
+  const initialView = parseShareView(await searchParams);
 
   const [share] = await db
     .select()
@@ -116,6 +122,7 @@ export default async function SharePage({
           files={fileRows}
           briefs={briefs}
           liveDriveFolders={driveFolders}
+          initialView={initialView}
         />
         <footer className="share-gallery__footer mx-auto max-w-6xl px-6 py-4 text-center text-[11px] text-slate-400">
           Shared from {client.name} · MessagingMatrix{" "}

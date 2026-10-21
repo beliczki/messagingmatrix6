@@ -13,7 +13,15 @@ const THEME_INIT_SCRIPT = (serverDefault: "light" | "dark" | "system") => `
 (function(){
   try {
     var def = ${JSON.stringify(serverDefault)};
-    function read(){ return localStorage.getItem('mm6_theme') || def || 'system'; }
+    // A share link can name its theme (?theme=dark|light, share-view-params.ts).
+    // Read here so it paints without a flash; it is not stored, so the
+    // viewer's own preference is untouched.
+    var linked = location.pathname.indexOf('/share/') === 0
+      ? new URLSearchParams(location.search).get('theme') : null;
+    function read(){
+      if (linked === 'dark' || linked === 'light') return linked;
+      return localStorage.getItem('mm6_theme') || def || 'system';
+    }
     function apply(){
       var mode = read();
       var dark = mode === 'dark' || (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);

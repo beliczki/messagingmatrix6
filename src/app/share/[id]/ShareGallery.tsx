@@ -20,6 +20,7 @@ import { parseSearchQuery, type SearchFields } from "@/lib/search-query";
 import VideoThumb from "../../(app)/_components/VideoThumb";
 import { Html5PackageFrame } from "../../(app)/_components/Html5PackageFrame";
 import { creativeMediaKind } from "@/lib/creative-media-kind";
+import { serializeShareView, type ShareViewState } from "@/lib/share-view-params";
 import { fetchMatrixDownload } from "./matrix-download";
 import {
   DownloadMenu,
@@ -133,6 +134,8 @@ type Props = {
   files: SnapshotFile[];
   /** Brief decks behind the shared cards, resolved live (see share-briefs.ts). */
   briefs: ShareBriefs;
+  /** The view the link asked for (see share-view-params.ts). */
+  initialView: ShareViewState;
 };
 
 const AUTHOR_NAME_KEY = "mm6_share_author_name";
@@ -150,6 +153,7 @@ export default function ShareGallery({
   liveDriveFolders,
   files,
   briefs,
+  initialView,
 }: Props) {
   const filesById = useMemo(() => new Map(files.map((f) => [f.id, f])), [files]);
 
@@ -276,14 +280,51 @@ export default function ShareGallery({
     });
   }, [items]);
 
-  const [sizeFilter, setSizeFilter] = useState<Set<string>>(new Set());
-  const [search, setSearch] = useState("");
-  const [commentedOnly, setCommentedOnly] = useState(false);
-  const [view, setView] = useState<ViewMode>("masonry");
+  // The link's view is the starting state. A size the share does not hold is
+  // dropped rather than kept as a filter that would empty the gallery.
+  const [sizeFilter, setSizeFilter] = useState<Set<string>>(
+    () => new Set(initialView.sizes.filter((sz) => sizeOptions.includes(sz))),
+  );
+  const [search, setSearch] = useState(initialView.q);
+  const [commentedOnly, setCommentedOnly] = useState(initialView.commented);
+  const [view, setView] = useState<ViewMode>(initialView.layout);
   // Image-preview mode: tiles show the stored preview PNG instead of rendering
   // the banner live in an iframe, and Download all bundles those PNGs. Same
   // toggle as the MC editor's "Image preview".
-  const [imagePreview, setImagePreview] = useState(false);
+  const [imagePreview, setImagePreview] = useState(initialView.image);
+  // The theme the address names: the link's, or the one the viewer switched
+  // to here. null = no theme in the address, the viewer's own applies.
+  const [linkTheme, setLinkTheme] = useState(initialView.theme);
+
+  // Both the header toggle and the phone's Actions menu switch the theme by
+  // the `.dark` class on <html> (useThemeSwitch); watching the class catches
+  // either without threading a callback through both.
+  useEffect(() => {
+    const root = document.documentElement;
+    const observer = new MutationObserver(() =>
+      setLinkTheme(root.classList.contains("dark") ? "dark" : "light"),
+    );
+    observer.observe(root, { attributes: true, attributeFilter: ["class"] });
+    return () => observer.disconnect();
+  }, []);
+
+  // Two-way: what the viewer changes is written back into the address, so a
+  // copied link opens the same view. replaceState, not push — a filter typed
+  // letter by letter is not a trail of pages to step back through.
+  useEffect(() => {
+    const query = serializeShareView({
+      theme: linkTheme,
+      layout: view,
+      sizes: [...sizeFilter],
+      q: search,
+      commented: commentedOnly,
+      image: imagePreview,
+    });
+    const next = `${window.location.pathname}${query}${window.location.hash}`;
+    if (next !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
+      window.history.replaceState(window.history.state, "", next);
+    }
+  }, [linkTheme, view, sizeFilter, search, commentedOnly, imagePreview]);
   // Card thumbs use a fixed checker background. The bg toggle lives in the
   // ShareDetailDialog header where the user is actually evaluating preview
   // backgrounds.

@@ -2981,3 +2981,37 @@ Review:
 - [x] Bump 6.125.1, CHANGELOG.
 - [x] Robi: az egyes elemek menüjében is „as Original PNG” legyen. Creative-nál a fájl formátuma szerepel benne, ismeretlen formátumnál a kiterjesztés nagybetűvel. MC-nél a sorrend: „as HTML package”, elválasztó, „as Original PNG” (az előnézet), majd a többi formátum, a PNG nélkül. Bump 6.125.2.
 - [x] **DEPLOYOLVA 6.125.1 + 6.125.2 — mindkét tenant** (`5f43e8c`, 2026-10-21): build ok, `/login` 200 mindkettőn, a `VjmGi_DRdqik` share 200. Élesben, böngészőben még nincs megnézve.
+
+## 2026-10-21 — Share: a nézet linkből paraméterezhető (Robi: kétirányú, beszédes kulcsok, az Image preview is)
+
+Igény (Robi): `?v=dark&f=szöveg&s=300x250,300x600&c=true&l=masonry` → ezzel a nézettel nyíljon a share.
+
+Tények: a gallery kezdőállapota ma fix (`search ""`, üres méretszűrő, `commentedOnly false`, `masonry`, image preview ki). A témát a root layout inline scriptje rakja fel a hidratálás előtt, a `mm6_theme` localStorage-ből.
+
+Terv:
+- [ ] A `page.tsx` (szerver) beolvassa a `searchParams`-ot, és `initialView` propként adja át a `ShareGallery`-nek. Ezekből lesz a `useState` kezdőértéke. Nincs hidratálási eltérés, és nem villan a nézet.
+  - `f` → a szűrő szövege, ugyanazzal a nyelvvel, mint a mező (`mc:141c`, OR …).
+  - `s` → vesszővel elválasztott méretlista. A share-ben nem létező méretet eldobjuk.
+  - `c=true` → Commented only.
+  - `l=grid|list|masonry` → nézet, bármi más esetén masonry.
+- [ ] `v=dark|light` → a téma inline scriptje `/share/` útvonalon a `?v=`-t előbbre veszi a `mm6_theme`-nél, így nem villan. Csak erre a látogatásra szól, a néző saját beállítását nem írja felül. A kapcsolóval továbbra is lehet váltani.
+- [ ] Egy unit teszt a param-parse-ra (érvénytelen értékek, ismeretlen méret). CHANGELOG, minor bump (6.126.0), deploy.
+
+Nyitott kérdések:
+1. Csak bejövő legyen (a link beállítja a kezdő nézetet), vagy kétirányú? Kétirányúnál a néző kattintásai frissítik a címsort (`replaceState`), így a címsorból kimásolt link a mostani nézetet adja tovább.
+2. Kell egy `i=true` is az Image preview-ra?
+
+Döntések (Robi):
+- Kétirányú működés.
+- Az Image preview is vezérelhető.
+- Az olvasható query kell: beszédes kulcsok, kapcsolók érték nélkül, csak a nem alapértelmezett beállítások. Útvonal vagy hash helyett query, mert a szabad szöveg az útvonalban szétesne, a hash pedig nem éri el a szervert.
+
+- [x] `lib/share-view-params.ts`: `parseShareView` / `serializeShareView`. A `,` `:` `/` kódolatlan marad, a szóköz `+` lesz.
+- [x] A `page.tsx` a szerveren olvassa be, így az `initialView` adja a gallery `useState` kezdőértékeit. A share-ben nem létező méret kiesik.
+- [x] A téma: a root layout inline scriptje `/share/` útvonalon a `?theme=`-t előbbre veszi a localStorage-nél, így nem villan, és nem is mentődik.
+- [x] Kétirányú: `history.replaceState`. A téma-váltást egy `MutationObserver` követi a `<html>` `.dark` osztályán, így a fejléc kapcsolója és a mobil Actions menü is számít.
+- [x] Helyben, böngészőben megnézve a `VjmGi_DRdqik`-n:
+  - a link mind az öt beállítást alkalmazza;
+  - a kattintások után a címsor a `layout` és az `image` nélkül, `theme=dark`-kal frissült;
+  - újratöltés után ugyanaz a nézet jön vissza.
+- [x] `share-view-params.test.ts` (4 teszt), unit suite zöld, `tsc` tiszta, nincs új lint-figyelmeztetés. Bump 6.126.0, CHANGELOG.

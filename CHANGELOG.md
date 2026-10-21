@@ -5,6 +5,14 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.128.1] — 2026-10-21
+
+### Fixed
+- **Next.js 16.4.0 → 16.4.2** (with eslint-config-next). 16.4.1 closes two critical RCE advisories
+  (`use cache` typed arrays, Image Optimization with SVG) and a Server Actions DoS; 16.4.2 is
+  Turbopack fixes. mm6 uses none of `use cache`, `next/image` or Server Actions, so this is
+  hygiene rather than an open hole.
+
 ## [6.128.0] — 2026-10-21
 
 ### Added

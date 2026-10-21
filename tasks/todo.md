@@ -3015,3 +3015,4 @@ Döntések (Robi):
   - a kattintások után a címsor a `layout` és az `image` nélkül, `theme=dark`-kal frissült;
   - újratöltés után ugyanaz a nézet jön vissza.
 - [x] `share-view-params.test.ts` (4 teszt), unit suite zöld, `tsc` tiszta, nincs új lint-figyelmeztetés. Bump 6.126.0, CHANGELOG.
+- [x] **DEPLOYOLVA 6.126.0 — mindkét tenant** (`fb82794`, 2026-10-21): build ok, `/login` 200 mindkettőn, a share oldalon ott az új téma-script. Élesben, böngészőben még nincs megnézve.

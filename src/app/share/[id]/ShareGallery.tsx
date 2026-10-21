@@ -1237,7 +1237,7 @@ function bulkEntry(
     if (choice.mode !== "image" || !previewSrc) return null;
     const base = `MC${it.message.number}${it.message.variant}-${it.size}`;
     return choice.as
-      ? { url: withImageFormat(previewSrc, choice.as, choice.quality), name: `${base}.${choice.as}` }
+      ? { url: withImageFormat(previewSrc, choice.as, choice.enc), name: `${base}.${choice.as}` }
       : { url: previewSrc, name: `${base}.png` };
   }
   if (!it.file) return null;
@@ -1248,7 +1248,7 @@ function bulkEntry(
   }
   const dot = name.lastIndexOf(".");
   return {
-    url: withImageFormat(url, choice.as, choice.quality),
+    url: withImageFormat(url, choice.as, choice.enc),
     name: `${dot > 0 ? name.slice(0, dot) : name}.${choice.as}`,
   };
 }

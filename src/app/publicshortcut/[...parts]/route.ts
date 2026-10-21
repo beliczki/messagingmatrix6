@@ -7,7 +7,7 @@ import { readFileBytes, readFileStream } from "@/lib/storage";
 import { parseRangeHeader } from "@/lib/http-range";
 import { storedFileHeaders } from "@/lib/stored-file-headers";
 import { verifyToken } from "@/lib/public-shortcut";
-import { parseImageFormat, parseJpgQuality } from "@/lib/image-formats";
+import { parseImageEncoding, parseImageFormat } from "@/lib/image-formats";
 import { convertImage } from "@/lib/image-convert";
 
 // The public image surface. Everything here is reachable without a session,
@@ -96,13 +96,13 @@ export async function GET(
     } catch {
       return NextResponse.json({ error: "storage_missing" }, { status: 410 });
     }
-    // `?as=jpg&q=70` — the share viewer's download menu asking for the preview
+    // `?as=jpg&q=70` / `?as=gif&colors=64` — the share viewer's download menu asking for the preview
     // in another format (see /share/[id]/file for the same parameter).
     const asRaw = url.searchParams.get("as");
     if (asRaw !== null) {
       const format = parseImageFormat(asRaw);
       if (!format) return NextResponse.json({ error: "not_convertible" }, { status: 400 });
-      const out = await convertImage(bytes, format, parseJpgQuality(url.searchParams.get("q")));
+      const out = await convertImage(bytes, format, parseImageEncoding(url.searchParams));
       return new NextResponse(new Uint8Array(out.bytes), {
         headers: {
           "Content-Type": out.contentType,

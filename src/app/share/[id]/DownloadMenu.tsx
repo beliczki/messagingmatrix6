@@ -5,13 +5,15 @@ import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { Icon } from "@/app/_icons/Icon";
 import {
-  DEFAULT_JPG_QUALITY,
+  GIF_PALETTES,
   IMAGE_FORMATS,
   IMAGE_FORMAT_LABELS,
   formatOfFilename,
   isConvertibleImage,
+  parseGifColors,
   parseJpgQuality,
   withImageFormat,
+  type ImageEncoding,
   type ImageFormat,
 } from "@/lib/image-formats";
 import { fetchMatrixDownload } from "./matrix-download";
@@ -25,6 +27,7 @@ import type { DialogItem } from "./ShareDetailDialog";
 // `overflow-hidden`, and a panel inside it would be cut off at its edge.
 
 const JPG_QUALITY_KEY = "mm6_share_jpg_quality";
+const GIF_COLORS_KEY = "mm6_share_gif_colors";
 
 export function saveHref(href: string, filename: string) {
   const a = document.createElement("a");
@@ -200,48 +203,56 @@ export function MenuDivider() {
   return <div className="download-menu__divider my-1 border-t border-slate-100" />;
 }
 
+// Only ever rendered in an open menu, i.e. in the browser after a click —
+// never during SSR, so reading storage in the initializer is safe.
+function useStoredKnob(key: string, parse: (raw: string | null) => number) {
+  const [value, setValue] = useState(() => {
+    try {
+      return parse(localStorage.getItem(key));
+    } catch {
+      return parse(null);
+    }
+  });
+  function change(raw: string) {
+    const v = parse(raw);
+    setValue(v);
+    try {
+      localStorage.setItem(key, String(v));
+    } catch {}
+  }
+  return [value, change] as const;
+}
+
 /**
- * "as JPG [70] %", "as PNG", "as WebP", "as AVIF" — minus the format the file
- * already is. Only JPG takes a quality (user decision, 2026-10-21); it is
- * remembered per viewer. The rows mount when a menu opens, so every menu
- * shows the value last typed into any of them.
+ * "as JPG [70] %", "as PNG", "as WebP", "as AVIF", "as GIF [256] colors" —
+ * minus the format the file already is. JPG takes a quality and GIF a palette
+ * size (user decisions, 2026-10-21), each remembered per viewer. The rows
+ * mount when a menu opens, so every menu shows the value last set in any of
+ * them.
  */
 export function ImageFormatRows({
   exclude = null,
   onPick,
 }: {
   exclude?: ImageFormat | null;
-  onPick: (as: ImageFormat, quality: number) => void;
+  onPick: (as: ImageFormat, enc: ImageEncoding) => void;
 }) {
-  // Only ever rendered in an open menu, i.e. in the browser after a click —
-  // never during SSR, so reading storage in the initializer is safe.
-  const [quality, setQuality] = useState(() => {
-    try {
-      return parseJpgQuality(localStorage.getItem(JPG_QUALITY_KEY));
-    } catch {
-      return DEFAULT_JPG_QUALITY;
-    }
-  });
-  function changeQuality(raw: string) {
-    const q = parseJpgQuality(raw);
-    setQuality(q);
-    try {
-      localStorage.setItem(JPG_QUALITY_KEY, String(q));
-    } catch {}
-  }
+  const [jpgQuality, changeQuality] = useStoredKnob(JPG_QUALITY_KEY, parseJpgQuality);
+  const [gifColors, changeColors] = useStoredKnob(GIF_COLORS_KEY, parseGifColors);
+  const enc = { jpgQuality, gifColors };
 
   return (
     <>
       {IMAGE_FORMATS.filter((f) => f !== exclude).map((f) =>
         f === "jpg" ? (
           <div key={f} className="download-menu__jpg-row flex items-center pr-3 hover:bg-slate-50">
-            <MenuRow onClick={() => onPick("jpg", quality)}>as JPG</MenuRow>
+            <MenuRow onClick={() => onPick("jpg", enc)}>as JPG</MenuRow>
             <label className="download-menu__quality flex shrink-0 items-center gap-1 text-[11px] text-slate-500">
               <input
                 type="number"
                 min={1}
                 max={100}
-                value={quality}
+                value={jpgQuality}
                 onChange={(e) => changeQuality(e.target.value)}
                 aria-label="JPG quality"
                 className="w-11 rounded border border-slate-200 bg-white px-1 py-0.5 text-right text-[11px] text-slate-700 focus:border-slate-500 focus:outline-none"
@@ -249,8 +260,27 @@ export function ImageFormatRows({
               %
             </label>
           </div>
+        ) : f === "gif" ? (
+          <div key={f} className="download-menu__gif-row flex items-center pr-3 hover:bg-slate-50">
+            <MenuRow onClick={() => onPick("gif", enc)}>as GIF</MenuRow>
+            <label className="download-menu__palette flex shrink-0 items-center gap-1 text-[11px] text-slate-500">
+              <select
+                value={gifColors}
+                onChange={(e) => changeColors(e.target.value)}
+                aria-label="GIF palette size"
+                className="custom-dropdown rounded border border-slate-200 bg-white px-1 py-0.5 text-[11px] text-slate-700 focus:border-slate-500 focus:outline-none"
+              >
+                {GIF_PALETTES.map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+              colors
+            </label>
+          </div>
         ) : (
-          <MenuRow key={f} onClick={() => onPick(f, quality)}>
+          <MenuRow key={f} onClick={() => onPick(f, enc)}>
             as {IMAGE_FORMAT_LABELS[f]}
           </MenuRow>
         ),
@@ -321,8 +351,8 @@ export function ItemDownloadMenu({
             </MenuRow>
             <ImageFormatRows
               exclude={format}
-              onPick={(as, q) => {
-                saveHref(withImageFormat(src, as, q), `${baseOf(name)}.${as}`);
+              onPick={(as, enc) => {
+                saveHref(withImageFormat(src, as, enc), `${baseOf(name)}.${as}`);
                 close();
               }}
             />
@@ -363,8 +393,8 @@ export function ItemDownloadMenu({
               </MenuRow>
               <ImageFormatRows
                 exclude="png"
-                onPick={(as, q) => {
-                  saveHref(withImageFormat(previewSrc, as, q), `${base}.${as}`);
+                onPick={(as, enc) => {
+                  saveHref(withImageFormat(previewSrc, as, enc), `${base}.${as}`);
                   close();
                 }}
               />
@@ -378,7 +408,9 @@ export function ItemDownloadMenu({
 
 export type BulkDownload =
   | { mode: "html" }
-  | { mode: "image"; as: ImageFormat | null; quality: number };
+  // `as: null` = the original pictures; a conversion always carries its knobs.
+  | { mode: "image"; as: null }
+  | { mode: "image"; as: ImageFormat; enc: ImageEncoding };
 
 /**
  * Download all's rows. With MCs in the list: "as HTML packages", then the
@@ -411,7 +443,7 @@ export function BulkDownloadRows({
       ) : null}
       <MenuRow
         disabled={imageCount === 0}
-        onClick={() => onPick({ mode: "image", as: null, quality: 0 })}
+        onClick={() => onPick({ mode: "image", as: null })}
       >
         as Original
         {originalFormats && originalFormats.length > 0
@@ -421,7 +453,7 @@ export function BulkDownloadRows({
       {imageCount > 0 ? (
         <ImageFormatRows
           exclude={originalFormats?.length === 1 ? originalFormats[0] : null}
-          onPick={(as, quality) => onPick({ mode: "image", as, quality })}
+          onPick={(as, enc) => onPick({ mode: "image", as, enc })}
         />
       ) : null}
     </>

@@ -5,6 +5,13 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.128.0] — 2026-10-21
+
+### Added
+- **GIF in the share download menus**, with a palette size to pick (32 / 64 / 128 / 256 colours,
+  remembered like the JPG quality). sharp on its own rounds every one of those up to 256 colours;
+  the converter passes the exact depth to libvips, and a test counts the colours in the output.
+
 ## [6.127.0] — 2026-10-21
 
 ### Changed

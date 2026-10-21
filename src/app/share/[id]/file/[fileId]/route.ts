@@ -11,7 +11,7 @@ import { storedFileHeaders } from "@/lib/stored-file-headers";
 import { loadSharedFile } from "@/lib/share-file";
 import { isHtml5PackageFile } from "@/lib/html5-poster";
 import { posterResponse } from "@/lib/html5-package-response";
-import { isConvertibleImage, parseImageFormat, parseJpgQuality } from "@/lib/image-formats";
+import { isConvertibleImage, parseImageEncoding, parseImageFormat } from "@/lib/image-formats";
 import { convertImage } from "@/lib/image-convert";
 import {
   StillsUnavailableError,
@@ -141,7 +141,7 @@ export async function GET(
     });
   }
 
-  // A download in another format (`?as=jpg&q=70`), from the download menus.
+  // A download in another format (`?as=jpg&q=70`, `?as=gif&colors=64`), from the download menus.
   // Converted on the fly and not cached: it is a one-off download, not a tile.
   const as = url.searchParams.get("as");
   if (as !== null) {
@@ -155,7 +155,7 @@ export async function GET(
     } catch {
       return NextResponse.json({ error: "storage_missing" }, { status: 410 });
     }
-    const out = await convertImage(src, format, parseJpgQuality(url.searchParams.get("q")));
+    const out = await convertImage(src, format, parseImageEncoding(url.searchParams));
     await db
       .update(shareGalleries)
       .set({ downloadCount: sql`${shareGalleries.downloadCount} + 1` })

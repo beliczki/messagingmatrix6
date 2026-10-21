@@ -69,8 +69,11 @@ describe("share file download in another format (?as=)", () => {
     const jpg = await get("?as=jpg&q=40");
     expect(jpg.headers.get("content-type")).toBe("image/jpeg");
 
+    const gif = await get("?as=gif&colors=32");
+    expect(gif.headers.get("content-type")).toBe("image/gif");
+
     const [row] = await db.select().from(shareGalleries).where(eq(shareGalleries.id, "s1"));
-    expect(row!.downloadCount).toBe(2);
+    expect(row!.downloadCount).toBe(3);
 
     const original = await get("");
     expect(original.headers.get("content-type")).toBe("image/png");

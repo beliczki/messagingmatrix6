@@ -3023,3 +3023,17 @@ Döntések (Robi):
 - [x] Az N a zip tényleges tartalmát mutatja (`Object.keys(zip.files)`), nem a kért elemek számát: a kimaradt elem nem számít, és két azonos nevű fájlból csak egy kerül be.
 - [x] `lib/share-bundle-name.ts` + `share-bundle-name.test.ts` (2 teszt), `tsc` tiszta, nincs új lint-figyelmeztetés. Bump 6.127.0 (látható változás, a heurisztika szerint minor).
 - [x] **DEPLOYOLVA 6.127.0 — mindkét tenant** (`c732b22`, 2026-10-21): build ok, `/login` 200 mindkettőn, a `g8PNWX9U5iMM` share 200. Élesben, böngészőben a letöltést még nem próbáltam ki.
+
+## 2026-10-21 — GIF a letöltési menükben, paletta-választóval
+
+- [x] Robi kérése: GIF formátum egy kis legördülővel a palettához (32 / 64 / 128 / 256). Az alapérték 256, a választás `mm6_share_gif_colors` kulcson marad meg, ugyanúgy, mint a JPG minőség.
+- [x] A konverziós beállítások közös objektumban utaznak (`ImageEncoding { jpgQuality, gifColors }`), és a `parseImageEncoding` olvassa be őket a két route-on. A `?as=gif&colors=64` paraméter a `withImageFormat`-ból jön. A `BulkDownload` típus pontosabb lett: konvertálásnál mindig van `enc`, az eredetinél nincs, így nem kell `!`.
+- [x] **Talált hiba a sharp-ban:** a `gif({ colours })` a színszámot kettő hatványára kerekített bitmélységgé alakítja, ahogy a PNG-nél kell (`bitdepthFromColourCount`). Ezért a 32, 64, 128 és 256 egyaránt 8 bit, vagyis 256 szín lett: mért kimenet 254 szín, bájtra azonos fájl. A libvips GIF-kódolója 1–8 között bármilyen bitmélységet elfogad. A `gifWithPalette` a pontos `log2`-t írja a sharp `options.gifBitdepth` mezőjébe; mérve 32 / 64 / 128 szín jön ki.
+  - Ez belső mező, nem API. A teszt a kimenet tényleges színszámát ellenőrzi, így egy sharp-frissítés nem ronthatja el csendben.
+  - Upstream jelzés a sharp felé még nem történt.
+- [x] Tesztek:
+  - `image-convert.test.ts`: GIF tartalomtípus, pontos színszám 32 / 64 / 128 esetén, `parseGifColors`, `?as=gif&colors=64`;
+  - integrációs teszt: `?as=gif` → `image/gif`;
+  - unit + konverziós: zöld, `tsc` tiszta, eslint új figyelmeztetés nélkül.
+- [x] Helyben, böngészőben megnézve: a „as GIF [256 ▾] colors” sor megjelenik. Valódi share-fájlon a `?as=gif&colors=64` → 200 `image/gif`.
+- [x] Bump 6.128.0, CHANGELOG, inventory.

@@ -2980,3 +2980,4 @@ Review:
 - Helyben, böngészőben megnézve: `VjmGi_DRdqik` (HTML, görgetősávval) és `99ZnezihxDMM` (vegyes képek). Az egyes elemek Download menüje („Original (.png)”) nem változott.
 - [x] Bump 6.125.1, CHANGELOG.
 - [x] Robi: az egyes elemek menüjében is „as Original PNG” legyen. Creative-nál a fájl formátuma szerepel benne, ismeretlen formátumnál a kiterjesztés nagybetűvel. MC-nél a sorrend: „as HTML package”, elválasztó, „as Original PNG” (az előnézet), majd a többi formátum, a PNG nélkül. Bump 6.125.2.
+- [x] **DEPLOYOLVA 6.125.1 + 6.125.2 — mindkét tenant** (`5f43e8c`, 2026-10-21): build ok, `/login` 200 mindkettőn, a `VjmGi_DRdqik` share 200. Élesben, böngészőben még nincs megnézve.

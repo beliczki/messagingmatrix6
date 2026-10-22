@@ -3043,4 +3043,4 @@ Döntések (Robi):
 - [x] Robi kérése: Next frissítés. 16.4.0 → 16.4.2 (latest, lts-active), vele együtt az eslint-config-next is.
 - [x] A 16.4.1 security release-ben két kritikus RCE javítás van (`use cache` typed array, Image Optimization + SVG), és egy Server Actions DoS. Az mm6 egyiket sem használja: `grep` alapján nincs `use cache`, `next/image` és `"use server"`. Ez tehát nem élő rés, hanem a framework naprakészen tartása.
 - [x] `tsc` tiszta, eslint 0 hiba, unit tesztek 417/417, helyi `npm run build` ok.
-- [ ] Deploy mindkét tenantra — Robi jóváhagyására vár.
+- [x] **DEPLOYOLVA 6.128.1 — mindkét tenant** (`dcb03f8`, 2026-10-22): `npm ci` + build ok, a boxon next 16.4.2, `/login` 200 mindkettőn.

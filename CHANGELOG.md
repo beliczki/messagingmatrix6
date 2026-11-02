@@ -5,6 +5,18 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.128.2] — 2026-11-02
+
+### Changed
+- `npm run export:mc` writes a `matrix_status` column on both sheets: what `messages.status` says,
+  not what the ad server runs. On the Creative export it is read from the Agentic card of the file's
+  MC, because the same number can also name a DCO card in another topic.
+
+### Fixed
+- Creative Library: **Filter to these** also clears the Product, Type and Size filters. They persist
+  between sessions, so a Product pick from an earlier day could hide a fresh upload of another
+  product and the `upload:last` view came up empty.
+
 ## [6.128.1] — 2026-10-21
 
 ### Fixed

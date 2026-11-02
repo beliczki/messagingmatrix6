@@ -415,7 +415,13 @@ export default function CreativeLibrary() {
 
   // Both upload views offer this; both land on the same query, so the box shows
   // what is being filtered and the token can be edited or removed by hand.
+  // The pill filters are cleared too: they persist, so a Product pick from an
+  // earlier session would hide a batch of another product and the upload would
+  // look lost.
   function filterToUploaded() {
+    setProducts(new Set());
+    setAxes(new Set());
+    setSizes(new Set());
     setSearch("upload:last");
     setUploadOpen(false);
     queue.setOpen(false);

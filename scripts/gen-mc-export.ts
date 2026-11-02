@@ -16,6 +16,9 @@
 // topic and template are constant within a card — the export asserts that rather
 // than assuming it.
 //
+// Both sheets carry matrix_status: what messages.status says, which is not
+// necessarily what the ad server is running.
+//
 // Read-only and rerunnable: after `npm run gen:previews` reshoots the previews
 // the row ids stay put but `?v=` (message_previews.updated_at) changes, so just
 // run this again and every link points at the fresh image.
@@ -251,6 +254,66 @@ async function fetchCreativeRows(clientId: number): Promise<CreativeRow[]> {
   return out;
 }
 
+// A card's placements need not agree, so the label can read "ACTIVE+INACTIVE".
+function joinStatuses(statuses: Iterable<string>): string {
+  return [...new Set(statuses)].sort().join("+");
+}
+
+// The status of the card each creative is filed under, keyed `number|variant`.
+// Numbering is axis-scoped (entities/messages.ts `sameAxisAs`): the same number
+// can also name a DCO card in another topic, and that namesake must not lend a
+// file its status. So only Agentic rows count, plus a draft when no Agentic row
+// exists, because a draft sits on no axis and can own a number by itself.
+async function fetchCreativeStatuses(
+  clientId: number,
+): Promise<Map<string, string>> {
+  const agentic = new Map<string, string[]>();
+  const drafts = new Map<string, string[]>();
+  let lastId = 0;
+  for (;;) {
+    const page = await db
+      .select({
+        id: messages.id,
+        number: messages.number,
+        variant: messages.variant,
+        status: messages.status,
+        audience: messages.audience,
+        channelId: channels.id,
+      })
+      .from(messages)
+      .leftJoin(
+        channels,
+        and(
+          eq(channels.clientId, messages.clientId),
+          eq(channels.key, messages.audience),
+        ),
+      )
+      .where(
+        and(
+          eq(messages.clientId, clientId),
+          isNull(messages.archivedAt),
+          gt(messages.id, lastId),
+        ),
+      )
+      .orderBy(messages.id)
+      .limit(PAGE_SIZE);
+    if (page.length === 0) break;
+    for (const m of page) {
+      const bucket =
+        m.channelId !== null ? agentic : m.audience === null ? drafts : null;
+      if (!bucket) continue;
+      const key = `${m.number}|${m.variant}`;
+      bucket.set(key, [...(bucket.get(key) ?? []), m.status]);
+    }
+    lastId = page[page.length - 1]!.id;
+    if (page.length < PAGE_SIZE) break;
+  }
+  const out = new Map<string, string>();
+  for (const [key, statuses] of drafts) out.set(key, joinStatuses(statuses));
+  for (const [key, statuses] of agentic) out.set(key, joinStatuses(statuses));
+  return out;
+}
+
 function sizeOrder(size: string): [number, number] {
   const [w, h] = size.split("x").map((n) => Number(n));
   return [Number.isFinite(w) ? w : 0, Number.isFinite(h) ? h : 0];
@@ -324,6 +387,7 @@ async function main() {
     "topic",
     "name",
     "template",
+    "matrix_status",
     "active",
     "inactive",
     "pmmid_count",
@@ -359,6 +423,7 @@ async function main() {
       card.topic,
       card.name ?? "",
       card.template ?? "",
+      joinStatuses(card.rows.map((r) => r.status)),
       active,
       card.rows.length - active,
       pmmids.length,
@@ -371,11 +436,13 @@ async function main() {
   // Sheet 2 — the agentic creatives, one row per FILE.
   const secret = await ensureSecret();
   const creativeRows = await fetchCreativeRows(client.id);
+  const creativeStatuses = await fetchCreativeStatuses(client.id);
   const creativeHeader = [
     "creative_id",
     "mc",
     "mc_number",
     "variant",
+    "matrix_status",
     "product",
     "brand",
     "type",
@@ -399,6 +466,7 @@ async function main() {
     c.mcNumber === null ? "" : `MC${c.mcNumber}${c.mcVariant ?? ""}`,
     c.mcNumber ?? "",
     c.mcVariant ?? "",
+    creativeStatuses.get(`${c.mcNumber}|${c.mcVariant ?? "a"}`) ?? "",
     c.product ?? "",
     c.brand ?? "",
     c.type ?? "",

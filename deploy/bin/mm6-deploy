@@ -21,14 +21,26 @@ PORT=$(grep '^PORT=' .env | cut -d= -f2)
 [ -n "$PORT" ] || { echo "no PORT in $DIR/.env" >&2; exit 1; }
 
 echo "==> git pull"
-BEFORE=$(git rev-parse HEAD)
 git pull --ff-only
 
+# The installed copy of this script is a manual step and has drifted before. Stop
+# here, before anything is touched; a re-run after installing picks up where this left.
+if ! cmp -s "$0" deploy/bin/mm6-deploy; then
+    echo "$0 differs from the repo's copy. Install it, then re-run:" >&2
+    echo "  install -m 755 $DIR/deploy/bin/mm6-deploy $0" >&2
+    exit 1
+fi
+
 # A dependency bump must reach node_modules, or the build silently uses the old
-# versions. Only when the lockfile moved — a plain deploy stays a plain build.
-if ! git diff --quiet "$BEFORE" HEAD -- package-lock.json; then
-    echo "==> package-lock.json changed: npm ci"
+# versions. The stamp is written only after a complete npm ci, so an interrupted
+# install or a manual git pull still triggers one on the next run. A plain deploy
+# stays a plain build.
+LOCK_SHA=$(sha256sum package-lock.json | cut -d' ' -f1)
+STAMP=node_modules/.mm6-lock-sha
+if [ ! -f "$STAMP" ] || [ "$(cat "$STAMP")" != "$LOCK_SHA" ]; then
+    echo "==> node_modules is not from this package-lock.json: npm ci"
     npm ci --no-audit --no-fund
+    echo "$LOCK_SHA" > "$STAMP"
 fi
 
 echo "==> build into .next-build (app stays up and serving)"
@@ -39,7 +51,9 @@ mkdir .next-build
 if [ -d .next/cache ]; then cp -a .next/cache .next-build/cache; fi
 NEXT_DIST_DIR=.next-build npm run build
 
-# A failed build exits above, before the gate goes up: the live app is untouched.
+# A failed build exits above, before the gate goes up: the live app keeps serving
+# its old .next. After an npm ci it does so on the new node_modules, until a deploy
+# succeeds or the lockfile is rolled back.
 echo "==> swap + restart behind the maintenance page"
 mm6-maint on "$TENANT"
 rm -rf .next-old

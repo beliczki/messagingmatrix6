@@ -3044,3 +3044,49 @@ Döntések (Robi):
 - [x] A 16.4.1 security release-ben két kritikus RCE javítás van (`use cache` typed array, Image Optimization + SVG), és egy Server Actions DoS. Az mm6 egyiket sem használja: `grep` alapján nincs `use cache`, `next/image` és `"use server"`. Ez tehát nem élő rés, hanem a framework naprakészen tartása.
 - [x] `tsc` tiszta, eslint 0 hiba, unit tesztek 417/417, helyi `npm run build` ok.
 - [x] **DEPLOYOLVA 6.128.1 — mindkét tenant** (`dcb03f8`, 2026-10-22): `npm ci` + build ok, a boxon next 16.4.2, `/login` 200 mindkettőn.
+
+## 2026-11-02 — Next novemberi biztonsági kiadás + `mm6-deploy` szinkron (TERV jóváhagyva 2026-11-02; 16.4.5 pusholva, a deployok Robi jóváhagyására várnak)
+**Planning review:** Chief Architect: OK with changes (`~/Grafia/agent-bus/answers/20261102-1238-mm6-next-nov-security-and-deploy-sync.md`), a változtatásai alább beépítve. Codex nincs telepítve. Robi döntése: B változat, Telekom az első tenant, `unoptimized` a bumppal.
+
+**Állapot (2026-11-02 12:40, ellenőrizve):**
+- A Next blogja (2026-10-27): ütemezett biztonsági kiadás 2026. november 3-án, hét közepes súlyosságú hiba, a részletek a kiadással együtt jönnek. Ma még nincs közzétéve: a legfrissebb GitHub-advisory 2026-10-14-i.
+- Az npm `latest` 16.4.4 (ma 10:49 UTC). A rendelkezésre álló adatok szerint nem ez a biztonsági kiadás: nincs GitHub release-e (404), nincs hozzá advisory, a 8 commitja backport és CI. A javító verziószámot még nem lehet tudni.
+- **Érintettség: ma nem megállapítható**, mert az advisoryk nincsenek kint. Ehhez a felülethez kell majd mérni:
+  - Mindkét tenant: next 16.4.2, React 19.3.0, sharp 0.35.5, Node 20.20.2, glibc (`f74c975`).
+  - Build-manifest a boxon: 0 server action, nincs middleware/proxy. `src`: nincs `use cache`, `use server`, `next/image`, `next/og`, `draftMode`, pages router.
+  - A `/login` prerenderelt (`x-nextjs-cache: HIT`).
+  - **Pontosítás a 6.128.1-es bejegyzéshez:** a `/_next/image` hitelesítés nélkül él mindkét tenanton (`url` nélkül 400, nem létező képre 404, az optimizer saját hibaüzeneteivel), noha a kód nem importálja a `next/image`-et. Egy image-optimizer advisory tehát érintheti az appot; a grep ezt nem zárja ki. Az SVG-t a végpont elutasítja, és a sharp az októberi javítás szintjén van.
+- `mm6-deploy`: a box és a repó között csak az `npm ci` blokk a különbség (box `367fbf0c…`, repó `83fb1c77…`). Az `mm6-maint` egyezik. A repó-változat 2026-10-09 óta (`515d73a`) nem került ki, azóta kézi `npm ci`-vel mentek a bumpok.
+
+**Két hiba a repó-változatban (kódolvasásból, nem futtatva):**
+1. Az `npm ci`-t a HEAD-diff dönti el. Ha az `npm ci` megszakad vagy a build elbukik, az újrafuttatásnál a `BEFORE` már az új HEAD, így az `npm ci` kimarad, és a build félkész `node_modules`-szal fut. Kézi `git pull` után ugyanez csendben a régi verziókat építi be.
+2. A script szerint bukott buildnél az élő app érintetlen. `npm ci` után ez nem igaz: a futó app alól eltűnik, majd kicserélődik a `node_modules`, és a build végéig (~85 s) régi `.next`-tel, új csomagokkal fut.
+
+**Javítási lehetőségek (Robi dönt):**
+- **A, 1:1 szinkron:** a repó-változat megy ki, mindkét hiba marad.
+- **B, ajánlott:** a szinkron előtt két kis módosítás a scriptben. (a) Az `npm ci`-t a `node_modules`-ban tárolt lockfile-hash dönti el: az `npm ci` törli a jelölőt, és csak siker után íródik vissza, így megszakadás és kézi pull után is lefut. (b) `git pull` után `cmp "$0" deploy/bin/mm6-deploy`, eltérésnél a build előtt megáll: ez zárja le a mostani elcsúszás okát. Plusz a megtévesztő komment javítása.
+- Egyik sem szünteti meg a 2. pont ablakát. Ezért a bump-deployt csendes időszakra tesszük, és figyeljük az error logot. Ha az Erste-mérés rossz, a gate-et az `npm ci` elé lehet hozni.
+
+**Lépések:**
+- [x] Robi: B, Telekom első, `unoptimized` a bumppal. A `tasks/todo.md` más session munkája miatt piszkos, ez marad: csak saját hunkot commitolok.
+- [x] Script: `8cfa4ff`, pusholva, verzió-bump nélkül (tooling). Csonkolt próba a box `dash`-ében: 10/10 forgatókönyv (megszakadt `npm ci`, kézi pull, bukott build, eltérő script); valódi deploy még nem futott vele.
+- [x] Szinkron: a Box B `/usr/local/bin/mm6-deploy` sha256-ja egyezik a repóval (`c3438a49…`), 755. Mindkét tenanton `/login` 200, pm2 online, a `restarts` nem nőtt.
+- [x] Lockfile-jelölő kézzel mindkét tenanton (a tervben nem szerepelt): nélküle a következő sima deploy is `npm ci`-t futtatna az élő app alatt. Előtte ellenőrizve: a telepített csomagok pontosan a lockfile szerintiek (733 csomag, 0 eltérés).
+- [x] **Kapu (ellenőrizve 2026-11-04):** a javító verzió a **16.4.5** (2026-11-03 18:38 UTC), a release notes mind a hét advisoryt felsorolja. `engines`: node >=20.9.0, a box Node 20.20.2-je megfelel. React 19.3.0 és sharp 0.35.5 marad. Érintettség:
+  - `GHSA-7qx7-33qx-rqx2` (SVG-tiltás megkerülése az image optimizerben): **érint**, a `/_next/image` hitelesítés nélkül él mindkét tenanton. Javítja a 16.4.5, és az `unoptimized` a végpontot is lezárja.
+  - `GHSA-pc58-hwjq-p385` (változatlanul továbbított fetch-válasz): kódolvasás szerint nem érint. A fájl-route-ok S3/fs streamet adnak saját fejlécekkel, a szerveroldali `fetch` (`fetch-remote-file.ts`, `drive.ts`) nem ad vissza `Response`-t, és az nginx-ben nincs `upstream` blokk. Kihasználási próbát nem futtattam.
+  - `GHSA-f3mh-rxg3-f5g2` (Edge cookie): nem érint, a box manifestjében 0 edge function és 0 middleware van.
+  - `GHSA-rhh4-g77r-r9qj`, `GHSA-vvgp-ww4w-46vf`, `GHSA-vc7v-qv4w-wrv8`, `GHSA-mfr8-8qww-v76h` (`use cache`, Cache Components): nem érint, a `src`-ben és a `next.config.ts`-ben nincs `use cache`, `cacheComponents`, `unstable_cache`.
+- [x] Bump helyben (2026-11-04, nincs commitolva): `next` és `eslint-config-next` 16.4.5, `images: { unoptimized: true }`. `tsc` 0 hiba, eslint 0 hiba (290 warning), `npm test` 119 fájl, 1105 teszt zöld, `npm run build` zöld. Mindez a helyi Node 24.13.1-en futott, a box Node 20.20.2-jén a Telekom-deploy buildje lesz az első próba. Végpont: élesben (16.4.2) `/_next/image` 400 és `?url=/` 500, helyben (16.4.5 + `unoptimized`) mindkettő 404, `/login` 200.
+- [x] Verzió és CHANGELOG: `6.128.2` → `6.128.3` (patch), a CHANGELOG pontosítja a 6.128.1-es megjegyzést.
+- [x] Commit és push Robi jóváhagyásával („Igen, mehet”, 2026-11-04).
+- [ ] `mm6-deploy telekom` Robi külön jóváhagyásával, csendes időszakban. Előtte: `df -h` és `free -m` (2 GB alatti szabad lemeznél nem indul), az előző HEAD sha-ja a deploy-naplóba. Közben `free -m` mintavétel. Swap-kifutásnál vagy bukásnál megállok, nem próbálom újra vakon.
+- [ ] Ellenőrzés: HEAD, verzió, next-verzió, `/login` 200, `/` nem 503, nincs `.next-old` és `.next-build`, pm2 online, error log az `npm ci` kezdete óta; `/_next/image` `url` nélkül 404 (ma 400). A `?url=` alak nem bizonyít, mert nem létező képre élesben már most is 404.
+- [ ] `mm6-deploy erste` ezután, Robi külön jóváhagyásával, soha nem párhuzamosan, ugyanazzal az előkészítéssel és ellenőrzéssel. Ha az első mérés hibákat mutat, előbb megállok.
+- [ ] Vége: a box scriptje egyezik a repóval, checkpoint ide (csak saját hunk).
+
+**Rollback:** ez lockfile-mozgató deploy, ezért a `.next-old` visszacsere önmagában nem elég, a `node_modules` már új. Ha az app nem jön fel: a boxon `git reset --hard f74c975` (vagy az akkori HEAD), `npm ci`, `.next-old` vissza, `pm2 restart`, `mm6-maint off`. Sikeres deploy után: `git revert`, push, újra `mm6-deploy`.
+
+**Nem része ennek a körnek:** Node 20→24; `npm audit` 5 találat a production-függőségekben (`zod` 4.4.1 és `body-parser` magas, `fast-uri`, `ip-address`, `qs` közepes, főleg az MCP SDK alatt): külön változás, de a két magas súlyosságút 2026-11-06-ig meg kell vizsgálni, hogy hálózatról elérhető-e (CA).
+
+**Külön döntés, a bumptól függetlenül:** az `images: { unoptimized: true }` a `next.config.ts`-ben lezárná a `/_next/image`-et (`next-server.js:193` a 16.4.2-ben 404-et ad rá; kódolvasásból, nem futtatva). Az app nem használja a végpontot, és szeptember óta több advisory is ezt érintette. A CA szerint a bumppal menjen, egy buildbe. Robi dönt.

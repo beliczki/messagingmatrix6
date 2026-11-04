@@ -5,6 +5,18 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.128.3] — 2026-11-04
+
+### Changed
+- `images: { unoptimized: true }` turns `/_next/image` off, so it answers 404. Nothing imports
+  `next/image`, but the optimizer was answering on both tenants without auth.
+
+### Fixed
+- **Next.js 16.4.2 → 16.4.5** (with eslint-config-next), the November security release with seven
+  medium advisories. One reaches mm6: the SVG rejection bypass in the image optimizer
+  (GHSA-7qx7-33qx-rqx2). The others need `use cache`, Cache Components, Edge routes or a forwarded
+  fetch response, which mm6 does not have.
+
 ## [6.128.2] — 2026-11-02
 
 ### Changed
@@ -23,7 +35,9 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 - **Next.js 16.4.0 → 16.4.2** (with eslint-config-next). 16.4.1 closes two critical RCE advisories
   (`use cache` typed arrays, Image Optimization with SVG) and a Server Actions DoS; 16.4.2 is
   Turbopack fixes. mm6 uses none of `use cache`, `next/image` or Server Actions, so this is
-  hygiene rather than an open hole.
+  hygiene rather than an open hole. **Correction (6.128.3):** wrong for Image Optimization.
+  `/_next/image` answered without auth even though nothing imports `next/image`, so that advisory
+  was not ruled out.
 
 ## [6.128.0] — 2026-10-21
 

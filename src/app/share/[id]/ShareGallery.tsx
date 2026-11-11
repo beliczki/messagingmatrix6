@@ -591,8 +591,9 @@ export default function ShareGallery({
   return (
     <>
       <header className="share-gallery__header sticky top-0 z-20 border-b border-slate-200 bg-white">
-        {/* Row 1 — what this share IS: identity, plus the two read-only facts
-            about it (how many comments it has collected, when it was captured). */}
+        {/* Row 1 — what this share IS: identity, plus the read-only facts
+            about it (how many comments it has collected, when it was captured,
+            where its delivery folders and brief decks live). */}
         <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
           <div className="share-gallery__brand flex shrink-0 items-center gap-2">
             {/* Same pair the app sidebar uses — the dark mark is white, so it
@@ -660,6 +661,14 @@ export default function ShareGallery({
             <span className="share-gallery__theme hidden sm:inline-flex">
               <ThemeToggle />
             </span>
+            {/* Where the share's material lives is a fact about it, so it sits
+                here, not with the controls. Narrow: both are in the Actions menu. */}
+            {driveFolders.length > 0 || briefDecks.length > 0 ? (
+              <span className="share-gallery__links hidden items-center gap-2 sm:inline-flex">
+                <DriveFolderButton folders={driveFolders} />
+                <BriefDeckButton decks={briefDecks} />
+              </span>
+            ) : null}
           </div>
         </div>
         {shareDescription ? (
@@ -766,8 +775,6 @@ export default function ShareGallery({
                 />
               )}
             </DownloadMenu>
-            <DriveFolderButton folders={driveFolders} />
-            <BriefDeckButton decks={briefDecks} />
           </div>
         </div>
       </header>

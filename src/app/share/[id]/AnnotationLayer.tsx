@@ -111,7 +111,8 @@ export default function AnnotationLayer({
   }, [drag]);
 
   // The overlay/capture children sit at z-20 / z-30 inside this layer's
-  // own div. `fill=true` is the default — required when the wrapped content
+  // own div; `isolate` keeps them there, so they never rise above controls
+  // outside the layer. `fill=true` is the default — required when the wrapped content
   // is absolutely positioned (e.g. an iframe with transform: scale) because
   // otherwise this div would collapse to 0×0 and the absolute children
   // would cover nothing. `fill=false` lets the layer collapse to its
@@ -120,7 +121,7 @@ export default function AnnotationLayer({
     <div
       ref={ref}
       className={clsx(
-        "annotation-layer relative",
+        "annotation-layer relative isolate",
         fill ? "block size-full" : "inline-block",
       )}
     >

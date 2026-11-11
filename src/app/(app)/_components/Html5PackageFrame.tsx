@@ -74,10 +74,12 @@ export function Html5PackageFrame({
   return (
     <div
       ref={wrapRef}
+      // `isolate`: the click shield's z-10 stays inside this box instead of
+      // competing with the page's sticky header and its menus.
       className={
         mode === "fill-width"
-          ? "html5-package-frame thumb-checker relative w-full overflow-hidden"
-          : "html5-package-frame thumb-checker relative size-full overflow-hidden"
+          ? "html5-package-frame thumb-checker relative isolate w-full overflow-hidden"
+          : "html5-package-frame thumb-checker relative isolate size-full overflow-hidden"
       }
       // Computed: the banner's own aspect, so masonry sizes the tile before load.
       style={mode === "fill-width" && native ? { aspectRatio: `${native.w} / ${native.h}` } : undefined}

@@ -5,6 +5,17 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.128.4] — 2026-11-11
+
+### Changed
+- Share gallery: **Drive** and **Slides** moved to the top row, after the theme switch. On a phone
+  they stay in the Actions menu.
+
+### Fixed
+- Share gallery: an open **Size** menu over a video tile took no clicks, the tile under it opened
+  instead. The video's hover-scrub layer stacked above the sticky header. Video, DCO, HTML5 and
+  comment-layer previews now keep their own layers inside their box (`isolate`).
+
 ## [6.128.3] — 2026-11-04
 
 ### Changed

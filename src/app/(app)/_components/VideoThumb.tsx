@@ -140,7 +140,11 @@ export default function VideoThumb({
 
   return (
     <div
-      className={clsx("video-thumb relative", wrapperClassName)}
+      // `isolate` keeps the scrub (z-20) and playhead (z-30) layers inside this
+      // box. Without it they compete with the whole page, so on the share
+      // gallery a video tile painted over the sticky header's (z-20) open Size
+      // menu and took its clicks.
+      className={clsx("video-thumb relative isolate", wrapperClassName)}
       onMouseEnter={() => setHovering(true)}
       // Leaving does NOT rewind: the frame you stopped on is the one you wanted
       // to look at, so the box keeps it and the badge keeps its time.

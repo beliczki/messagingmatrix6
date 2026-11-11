@@ -113,10 +113,12 @@ export default function PublicMatrixPreview({
 
   const wrapStyle: React.CSSProperties =
     mode === "fill-width" ? { aspectRatio: `${nativeW} / ${nativeH}` } : {};
+  // `isolate`: the click shield's z-10 stays inside this box instead of
+  // competing with the page's sticky header and its menus.
   const wrapClass =
     mode === "fill-width"
-      ? "matrix-iframe-preview thumb-checker relative w-full overflow-hidden"
-      : "matrix-iframe-preview thumb-checker relative size-full overflow-hidden";
+      ? "matrix-iframe-preview thumb-checker relative isolate w-full overflow-hidden"
+      : "matrix-iframe-preview thumb-checker relative isolate size-full overflow-hidden";
 
   return (
     <div ref={wrapRef} className={wrapClass} style={wrapStyle}>

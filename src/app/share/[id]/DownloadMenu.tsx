@@ -320,32 +320,44 @@ function baseOf(name: string): string {
  * would show nothing until the response began — so it is fetched here, with
  * the trigger saying so, and saved when it lands.
  */
+// What the button says when a WebM did not come: the server refuses a video
+// over its caps for good (422: take the original), and turns one away for now
+// when too many encodes already wait (503 with Retry-After).
+const VIDEO_FAILURE: Record<number, { label: string; title: string }> = {
+  422: {
+    label: "Too long for WebM",
+    title: "Over 60 s or over 1080p — download the original instead",
+  },
+  503: { label: "Busy — try again", title: "Other videos are converting — try again shortly" },
+};
+const VIDEO_FAILED = { label: "Conversion failed", title: "The video could not be converted" };
+
 function VideoDownloadMenu({ src, name }: { src: string; name: string }) {
   const [busy, setBusy] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<{ label: string; title: string } | null>(null);
   async function downloadAs(as: VideoFormat) {
     setBusy(true);
-    setFailed(false);
+    setFailure(null);
     try {
       const r = await fetch(withVideoFormat(src, as));
       if (!r.ok) {
-        setFailed(true);
+        setFailure(VIDEO_FAILURE[r.status] ?? VIDEO_FAILED);
         return;
       }
       saveBlob(await r.blob(), `${baseOf(name)}.${as}`);
     } catch {
       // A dropped connection on a long encode: say so on the button.
-      setFailed(true);
+      setFailure(VIDEO_FAILED);
     } finally {
       setBusy(false);
     }
   }
   return (
     <DownloadMenu
-      label={busy ? "Converting…" : failed ? "Conversion failed" : "Download"}
+      label={busy ? "Converting…" : failure ? failure.label : "Download"}
       busy={busy}
       disabled={busy}
-      title={busy ? "Converting the video — this can take a minute" : undefined}
+      title={busy ? "Converting the video — this can take a minute" : failure?.title}
       triggerClassName={ITEM_TRIGGER}
     >
       {(close) => (

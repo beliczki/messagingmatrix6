@@ -14,7 +14,13 @@ import { posterResponse } from "@/lib/html5-package-response";
 import { isConvertibleImage, parseImageEncoding, parseImageFormat } from "@/lib/image-formats";
 import { convertImage } from "@/lib/image-convert";
 import { isConvertibleVideo, parseVideoFormat } from "@/lib/video-formats";
-import { VideoConvertError, ensureConvertedVideo, videoContentType } from "@/lib/video-convert";
+import {
+  VideoBusyError,
+  VideoConvertError,
+  VideoTooLargeError,
+  ensureConvertedVideo,
+  videoContentType,
+} from "@/lib/video-convert";
 import {
   StillsUnavailableError,
   ensureStills,
@@ -155,10 +161,18 @@ export async function GET(
     }
     let bytes: Buffer;
     try {
-      bytes = await fs.readFile(
-        await ensureConvertedVideo(key, file.id, file.storagePath, videoFormat),
-      );
+      bytes = await fs.readFile(await ensureConvertedVideo(key, file, videoFormat));
     } catch (e) {
+      // Over a cap: this file will not be converted; the original is the way.
+      if (e instanceof VideoTooLargeError) {
+        return NextResponse.json({ error: "too_large", reason: e.message }, { status: 422 });
+      }
+      if (e instanceof VideoBusyError) {
+        return NextResponse.json(
+          { error: "busy", reason: e.message },
+          { status: 503, headers: { "Retry-After": "30" } },
+        );
+      }
       if (e instanceof VideoConvertError) {
         return NextResponse.json(
           { error: "convert_unavailable", reason: e.message },

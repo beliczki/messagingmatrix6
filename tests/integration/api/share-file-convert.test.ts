@@ -121,6 +121,45 @@ describe("share file download in another format (?as=)", () => {
     fs.rmSync(work, { recursive: true, force: true });
   });
 
+  it("turns away a video over the caps with 422, without encoding it", async () => {
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), "mm6-clip-"));
+    const clip = (name: string, size: string, duration: number) => {
+      const out = path.join(work, name);
+      execFileSync("ffmpeg", [
+        "-nostdin", "-v", "error", "-f", "lavfi",
+        "-i", `color=c=blue:size=${size}:rate=1:duration=${duration}`,
+        "-pix_fmt", "yuv420p", out,
+      ]);
+      return fs.readFileSync(out);
+    };
+    const wide = await uploadFile(erste.id, {
+      buffer: clip("wide.mp4", "2560x1440", 1),
+      originalFilename: "wide.mp4",
+      mimeType: "video/mp4",
+      category: "creative",
+      uploadedBy: "u-test",
+    });
+    const long = await uploadFile(erste.id, {
+      buffer: clip("long.mp4", "64x48", 61),
+      originalFilename: "long.mp4",
+      mimeType: "video/mp4",
+      category: "creative",
+      uploadedBy: "u-test",
+    });
+    const tooWide = await (await share(wide.id))("?as=webm");
+    expect(tooWide.status).toBe(422);
+    expect(((await tooWide.json()) as { reason: string }).reason).toMatch(/2560x1440/);
+    await db.delete(shareGalleries);
+    const tooLong = await (await share(long.id))("?as=webm");
+    expect(tooLong.status).toBe(422);
+    expect(((await tooLong.json()) as { reason: string }).reason).toMatch(/61\.0 s/);
+    // Nothing was encoded, and nothing counted as a download.
+    expect(fs.existsSync(path.join(storageRoot, "erste", ".thumbs"))).toBe(false);
+    const [row] = await db.select().from(shareGalleries).where(eq(shareGalleries.id, "s1"));
+    expect(row!.downloadCount).toBe(0);
+    fs.rmSync(work, { recursive: true, force: true });
+  });
+
   it("refuses WebM for a picture and for a video that already is WebM", async () => {
     const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "#000" } })
       .png()

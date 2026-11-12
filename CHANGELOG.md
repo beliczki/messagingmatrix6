@@ -11,7 +11,10 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 - Share gallery: a video downloads **as WebM** too, from its own Download menu (card and detail
   view) and from Download all. Encoded on the server once (VP9 + Opus, fixed quality), then served
   from the cache; the first download of a 10 s 1080p clip takes about half a minute, and the button
-  says "Converting…" meanwhile.
+  says "Converting…" meanwhile. The route is public, so the encode has ceilings: up to 60 s, 1080p
+  and 150 MB per video (above that: 422, "Too long for WebM", take the original), killed after
+  240 s, one at a time per process with at most two waiting (then 503, "Busy — try again"). One
+  log line per encode.
 
 ### Changed
 - Share gallery: **Image preview** shows only when the share holds MCs. It never swapped anything

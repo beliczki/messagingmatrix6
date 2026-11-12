@@ -15,14 +15,28 @@ const run = promisify(execFile);
 // (2 vCPU) — so each file is encoded once and cached on local disk beside its
 // still strip; every later download is a file read.
 //
-// The route is public, so the cost has to be bounded by the share, not by the
-// traffic: a file is encoded at most once (the cache, plus one pass shared by
-// concurrent callers), one encode runs at a time per process, and it runs
-// under `nice` so the app keeps answering while it does.
+// The route is public, so the cost has a ceiling per input and per process
+// (Chief Architect review, 2026-11-12), not just per share:
+// - a file is encoded at most once: the cache, plus one pass shared by
+//   concurrent callers for it;
+// - only what fits the caps below is encoded at all, and an encode that runs
+//   past ENCODE_TIMEOUT_MS is killed;
+// - one encode runs at a time per process, at most MAX_WAITING wait behind it,
+//   and the rest are turned away to come back later;
+// - it runs under `nice`, so the app keeps answering meanwhile.
 
 // Part of the cached file's NAME: a change to the settings below must miss and
 // re-encode, not keep serving what the old ones produced.
 const CACHE_VERSION = 1;
+
+// The caps. A banner video is seconds long and at most 1080p; 60 s of 1080p
+// at the measured ~3 s of encode per second of video is ~180 s, inside the
+// timeout, which itself stays inside nginx's 300 s.
+export const MAX_SOURCE_BYTES = 150 * 1024 * 1024;
+export const MAX_DURATION_SEC = 60;
+export const MAX_PIXELS = 1920 * 1080;
+const ENCODE_TIMEOUT_MS = 240_000;
+const MAX_WAITING = 2;
 
 const ENCODERS: Record<VideoFormat, { args: string[]; contentType: string }> = {
   // Constant quality (fixed, no knob — user decision 2026-11-12). CRF 32 turned
@@ -34,14 +48,19 @@ const ENCODERS: Record<VideoFormat, { args: string[]; contentType: string }> = {
     args: [
       "-c:v", "libvpx-vp9", "-crf", "32", "-b:v", "0",
       "-row-mt", "1", "-deadline", "good", "-cpu-used", "4",
-      "-pix_fmt", "yuv420p",
+      "-threads", "2", "-pix_fmt", "yuv420p",
       "-c:a", "libopus", "-b:a", "96k",
     ],
     contentType: "video/webm",
   },
 };
 
+/** The encode failed or could not run (ffmpeg missing, killed, bad input). */
 export class VideoConvertError extends Error {}
+/** The video is over a cap; the original is the way to get it. */
+export class VideoTooLargeError extends Error {}
+/** Too many encodes already waiting in this process; try again later. */
+export class VideoBusyError extends Error {}
 
 export function videoContentType(as: VideoFormat): string {
   return ENCODERS[as].contentType;
@@ -60,51 +79,111 @@ async function exists(file: string): Promise<boolean> {
   }
 }
 
-// One encode at a time: each one already takes both cores.
+// One encode at a time: each one already takes both cores. `waiting` counts
+// the jobs queued behind the running one.
 let queue: Promise<unknown> = Promise.resolve();
+let waiting = 0;
 function oneAtATime<T>(work: () => Promise<T>): Promise<T> {
-  const next = queue.then(work, work);
+  if (waiting >= MAX_WAITING) {
+    throw new VideoBusyError(`${waiting} encodes already waiting`);
+  }
+  waiting += 1;
+  const start = () => {
+    waiting -= 1;
+    return work();
+  };
+  const next = queue.then(start, start);
   queue = next.catch(() => undefined);
   return next;
 }
+export const _oneAtATimeForTests = oneAtATime;
 
 const inFlight = new Map<string, Promise<string>>();
+// A file found over a cap stays over it: remembered, so asking again does not
+// pull the source down and probe it again.
+const overCap = new Map<string, string>();
 
 /** The video in `as`, encoded once and cached; returns the cached file's path. */
 export async function ensureConvertedVideo(
   clientKey: string,
-  fileId: string,
-  storagePath: string,
+  file: { id: string; storagePath: string; sizeBytes: number | null },
   as: VideoFormat,
 ): Promise<string> {
-  const out = convertedPath(clientKey, fileId, as);
+  const out = convertedPath(clientKey, file.id, as);
   if (await exists(out)) return out;
+  const known = overCap.get(out);
+  if (known) throw new VideoTooLargeError(known);
+  if (file.sizeBytes !== null && file.sizeBytes > MAX_SOURCE_BYTES) {
+    throw new VideoTooLargeError(`source is ${file.sizeBytes} bytes, over ${MAX_SOURCE_BYTES}`);
+  }
   const existing = inFlight.get(out);
   if (existing) return existing;
-  const job = oneAtATime(() => encode(storagePath, out, as)).finally(() =>
-    inFlight.delete(out),
-  );
+  const job = oneAtATime(() => encode(file, out, as)).finally(() => inFlight.delete(out));
   inFlight.set(out, job);
   return job;
 }
 
-async function encode(storagePath: string, out: string, as: VideoFormat): Promise<string> {
+async function probe(src: string): Promise<{ width: number; height: number; durationSec: number }> {
+  const { stdout } = await run("ffprobe", [
+    "-v", "error", "-select_streams", "v:0",
+    "-show_entries", "stream=width,height:format=duration",
+    "-of", "json", src,
+  ]);
+  const parsed = JSON.parse(stdout) as {
+    streams: Array<{ width: number; height: number }>;
+    format: { duration?: string };
+  };
+  const stream = parsed.streams[0];
+  if (!stream) throw new VideoConvertError("no video stream");
+  return {
+    width: stream.width,
+    height: stream.height,
+    durationSec: Number(parsed.format.duration),
+  };
+}
+
+async function encode(
+  file: { id: string; storagePath: string },
+  out: string,
+  as: VideoFormat,
+): Promise<string> {
   // A caller that checked the cache just before an earlier pass finished
   // queued behind it; the file is there now.
   if (await exists(out)) return out;
   const work = await fs.mkdtemp(path.join(os.tmpdir(), "mm6-video-"));
   try {
     // ffmpeg needs a seekable file; in S3 mode the source is in the object store.
-    const src = path.join(work, `src${path.extname(storagePath) || ".mp4"}`);
-    await fs.writeFile(src, await readFileBytes(storagePath));
+    const src = path.join(work, `src${path.extname(file.storagePath) || ".mp4"}`);
+    const bytes = await readFileBytes(file.storagePath);
+    await fs.writeFile(src, bytes);
+
+    const { width, height, durationSec } = await probe(src);
+    // A duration ffprobe cannot read is let through: the timeout still bounds it.
+    const over =
+      width * height > MAX_PIXELS
+        ? `${width}x${height} is over 1080p`
+        : durationSec > MAX_DURATION_SEC
+          ? `${durationSec.toFixed(1)} s is over ${MAX_DURATION_SEC} s`
+          : null;
+    if (over) {
+      overCap.set(out, over);
+      throw new VideoTooLargeError(over);
+    }
+
     const encoded = path.join(work, `out.${as}`);
+    const started = Date.now();
     // -nostdin: ffmpeg otherwise reads its stdin as interactive commands.
-    await run("nice", [
-      "-n", "10",
-      "ffmpeg", "-nostdin", "-v", "error", "-y", "-i", src,
-      ...ENCODERS[as].args,
-      encoded,
-    ]);
+    // `nice` execs ffmpeg in place, so the timeout's SIGKILL reaches ffmpeg.
+    await run(
+      "nice",
+      [
+        "-n", "10",
+        "ffmpeg", "-nostdin", "-v", "error", "-y", "-i", src,
+        ...ENCODERS[as].args,
+        encoded,
+      ],
+      { timeout: ENCODE_TIMEOUT_MS, killSignal: "SIGKILL" },
+    );
     // Copy, then rename inside the cache dir: the work dir may be on another
     // filesystem (EXDEV, as in video-stills), and a reader must never find a
     // half-written file under the final name.
@@ -112,9 +191,16 @@ async function encode(storagePath: string, out: string, as: VideoFormat): Promis
     const part = `${out}.part`;
     await fs.copyFile(encoded, part);
     await fs.rename(part, out);
+    const { size } = await fs.stat(out);
+    // One line per encode, so heavy or unexpected use shows in the pm2 log.
+    console.log(
+      `[video-convert] ${file.id} ${as} ${width}x${height} ${durationSec.toFixed(1)}s ` +
+        `${Date.now() - started}ms in=${bytes.length} out=${size}`,
+    );
     return out;
   } catch (e) {
-    throw new VideoConvertError(`${as} encode failed: ${(e as Error).message}`);
+    if (e instanceof VideoTooLargeError || e instanceof VideoConvertError) throw e;
+    throw new VideoConvertError(`${as} encode failed for ${file.id}: ${(e as Error).message}`);
   } finally {
     await fs.rm(work, { recursive: true, force: true });
   }

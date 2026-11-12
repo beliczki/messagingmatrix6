@@ -3158,3 +3158,13 @@ Lépések:
   - Vegyes share (videó és kép vagy MC együtt) nem volt az utolsó 40 ERSTE share-ben, azt nem láttam.
   - vitest: 119 fájl, 1107 teszt zöld. tsc tiszta.
 - [x] 7. CHANGELOG az `[Unreleased]` alatt. Verziójavaslat: 6.128.4 → 6.129.0 (minor). Nincs commitolva.
+
+### 6.129.0 deploy — Chief Architect: OK with changes (`~/agent-bus/answers/20261112-1459-mm6-6.129.0-webm-deploy.md`)
+- [x] Push `5afc63b..358d711` (Robi: „Igen, push + deploy”). Pre-flight: 12 GB szabad a `/`-en, 2120 MB elérhető memória, mindkét tenant `5afc63b`, pm2 online, a deploy-script `c3438a49`.
+- [x] Deploy felfüggesztve, Robi döntött: „Igen, építsd be”. Az 1. és 2. pont beépítve, a verzió marad 6.129.0, mert még nem ment élesbe.
+  1. Felső korlát bemenetenként: execFile `timeout` 240 s, SIGKILL (az nginx 300 s alatt), `-threads 2`, és előellenőrzés: a forrás mérete legfeljebb 150 MB, ffprobe-hossz legfeljebb 60 s, felbontás legfeljebb 1080p. Felette 422, a gomb azt mondja: használd az Original-t.
+  2. A várósor korlátja: folyamatonként legfeljebb 2 várakozó kódolás, felette 503 `Retry-After`-rel. A Download all sorban kér (`for` + `await`), ezt ellenőriztem.
+  - Mellé: egy naplósor kódolásonként (fileId, ms, be/ki bájt), hogy látszódjon a visszaélés.
+  - 3. (memória): a 150 MB-os korlát lefedi. 4. (Cache-Control): az eredeti bájtok ágával egyezik (`public, max-age=86400`), nem változtatok. 5. (`.thumbs` takarítása törléskor + méretriport): külön feladat, a stillekre is igaz.
+  - Beépítve: a forrásméret előre a DB-ből jön, a hossz és a felbontás ffprobe-bal a kódolás előtt. A korlát feletti fájl memóriában marad, így nem töltjük le újra. 422 esetén a gomb „Too long for WebM”, 503 esetén „Busy — try again”. A sor: legfeljebb 2 várakozó, unit teszttel (`tests/unit/video-convert-queue.test.ts`). Integrációs teszt: 2560x1440 és 61 s → 422, kódolás és letöltésszámlálás nélkül. Naplósor: `[video-convert] <fileId> webm WxH Ns Nms in= out=`.
+- [ ] Nyitott, külön feladat (CA 5. pont): a `.thumbs` alatti WebM-ek (és a stillek) törlése, amikor a fájl vagy a share törlődik, plusz méretriport.

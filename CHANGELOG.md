@@ -5,6 +5,27 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.130.0] — 2026-11-12
+
+### Added
+- Share gallery: a link can open a preview. The address carries the open item (`?open=c-1234`),
+  follows the viewer through the previews and drops it on close; a copied link opens on the same
+  preview. An item the share does not hold, or one the link's filters hide, leaves it closed.
+
+### Changed
+- Videos are shown by the frame a second before their end, where a banner holds its full text,
+  instead of frame 0: share tiles, Creative Library cards and draft covers (one server-side rule,
+  no recut of existing stills). The badge reads `0:09 / 0:10` at rest and the scrub still reaches
+  the opening frame. The share's detail view opens the video on that frame too; Play starts from
+  the top.
+- WebM download encodes about five times faster (VP9 realtime): 19 s instead of 99 s for a busy
+  10 s 1080p clip, same measured quality (SSIM), a quarter more bytes. Clips cached or refused
+  under the old settings are encoded again on the next request.
+
+### Fixed
+- WebM download: a video whose encode ran past the 240 s limit was encoded again, for another
+  240 s, on every request. It is now remembered and answered "Too long for WebM" at once.
+
 ## [6.129.0] — 2026-11-12
 
 ### Added

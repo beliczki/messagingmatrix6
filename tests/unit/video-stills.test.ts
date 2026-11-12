@@ -3,6 +3,7 @@ import {
   MAX_STILLS,
   STILL_INTERVAL_SEC,
   planStills,
+  posterStillIndex,
   stillInterval,
   stillTimestamp,
   wantsEndFrame,
@@ -90,5 +91,41 @@ describe("stillTimestamp", () => {
     expect(stillTimestamp(10, { ...withEnd, durationSec: 12 })).toBe(12);
     // The ticks before it are unaffected.
     expect(stillTimestamp(9, withEnd)).toBe(9);
+  });
+});
+
+describe("posterStillIndex", () => {
+  // Manifests as generate() writes them: one tick a second plus, when the last
+  // tick stops short, the closing frame.
+  const manifestFor = (durationSec: number) => {
+    const ticks = planStills(durationSec);
+    const endFrame = wantsEndFrame(durationSec, ticks);
+    return {
+      count: ticks + (endFrame ? 1 : 0),
+      intervalSec: stillInterval(durationSec),
+      durationSec,
+      endFrame,
+    };
+  };
+
+  it("picks the still a second before the end, not frame 0", () => {
+    // 10 s clip: ticks at 0…9 s plus the closing frame — the poster is 0:09.
+    const ten = manifestFor(10.04);
+    expect(posterStillIndex(ten)).toBe(9);
+    expect(stillTimestamp(posterStillIndex(ten), ten)).toBe(9);
+    expect(posterStillIndex(manifestFor(6))).toBe(5);
+  });
+
+  it("follows a stretched interval on a long clip", () => {
+    // 90 s at 2 s a still: 88 s and the 90 s closing frame are both a second
+    // off the 89 s target; the tie goes to the earlier one.
+    const long = manifestFor(90);
+    expect(stillTimestamp(posterStillIndex(long), long)).toBe(88);
+  });
+
+  it("falls back to the first still when there is nothing to choose", () => {
+    expect(posterStillIndex(manifestFor(0.5))).toBe(0);
+    expect(posterStillIndex({ count: 1, intervalSec: 1, durationSec: 0, endFrame: false })).toBe(0);
+    expect(posterStillIndex({ count: 5, intervalSec: 1, durationSec: NaN, endFrame: false })).toBe(0);
   });
 });

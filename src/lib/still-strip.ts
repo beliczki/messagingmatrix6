@@ -84,3 +84,30 @@ export function stillTimestamp(
   if (manifest.endFrame && index === manifest.count - 1) return manifest.durationSec;
   return index * manifest.intervalSec;
 }
+
+/**
+ * The still a video is shown by at rest — its poster: the one nearest a
+ * second before the end (user, 2026-11-12). A banner video builds its message
+ * up and holds the full text at the close, while frame 0 is often an empty
+ * opening; the very last frame can already be fading out. One rule for every
+ * poster (library cards, draft covers, share tiles), read off the manifest's
+ * own fields, so strips cut before it need no recut. Ties go to the earlier
+ * still; an unknown duration falls back to the first.
+ */
+export function posterStillIndex(
+  manifest: Pick<StillManifest, "count" | "intervalSec" | "durationSec" | "endFrame">,
+): number {
+  const { count, durationSec } = manifest;
+  if (count <= 1 || !Number.isFinite(durationSec) || durationSec <= 0) return 0;
+  const target = Math.max(0, durationSec - 1);
+  let best = 0;
+  for (let i = 1; i < count; i += 1) {
+    if (
+      Math.abs(stillTimestamp(i, manifest) - target) <
+      Math.abs(stillTimestamp(best, manifest) - target)
+    ) {
+      best = i;
+    }
+  }
+  return best;
+}

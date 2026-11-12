@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { Icon } from "@/app/_icons/Icon";
 
-import { stillTimestamp, type StillManifest } from "@/lib/still-strip";
+import { posterStillIndex, stillTimestamp, type StillManifest } from "@/lib/still-strip";
 
 function formatClock(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
@@ -14,7 +14,8 @@ function formatClock(seconds: number): string {
 /**
  * A video's poster frame, with a hover scrub over the stills behind it.
  *
- * The poster comes from the thumbnail route (still 0) as a plain <img>, not a
+ * The poster comes from the thumbnail route (the still a second before the
+ * end, posterStillIndex) as a plain <img>, not a
  * <video preload="metadata">: a video element has to fetch and decode part of
  * the clip before it can paint anything, and until the stills exist there is
  * nothing to paint at all — which is what left the preview box empty after an
@@ -55,9 +56,11 @@ export default function VideoThumb({
   // They differ while a frame is still downloading — a mounted <img> with no
   // bytes yet is transparent, so flipping it to opaque on mouseenter showed the
   // poster through it while the badge already claimed the new time.
+  // Both start on the poster's still, which is known once the manifest lands
+  // (posterStillIndex — a second before the end, user 2026-11-12).
   const [index, setIndex] = useState(0);
   const [shown, setShown] = useState(0);
-  // Index 0 needs no waiting: it IS the poster, already on screen.
+  // The poster's still needs no waiting: it IS the poster, already on screen.
   const [ready, setReady] = useState<number[]>([0]);
   // Where the pointer last was across the box, 0–1. Continuous, unlike `index`:
   // the line tracks the mouse while the picture snaps to the nearest still.
@@ -105,7 +108,14 @@ export default function VideoThumb({
       // No manifest means no strip to scrub — a video whose stills could not be
       // cut (no ffmpeg on the host) still has its poster, and keeps it.
       if (!res.ok || cancelled) return;
-      setManifest((await res.json()) as StillManifest);
+      const m = (await res.json()) as StillManifest;
+      // The poster on screen is the server's pick of the strip; rest there, so
+      // the badge reads its time and the scrub can reach frame 0 like any other.
+      const rest = posterStillIndex(m);
+      setManifest(m);
+      setIndex(rest);
+      setShown(rest);
+      setReady([rest]);
     })();
     return () => {
       cancelled = true;
@@ -113,6 +123,7 @@ export default function VideoThumb({
   }, [scrub, loaded, manifestSrc]);
 
   const count = manifest?.count ?? 0;
+  const rest = manifest ? posterStillIndex(manifest) : 0;
   // The strip's version rides in the URL so a regenerated strip is a new URL.
   // Without it the frames sit in the browser cache for a day and a redeploy
   // that recuts them — different colour, different frames — goes unseen.
@@ -170,11 +181,12 @@ export default function VideoThumb({
       />
 
       {/* The rest of the strip, stacked over the poster; exactly one is opaque
-          at a time. Mounted only while the pointer is on the box. Index 0 hides
-          them all, which uncovers the poster underneath — and the poster IS
-          frame 0, so that reads as a cut like any other. */}
-      {scrub && loaded && count > 1 && (hovering || shown > 0)
-        ? Array.from({ length: count - 1 }, (_, n) => n + 1)
+          at a time. Mounted only while the pointer is on the box. The poster's
+          own index hides them all, which uncovers the poster underneath — and
+          the poster IS that still, so it reads as a cut like any other. */}
+      {scrub && loaded && count > 1 && (hovering || shown !== rest)
+        ? Array.from({ length: count }, (_, i) => i)
+            .filter((i) => i !== rest)
             // Only the frames around the pointer, plus the ones already
             // fetched. At one still per second a whole strip is tens of
             // megabytes, and mounting it all would pull every frame the moment

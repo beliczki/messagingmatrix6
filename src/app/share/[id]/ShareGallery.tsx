@@ -293,6 +293,11 @@ export default function ShareGallery({
   // The theme the address names: the link's, or the one the viewer switched
   // to here. null = no theme in the address, the viewer's own applies.
   const [linkTheme, setLinkTheme] = useState(initialView.theme);
+  // Detail dialog — track by key so size-filter changes don't shift the open
+  // item underneath the user. In the link too (`?open=`, user 2026-11-12), so
+  // a copied address opens on the same preview; a key the share does not hold,
+  // or one the link's own filters hide, simply leaves it closed (see below).
+  const [detailKey, setDetailKey] = useState<string | null>(initialView.open);
 
   // Both the header toggle and the phone's Actions menu switch the theme by
   // the `.dark` class on <html> (useThemeSwitch); watching the class catches
@@ -317,12 +322,13 @@ export default function ShareGallery({
       q: search,
       commented: commentedOnly,
       image: imagePreview,
+      open: detailKey,
     });
     const next = `${window.location.pathname}${query}${window.location.hash}`;
     if (next !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
       window.history.replaceState(window.history.state, "", next);
     }
-  }, [linkTheme, view, sizeFilter, search, commentedOnly, imagePreview]);
+  }, [linkTheme, view, sizeFilter, search, commentedOnly, imagePreview, detailKey]);
   // Card thumbs use a fixed checker background. The bg toggle lives in the
   // ShareDetailDialog header where the user is actually evaluating preview
   // backgrounds.
@@ -591,9 +597,6 @@ export default function ShareGallery({
     }
   }
 
-  // Detail dialog — track by key so size-filter changes don't shift the open
-  // item underneath the user.
-  const [detailKey, setDetailKey] = useState<string | null>(null);
   const detailIndex = useMemo(
     () => (detailKey ? filtered.findIndex((it) => it.key === detailKey) : -1),
     [detailKey, filtered],

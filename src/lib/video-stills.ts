@@ -10,6 +10,7 @@ import {
   STILLS_CACHE_VERSION,
   STILL_INTERVAL_SEC,
   planStills,
+  posterStillIndex,
   stillInterval,
   wantsEndFrame,
   type StillManifest,
@@ -340,4 +341,20 @@ export async function readStillResized(
     .toBuffer();
   await fs.writeFile(sized, bytes);
   return bytes;
+}
+
+/**
+ * A video's poster: the still `posterStillIndex` picks, resized like any other.
+ * The index comes back with the bytes because the callers' ETag has to name
+ * the frame — the poster URL itself does not.
+ */
+export async function readPosterResized(
+  clientKey: string,
+  fileId: string,
+  storagePath: string,
+  width: number,
+): Promise<{ bytes: Buffer; index: number } | null> {
+  const index = posterStillIndex(await ensureStills(clientKey, fileId, storagePath));
+  const bytes = await readStillResized(clientKey, fileId, storagePath, index, width);
+  return bytes ? { bytes, index } : null;
 }

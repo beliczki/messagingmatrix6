@@ -8,7 +8,7 @@ import { readFileBytes, resolveStoragePath } from "@/lib/storage";
 import {
   StillsUnavailableError,
   normalizeStillWidth,
-  readStillResized,
+  readPosterResized,
   stillETag,
 } from "@/lib/video-stills";
 import { withSession } from "@/lib/scoped";
@@ -22,9 +22,10 @@ const ALLOWED_WIDTHS = [80, 200, 400, 800];
 const ALLOWED_OUTPUT = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 // Spec §4.4 — on-the-fly resize cached under storage/{clientKey}/.thumbs/.
-// A video's thumbnail is its FIRST STILL, so every caller that already asks for
-// a thumbnail (library cards and tiles, draft covers, share gallery) gets a
-// video poster for free and can drop its <video preload="metadata"> element.
+// A video's thumbnail is its POSTER STILL (a second before the end — see
+// posterStillIndex), so every caller that already asks for a thumbnail
+// (library cards and tiles, draft covers, share gallery) gets a video poster
+// for free and can drop its <video preload="metadata"> element.
 export const GET = withSession<Params>(async ({ req, claims, params }) => {
   const row = await getFile(claims.cid, params.id);
   if (!row) return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -73,13 +74,12 @@ export const GET = withSession<Params>(async ({ req, claims, params }) => {
   const client = await getActiveClient();
 
   if (isVideo) {
-    let bytes: Buffer | null;
+    let poster: { bytes: Buffer; index: number } | null;
     try {
-      bytes = await readStillResized(
+      poster = await readPosterResized(
         client.key,
         row.id,
         row.storagePath,
-        0,
         normalizeStillWidth(wRaw),
       );
     } catch (e) {
@@ -91,12 +91,14 @@ export const GET = withSession<Params>(async ({ req, claims, params }) => {
       }
       throw e;
     }
-    if (!bytes) return NextResponse.json({ error: "not_found" }, { status: 404 });
-    // A video poster is still 0, and its URL carries no strip version — the
-    // caller has not read the manifest yet, so it cannot. Cached hard it would
-    // survive a recut for a day and need a hard reload to come back; an ETag
+    if (!poster) return NextResponse.json({ error: "not_found" }, { status: 404 });
+    const { bytes, index } = poster;
+    // A video poster is the still a second before the end (posterStillIndex),
+    // and its URL carries no strip version — the caller has not read the
+    // manifest yet, so it cannot. Cached hard it would survive a recut for a
+    // day and need a hard reload to come back; an ETag (naming the frame)
     // lets it revalidate instead, and an unchanged poster costs a 304.
-    const tag = stillETag(row.id, 0, normalizeStillWidth(wRaw));
+    const tag = stillETag(row.id, index, normalizeStillWidth(wRaw));
     if (req.headers.get("if-none-match") === tag) {
       return new NextResponse(null, { status: 304, headers: { ETag: tag } });
     }

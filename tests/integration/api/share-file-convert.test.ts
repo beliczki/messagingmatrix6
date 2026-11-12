@@ -10,6 +10,7 @@ import { db } from "@/db";
 import { clients, shareGalleries } from "@/db/schema";
 import { uploadFile } from "@/lib/entities/files";
 import { _setStorageRootForTests } from "@/lib/storage";
+import { _setEncodeTimeoutForTests } from "@/lib/video-convert";
 import { createTestDb, withActiveClientKey, type TestDb } from "../../helpers/test-db";
 
 const { GET } = await import("@/app/share/[id]/file/[fileId]/route");
@@ -153,10 +154,46 @@ describe("share file download in another format (?as=)", () => {
     const tooLong = await (await share(long.id))("?as=webm");
     expect(tooLong.status).toBe(422);
     expect(((await tooLong.json()) as { reason: string }).reason).toMatch(/61\.0 s/);
-    // Nothing was encoded, and nothing counted as a download.
-    expect(fs.existsSync(path.join(storageRoot, "erste", ".thumbs"))).toBe(false);
+    // Nothing was encoded, nothing counted as a download, and each refusal is
+    // remembered beside where its WebM would be.
+    const thumbs = fs.readdirSync(path.join(storageRoot, "erste", ".thumbs"));
+    expect(thumbs.filter((f) => f.endsWith(".webm"))).toEqual([]);
+    expect(thumbs.filter((f) => f.endsWith(".webm.over"))).toHaveLength(2);
     const [row] = await db.select().from(shareGalleries).where(eq(shareGalleries.id, "s1"));
     expect(row!.downloadCount).toBe(0);
+    fs.rmSync(work, { recursive: true, force: true });
+  });
+
+  it("remembers an encode killed by the timeout and answers 422 after", async () => {
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), "mm6-clip-"));
+    const mp4 = path.join(work, "clip.mp4");
+    execFileSync("ffmpeg", [
+      "-nostdin", "-v", "error", "-f", "lavfi",
+      "-i", "testsrc=size=64x48:rate=10:duration=1",
+      "-pix_fmt", "yuv420p", mp4,
+    ]);
+    const file = await uploadFile(erste.id, {
+      buffer: fs.readFileSync(mp4),
+      originalFilename: "clip.mp4",
+      mimeType: "video/mp4",
+      category: "creative",
+      uploadedBy: "u-test",
+    });
+    const get = await share(file.id);
+    _setEncodeTimeoutForTests(1);
+    try {
+      const first = await get("?as=webm");
+      expect(first.status).toBe(422);
+      expect(((await first.json()) as { reason: string }).reason).toMatch(/ran past/);
+    } finally {
+      _setEncodeTimeoutForTests(240_000);
+    }
+    // With the timeout back to normal it would encode fine — but the verdict
+    // stands: the second request is refused from the marker, not re-encoded.
+    const second = await get("?as=webm");
+    expect(second.status).toBe(422);
+    const thumbs = fs.readdirSync(path.join(storageRoot, "erste", ".thumbs"));
+    expect(thumbs.filter((f) => f.endsWith(".webm"))).toEqual([]);
     fs.rmSync(work, { recursive: true, force: true });
   });
 

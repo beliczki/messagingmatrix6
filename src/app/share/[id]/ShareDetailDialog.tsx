@@ -678,17 +678,53 @@ function CreativePreviewStage({
         onDraw={onDraw}
         fill={false}
       >
-        <video
+        {/* Keyed by the file: stepping to the next video must start over, not
+            inherit this one's "already played" state. */}
+        <LateFrameVideo
+          key={fullSrc}
           src={fullSrc}
           className="block max-h-[80vh] max-w-[min(100%,80vw)]"
-          controls
-          preload="metadata"
         />
       </AnnotationLayer>
     );
   }
   return (
     <div className="text-xs text-slate-400">{file.mimeType ?? "binary"}</div>
+  );
+}
+
+// A video opens on the frame a second before its end — where a banner holds
+// its full text, the same moment its tile's poster shows (user, 2026-11-12) —
+// at the video's own resolution, not as an upscaled still. Play still starts
+// from the top: the first play rewinds, unless the viewer has already moved
+// the playhead themselves.
+function LateFrameVideo({ src, className }: { src: string; className: string }) {
+  // Our own seek also fires `seeked`; this tells it apart from the viewer's.
+  const autoSeek = useRef(false);
+  // The viewer has played or moved the playhead: leave the position to them.
+  const touched = useRef(false);
+  return (
+    <video
+      src={src}
+      className={className}
+      controls
+      preload="metadata"
+      onLoadedMetadata={(e) => {
+        const v = e.currentTarget;
+        if (touched.current || !Number.isFinite(v.duration) || v.duration <= 1) return;
+        autoSeek.current = true;
+        v.currentTime = v.duration - 1;
+      }}
+      onSeeked={() => {
+        if (autoSeek.current) autoSeek.current = false;
+        else touched.current = true;
+      }}
+      onPlay={(e) => {
+        if (touched.current) return;
+        touched.current = true;
+        e.currentTarget.currentTime = 0;
+      }}
+    />
   );
 }
 

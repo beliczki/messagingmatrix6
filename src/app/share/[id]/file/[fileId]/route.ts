@@ -25,6 +25,7 @@ import {
   StillsUnavailableError,
   ensureStills,
   normalizeStillWidth,
+  readPosterResized,
   readStillResized,
   stillETag,
 } from "@/lib/video-stills";
@@ -57,7 +58,7 @@ export async function GET(
   // A video's stills, same strip the signed-in library scrubs — the viewer here
   // is unauthenticated and cannot reach /api/files, so it comes through this
   // proxy instead. `?stills` is the manifest, `?still=N` one frame, and a
-  // `?thumb=` on a video is frame 0, so the gallery's existing poster URL works
+  // `?thumb=` on a video is its poster still, so the gallery's existing poster URL works
   // for video without the caller knowing the difference.
   // A package's thumbnail is its poster; the full-file serve below stays the
   // original zip, which is the share's download.
@@ -84,15 +85,25 @@ export async function GET(
           headers: { "Cache-Control": "public, no-cache" },
         });
       }
-      const rawIndex = url.searchParams.get("still");
-      const index = rawIndex === null ? 0 : Number(rawIndex);
-      if (!Number.isInteger(index) || index < 0) {
-        return NextResponse.json({ error: "bad_index" }, { status: 400 });
-      }
       const w = normalizeStillWidth(
         Number(url.searchParams.get("w") ?? thumbRaw ?? "400"),
       );
-      const bytes = await readStillResized(key, file.id, file.storagePath, index, w);
+      // `?still=N` is that frame; without it (`?thumb=`) the poster, which the
+      // server picks — a second before the end, see posterStillIndex.
+      const rawIndex = url.searchParams.get("still");
+      let index: number;
+      let bytes: Buffer | null;
+      if (rawIndex === null) {
+        const poster = await readPosterResized(key, file.id, file.storagePath, w);
+        if (!poster) return NextResponse.json({ error: "not_found" }, { status: 404 });
+        ({ index, bytes } = poster);
+      } else {
+        index = Number(rawIndex);
+        if (!Number.isInteger(index) || index < 0) {
+          return NextResponse.json({ error: "bad_index" }, { status: 400 });
+        }
+        bytes = await readStillResized(key, file.id, file.storagePath, index, w);
+      }
       if (!bytes) return NextResponse.json({ error: "not_found" }, { status: 404 });
       // The poster (`?thumb=` on a video) has no strip version in its URL — the
       // caller has not read the manifest yet. An ETag lets it revalidate rather

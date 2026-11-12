@@ -15,6 +15,7 @@ describe("share view in the link", () => {
         q: "mc:141c hitel",
         commented: "",
         image: "",
+        open: "m-45-300x250",
       }),
     ).toEqual({
       theme: "dark",
@@ -23,11 +24,12 @@ describe("share view in the link", () => {
       q: "mc:141c hitel",
       commented: true,
       image: true,
+      open: "m-45-300x250",
     });
   });
 
   it("falls back to the default for anything it does not know", () => {
-    expect(parseShareView({ theme: "blue", layout: "carousel", size: "" })).toEqual(
+    expect(parseShareView({ theme: "blue", layout: "carousel", size: "", open: " " })).toEqual(
       DEFAULT_SHARE_VIEW,
     );
   });
@@ -44,10 +46,11 @@ describe("share view in the link", () => {
       q: "mc:141c hitelkártya & co",
       commented: true,
       image: false,
+      open: "c-1234",
     };
     const query = serializeShareView(view);
     expect(query).toBe(
-      "?theme=light&layout=list&size=300x250,300x600&q=mc:141c+hitelk%C3%A1rtya+%26+co&commented",
+      "?theme=light&layout=list&size=300x250,300x600&q=mc:141c+hitelk%C3%A1rtya+%26+co&commented&open=c-1234",
     );
     expect(parseShareView(Object.fromEntries(new URLSearchParams(query)))).toEqual(view);
   });

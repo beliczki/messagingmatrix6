@@ -326,7 +326,7 @@ function baseOf(name: string): string {
 const VIDEO_FAILURE: Record<number, { label: string; title: string }> = {
   422: {
     label: "Too long for WebM",
-    title: "Over 60 s or over 1080p — download the original instead",
+    title: "Too long or too heavy to convert here — download the original instead",
   },
   503: { label: "Busy — try again", title: "Other videos are converting — try again shortly" },
 };

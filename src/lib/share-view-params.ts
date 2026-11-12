@@ -1,6 +1,7 @@
 // A share's view, carried in its link (user request, 2026-10-21):
 //
 //   /share/<id>?theme=dark&layout=grid&size=300x250,300x600&q=hitelkártya&commented&image
+//   /share/<id>?open=c-1234       (the detail view open on that item, 2026-11-12)
 //
 // Both ways: the link sets the view the gallery opens with, and the gallery
 // writes what the viewer changes back into the address bar, so a copied
@@ -19,6 +20,11 @@ export type ShareViewState = {
   q: string;
   commented: boolean;
   image: boolean;
+  /** The item whose detail view is open: the gallery's own key for it,
+   *  `m-<messageId>-<size>` for an MC, `c-<creativeId>` for a creative,
+   *  `a-<assetId>` for an asset. Built from ids, so a link keeps pointing at
+   *  the same item. */
+  open: string | null;
 };
 
 export const DEFAULT_SHARE_VIEW: ShareViewState = {
@@ -28,6 +34,7 @@ export const DEFAULT_SHARE_VIEW: ShareViewState = {
   q: "",
   commented: false,
   image: false,
+  open: null,
 };
 
 type RawParams = Record<string, string | string[] | undefined>;
@@ -39,6 +46,7 @@ function first(v: string | string[] | undefined): string | undefined {
 export function parseShareView(raw: RawParams): ShareViewState {
   const theme = first(raw.theme);
   const layout = first(raw.layout);
+  const open = (first(raw.open) ?? "").trim();
   return {
     theme: theme === "dark" || theme === "light" ? theme : null,
     layout: layout === "grid" || layout === "list" ? layout : "masonry",
@@ -49,6 +57,7 @@ export function parseShareView(raw: RawParams): ShareViewState {
     q: first(raw.q) ?? "",
     commented: raw.commented !== undefined,
     image: raw.image !== undefined,
+    open: open === "" ? null : open,
   };
 }
 
@@ -73,5 +82,6 @@ export function serializeShareView(v: ShareViewState): string {
   if (v.q.trim() !== "") parts.push(`q=${encode(v.q)}`);
   if (v.commented) parts.push("commented");
   if (v.image) parts.push("image");
+  if (v.open) parts.push(`open=${encode(v.open)}`);
   return parts.length > 0 ? `?${parts.join("&")}` : "";
 }

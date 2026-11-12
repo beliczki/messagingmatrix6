@@ -3168,3 +3168,45 @@ Lépések:
   - 3. (memória): a 150 MB-os korlát lefedi. 4. (Cache-Control): az eredeti bájtok ágával egyezik (`public, max-age=86400`), nem változtatok. 5. (`.thumbs` takarítása törléskor + méretriport): külön feladat, a stillekre is igaz.
   - Beépítve: a forrásméret előre a DB-ből jön, a hossz és a felbontás ffprobe-bal a kódolás előtt. A korlát feletti fájl memóriában marad, így nem töltjük le újra. 422 esetén a gomb „Too long for WebM”, 503 esetén „Busy — try again”. A sor: legfeljebb 2 várakozó, unit teszttel (`tests/unit/video-convert-queue.test.ts`). Integrációs teszt: 2560x1440 és 61 s → 422, kódolás és letöltésszámlálás nélkül. Naplósor: `[video-convert] <fileId> webm WxH Ns Nms in= out=`.
 - [ ] Nyitott, külön feladat (CA 5. pont): a `.thumbs` alatti WebM-ek (és a stillek) törlése, amikor a fájl vagy a share törlődik, plusz méretriport.
+- [x] Commit `fc5065d` (a korlátok), push `358d711..fc5065d`.
+- [x] **DEPLOYOLVA `mm6-telekom`** (14:07 UTC): 52 s, `npm ci` nem futott, a legkevesebb szabad memória 1152 MB, a swap legfeljebb 694 MB. HEAD `fc5065d`, 6.129.0, next 16.4.5, `/login` 200, `/` 307, `/_next/image` 404, az error log üres. Előtte ellenőrizve: `nice`, `ffmpeg`, libvpx-vp9 és libopus megvan.
+  - WebM-próba (`3_Ml4cJyfDkA`, 1080x1920, 10 s, 13.6 MB): hidegen **110 s**, 2.9 MB; a második kérés 0.13 s, a cache-ből. A legkevesebb szabad memória 1392 MB. A naplósor megjelent. A share `downloadCount`-ja +2.
+- [x] **DEPLOYOLVA `mm6-erste`** (14:13 UTC): 51 s, a legkevesebb szabad memória 909 MB, a swap legfeljebb 755 MB. HEAD `fc5065d`, 6.129.0, `/login` 200, `/_next/image` 404. Az error logban csak az ismert AWS SDK Node 20 figyelmeztetés van.
+  - WebM-próba (WyEy2p, MC412a 1920x1080, 10 s, 6.2 MB): hidegen 29.8 s, 441 KB; másodszor 0.05 s. A legkevesebb szabad memória 1755 MB. A WyEy2p `downloadCount`-ja +2.
+- [ ] **Tanulság:** a kódolási idő erősen tartalomfüggő. A Telekom-klip 11 s/s, az ERSTE-klip 3 s/s. Ilyen tartalom mellett a 240 s-os időkorlát kb. 20 s-nyi videót enged, nem 60 s-ot. Ami túllépi, azt most minden kérés újra 240 s-ig kódolja, majd 503-at kap.
+  - Javaslat: a lejárt kódolást ugyanúgy jegyezze meg, mint a korlát fölöttit (422, „Too long for WebM”).
+  - Mérjünk gyorsabb beállítást (`-deadline realtime` vagy `-cpu-used 5`) ugyanazon a klipen.
+
+## 2026-11-12 — Videó kezdőképe az utolsó előtti másodperc + mély link a nyitott előnézetre + WebM-tanulság (Robi: „Igen, mehet”, a library-ben is)
+
+Robi kérése: a videók alapból az utolsó előtti másodpercet mutassák, mert akkor van rajtuk a teljes szöveg, ne a 0. képkockát. Kell továbbá mély link: ha egy előnézeti ablak nyitva van, a link oda vigyen.
+
+**Kezdőkép.** Ma a szerver dönti el: a videó "thumbnail"-je a 0. still (`?thumb=` a share-proxyn, `/api/files/[id]/thumbnail` bejelentkezve). Ezt a library kártyái, a draft-borítók és a share csempéi mind ugyanígy kérik. A `VideoThumb` arra épít, hogy a poszter = 0. képkocka (nyugalmi idő 0:00, a 0-s indexre visszatérés a posztert fedi fel).
+- Mechanizmus-szintű javítás: egy függvény a `still-strip.ts`-ben (`posterStillIndex(manifest)`): az a still, amelyik legközelebb esik a `hossz − 1 s`-hoz. Egy 10 s-os klipnél ez a 9.1 s-os tick. A szerver ezt adja posztereként, a `VideoThumb` pedig ettől az indextől indul. A badge nyugalomban `0:09 / 0:10`, a scrub a 0. képkockát is mutatja. A manifesthez nem kell új mező és nem kell újravágás: az index a meglévő mezőkből jön.
+- A részletes nézet `<video>`-ja: a betöltés után az utolsó előtti másodpercre áll, saját felbontásban. Az első Play a 0-ról indul.
+
+**Mély link.** A share nézete már most kétirányú URL-paraméterekben él (`share-view-params.ts`: theme, layout, size, q, commented, image). Ez egy új paramétert kap: `open=<elem kulcsa>`, például `?open=c-1234` vagy `?open=m-45-300x250`. A kulcs a stabil DB-id-ből jön.
+- Nyitáskor, lapozáskor (előző/következő) és záráskor ugyanaz a `replaceState` írja.
+- Betöltéskor, ha az elem létezik és a szűrők nem rejtik el, a dialógus nyitva indul.
+
+Lépések:
+- [x] 1. `posterStillIndex` (`still-strip.ts`) + unit teszt: 10 s → 9 s, 6 s → 5 s, 90 s → 88 s (döntetlennél a korábbi), ismeretlen hossz → 0.
+- [x] 2. `readPosterResized` (`video-stills.ts`), a share `?thumb=` és a `/api/files/[id]/thumbnail` is ezt hívja. Az ETag a kiválasztott indexet tartalmazza, így a böngésző a régi 0-s posztert újraérvényesíti.
+- [x] 3. `VideoThumb`: a manifest megérkezésekor az index, a shown és a ready a poszterindexre áll. Az overlay minden indexre mehet, kivéve a poszterét.
+- [x] 4. `LateFrameVideo` (`ShareDetailDialog.tsx`, a fájllal kulcsolva): `loadedmetadata`-kor `hossz − 1`-re ugrik, az első Play a 0-ról indul, kivéve ha a néző már maga tekert. A library saját lejátszói (MatrixDetailDialog, ScaledMediaPreview, Assets, Drafts) változatlanok, ott csak a csempe kezdőképe váltott.
+- [x] 5. `open` a `share-view-params.ts`-ben, tesztekkel. A `detailKey` a linkből indul, és ugyanaz a `replaceState` írja vissza. A nem létező kulcsot a meglévő effekt zárja be, és az URL-ből is kikerül.
+- [x] 6. Ellenőrzés helyben, a WyEy2p share-en:
+  - A csempék a teljes szövegű képkockát mutatják `0:09 / 0:10`-en, a scrub eléri a 0:00-t.
+  - A dialógus videója 9.04/10.04-en áll, Play után 1.2 s-mal 1.18 s-on tart.
+  - A `?layout=grid&open=c-18201` link nyitott dialógussal indul, a Next `open=c-18206`-ra vált (a videó újra 9.04-en), Escape után `?layout=grid` marad.
+  - `open=c-999999`: zárva marad, az URL kitisztul.
+  - A library-csempét nem néztem böngészőben, mert a helyi dev szerveren nem vagyok belépve. Ugyanazt a szerverfüggvényt hívja.
+  - CHANGELOG az `[Unreleased]` alatt, verziójavaslat 6.130.0.
+- [x] 7. WebM:
+  - A korlát fölötti és a lejárt kódolás jelölőfájlt kap (`<fileId>-v2.webm.over`), ami újraindítás után is megmarad, és azonnal 422-t ad. Integrációs teszt 1 ms-os időkorláttal.
+  - Mérés a boxon (Telekom-klip, nice 19, SSIM a forráshoz):
+    - good/4: 99 s, 2.9 MB, 0.9811
+    - good/5: 92 s, 0.9801
+    - realtime/6: 19 s, 3.7 MB, 0.9817
+    - realtime/8: 14 s, 4.1 MB, 0.9815
+  - Átállás realtime/6-ra, `CACHE_VERSION` 2: a régi cache és a régi jelölők is újrapróbálódnak.

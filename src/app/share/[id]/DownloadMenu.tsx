@@ -16,6 +16,13 @@ import {
   type ImageEncoding,
   type ImageFormat,
 } from "@/lib/image-formats";
+import {
+  VIDEO_FORMATS,
+  VIDEO_FORMAT_LABELS,
+  isConvertibleVideo,
+  withVideoFormat,
+  type VideoFormat,
+} from "@/lib/video-formats";
 import { fetchMatrixDownload } from "./matrix-download";
 import type { DialogItem } from "./ShareDetailDialog";
 
@@ -108,15 +115,20 @@ export function DownloadMenu({
       if (panelRef.current?.contains(e.target as Node)) return;
       setOpen(false);
     }
+    // Its own handler: a resize's target is the window, not a Node, and
+    // `contains(window)` throws — the menu stayed open over a rotated phone.
+    function onResize() {
+      setOpen(false);
+    }
     document.addEventListener("mousedown", onDocMouseDown);
     document.addEventListener("keydown", onKey);
     window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("resize", onScroll);
+    window.addEventListener("resize", onResize);
     return () => {
       document.removeEventListener("mousedown", onDocMouseDown);
       document.removeEventListener("keydown", onKey);
       window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("resize", onScroll);
+      window.removeEventListener("resize", onResize);
     };
   }, [open]);
 
@@ -303,11 +315,73 @@ function baseOf(name: string): string {
 }
 
 /**
+ * A video's Download: "as Original MP4", then "as WebM". The WebM is encoded
+ * on the server, ~30 s the first time (lib/video-convert.ts), and a plain link
+ * would show nothing until the response began — so it is fetched here, with
+ * the trigger saying so, and saved when it lands.
+ */
+function VideoDownloadMenu({ src, name }: { src: string; name: string }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  async function downloadAs(as: VideoFormat) {
+    setBusy(true);
+    setFailed(false);
+    try {
+      const r = await fetch(withVideoFormat(src, as));
+      if (!r.ok) {
+        setFailed(true);
+        return;
+      }
+      saveBlob(await r.blob(), `${baseOf(name)}.${as}`);
+    } catch {
+      // A dropped connection on a long encode: say so on the button.
+      setFailed(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <DownloadMenu
+      label={busy ? "Converting…" : failed ? "Conversion failed" : "Download"}
+      busy={busy}
+      disabled={busy}
+      title={busy ? "Converting the video — this can take a minute" : undefined}
+      triggerClassName={ITEM_TRIGGER}
+    >
+      {(close) => (
+        <>
+          <MenuRow
+            onClick={() => {
+              saveHref(src, name);
+              close();
+            }}
+          >
+            as Original {extOf(name).toUpperCase()}
+          </MenuRow>
+          {VIDEO_FORMATS.map((f) => (
+            <MenuRow
+              key={f}
+              onClick={() => {
+                close();
+                void downloadAs(f);
+              }}
+            >
+              as {VIDEO_FORMAT_LABELS[f]}
+            </MenuRow>
+          ))}
+        </>
+      )}
+    </DownloadMenu>
+  );
+}
+
+/**
  * One shared item's Download, worded like Download all: "as Original PNG"
  * (the format the file is), then the picture in the other formats. An MC
  * offers its HTML package first; its picture is the stored preview PNG
- * (`previewSrc`), so without one the menu offers the package alone. A video, an HTML5 package or an SVG has nothing to
- * convert and stays a one-click Download.
+ * (`previewSrc`), so without one the menu offers the package alone. A video
+ * offers WebM (VideoDownloadMenu). A WebM video, an HTML5 package or an SVG
+ * has nothing to convert and stays a one-click Download.
  */
 export function ItemDownloadMenu({
   item,
@@ -324,6 +398,9 @@ export function ItemDownloadMenu({
     const name = item.creative.fileName ?? file.filename;
     const src = `/share/${shareId}/file/${file.id}`;
     const format = formatOfFilename(name);
+    if (isConvertibleVideo(file.mimeType)) {
+      return <VideoDownloadMenu src={src} name={name} />;
+    }
     if (!isConvertibleImage(file.mimeType)) {
       return (
         <a
@@ -410,26 +487,37 @@ export type BulkDownload =
   | { mode: "html" }
   // `as: null` = the original pictures; a conversion always carries its knobs.
   | { mode: "image"; as: null }
-  | { mode: "image"; as: ImageFormat; enc: ImageEncoding };
+  | { mode: "image"; as: ImageFormat; enc: ImageEncoding }
+  // Every convertible video in `as`; everything else as "as Original" gives it.
+  | { mode: "video"; as: VideoFormat };
 
 /**
  * Download all's rows. With MCs in the list: "as HTML packages", then the
  * preview images under their own label. Without them the pictures are the
  * creatives themselves, and the label would only repeat the button.
  * `originalFormats` names what the original pictures are ("as Original PNG",
- * "as Original PNG · JPG"). When they are all in one format, the row that
- * would produce the same files again is left out; when mixed, every row
- * converts something, so all stay.
+ * "as Original PNG · JPG"), `videoFormats` what the videos are ("MP4"). When
+ * the pictures are all in one format, the row that would produce the same
+ * files again is left out; when mixed, every row converts something, so all
+ * stay. The picture formats show only when there is a picture to convert
+ * (`pictureCount`), the video formats only when there is a video
+ * (`videoCount`) — under their own label when pictures or MCs share the list.
  */
 export function BulkDownloadRows({
   hasMatrix,
   imageCount,
   originalFormats,
+  pictureCount,
+  videoCount,
+  videoFormats,
   onPick,
 }: {
   hasMatrix: boolean;
   imageCount: number;
   originalFormats: ImageFormat[] | null;
+  pictureCount: number;
+  videoCount: number;
+  videoFormats: string[];
   onPick: (choice: BulkDownload) => void;
 }) {
   return (
@@ -446,15 +534,31 @@ export function BulkDownloadRows({
         onClick={() => onPick({ mode: "image", as: null })}
       >
         as Original
-        {originalFormats && originalFormats.length > 0
-          ? ` ${originalFormats.map((f) => IMAGE_FORMAT_LABELS[f]).join(" · ")}`
+        {originalFormats &&
+        originalFormats.length + videoFormats.length > 0
+          ? ` ${[...originalFormats.map((f) => IMAGE_FORMAT_LABELS[f]), ...videoFormats].join(" · ")}`
           : ""}
       </MenuRow>
-      {imageCount > 0 ? (
+      {pictureCount > 0 ? (
         <ImageFormatRows
           exclude={originalFormats?.length === 1 ? originalFormats[0] : null}
           onPick={(as, enc) => onPick({ mode: "image", as, enc })}
         />
+      ) : null}
+      {videoCount > 0 ? (
+        <>
+          {hasMatrix || pictureCount > 0 ? (
+            <>
+              <MenuDivider />
+              <MenuLabel>Videos · {videoCount}</MenuLabel>
+            </>
+          ) : null}
+          {VIDEO_FORMATS.map((f) => (
+            <MenuRow key={f} onClick={() => onPick({ mode: "video", as: f })}>
+              as {VIDEO_FORMAT_LABELS[f]}
+            </MenuRow>
+          ))}
+        </>
       ) : null}
     </>
   );

@@ -5,6 +5,25 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.129.0] — 2026-11-12
+
+### Added
+- Share gallery: a video downloads **as WebM** too, from its own Download menu (card and detail
+  view) and from Download all. Encoded on the server once (VP9 + Opus, fixed quality), then served
+  from the cache; the first download of a 10 s 1080p clip takes about half a minute, and the button
+  says "Converting…" meanwhile.
+
+### Changed
+- Share gallery: **Image preview** shows only when the share holds MCs. It never swapped anything
+  else, so on a share of videos it sat there with a count of 0.
+- Share gallery: **Download all** offers the picture formats (JPG, PNG, WebP, AVIF, GIF) only when
+  there is a picture to convert, and the video formats only when there is a video. On a share of
+  videos it now reads "as Original MP4" and "as WebM".
+
+### Fixed
+- Share gallery: resizing the window or turning the phone with a Download menu open threw an error
+  and left the menu floating; it now closes.
+
 ## [6.128.4] — 2026-11-11
 
 ### Changed

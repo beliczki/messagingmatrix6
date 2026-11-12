@@ -36,6 +36,7 @@ import {
   withImageFormat,
   type ImageFormat,
 } from "@/lib/image-formats";
+import { isConvertibleVideo, withVideoFormat } from "@/lib/video-formats";
 import ShareDetailDialog, {
   type DialogItem,
   type ShareCommentRow,
@@ -258,16 +259,12 @@ export default function ShareGallery({
     }));
   }, [briefs, creatives, matrixItems]);
 
-  // The image-preview switch swaps a live render for a stored PNG. When every
-  // item in the share is already a delivered image there is nothing to swap, so
-  // the control would only offer a no-op.
+  // The image-preview switch swaps an MC's live render for its stored PNG — the
+  // cards and the dialog swap nothing else. A creative is shown as it is: a
+  // video or an HTML5 package has no stored picture to swap in. So without an
+  // MC in the share the control would only offer a no-op.
   const canImagePreview = useMemo(
-    () =>
-      items.some(
-        (it) =>
-          it.kind !== "creative" ||
-          !(it.file?.mimeType?.startsWith("image/") ?? false),
-      ),
+    () => items.some((it) => it.kind === "matrix"),
     [items],
   );
 
@@ -512,6 +509,31 @@ export default function ShareGallery({
   const imageCount = filtered.filter((it) =>
     it.kind === "matrix" ? imageSrcFor(it) !== null : it.file !== undefined,
   ).length;
+  // What the format rows can act on: a picture to re-encode (an MC preview or
+  // a raster creative), a video to turn into WebM. A share of videos has no
+  // picture, so it gets no JPG / PNG / … rows that would only hand back the
+  // videos unchanged.
+  const pictureCount = filtered.filter((it) =>
+    it.kind === "matrix"
+      ? imageSrcFor(it) !== null
+      : it.file !== undefined && isConvertibleImage(it.file.mimeType),
+  ).length;
+  const videoCount = filtered.filter(
+    (it) => it.kind === "creative" && it.file !== undefined && isConvertibleVideo(it.file.mimeType),
+  ).length;
+  // What the original videos are, for "as Original PNG · MP4".
+  const videoFormats = useMemo(() => {
+    const exts = new Set<string>();
+    for (const it of filtered) {
+      if (it.kind !== "creative" || it.file === undefined) continue;
+      const mime = it.file.mimeType;
+      if (mime === null || !mime.startsWith("video/")) continue;
+      const name = it.creative.fileName ?? it.file.filename;
+      const dot = name.lastIndexOf(".");
+      if (dot > 0) exts.add(name.slice(dot + 1).toUpperCase());
+    }
+    return [...exts];
+  }, [filtered]);
   // The formats the original pictures are in, most common first: MC previews
   // are PNG, a creative is what its file name says (a share of PNGs can hold
   // one JPG). Null when one of them is in none of the four.
@@ -739,6 +761,9 @@ export default function ShareGallery({
             hasMatrix={hasMatrix}
             originalFormats={originalFormats}
             imageCount={imageCount}
+            pictureCount={pictureCount}
+            videoCount={videoCount}
+            videoFormats={videoFormats}
             zipping={zipping}
             zipProgress={zipProgress}
             onDownloadAll={(choice) => void downloadAll(choice)}
@@ -768,6 +793,9 @@ export default function ShareGallery({
                   hasMatrix={hasMatrix}
                   originalFormats={originalFormats}
                   imageCount={imageCount}
+                  pictureCount={pictureCount}
+                  videoCount={videoCount}
+                  videoFormats={videoFormats}
                   onPick={(choice) => {
                     close();
                     void downloadAll(choice);
@@ -1250,14 +1278,15 @@ function bulkEntry(
   if (!it.file) return null;
   const name = it.creative.fileName ?? it.file.filename;
   const url = `/share/${shareId}/file/${it.file.id}`;
+  const dot = name.lastIndexOf(".");
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  if (choice.mode === "video" && isConvertibleVideo(it.file.mimeType)) {
+    return { url: withVideoFormat(url, choice.as), name: `${base}.${choice.as}` };
+  }
   if (choice.mode !== "image" || !choice.as || !isConvertibleImage(it.file.mimeType)) {
     return { url, name };
   }
-  const dot = name.lastIndexOf(".");
-  return {
-    url: withImageFormat(url, choice.as, choice.enc),
-    name: `${dot > 0 ? name.slice(0, dot) : name}.${choice.as}`,
-  };
+  return { url: withImageFormat(url, choice.as, choice.enc), name: `${base}.${choice.as}` };
 }
 
 function labelFor(it: Item): string {

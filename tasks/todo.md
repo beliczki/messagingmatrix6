@@ -3045,6 +3045,26 @@ Döntések (Robi):
 - [x] `tsc` tiszta, eslint 0 hiba, unit tesztek 417/417, helyi `npm run build` ok.
 - [x] **DEPLOYOLVA 6.128.1 — mindkét tenant** (`dcb03f8`, 2026-10-22): `npm ci` + build ok, a boxon next 16.4.2, `/login` 200 mindkettőn.
 
+## 2026-11-02 — MC export novemberi példány, Matrix-státusszal
+Robi kérése: a Drive-on lévő `mc-export 09.xlsx` duplikálása 11. hóra, mai adatokkal, Matrix-státusszal. A szeptemberi fájl tartalma érintetlen.
+- [x] `scripts/gen-mc-export.ts`: `matrix_status` oszlop mindkét lapra. MC export: a kártya sorainak státuszai (`ACTIVE`, `INACTIVE`, `ACTIVE+INACTIVE`). Creative export: a fájl MC-jének státusza az Agentic tengelyen, mert a szám tengelyenként külön kártyát jelenthet; ha ott nincs sor, a `DRAFT`; ha semmi, üres.
+- [x] `npm run export:mc` futtatása (read-only, élő DB): 225 MC, 3688 kreatív.
+- [x] A szeptemberi kézi réteg visszaépítése egyszeri lépésben: szürke fejléc, fagyasztott első sor, autofilter, rejtett `pmmids` és `image_text`, `HYPERLINK(IMAGE())` képoszlop, Creative exporton a mentett 1080x1080 + 300x250 szűrő (928 látható sor).
+- [x] Mentés `mc-export 11.xlsx` néven ugyanabba a Drive-mappába (`ERSTE HU/_messagingmatrix.ai`), id `1SJUW9ShORz07cPl0Eo4ZFSRO_lQPzMWa`. A Drive-ról visszatöltve bájtra egyezik.
+- [x] Ellenőrzés: darabszámok a DB-hez, xlsx integritás, Excel-megnyitás `[Repaired]` nélkül, 3 mintakártya `mc_get`-tel (vegyes, névrokon, draft), élő linkminta.
+
+**Review.** Nem ellenőrzött: a képoszlop kirajzolása a Google Táblázatokban, mert a beépített böngésző nincs belépve. A kézi réteg nincs a scriptben (a `node-xlsx` nem tud fejlécszínt és fagyasztást), egy következő havi példánynál újra kell építeni. A megosztás eltér a szeptemberitől: Kristóf Martikán és Anna Marján csak a 09-en van rajta, Robi döntése szerint nem osztjuk meg.
+
+## 2026-11-02 — 6.128.2 deploy (`f74c975`)
+- [x] Chief Architect: OK with changes (`~/Grafia/agent-bus/answers/20261102-1028-mm6-6.128.2-deploy.md`). Codex nincs telepítve.
+- [x] Push origin/main.
+- [x] **DEPLOYOLVA `mm6-erste`**: 84 s, a build alatt a legkevesebb szabad memória 870 MB, a swap legfeljebb 905 MB. `/login` 200, `.next-old` törölve, gate lekapcsolva, az error log üres.
+- [x] **DEPLOYOLVA `mm6-telekom`** (Robi jóváhagyásával): 82 s, a build alatt a legkevesebb szabad memória 1127 MB, a swap legfeljebb 626 MB. Mindkét tenanton HEAD `f74c975`, 6.128.2, `/login` 200, `/` 307 (gate lekapcsolva), nincs `.next-old`. A javítás benne van a Telekom bundle-ben. Az újraindítás óta nincs új hibasor; a logban látható „Server Reference ID” sorok 02:25–02:41 UTC-sek, a deploy előttiek.
+- [ ] A „Filter to these” éles próbája: az `uploaded_files` legújabb sora 2026-10-31 20:58, azaz a 6.128.2 óta nem volt feltöltés, a gomb nem futott élesben. Az első valódi feltöltésnél kell megnézni: Product szűrő bekapcsolva, feltöltés, gomb.
+- [x] MinIO írás igazolva (Robi jóváhagyásával): az app S3-beállításaival 2 MB-os teszt objektum a `mm6-files`-ba, sha256-tal egyező visszaolvasás, a bájtok az új volume-on voltak, a régin nem. A teszt objektumot töröltem, a `_writetest` mappa sem maradt meg. Közben az app is írt: 4 előnézet került az `erste/previews/2026/11` alá 11:31 UTC-kor, szintén az új volume-ra.
+- [ ] A régi `supabase-mm6_mm6-minio-data` volume (7,9 GB) törlése: Robi külön jóváhagyására vár. Összevetés méret alapján (`rsync -n --size-only`, `.minio.sys` nélkül): a régi 34 692 fájlja mind megvan az újon, a különbség csak a 4 új előnézet. Egy konténer sem használja. Törléskor a `/opt/supabase-mm6` compose-ból is ki kell venni a `mm6-minio-data` bejegyzést.
+- Következő körre (Chief Architect): a Next biztonsági kiadása november 3-ra van bejelentve; előtte a boxon szinkronizálni kell a `mm6-deploy`-t, mert a régi példány nem futtat `npm ci`-t lockfile-változáskor. A box Node 20.20.2-n fut, a 20→24 váltás külön terv.
+
 ## 2026-11-02 — Next novemberi biztonsági kiadás + `mm6-deploy` szinkron (TERV jóváhagyva 2026-11-02; 16.4.5 pusholva, a deployok Robi jóváhagyására várnak)
 **Planning review:** Chief Architect: OK with changes (`~/Grafia/agent-bus/answers/20261102-1238-mm6-next-nov-security-and-deploy-sync.md`), a változtatásai alább beépítve. Codex nincs telepítve. Robi döntése: B változat, Telekom az első tenant, `unoptimized` a bumppal.
 
@@ -3080,13 +3100,61 @@ Döntések (Robi):
 - [x] Bump helyben (2026-11-04, nincs commitolva): `next` és `eslint-config-next` 16.4.5, `images: { unoptimized: true }`. `tsc` 0 hiba, eslint 0 hiba (290 warning), `npm test` 119 fájl, 1105 teszt zöld, `npm run build` zöld. Mindez a helyi Node 24.13.1-en futott, a box Node 20.20.2-jén a Telekom-deploy buildje lesz az első próba. Végpont: élesben (16.4.2) `/_next/image` 400 és `?url=/` 500, helyben (16.4.5 + `unoptimized`) mindkettő 404, `/login` 200.
 - [x] Verzió és CHANGELOG: `6.128.2` → `6.128.3` (patch), a CHANGELOG pontosítja a 6.128.1-es megjegyzést.
 - [x] Commit és push Robi jóváhagyásával („Igen, mehet”, 2026-11-04).
-- [ ] `mm6-deploy telekom` Robi külön jóváhagyásával, csendes időszakban. Előtte: `df -h` és `free -m` (2 GB alatti szabad lemeznél nem indul), az előző HEAD sha-ja a deploy-naplóba. Közben `free -m` mintavétel. Swap-kifutásnál vagy bukásnál megállok, nem próbálom újra vakon.
-- [ ] Ellenőrzés: HEAD, verzió, next-verzió, `/login` 200, `/` nem 503, nincs `.next-old` és `.next-build`, pm2 online, error log az `npm ci` kezdete óta; `/_next/image` `url` nélkül 404 (ma 400). A `?url=` alak nem bizonyít, mert nem létező képre élesben már most is 404.
-- [ ] `mm6-deploy erste` ezután, Robi külön jóváhagyásával, soha nem párhuzamosan, ugyanazzal az előkészítéssel és ellenőrzéssel. Ha az első mérés hibákat mutat, előbb megállok.
-- [ ] Vége: a box scriptje egyezik a repóval, checkpoint ide (csak saját hunk).
+- [x] `mm6-deploy telekom` (2026-11-11 11:18 UTC, Robi: „deploy”, a 6.128.4-gyel együtt, a share-session futtatta). Előtte: lemez 12 GB szabad, 2088 MB elérhető memória, a box scriptje egyezik a repóval (`c3438a49`), előző HEAD `f74c975`, 15 percig nem volt forgalom. 160 s, a legkevesebb szabad memória 1043 MB, a swap legfeljebb 1032 MB. Új Chief Architect kérés nem ment, mert a mappa `~/agent-bus` alá költözött, és ez csak utólag derült ki. A november 2-i válasz (`~/agent-bus/answers/20261102-1238-…`) pontjait utólag végignéztem: a sorrend, a `df`/`free` előellenőrzés, az előző HEAD naplózása, a `/_next/image` 404 és a tenantonkénti külön jóváhagyás teljesült.
+- [x] Ellenőrzés: HEAD `5afc63b`, 6.128.4, next 16.4.5, a lockfile-jelölő egyezik (az `npm ci` lefutott), `/login` 200, `/` 307, nincs `.next-old` és `.next-build`, pm2 online, az error log üres. `/_next/image` `url` nélkül és `?url=/` alakkal is 404.
+- [x] `mm6-deploy erste` (2026-11-11 11:27 UTC, Robi külön jóváhagyásával, a Telekom után). Előtte 2465 MB elérhető memória, lemez 68%; egy IP 11:24-kor még a WyEy2p share-t nézte. 142 s, a legkevesebb szabad memória 1174 MB, a swap legfeljebb 1073 MB. Ellenőrzés: HEAD `5afc63b`, 6.128.4, next 16.4.5, a lockfile-jelölő egyezik, `/login` 200, `/` 307, a share 200, a `/_next/image` mindkét alakkal 404, nincs `.next-old` és `.next-build`, az error log üres (az `npm ci` alatt sem jött hiba). A share-oldal ellenőrző `curl`-je a WyEy2p `viewCount`-ját 1-gyel növelte.
+- [x] Vége: a box scriptje egyezik a repóval (`c3438a49`). Checkpoint itt, nincs commitolva.
 
 **Rollback:** ez lockfile-mozgató deploy, ezért a `.next-old` visszacsere önmagában nem elég, a `node_modules` már új. Ha az app nem jön fel: a boxon `git reset --hard f74c975` (vagy az akkori HEAD), `npm ci`, `.next-old` vissza, `pm2 restart`, `mm6-maint off`. Sikeres deploy után: `git revert`, push, újra `mm6-deploy`.
 
 **Nem része ennek a körnek:** Node 20→24; `npm audit` 5 találat a production-függőségekben (`zod` 4.4.1 és `body-parser` magas, `fast-uri`, `ip-address`, `qs` közepes, főleg az MCP SDK alatt): külön változás, de a két magas súlyosságút 2026-11-06-ig meg kell vizsgálni, hogy hálózatról elérhető-e (CA).
 
 **Külön döntés, a bumptól függetlenül:** az `images: { unoptimized: true }` a `next.config.ts`-ben lezárná a `/_next/image`-et (`next-server.js:193` a 16.4.2-ben 404-et ad rá; kódolvasásból, nem futtatva). Az app nem használja a végpontot, és szeptember óta több advisory is ezt érintette. A CA szerint a bumppal menjen, egy buildbe. Robi dönt.
+
+## 2026-11-11 — Share oldal: Drive/Slides a felső sorba, a Size menüt eltakaró videócsempe
+
+**Ok (kódból, böngészőben még nem mérve).** A `VideoThumb` gyökere `relative`, de nem hoz létre saját stacking contextet, ezért a hover-scrub réteg (`video-thumb__scrub`, `z-20`) és a lejátszófej (`video-thumb__playhead`, `z-30`) az oldal szintjén versenyez. A share fejléc `sticky z-20`, a Size menü ezen belül van. A scrub réteg ugyanazon a szinten, de később jön a DOM-ban, ezért a menü fölé rajzolódik, és a kattintás a csempére megy. Ezért csak videónál jelentkezik. A Creative Libraryben nem, mert ott a csempét a `Selection` `isolate`-tel már elszigeteli; ugyanezt a hibát javította ott korábban.
+
+**Kis javítás:** `isolate` a `VideoThumb` gyökerére (`src/app/(app)/_components/VideoThumb.tsx`).
+**Teljes javítás (ajánlott):** `isolate` minden előnézet-komponens gyökerére, amelyben z-indexes réteg van: `VideoThumb` (z-20/z-30), `PublicMatrixPreview` és `Html5PackageFrame` (z-10 click-shield), `AnnotationLayer` (z-20/z-30). Így egyik előnézet rétege sem tud kilógni az oldal fejléce vagy menüi fölé, bárhol is használják. Mind a négy egyszavas változás, a megjelenés nem változik.
+
+- [x] `isolate` mind a négy gyökérre (Robi: teljes javítás). Egy látható sorrend-változás: a részletes nézetben a HTML5 Restart gomb (`z-30`) most a rajzoló réteg fölött marad, ahol átfedik egymást; eddig rajzolás módban a réteg takarta.
+- [x] Drive és Slides az első sorban, a témaváltó után (`share-gallery__links`, csak ha van mappa vagy deck); a második sorból kikerültek. Komponens-leltár frissítve.
+- [x] Ellenőrzés helyi dev szerveren (`.claude/launch.json`, új, nem commitolt): a Size menü 4 sorából 3 videócsempe fölött van. Az `isolation` kikapcsolásával mindháromnál a `video-thumb__scrub` kapta a pontot, a javítással mindegyiknél a menü. Valódi kattintás a 1920x1080 sorra egy videó fölött: a szűrő kikapcsolt, dialog nem nyílt. Keskeny nézetben a `share-gallery__links` rejtve, Drive és Slides az Actions menüben. `tsc` tiszta, a dev szerver logjában nincs hiba. A részletes nézetet és a DCO/HTML5 csempéket nem néztem. A share `viewCount`-ja az éles DB-ben az oldalbetöltéssel 1-gyel nőtt.
+- [x] Commit `5afc63b` (6.128.4, Robi jóváhagyásával), nincs pusholva. A `package-lock.json` verziómezője marad 6.128.3, hogy a deploy ne futtasson miatta `npm ci`-t.
+- [x] Push és deploy Robi jóváhagyásával (2026-11-11), a 6.128.3 Next-bumppal együtt, a Next-session terve szerint: Telekom 11:18, ERSTE 11:27 UTC. Mindkettő `5afc63b`-n, a részletek a fenti Next-szakaszban. Élesben a Size menüt nem kattintottam végig, a javítás a bundle-ben van.
+
+## 2026-11-12 — Share: videós share-ben se Image preview, se képletöltés; WebM letöltés (Robi jóváhagyta: „igen, mehet a terv, fix minőség jó”)
+
+Robi kérése: ha egy share-ben videók vannak, az Image preview kapcsoló és a képformátumos letöltés értelmetlen. A videó legyen letölthető WebM-ben is, a Download all menüben és a részletes nézet Download gombján is, formátumválasztó legördülővel.
+
+**Gyökérok, Image preview:** a `canImagePreview` (`ShareGallery.tsx:264`) minden nem-képes creative-ot cserélhetőnek számol: a videót és a HTML5-csomagot is. A kép-mód viszont csak MC-n cserél (`item.kind === "matrix" && imageMode`), creative-ra az `imageSrcFor` nem ad képet. Tiszta videós share-ben ezért a kapcsoló 0-s számlálóval kirajzolódik, és nem csinál semmit. Javítás: a feltétel ugyanaz legyen, amit a kártyák használnak, vagyis legyen MC a share-ben. A mobil Actions menü ugyanazt a flaget kapja.
+
+**Download all:**
+- A képformátum-sorok csak akkor jelennek meg, ha van konvertálható kép (MC-preview vagy raszteres creative).
+- A videósorok (as Original MP4, as WebM) csak akkor, ha van videó.
+- Vegyes share-ben két csoport jelenik meg, címkével, ahogy most a Preview images · N. Mindegyik csak a saját fajtáját konvertálja, a többi eredetiben megy.
+
+**WebM a szerveren:** a boxon ffmpeg 6.1.1 fut libvpx-vp9 és libopus kódolóval, 2 vCPU-n, 3.8 GB memóriával. Az nginx `location /` timeoutja 300 s, mindkét tenanton.
+- `?as=webm` ugyanazon a `/share/[id]/file/[fileId]` route-on, amelyen a képkonverzió is megy.
+- Kódolás: VP9 + Opus, fix minőséggel (CRF), knob nélkül.
+- Cache a stillek mellé: `<client>/.thumbs/<fileId>.webm`. Másodszorra azonnal jön.
+- Folyamatonként egyszerre egy kódolás fut, ugyanarra a fájlra legfeljebb egy (single-flight). Publikus, bejelentkezés nélküli úton ez tartja korlátban a CPU-t: egy videó legfeljebb egyszer kódolódik.
+- A `downloadCount` nő, ahogy a képkonverziónál.
+- Ha a forrás már WebM, a sor nem jelenik meg (mint a képformátumoknál).
+
+Lépések:
+- [x] 1. Mérés a boxon: MC412a 1920x1080, 10 s, 6.2 MB MP4, hang nélkül. VP9 CRF 32, `-cpu-used 4`: 29.7 s, 441 KB; `-cpu-used 6`: 31.2 s (nem gyorsabb). A mintát Range-kéréssel húztam le, így nem számított letöltésnek. Tanulság: az ffmpeg `-nostdin` nélkül a heredoc maradékát parancsként olvasta, ezért a takarítás elmaradt; a mappát utána kézzel töröltem. Az appban is `-nostdin` megy.
+- [x] 2. `canImagePreview` = van MC a share-ben (`ShareGallery.tsx`). A mobil Actions menü ugyanezt a flaget kapja.
+- [x] 3. `src/lib/video-formats.ts` (kliensbiztos: formátumlista, címke, `isConvertibleVideo`, `withVideoFormat`) és `src/lib/video-convert.ts`: ffmpeg `nice -n 10` alatt, a cache a stillek mellett (`<client>/.thumbs/<fileId>-v1.webm`), egy fájlra egy futás, folyamatonként egy kódolás. Eltérés a tervtől: nem a stillek 2-es ffmpeg-keretét használja, hanem saját, egyhelyes sort, mert egy kódolás már mindkét magot viszi. Bekötés: `?as=webm` a share file route-on; 400, ha a fájl nem videó vagy már WebM; 503, ha nem sikerül. Új integrációs tesztek a `share-file-convert.test.ts`-ben: valódi 1 s-os klip, VP9 64x48, a második kérés a cache-ből jön, a `downloadCount` 2; képre és WebM-re 400.
+- [x] 4. `ItemDownloadMenu` → `VideoDownloadMenu`: as Original MP4, as WebM. A WebM-et fetch-csel tölti, a gomb közben „Converting…” (spinnerrel), hiba esetén „Conversion failed”. Közvetlen linkkel ~30 s-ig semmi nem látszana.
+- [x] 5. `BulkDownloadRows` és `bulkEntry`: a képformátumok csak akkor jelennek meg, ha van kép (`pictureCount`), a WebM csak akkor, ha van videó (`videoCount`). Ha MC vagy kép is van mellette, a WebM saját „Videos · N” címke alatt áll. Az „as Original” mellé a videók kiterjesztése is kiíródik (MP4). Új mód: `{ mode: "video", as }`. A mobil Actions menü ugyanezeket kapja.
+- [x] Mellékesen: a `DownloadMenu` resize-figyelője a scroll-kezelőt hívta, a `contains(window)` kivételt dobott, és a menü nyitva maradt. Mostantól saját `onResize` zárja be. Átméretezéssel ellenőrizve.
+- [x] 6. Ellenőrzés helyi dev szerveren, az éles DB-vel:
+  - Videós share (WyEy2p): nincs Image preview. A Download all, a részletes nézet és a mobil Actions menü is „as Original MP4” és „as WebM” sort mutat.
+  - Egy WebM-letöltés végig: „Converting…”, utána 200. A helyi cache-ben VP9 1080x1920, 10.04 s, 492 KB. Mellékhatás az éles DB-ben: a WyEy2p `downloadCount` +1, a `viewCount` néhány oldalbetöltéssel nőtt.
+  - MC-share (d1zZ7rcWrpMn): van Image preview (20), a menü változatlan, WebM nélkül.
+  - Képes share (zYivZmN1jRkl): változatlan.
+  - Vegyes share (videó és kép vagy MC együtt) nem volt az utolsó 40 ERSTE share-ben, azt nem láttam.
+  - vitest: 119 fájl, 1107 teszt zöld. tsc tiszta.
+- [x] 7. CHANGELOG az `[Unreleased]` alatt. Verziójavaslat: 6.128.4 → 6.129.0 (minor). Nincs commitolva.

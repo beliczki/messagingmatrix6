@@ -13,6 +13,8 @@ import { isHtml5PackageFile } from "@/lib/html5-poster";
 import { posterResponse } from "@/lib/html5-package-response";
 import { isConvertibleImage, parseImageEncoding, parseImageFormat } from "@/lib/image-formats";
 import { convertImage } from "@/lib/image-convert";
+import { isConvertibleVideo, parseVideoFormat } from "@/lib/video-formats";
+import { VideoConvertError, ensureConvertedVideo, videoContentType } from "@/lib/video-convert";
 import {
   StillsUnavailableError,
   ensureStills,
@@ -142,8 +144,41 @@ export async function GET(
   }
 
   // A download in another format (`?as=jpg&q=70`, `?as=gif&colors=64`), from the download menus.
-  // Converted on the fly and not cached: it is a one-off download, not a tile.
+  // A picture is converted on the fly and not cached: it is a one-off
+  // download, not a tile. A video (`?as=webm`) takes too long for that and is
+  // encoded once, then served from the cache (lib/video-convert.ts).
   const as = url.searchParams.get("as");
+  const videoFormat = parseVideoFormat(as);
+  if (videoFormat) {
+    if (!isConvertibleVideo(file.mimeType)) {
+      return NextResponse.json({ error: "not_convertible" }, { status: 400 });
+    }
+    let bytes: Buffer;
+    try {
+      bytes = await fs.readFile(
+        await ensureConvertedVideo(key, file.id, file.storagePath, videoFormat),
+      );
+    } catch (e) {
+      if (e instanceof VideoConvertError) {
+        return NextResponse.json(
+          { error: "convert_unavailable", reason: e.message },
+          { status: 503 },
+        );
+      }
+      throw e;
+    }
+    await db
+      .update(shareGalleries)
+      .set({ downloadCount: sql`${shareGalleries.downloadCount} + 1` })
+      .where(eq(shareGalleries.id, id));
+    return new NextResponse(new Uint8Array(bytes), {
+      headers: {
+        ...storedFileHeaders(videoContentType(videoFormat)),
+        "Content-Length": String(bytes.length),
+        "Cache-Control": "public, max-age=86400",
+      },
+    });
+  }
   if (as !== null) {
     const format = parseImageFormat(as);
     if (!format || !isConvertibleImage(file.mimeType)) {

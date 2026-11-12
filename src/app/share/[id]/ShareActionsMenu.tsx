@@ -33,6 +33,9 @@ export default function ShareActionsMenu({
   hasMatrix,
   imageCount,
   originalFormats,
+  pictureCount,
+  videoCount,
+  videoFormats,
   zipping,
   zipProgress,
   onDownloadAll,
@@ -52,6 +55,9 @@ export default function ShareActionsMenu({
   hasMatrix: boolean;
   imageCount: number;
   originalFormats: ImageFormat[] | null;
+  pictureCount: number;
+  videoCount: number;
+  videoFormats: string[];
   zipping: boolean;
   zipProgress: number;
   onDownloadAll: (choice: BulkDownload) => void;
@@ -111,6 +117,9 @@ export default function ShareActionsMenu({
                 hasMatrix={hasMatrix}
                 imageCount={imageCount}
                 originalFormats={originalFormats}
+                pictureCount={pictureCount}
+                videoCount={videoCount}
+                videoFormats={videoFormats}
                 onPick={(choice) => {
                   onDownloadAll(choice);
                   setOpen(false);

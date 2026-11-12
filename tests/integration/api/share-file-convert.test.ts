@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import fs from "node:fs";
 import os from "node:os";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import sharp from "sharp";
 import { eq } from "drizzle-orm";
@@ -77,6 +78,70 @@ describe("share file download in another format (?as=)", () => {
 
     const original = await get("");
     expect(original.headers.get("content-type")).toBe("image/png");
+  });
+
+  it("encodes a shared video to WebM once and serves the cached file after", async () => {
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), "mm6-clip-"));
+    const mp4 = path.join(work, "clip.mp4");
+    execFileSync("ffmpeg", [
+      "-nostdin", "-v", "error", "-f", "lavfi",
+      "-i", "testsrc=size=64x48:rate=10:duration=1",
+      "-pix_fmt", "yuv420p", mp4,
+    ]);
+    const file = await uploadFile(erste.id, {
+      buffer: fs.readFileSync(mp4),
+      originalFilename: "clip.mp4",
+      mimeType: "video/mp4",
+      category: "creative",
+      uploadedBy: "u-test",
+    });
+    const get = await share(file.id);
+
+    const first = await get("?as=webm");
+    expect(first.status).toBe(200);
+    expect(first.headers.get("content-type")).toBe("video/webm");
+    const webm = path.join(work, "out.webm");
+    fs.writeFileSync(webm, Buffer.from(await first.arrayBuffer()));
+    const probe = execFileSync("ffprobe", [
+      "-v", "error", "-select_streams", "v:0",
+      "-show_entries", "stream=codec_name,width,height", "-of", "csv=p=0", webm,
+    ]).toString().trim();
+    expect(probe).toBe("vp9,64,48");
+
+    // Cached beside the still strip; the second download reads it back.
+    const cached = fs
+      .readdirSync(path.join(storageRoot, "erste", ".thumbs"))
+      .filter((f) => f.startsWith(file.id) && f.endsWith(".webm"));
+    expect(cached).toHaveLength(1);
+    const second = await get("?as=webm");
+    expect(Buffer.from(await second.arrayBuffer())).toEqual(fs.readFileSync(webm));
+
+    const [row] = await db.select().from(shareGalleries).where(eq(shareGalleries.id, "s1"));
+    expect(row!.downloadCount).toBe(2);
+    fs.rmSync(work, { recursive: true, force: true });
+  });
+
+  it("refuses WebM for a picture and for a video that already is WebM", async () => {
+    const png = await sharp({ create: { width: 8, height: 8, channels: 3, background: "#000" } })
+      .png()
+      .toBuffer();
+    const pic = await uploadFile(erste.id, {
+      buffer: png,
+      originalFilename: "p.png",
+      mimeType: "image/png",
+      category: "creative",
+      uploadedBy: "u-test",
+    });
+    expect((await (await share(pic.id))("?as=webm")).status).toBe(400);
+    await db.delete(shareGalleries);
+    const webm = await uploadFile(erste.id, {
+      buffer: Buffer.from("not really a video"),
+      originalFilename: "clip.webm",
+      mimeType: "video/webm",
+      category: "creative",
+      uploadedBy: "u-test",
+    });
+    expect((await (await share(webm.id))("?as=webm")).status).toBe(400);
   });
 
   it("refuses an unknown format and a file that is not a raster picture", async () => {

@@ -111,30 +111,49 @@ export const _oneAtATimeForTests = oneAtATime;
 
 const inFlight = new Map<string, Promise<string>>();
 
-// A file found over a cap — or one whose encode ran past the timeout — stays
-// that way. It is remembered on disk next to where its WebM would be, so
-// asking again (also after a restart) answers at once instead of pulling the
-// source down, probing it, or burning another 240 s of both cores on it. The
-// deploy showed why the timeout needs this: encode time depends on the
-// picture, not just the length (a 10 s clip took 30 s on one share, 110 s on
-// another), so a clip well inside the 60 s cap can still run out of time.
-function overCapMarker(out: string): string {
-  return `${out}.over`;
+// A refusal is remembered on disk next to where the WebM would be, so asking
+// again (also after a restart) answers at once instead of pulling the source
+// down, probing it, or burning another 240 s of both cores on it.
+// - `.over`: over a cap. Size, length and resolution are the file's own, so
+//   this one stands until a CACHE_VERSION bump.
+// - `.timeout`: the encode ran past the timeout. Encode time depends on the
+//   picture (a 10 s clip took 30 s on one share, 110 s on another) but also
+//   on what else the 2-vCPU box is doing, so this one is retried after a day
+//   (Chief Architect review, 2026-11-12) rather than condemning the clip for
+//   one busy moment.
+type Refusal = "over" | "timeout";
+const TIMEOUT_RETRY_MS = 24 * 60 * 60 * 1000;
+
+function refusalMarker(out: string, kind: Refusal): string {
+  return `${out}.${kind}`;
 }
 
-async function readOverCap(out: string): Promise<string | null> {
+/** A missing marker is the ordinary case — the file was never refused. */
+async function readMarker(file: string): Promise<{ reason: string; ageMs: number } | null> {
+  let reason: string;
+  let mtimeMs: number;
   try {
-    return await fs.readFile(overCapMarker(out), "utf8");
+    [reason, { mtimeMs }] = await Promise.all([fs.readFile(file, "utf8"), fs.stat(file)]);
   } catch {
     return null;
   }
+  return { reason, ageMs: Date.now() - mtimeMs };
 }
 
-async function markOverCap(out: string, reason: string): Promise<VideoTooLargeError> {
+async function readRefusal(out: string): Promise<string | null> {
+  const over = await readMarker(refusalMarker(out, "over"));
+  if (over) return over.reason;
+  const timeout = await readMarker(refusalMarker(out, "timeout"));
+  if (timeout && timeout.ageMs < TIMEOUT_RETRY_MS) return timeout.reason;
+  return null;
+}
+
+async function markRefused(out: string, kind: Refusal, reason: string): Promise<VideoTooLargeError> {
   await fs.mkdir(path.dirname(out), { recursive: true });
-  await fs.writeFile(overCapMarker(out), reason, "utf8");
+  await fs.writeFile(refusalMarker(out, kind), reason, "utf8");
   return new VideoTooLargeError(reason);
 }
+export const _timeoutRetryMsForTests = TIMEOUT_RETRY_MS;
 
 /** The video in `as`, encoded once and cached; returns the cached file's path. */
 export async function ensureConvertedVideo(
@@ -144,7 +163,7 @@ export async function ensureConvertedVideo(
 ): Promise<string> {
   const out = convertedPath(clientKey, file.id, as);
   if (await exists(out)) return out;
-  const known = await readOverCap(out);
+  const known = await readRefusal(out);
   if (known !== null) throw new VideoTooLargeError(known);
   if (file.sizeBytes !== null && file.sizeBytes > MAX_SOURCE_BYTES) {
     throw new VideoTooLargeError(`source is ${file.sizeBytes} bytes, over ${MAX_SOURCE_BYTES}`);
@@ -198,7 +217,7 @@ async function encode(
         : durationSec > MAX_DURATION_SEC
           ? `${durationSec.toFixed(1)} s is over ${MAX_DURATION_SEC} s`
           : null;
-    if (over) throw await markOverCap(out, over);
+    if (over) throw await markRefused(out, "over", over);
 
     const encoded = path.join(work, `out.${as}`);
     const started = Date.now();
@@ -216,10 +235,14 @@ async function encode(
         { timeout: encodeTimeoutMs, killSignal: "SIGKILL" },
       );
     } catch (e) {
-      // Killed by the timeout: too heavy to convert here, for good.
-      if ((e as { killed?: boolean }).killed) {
-        throw await markOverCap(
+      // Killed by OUR timeout: execFile sets `killed` only when it killed the
+      // child itself. A SIGKILL from elsewhere (the kernel's OOM killer) or an
+      // ffmpeg crash is not the clip's fault and is not remembered.
+      const { killed, signal } = e as { killed?: boolean; signal?: string };
+      if (killed && signal === "SIGKILL") {
+        throw await markRefused(
           out,
+          "timeout",
           `encode ran past ${encodeTimeoutMs / 1000} s (${width}x${height}, ${durationSec.toFixed(1)} s)`,
         );
       }
@@ -241,7 +264,10 @@ async function encode(
     return out;
   } catch (e) {
     if (e instanceof VideoTooLargeError || e instanceof VideoConvertError) throw e;
-    throw new VideoConvertError(`${as} encode failed for ${file.id}: ${(e as Error).message}`);
+    // Not remembered (it may be the box, not the clip), so it is logged.
+    const failure = new VideoConvertError(`${as} encode failed for ${file.id}: ${(e as Error).message}`);
+    console.error(`[video-convert] ${failure.message}`);
+    throw failure;
   } finally {
     await fs.rm(work, { recursive: true, force: true });
   }

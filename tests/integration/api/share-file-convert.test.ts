@@ -10,7 +10,7 @@ import { db } from "@/db";
 import { clients, shareGalleries } from "@/db/schema";
 import { uploadFile } from "@/lib/entities/files";
 import { _setStorageRootForTests } from "@/lib/storage";
-import { _setEncodeTimeoutForTests } from "@/lib/video-convert";
+import { _setEncodeTimeoutForTests, _timeoutRetryMsForTests } from "@/lib/video-convert";
 import { createTestDb, withActiveClientKey, type TestDb } from "../../helpers/test-db";
 
 const { GET } = await import("@/app/share/[id]/file/[fileId]/route");
@@ -192,8 +192,17 @@ describe("share file download in another format (?as=)", () => {
     // stands: the second request is refused from the marker, not re-encoded.
     const second = await get("?as=webm");
     expect(second.status).toBe(422);
-    const thumbs = fs.readdirSync(path.join(storageRoot, "erste", ".thumbs"));
-    expect(thumbs.filter((f) => f.endsWith(".webm"))).toEqual([]);
+    const dir = path.join(storageRoot, "erste", ".thumbs");
+    expect(fs.readdirSync(dir).filter((f) => f.endsWith(".webm"))).toEqual([]);
+
+    // A timeout may have been the box, not the clip: after a day it is tried
+    // again, and this time it encodes.
+    const marker = fs.readdirSync(dir).find((f) => f.endsWith(".webm.timeout"))!;
+    const dayAgo = new Date(Date.now() - _timeoutRetryMsForTests - 60_000);
+    fs.utimesSync(path.join(dir, marker), dayAgo, dayAgo);
+    const retried = await get("?as=webm");
+    expect(retried.status).toBe(200);
+    expect(retried.headers.get("content-type")).toBe("video/webm");
     fs.rmSync(work, { recursive: true, force: true });
   });
 

@@ -3210,3 +3210,17 @@ Lépések:
     - realtime/6: 19 s, 3.7 MB, 0.9817
     - realtime/8: 14 s, 4.1 MB, 0.9815
   - Átállás realtime/6-ra, `CACHE_VERSION` 2: a régi cache és a régi jelölők is újrapróbálódnak.
+
+### 6.130.0 deploy — Chief Architect: OK with changes (`~/agent-bus/answers/20261112-1529-mm6-6.130.0-poster-deeplink-deploy.md`)
+- [x] Push `fc5065d..654bec0` (Robi: „Igen, push + deploy”).
+- [x] A CA-pontokból beépítve, saját commitban a 6.130.0-n belül, mert még nem ment élesbe:
+  - A jelölő kétféle. A `.over` (korlát fölött) végleges. A `.timeout` 24 óra után lejár, mert a terhelés is okozhatja.
+  - Jelölés csak akkor jön, ha a saját időkorlátunk ölte meg a kódolást (`killed && signal === "SIGKILL"`). Más leállást (OOM, ffmpeg-összeomlás) naplózunk, de nem jegyzünk meg.
+  - A `?open=` csak `^[mca]-[0-9a-z-]{1,62}$` alakot fogad el.
+  - Tesztek: lejárt `.timeout` után újra kódol (200), és rossz alakú `open` → null.
+- Már teljesült a beépítés előtt is:
+  - (3) a részleges kimenet a tmp-ben készül, utána copy + rename, így sosem kerül a cache-be;
+  - (6) a poszter indexére a `readStillResized` határellenőrzése → 404, a Cache-Control nem változott.
+- Nem csináltam meg:
+  - (4) a régi `*-v1.webm` törlését (2 fájl, kb. 3.4 MB a köteten): törlés, Robi kifejezett jóváhagyása kell.
+  - A CA szerint a Box B 91%-on van; ez nem stimmel: `/` 68%, a tárolókötet 10%.

@@ -34,6 +34,14 @@ describe("share view in the link", () => {
     );
   });
 
+  it("takes only an item key shaped like the gallery's own", () => {
+    expect(parseShareView({ open: "m-45-300x250" }).open).toBe("m-45-300x250");
+    expect(parseShareView({ open: "a-12" }).open).toBe("a-12");
+    expect(parseShareView({ open: "<script>" }).open).toBeNull();
+    expect(parseShareView({ open: "x-1" }).open).toBeNull();
+    expect(parseShareView({ open: `c-${"1".repeat(80)}` }).open).toBeNull();
+  });
+
   it("writes nothing for the default view", () => {
     expect(serializeShareView(DEFAULT_SHARE_VIEW)).toBe("");
   });

@@ -39,6 +39,10 @@ export const DEFAULT_SHARE_VIEW: ShareViewState = {
 
 type RawParams = Record<string, string | string[] | undefined>;
 
+// An item key as the gallery builds it — `m-45-300x250`, `c-1234`, `a-12` —
+// and no longer than any of them can be.
+const OPEN_KEY = /^[mca]-[0-9a-z-]{1,62}$/i;
+
 function first(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
@@ -47,6 +51,7 @@ export function parseShareView(raw: RawParams): ShareViewState {
   const theme = first(raw.theme);
   const layout = first(raw.layout);
   const open = (first(raw.open) ?? "").trim();
+  // Only the shape the gallery's own keys have; anything else is no item.
   return {
     theme: theme === "dark" || theme === "light" ? theme : null,
     layout: layout === "grid" || layout === "list" ? layout : "masonry",
@@ -57,7 +62,7 @@ export function parseShareView(raw: RawParams): ShareViewState {
     q: first(raw.q) ?? "",
     commented: raw.commented !== undefined,
     image: raw.image !== undefined,
-    open: open === "" ? null : open,
+    open: OPEN_KEY.test(open) ? open : null,
   };
 }
 

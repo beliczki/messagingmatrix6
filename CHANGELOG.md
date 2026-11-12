@@ -24,7 +24,10 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ### Fixed
 - WebM download: a video whose encode ran past the 240 s limit was encoded again, for another
-  240 s, on every request. It is now remembered and answered "Too long for WebM" at once.
+  240 s, on every request. It is now answered "Too long for WebM" at once for a day, then tried
+  again (a busy box can cause a timeout too); a video over the size, length or resolution caps
+  stays refused. Only our own timeout counts: another kind of kill is logged, not remembered.
+- Share gallery: `?open=` takes only a value shaped like an item key.
 
 ## [6.129.0] — 2026-11-12
 

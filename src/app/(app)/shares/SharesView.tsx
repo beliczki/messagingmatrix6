@@ -240,7 +240,7 @@ export function SharesView() {
     const ok = await dialog.confirm({
       title: `Refresh ${targets.length} share${targets.length === 1 ? "" : "s"}?`,
       message:
-        "The public link will show the current content, text styles and custom CSS of its creatives. Items and comments stay.",
+        "The public link will show the current content, text styles and custom CSS of its creatives. A creative with a newer version (_n2, _n3 …) is swapped for it in the same place, with its comments. The link and the order stay.",
       confirmLabel: "Refresh",
       variant: "info",
     });

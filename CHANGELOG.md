@@ -5,6 +5,14 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.131.0] — 2026-11-20
+
+### Changed
+- Shares: Refresh also brings in a newer version of a creative (`_n2`, `_n3` …) — it takes the n1's
+  place in the same link, with the n1's comments; the n1's file leaves the share. Only a higher
+  version of the same family (filename + declared size, a zip apart from a picture) replaces, and
+  never an archived one. Before, Refresh re-read the same creatives and the n2 never came in.
+
 ## [6.130.0] — 2026-11-12
 
 ### Added

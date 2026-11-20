@@ -3,7 +3,7 @@
 // adding to an existing one — they must resolve a selection identically, or a
 // share built in two steps would differ from the same share built in one.
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import {
   assets,
@@ -11,10 +11,13 @@ import {
   messagePreviews,
   messages,
   nowUtc,
+  shareComments,
   shareGalleries,
   uploadedFiles,
 } from "@/db/schema";
 import { readTemplate } from "@/lib/templates";
+import { parseCreativeFilename } from "@/lib/parse-creative-filename";
+import { versionFamilyKey } from "@/lib/group-creative-versions";
 import { getActiveClient } from "@/lib/active-client";
 import { warmStills } from "@/lib/video-stills";
 import { ensureSecret, signTokenWith } from "@/lib/public-shortcut";
@@ -326,16 +329,33 @@ export async function addToShare(
 }
 
 export type RefreshShareResult =
-  | { ok: true; changed: number; title: string | null }
+  | {
+      ok: true;
+      changed: number;
+      /** Creatives swapped for a newer version of themselves (n1 → n2). */
+      replaced: Array<{ from: number; to: number }>;
+      /** Files the share did not hold before — the newer versions' — to warm. */
+      newFileIds: string[];
+      title: string | null;
+    }
   | { ok: false; status: 404 | 409; error: string };
 
 /**
  * Brings a share's frozen rows up to what the MCs and creatives are now — the
- * content, text styles and custom CSS edited since the share was made. Only the
- * lookup rows (messages, creatives, assets, files) are swapped, by id: the items, their
- * order and the comments keyed by them stay. A row that no longer exists keeps
- * its frozen copy, so a deletion never punches a hole in a sent link. Locked
- * like addToShare, so a refresh and an add cannot drop each other's write.
+ * content, text styles and custom CSS edited since the share was made. The
+ * lookup rows (messages, creatives, assets, files) are swapped by id: the items,
+ * their order and the comments keyed by them stay. A row that no longer exists
+ * keeps its frozen copy, so a deletion never punches a hole in a sent link.
+ * Locked like addToShare, so a refresh and an add cannot drop each other's write.
+ *
+ * "What the creatives are now" includes a newer delivery (user request,
+ * 2026-11-20: the n2 of two sizes should come into the same link). A newer
+ * version is a creative row of its own with its own id, so re-reading by id
+ * alone never found it. Each creative is swapped, in its place, for the newest
+ * live version of its family — the library's own family key (filename minus
+ * `_nN`, plus the declared size; a zip is its own family). Its comments move
+ * with it (user decision 2026-11-20), or they would vanish from the link. Only
+ * a HIGHER `_nN` replaces: an archived n2 must not send the share back to n1.
  */
 export async function refreshShare(
   clientId: number,
@@ -399,19 +419,124 @@ export async function refreshShare(
         return now;
       });
     }
+    const refreshedCreatives = overlay(existing.creatives ?? [], liveCreatives);
+    const refreshedAssets = overlay(existing.assets ?? [], liveAssets);
+
+    // Newer versions. A family's versions share the MC number, so the
+    // candidates are read by it (indexed) — not the client's whole library,
+    // which is thousands of rows. Both the column and the filename's own MC
+    // number are asked for, in case one was edited apart from the other.
+    const mcNumbers = new Set<number>();
+    for (const c of refreshedCreatives) {
+      if (c.mcNumber !== null) mcNumbers.add(c.mcNumber);
+      const fromName = c.fileName ? parseCreativeFilename(c.fileName).mcNumber : null;
+      if (fromName !== null) mcNumbers.add(fromName);
+    }
+    const candidates = mcNumbers.size
+      ? await tx
+          .select()
+          .from(creatives)
+          .where(
+            and(
+              eq(creatives.clientId, clientId),
+              inArray(creatives.mcNumber, [...mcNumbers]),
+              isNull(creatives.archivedAt),
+            ),
+          )
+      : [];
+    // The newest live version per family; within one version the latest upload.
+    const newest = new Map<string, { row: (typeof candidates)[number]; version: number }>();
+    for (const row of candidates) {
+      const family = row.fileName ? versionFamilyKey(row.fileName) : null;
+      if (!family) continue;
+      const best = newest.get(family.key);
+      const newer =
+        !best ||
+        family.version > best.version ||
+        (family.version === best.version &&
+          (row.createdAt > best.row.createdAt ||
+            (row.createdAt === best.row.createdAt && row.id > best.row.id)));
+      if (newer) newest.set(family.key, { row, version: family.version });
+    }
+    const replaced: Array<{ from: number; to: number }> = [];
+    const creativeRows: typeof refreshedCreatives = [];
+    const inShare = new Set<number>();
+    for (const c of refreshedCreatives) {
+      const family = c.fileName ? versionFamilyKey(c.fileName) : null;
+      const best = family ? newest.get(family.key) : undefined;
+      const row = best && family && best.version > family.version ? best.row : c;
+      if (row.id !== c.id) replaced.push({ from: c.id, to: row.id });
+      // The newer version is already in the share (added by hand, or another
+      // old version swapped to it first): one tile, at the first place.
+      if (inShare.has(row.id)) continue;
+      inShare.add(row.id);
+      creativeRows.push(row);
+    }
+
+    // The files are the items' lookup table: the newer versions' files come in,
+    // and a replaced version's file leaves — the link should not keep serving
+    // the n1 that was swapped out.
+    const referenced = new Set(
+      [...creativeRows, ...refreshedAssets]
+        .map((r) => r.fileId)
+        .filter((id): id is string => !!id),
+    );
+    const replacedFrom = new Set(replaced.map((r) => r.from));
+    const leaving = new Set(
+      refreshedCreatives
+        .filter((c) => replacedFrom.has(c.id) && c.fileId && !referenced.has(c.fileId))
+        .map((c) => c.fileId!),
+    );
+    const refreshedFiles = overlay(existing.files ?? [], liveFiles).filter(
+      (f) => !leaving.has(f.id),
+    );
+    const held = new Set(refreshedFiles.map((f) => f.id));
+    const newFileIds = [...referenced].filter((id) => !held.has(id));
+    const newFiles = newFileIds.length
+      ? await tx
+          .select({
+            id: uploadedFiles.id,
+            filename: uploadedFiles.filename,
+            mimeType: uploadedFiles.mimeType,
+            sizeBytes: uploadedFiles.sizeBytes,
+            dimensions: uploadedFiles.dimensions,
+          })
+          .from(uploadedFiles)
+          .where(
+            and(eq(uploadedFiles.clientId, clientId), inArray(uploadedFiles.id, newFileIds)),
+          )
+      : [];
+
+    // Comments are keyed by item (`c-<creativeId>`): they follow the swap.
+    // Archived ones too, so a restore lands on the tile that is there.
+    for (const r of replaced) {
+      await tx
+        .update(shareComments)
+        .set({ itemKey: `c-${r.to}` })
+        .where(
+          and(eq(shareComments.shareGalleryId, shareId), eq(shareComments.itemKey, `c-${r.from}`)),
+        );
+    }
+
     const metadata: SnapshotMetadata = {
       generatedAt: new Date().toISOString(),
       messages: overlay(existing.messages, liveMessages),
       matrixItems: existing.matrixItems,
-      creatives: overlay(existing.creatives ?? [], liveCreatives),
-      assets: overlay(existing.assets ?? [], liveAssets),
-      files: overlay(existing.files ?? [], liveFiles),
+      creatives: creativeRows,
+      assets: refreshedAssets,
+      files: [...refreshedFiles, ...newFiles],
     };
     await tx
       .update(shareGalleries)
       .set({ metadata: JSON.stringify(metadata), updatedAt: nowUtc })
       .where(eq(shareGalleries.id, shareId));
-    return { ok: true, changed, title: share.title };
+    return {
+      ok: true,
+      changed,
+      replaced,
+      newFileIds: newFiles.map((f) => f.id),
+      title: share.title,
+    };
   });
 }
 

@@ -3224,3 +3224,46 @@ Lépések:
 - Nem csináltam meg:
   - (4) a régi `*-v1.webm` törlését (2 fájl, kb. 3.4 MB a köteten): törlés, Robi kifejezett jóváhagyása kell.
   - A CA szerint a Box B 91%-on van; ez nem stimmel: `/` 68%, a tárolókötet 10%.
+- [x] Commit `ed0d719` (CA-javítások), push `654bec0..ed0d719`.
+- [x] **DEPLOYOLVA `mm6-telekom`** (14:34 UTC):
+  - 47 s, a legkevesebb szabad memória 1560 MB. HEAD `ed0d719`, 6.130.0, `/login` 200, `/_next/image` 404.
+  - Poszter: ETag `s5-…-9-400` (a 10 s-os klip 9. stillje), If-None-Match-re 304.
+  - WebM v2: hidegen **16.9 s** (reggel 110 s), 3.7 MB; másodszor 0.05 s. A legkevesebb szabad memória 1978 MB.
+- [x] **DEPLOYOLVA `mm6-erste`** (14:36 UTC):
+  - 42 s, a legkevesebb szabad memória 1534 MB. HEAD `ed0d719`, 6.130.0, `/login` 200, `/_next/image` 404.
+  - Poszter: index 9, 304.
+  - WebM v2: hidegen **6.5 s** (reggel 29.8 s), 627 KB; másodszor 0.02 s.
+  - Az error logban a deploy óta nincs új sor.
+  - Korábbi, nem ehhez tartozó sor: 14:11:45-kor egy `uncaughtException: Controller is already closed` még a 6.128.4-es kódon. Valószínűleg egy megszakított videó-Range-stream. Egyetlen előfordulás; ha ismétlődik, a `readFileStream` → web stream átalakítást kell megnézni.
+  - A `?open=` élesben még nem volt kipróbálva, helyben igen.
+- [x] A régi `*-v1.webm` törlése (Robi: „igen, töröld a két régi webm-et”). A két fájlt név szerint töröltem, összesen 3.4 MB; v1-es jelölő nem volt. A v2-es fájlok megvannak, az ERSTE WebM 0.05 s alatt jön a cache-ből. Ez a kérés a WyEy2p `downloadCount`-ját +1-gyel növelte.
+
+## 2026-11-20 — Share Refresh hozza be az újabb verziót (n1 → n2) — Robi: „Mehet, átvinni” (alapos terv, a kommentek átkerülnek)
+
+Robi: „van most ezen két méret https://erste.messagingmatrix.ai/share/0FVkKhe4V3H3 aminek van n2 verziója, nem szeretnék új share linket, szeretném ha n2-k befrissülnének a sharebe … kéne”.
+
+**Most:** a Shares lap Refresh gombja (`refreshShare`, `src/lib/share-snapshot.ts:340`) csak ugyanazokat a creative id-ket olvassa újra. Az n2 viszont új creative sor, új id-vel. Az Add to share a végére fűzi az n2-t, de az n1 is bent marad, és egy elemet kivenni a share-ből nem lehet. Erre a share-re (BlackFriday TCÜ, 11 creative, 0 komment) ez a két csere jönne:
+- 18295 `ERSTE_SZA_MC420_a_BF_TCU_n1_1080x1920.jpg` → 18303 `…_n2_1080x1920.jpg`
+- 18302 `ERSTE_SZA_MC420_b_BF_TCU_animated_n1_1080x1920.mp4` → 18304 `…_animated_n2_1080x1920.mp4`
+
+**Kicsi javítás (nem ajánlom):** külön „Replace with newest versions” gomb. Ezzel két, majdnem ugyanazt csináló gomb lenne.
+
+**Alapos javítás (ajánlott):** a Refresh jelentése az lesz, hogy a share a mostani állapotot mutassa. Ebbe beletartozik, hogy minden creative-et a saját verziócsaládja legújabb, nem archivált tagjára cserél, a share-en belül ugyanazon a helyen. A család ugyanaz a kulcs, amit a library használ (`versionFamilyKey`: fájlnév + deklarált méret, a zip külön család), így a későbbi n3 is magától bejön.
+- [x] `refreshShare`: a share creative-jeinek `mc_number`-ére egyetlen lekérdezés (index: `creatives_client_mc_idx`; nem az összes creative, mert az ERSTE-nél 18k sor van, és belefutna a 1000-es plafonba). `versionFamilyKey` szerint csoportosít, és ha van újabb verzió, cserél: a creative sor és a hozzá tartozó `files` bejegyzés is a régi helyére kerül.
+- [x] Ha az újabb verzió már bent van a share-ben, a régit kiveszi, hogy ne legyen duplikátum.
+- [x] A régi elem kommentjei (`share_comments.item_key` `c-<régi id>` → `c-<új id>`) ugyanabban a tranzakcióban átkerülnek az új verzióra, különben eltűnnének a linkről. Robi döntése: átvisszük, az archivált kommentekkel együtt.
+- [x] Az új fájloknak `warmShareStills` (a videó still-strip előre elkészül), ahogy az Add to share-nél is.
+- [x] Az audit `after` mezőjébe a `replaced` lista; a Refresh visszajelzése: „N updated, M replaced by a newer version”. A gomb tooltipje marad: „to the current creatives”.
+- [x] Integrációs teszt: n1 → n2 csere a helyén, az archivált n2-t kihagyja, duplikátumnál a régit kiveszi, a kommentek átkerülnek, a zip és a jpg két külön család.
+- [ ] Bump: 6.130.0 → 6.131.0 (minor, mert a felhasználó számára látható viselkedés változik), CHANGELOG, deploy (először Telekom), utána Refresh ezen a share-en élesben.
+
+Mellékhatás: egy régi `?open=c-18295` link a csere után nem nyitja meg az új elemet. A share alapnézete ettől még rendben megjelenik.
+
+### Megvalósítás (nem commitolt)
+- `src/lib/share-snapshot.ts` `refreshShare`: a kreatívokat a saját MC-számuk szerint keresi, az oszlopból és a fájlnévből is. Csak a nem archivált kreatívok jöhetnek szóba, és csak a magasabb `_nN` cserél. Ugyanazon verzión belül a legkésőbbi feltöltés nyer. A lecserélt n1 fájlja kikerül a `files` listából, kivéve, ha más elem is használja. Az eredményben új mező a `replaced` és a `newFileIds`.
+- `refresh/route.ts`: `warmShareStills` az új fájlokra, az auditba `replaced`.
+- `SharesView.tsx`: az app-ban nincs toast komponens, ezért a Refresh sikeres futás után továbbra is csendes. A megerősítő ablak szövege mondja el, hogy az újabb verzió a helyére kerül a kommentjeivel együtt.
+- Korlát: ha egy kreatívnak se az oszlopában, se a fájlnevében nincs MC-szám, az újabb verzióját nem keresi meg. Az ERSTE-nél ez 1 a 3792 élő kreatívból.
+- Az élő share-en a két fájlnév családkulcsa egyezik: `erste_sza_mc420_a_bf_tcu|1080x1920` n1 → n2, és `…_b_bf_tcu_animated|1080x1920` n1 → n2. Csak ez a kettő cserélődne.
+- Teszt: `tests/integration/api/share-add-items.test.ts`, 2 új eset (10/10 zöld).
+

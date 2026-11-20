@@ -7,6 +7,7 @@ import {
   creatives,
   messagePreviews,
   messages,
+  shareComments,
   shareGalleries,
 } from "@/db/schema";
 import {
@@ -172,6 +173,100 @@ describe("refreshShare", () => {
       .set({ archivedAt: "2026-10-02 00:00:00" })
       .where(eq(shareGalleries.id, "s1"));
     expect(await refreshShare(erste.id, "s1")).toMatchObject({ ok: false, status: 409 });
+  });
+});
+
+describe("refreshShare — newer versions", () => {
+  // MC420 as delivered: a picture and an HTML5 zip of the same name are two
+  // families; a 300x250 n2 that was archived must not count.
+  async function seedVersions() {
+    const file = (id: string, filename: string, mimeType: string) => ({
+      id, clientId: erste.id, filename, originalFilename: filename,
+      storagePath: `x/${filename}`, mimeType, category: "creative",
+    });
+    await db.insert(uploadedFiles).values([
+      file("f-a1", "ERSTE_SZA_MC420_a_BF_n1_1080x1920.jpg", "image/jpeg"),
+      file("f-a2", "ERSTE_SZA_MC420_a_BF_n2_1080x1920.jpg", "image/jpeg"),
+      file("f-p1", "ERSTE_SZA_MC420_a_BF_n1_300x250.jpg", "image/jpeg"),
+      file("f-p2", "ERSTE_SZA_MC420_a_BF_n2_300x250.jpg", "image/jpeg"),
+      file("f-z1", "ERSTE_SZA_MC420_a_BF_n1_300x250.zip", "application/zip"),
+      file("f-z2", "ERSTE_SZA_MC420_a_BF_n2_300x250.zip", "application/zip"),
+    ]);
+    const row = (fileId: string, fileName: string, archivedAt: string | null = null) => ({
+      clientId: erste.id, fileId, fileName, mcNumber: 420, mcVariant: "a", archivedAt,
+    });
+    const [a1, a2, p1, , z1, z2] = await db
+      .insert(creatives)
+      .values([
+        row("f-a1", "ERSTE_SZA_MC420_a_BF_n1_1080x1920.jpg"),
+        row("f-a2", "ERSTE_SZA_MC420_a_BF_n2_1080x1920.jpg"),
+        row("f-p1", "ERSTE_SZA_MC420_a_BF_n1_300x250.jpg"),
+        row("f-p2", "ERSTE_SZA_MC420_a_BF_n2_300x250.jpg", "2026-11-20 09:00:00"),
+        row("f-z1", "ERSTE_SZA_MC420_a_BF_n1_300x250.zip"),
+        row("f-z2", "ERSTE_SZA_MC420_a_BF_n2_300x250.zip"),
+      ])
+      .returning();
+    // Another client's n3 of the same name is not this share's newer version.
+    await db.insert(creatives).values({
+      clientId: telekom.id, fileName: "ERSTE_SZA_MC420_a_BF_n3_1080x1920.jpg", mcNumber: 420,
+    });
+    return { a1: a1!.id, a2: a2!.id, p1: p1!.id, z1: z1!.id, z2: z2!.id };
+  }
+
+  async function commentKeys(shareId: string) {
+    const rows = await db
+      .select({ id: shareComments.id, itemKey: shareComments.itemKey })
+      .from(shareComments)
+      .where(eq(shareComments.shareGalleryId, shareId));
+    return Object.fromEntries(rows.map((r) => [r.id, r.itemKey]));
+  }
+
+  it("swaps each creative for its newest live version in place, files and comments with it", async () => {
+    const v = await seedVersions();
+    await seedShare("s1", {
+      mcIds: [], assetIds: [], matrix: [],
+      creativeIds: [creativeIds[0], v.a1, v.p1, v.z1],
+    });
+    await db.insert(shareComments).values([
+      { id: "k1", shareGalleryId: "s1", itemKey: `c-${v.a1}`, authorName: "Krisz", body: "fix the CTA" },
+      { id: "k2", shareGalleryId: "s1", itemKey: `c-${v.a1}`, authorName: "Krisz", body: "old", archivedAt: "2026-11-20 10:00:00" },
+      { id: "k3", shareGalleryId: "s1", itemKey: `c-${v.p1}`, authorName: "Krisz", body: "ok" },
+    ]);
+
+    const result = await refreshShare(erste.id, "s1");
+    expect(result).toMatchObject({
+      ok: true,
+      replaced: [{ from: v.a1, to: v.a2 }, { from: v.z1, to: v.z2 }],
+    });
+    expect(result.ok && [...result.newFileIds].sort()).toEqual(["f-a2", "f-z2"]);
+
+    const snap = await readSnapshot("s1");
+    // Same places; the jpg 300x250 keeps n1 (its n2 is archived), the zip moves on.
+    expect(snap.creatives!.map((c) => c.id)).toEqual([creativeIds[0], v.a2, v.p1, v.z2]);
+    expect(snap.files!.map((f) => f.id).sort()).toEqual(["f-a2", "f-p1", "f-z2"]);
+    expect(await loadSharedFile("s1", "f-a2")).toMatchObject({ file: { id: "f-a2" } });
+    expect(await commentKeys("s1")).toEqual({ k1: `c-${v.a2}`, k2: `c-${v.a2}`, k3: `c-${v.p1}` });
+
+    // Nothing newer the second time.
+    expect(await refreshShare(erste.id, "s1")).toMatchObject({ ok: true, replaced: [], newFileIds: [] });
+  });
+
+  it("keeps one tile when the newer version is already in the share", async () => {
+    const v = await seedVersions();
+    await seedShare("s1", { mcIds: [], assetIds: [], matrix: [], creativeIds: [v.a2, v.a1] });
+    await db.insert(shareComments).values({
+      id: "k1", shareGalleryId: "s1", itemKey: `c-${v.a1}`, authorName: "Krisz", body: "on n1",
+    });
+
+    expect(await refreshShare(erste.id, "s1")).toMatchObject({
+      ok: true,
+      replaced: [{ from: v.a1, to: v.a2 }],
+      newFileIds: [],
+    });
+    const snap = await readSnapshot("s1");
+    expect(snap.creatives!.map((c) => c.id)).toEqual([v.a2]);
+    expect(snap.files!.map((f) => f.id)).toEqual(["f-a2"]);
+    expect(await commentKeys("s1")).toEqual({ k1: `c-${v.a2}` });
   });
 });
 

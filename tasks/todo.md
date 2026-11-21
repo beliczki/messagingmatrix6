@@ -3305,5 +3305,12 @@ Ismert korlát: ha az előnézet és a Refresh gomb megnyomása között új ver
 
 ### 2026-11-21 — Robi döntése, bump
 - Robi döntött a CA-ütközésről: „direkt kérem hogy a dialogus mutassa mi mire cserélne”. Az előnézet marad.
-- 6.132.0, CHANGELOG, commit. Deploy még nincs, arra külön go kell (először Telekom, aztán ERSTE).
-- [ ] Deploy után: Robi megnyomja a Refresh-t a BlackFriday TCÜ share-en, és az ablakban a 18295 → 18303 és 18302 → 18304 párnak kell látszania. Utána DB-ben ellenőrizni: a kreatívok sorrendje, az n1 fájlok kikerültek a `files`-ból, a kommentszám változatlan, az audit sorban ott a `replaced`.
+- 6.132.0, CHANGELOG, commit `9be22f7`, push `ed2f6c6..9be22f7` (Robi: „Mehet a deploy”).
+- Chief Architect: OK (`~/agent-bus/answers/20261121-1615-mm6-6.132.0-refresh-preview-deploy.md`). A pontjai:
+  - A thumbnail route a kliensre szűr (`getFile(claims.cid, …)`), nem a share fájlkapujára, így a régi kép is betölt.
+  - A `warmShareStills` miatti aggodalom már a 6.131.0-nál le volt zárva: csak a DB-lookupot várja meg.
+  - Bejelentkezett GET-smoke-ot (200 + `replaced`, másik tenantról 404) nem tudtam futtatni, mert nem jelentkezem be. Helyette: a bejelentkezés nélküli GET mindkét tenanton 401, az élő DB-n a `previewShareRefresh` pedig a két várt cserét adja. A 404/409 eseteket a teszt fedi.
+- [x] **DEPLOYOLVA `mm6-telekom`** (15:16 UTC): 44 s, a legkevesebb szabad memória 1279 MB, a swap legfeljebb 567 MB. Előtte: a box scriptje egyezik a repóval (`c3438a49`), előző HEAD `ed2f6c6`. Utána: HEAD `9be22f7`, 6.132.0, `/login` 200, a refresh GET bejelentkezés nélkül 401, pm2 online, az error logba nem jött új sor.
+- [x] **DEPLOYOLVA `mm6-erste`** (15:17 UTC): 44 s, a legkevesebb szabad memória 1286 MB, a swap legfeljebb 604 MB. HEAD `9be22f7`, 6.132.0, `/login` 200, `/share/0FVkKhe4V3H3` 200 (ez a `curl` a viewCount-ot 1-gyel növelte), a refresh GET 401, az error logba nem jött új sor.
+- [x] Deploy után: Robi megnyomja a Refresh-t a BlackFriday TCÜ share-en, és az ablakban a 18295 → 18303 és 18302 → 18304 párnak kell látszania. Utána DB-ben ellenőrizni: a kreatívok sorrendje, az n1 fájlok kikerültek a `files`-ból, a kommentszám változatlan, az audit sorban ott a `replaced`.
+  - Robi megnyomta (2026-11-21 15:19 UTC). DB: a sorrend `18296,18297,18292,18303,18294,18293,18298,18299,18300,18304,18301`, az n1 fájlok (`o_YrF6…`, `3C8XaR…`) kikerültek a `files`-ból, az n2 fájlok bekerültek, a kommentszám 0 (előtte is 0), az audit sor `replaced: [{18295→18303},{18302→18304}]`.

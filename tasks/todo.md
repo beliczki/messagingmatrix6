@@ -3267,3 +3267,43 @@ Mellékhatás: egy régi `?open=c-18295` link a csere után nem nyitja meg az ú
 - Az élő share-en a két fájlnév családkulcsa egyezik: `erste_sza_mc420_a_bf_tcu|1080x1920` n1 → n2, és `…_b_bf_tcu_animated|1080x1920` n1 → n2. Csak ez a kettő cserélődne.
 - Teszt: `tests/integration/api/share-add-items.test.ts`, 2 új eset (10/10 zöld).
 
+
+### 6.131.0 deploy — Chief Architect: OK with changes (`~/agent-bus/answers/20261120-1255-mm6-6.131.0-share-refresh-versions.md`)
+- [x] CA pontjai:
+  - A `warmShareStills` csak a DB-lookupot várja meg, a stilleket `void warmStills` indítja, így a Refresh kérés nem vár az ffmpeg-re.
+  - A `c-<id>` elemkulcsot csak a `share_comments` használja; más elemhez kötött adat nincs.
+  - A fájl-proxy `public, max-age=86400`-zal szolgál ki. Ismert korlát: aki az n1 URL-jét már letöltötte, a böngészője legfeljebb egy napig a cache-ből még megmutatja. A galéria az n2-t új URL-en hozza.
+  - A CA toastot javasolt a cserék számával; az app-ban nincs toast komponens, ez nyitott kérdés Robinak.
+- [x] Commit `ed2f6c6`, push `ed0d719..ed2f6c6`.
+- [x] **DEPLOYOLVA `mm6-telekom`** (11:56 UTC): 69 s, a legkevesebb szabad memória 1075 MB. HEAD `ed2f6c6`, 6.131.0, `/login` 200, pm2 online, az error log üres.
+- [x] **DEPLOYOLVA `mm6-erste`** (11:58 UTC): 59 s, a legkevesebb szabad memória 1220 MB. HEAD `ed2f6c6`, 6.131.0, `/login` 200, `/share/0FVkKhe4V3H3` 200, az error log üres.
+- [ ] Robi a Shares lapon Refresh-t nyom a BlackFriday TCÜ share-re. Előtte: creatives `18296,18297,18292,18295,18294,18293,18298,18299,18300,18302,18301`, 0 komment, `updated_at` 11:12:34. Várt eredmény: 18295 → 18303 és 18302 → 18304 ugyanazon a helyen, az n1 fájljai kikerülnek a `files`-ból, a kommentszám nem változik.
+
+## 2026-11-20 — Refresh előnézet: a megerősítő ablak thumbnaillel mutatja, mi cserélődik — Robi: „jó lenne ha itt kiírná már hogy mit fog refreshelni thumbnail-el”
+
+Most a Refresh ablak csak általános szöveget ír, nem mondja meg, melyik kreatív cserélődik melyikre.
+
+**Mechanizmus (javasolt):** a cseretervet egyetlen függvény számolja (`planShareRefresh`). Ugyanezt használja a Refresh (POST) és az előnézet is: egy új `GET /api/share-galleries/[id]/refresh`, ami nem ír semmit. Így az ablak nem mutathat mást, mint amit a Refresh tényleg csinál. Az elvetett kis megoldás: a családkulcs-logika a kliensben is lefutna. Ez másolat lenne, ami előbb-utóbb eltérne a szervertől.
+Ütközés a CA tanácsával: a 6.131.0 válaszában azt írta, „Do not add a preview/dry-run layer”. Itt nincs külön réteg, mert az előnézet ugyanazt a függvényt hívja. A döntés Robié.
+
+- [x] `src/lib/share-snapshot.ts`: a jelölt-keresés és a „legújabb a családban” rész kikerül a `planShareRefresh(tx, clientId, creatives)` függvénybe. Visszaadja a `{ from, to }` párokat fájlnévvel és `fileId`-val. A `refreshShare` ugyanezt hívja, a viselkedése nem változik.
+- [x] `refresh/route.ts`: új `GET`, `withSession` mögött, kliensre szűrve. Válasz: `{ replaced: [{ from:{id,fileName,fileId}, to:{…} }] }`. Archivált share-re 409, mint a POST-nál.
+- [x] `SharesView.tsx` `refreshSelected`: a kijelölt share-ek előnézetét párhuzamosan lekéri, és csak utána nyitja meg a megerősítő ablakot. Az ablak törzse (ReactNode) share-enként mutatja a párokat: n1 thumbnail → n2 thumbnail, alattuk a fájlnév. Thumbnail: `/api/files/<fileId>/thumbnail?w=200`, ami képre, videó-posterre és HTML5 zip posterre is működik. Ha nincs csere: „No newer versions — content and styles are re-read.” Görgethető, max. magasságú lista.
+- [x] Szemantikus osztályok: `share-refresh-preview`, `__share`, `__pair`, `__thumb` (+ `thumb-checker`), `__arrow`, `__name`. Bekerülnek a `tasks/component-inventory.md`-be.
+- [x] Integrációs teszt: a GET ugyanazt a párlistát adja, mint utána a POST `replaced`-je. A GET nem módosít semmit (metadata, kommentek, `updated_at` változatlan). Másik kliens share-jére 404.
+- [x] Bump: 6.131.0 → 6.132.0 (minor, új HTTP route + látható változás), CHANGELOG. Deploy csak Robi go-ja után.
+
+Ismert korlát: ha az előnézet és a Refresh gomb megnyomása között új verzió érkezik, a Refresh már azt hozza. A POST válasza a ténylegesen lefutott cserelistát adja vissza.
+
+### Megvalósítás (nem commitolt) — Robi: „Mehet”
+- `share-snapshot.ts`: a `planVersionSwaps(q, clientId, current)` kiemelve, és a `refreshShare` is ezt hívja. Új `previewShareRefresh`, ami csak olvas. A fájltípust a tárolt mime alapján adja meg a `creativeMediaKind`.
+- `refresh/route.ts`: `GET` → `{ replaced: [{ from, to }] }`, az elutasítások ugyanazok, mint a POST-nál (404/409).
+- `SharesView.tsx`: a Refresh előbb lekéri a kijelölt share-ek előnézetét, közben a gomb tiltva van. Az ablak törzse a `RefreshPreview`: share-enként régi → új thumbnail, alatta a fájlnév. Több share kijelölésekor a share címe is látszik. Ha nincs csere: „No newer versions — nothing is swapped.”
+- Teszt: 2 új eset (12/12 zöld). Az előnézet ugyanazt a párlistát adja, mint utána a Refresh, és semmit nem ír. 404/409.
+- Élő, csak olvasó próba a BlackFriday TCÜ share-en (helyi kód, éles DB): 18295 → 18303 (jpg, image) és 18302 → 18304 (mp4, video). A share érintetlen, `updated_at` 11:12:34.
+- Nem ellenőrzött: az ablak megjelenése a böngészőben, mert a helyi app bejelentkezést kér.
+
+### 2026-11-21 — Robi döntése, bump
+- Robi döntött a CA-ütközésről: „direkt kérem hogy a dialogus mutassa mi mire cserélne”. Az előnézet marad.
+- 6.132.0, CHANGELOG, commit. Deploy még nincs, arra külön go kell (először Telekom, aztán ERSTE).
+- [ ] Deploy után: Robi megnyomja a Refresh-t a BlackFriday TCÜ share-en, és az ablakban a 18295 → 18303 és 18302 → 18304 párnak kell látszania. Utána DB-ben ellenőrizni: a kreatívok sorrendje, az n1 fájlok kikerültek a `files`-ból, a kommentszám változatlan, az audit sorban ott a `replaced`.

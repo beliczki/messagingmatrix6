@@ -5,6 +5,14 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.132.0] — 2026-11-21
+
+### Added
+- Shares: the Refresh dialog shows what it will swap before you confirm — per share, the old
+  version's thumbnail and filename next to the new one's. With nothing newer it says so. The dialog
+  reads the same swap plan the Refresh then runs, so it cannot promise a swap that does not happen
+  (new read-only `GET /api/share-galleries/[id]/refresh`).
+
 ## [6.131.0] — 2026-11-20
 
 ### Changed

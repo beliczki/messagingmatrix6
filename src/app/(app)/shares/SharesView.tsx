@@ -9,6 +9,7 @@ import { AppBrandTag } from "@/app/_components/AppBrandTag";
 import ArchiveToggle from "../_components/ArchiveToggle";
 import RightToolbar from "../_components/RightToolbar";
 import { useAlertDialog } from "../_components/AlertDialog";
+import type { RefreshPreviewItem } from "@/lib/share-snapshot";
 
 type Share = {
   id: string;
@@ -23,6 +24,9 @@ type Share = {
   viewCount: number;
   downloadCount: number;
 };
+
+type RefreshPair = { from: RefreshPreviewItem; to: RefreshPreviewItem };
+type RefreshPreviewShare = { share: Share; replaced: RefreshPair[] };
 
 type SortKey =
   | "title"
@@ -58,6 +62,7 @@ export function SharesView() {
   const dialog = useAlertDialog();
   const [showArchived, setShowArchived] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [previewing, setPreviewing] = useState(false);
   const [lastClickedId, setLastClickedId] = useState<string | null>(null);
   const [sort, setSort] = useState<SortState>({
     key: "createdAt",
@@ -234,13 +239,38 @@ export function SharesView() {
     for (const r of targets) archiveM.mutate(r.id);
   }
 
+  // The confirm dialog shows what each share's refresh would swap (n1 → n2),
+  // asked from the server's own plan — the same one the refresh then runs.
   async function refreshSelected() {
     const targets = selectedRows.filter((r) => r.archivedAt === null);
     if (targets.length === 0) return;
+    setPreviewing(true);
+    let previews: RefreshPreviewShare[];
+    try {
+      previews = await Promise.all(
+        targets.map(async (share) => {
+          const r = await fetch(`/api/share-galleries/${share.id}/refresh`);
+          if (!r.ok) {
+            const body = await r.json().catch(() => ({}));
+            throw new Error(body.error ?? "refresh preview failed");
+          }
+          const body = (await r.json()) as { replaced: RefreshPair[] };
+          return { share, replaced: body.replaced };
+        }),
+      );
+    } catch (err) {
+      await dialog.alert({
+        title: "Couldn't check the shares",
+        message: err instanceof Error ? err.message : String(err),
+        variant: "danger",
+      });
+      return;
+    } finally {
+      setPreviewing(false);
+    }
     const ok = await dialog.confirm({
       title: `Refresh ${targets.length} share${targets.length === 1 ? "" : "s"}?`,
-      message:
-        "The public link will show the current content, text styles and custom CSS of its creatives. A creative with a newer version (_n2, _n3 …) is swapped for it in the same place, with its comments. The link and the order stay.",
+      message: <RefreshPreview previews={previews} />,
       confirmLabel: "Refresh",
       variant: "info",
     });
@@ -514,7 +544,7 @@ export function SharesView() {
                 <button
                   type="button"
                   onClick={refreshSelected}
-                  disabled={refreshM.isPending || selectedActiveCount === 0}
+                  disabled={refreshM.isPending || previewing || selectedActiveCount === 0}
                   title={
                     selectedActiveCount === 0
                       ? "Archived shares can't be refreshed"
@@ -624,4 +654,74 @@ function compareRows(a: Share, b: Share, key: SortKey): number {
   if (bv === null || bv === undefined) return 1;
   if (typeof av === "number" && typeof bv === "number") return av - bv;
   return String(av).localeCompare(String(bv));
+}
+
+// Body of the Refresh confirm dialog: per share, each creative that a newer
+// version (_n2, _n3 …) replaces — old thumbnail → new thumbnail.
+function RefreshPreview({ previews }: { previews: RefreshPreviewShare[] }) {
+  const withSwaps = previews.filter((p) => p.replaced.length > 0);
+  return (
+    <div className="share-refresh-preview flex flex-col gap-3">
+      <p>
+        The public link will show the current content, text styles and custom CSS of its
+        creatives. The link and the order stay.
+      </p>
+      {withSwaps.length === 0 ? (
+        <p className="share-refresh-preview__none text-slate-500">
+          No newer versions — nothing is swapped.
+        </p>
+      ) : (
+        <div className="share-refresh-preview__list flex max-h-[50vh] flex-col gap-4 overflow-y-auto">
+          {withSwaps.map((p) => (
+            <section key={p.share.id} className="share-refresh-preview__share flex flex-col gap-2">
+              {previews.length > 1 ? (
+                <h3 className="share-refresh-preview__share-title truncate text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  {p.share.title ?? "(untitled)"}
+                </h3>
+              ) : null}
+              <p className="share-refresh-preview__count">
+                {p.replaced.length} creative{p.replaced.length === 1 ? "" : "s"} swapped for a
+                newer version, in the same place, with comments:
+              </p>
+              {p.replaced.map((pair) => (
+                <div
+                  key={pair.from.id}
+                  className="share-refresh-preview__pair flex items-start gap-2"
+                >
+                  <RefreshThumb item={pair.from} />
+                  <Icon
+                    name="chevron-right"
+                    className="share-refresh-preview__arrow mt-12 size-4 shrink-0 text-slate-400"
+                  />
+                  <RefreshThumb item={pair.to} />
+                </div>
+              ))}
+            </section>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RefreshThumb({ item }: { item: RefreshPreviewItem }) {
+  return (
+    <figure className="share-refresh-preview__item flex w-[150px] min-w-0 flex-col gap-1">
+      <div className="share-refresh-preview__thumb thumb-checker flex h-[110px] items-center justify-center overflow-hidden rounded-md border border-slate-200">
+        {item.fileId && item.kind !== "other" ? (
+          <img
+            src={`/api/files/${item.fileId}/thumbnail?w=200`}
+            alt={item.fileName ?? "creative"}
+            className="share-refresh-preview__image block max-h-full max-w-full object-contain"
+            decoding="async"
+          />
+        ) : (
+          <Icon name="image" className="size-6 text-slate-300" />
+        )}
+      </div>
+      <figcaption className="share-refresh-preview__name whitespace-normal break-all font-mono text-[10px] leading-snug text-slate-600">
+        {item.fileName}
+      </figcaption>
+    </figure>
+  );
 }

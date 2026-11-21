@@ -21,7 +21,7 @@ import { versionFamilyKey } from "@/lib/group-creative-versions";
 import { getActiveClient } from "@/lib/active-client";
 import { warmStills } from "@/lib/video-stills";
 import { ensureSecret, signTokenWith } from "@/lib/public-shortcut";
-import { creativeMediaKind } from "@/lib/creative-media-kind";
+import { creativeMediaKind, type CreativeMediaKind } from "@/lib/creative-media-kind";
 
 type SnapshotFile = {
   id: string;
@@ -328,6 +328,151 @@ export async function addToShare(
   });
 }
 
+type CreativeRow = typeof creatives.$inferSelect;
+
+/**
+ * Which of a share's creatives a refresh swaps for a newer version of itself,
+ * and the creative list after the swaps. ONE function for the refresh and for
+ * its preview in the confirm dialog (user request 2026-11-20: show what will be
+ * swapped, with thumbnails) — so the dialog cannot promise a swap the refresh
+ * then does not make. `current` is the share's creatives as they are now: the
+ * live row by id, the frozen copy where the row is gone.
+ */
+async function planVersionSwaps(
+  q: Pick<typeof db, "select">,
+  clientId: number,
+  current: CreativeRow[],
+): Promise<{ rows: CreativeRow[]; replaced: Array<{ from: CreativeRow; to: CreativeRow }> }> {
+  // A family's versions share the MC number, so the candidates are read by it
+  // (indexed) — not the client's whole library, which is thousands of rows.
+  // Both the column and the filename's own MC number are asked for, in case
+  // one was edited apart from the other.
+  const mcNumbers = new Set<number>();
+  for (const c of current) {
+    if (c.mcNumber !== null) mcNumbers.add(c.mcNumber);
+    const fromName = c.fileName ? parseCreativeFilename(c.fileName).mcNumber : null;
+    if (fromName !== null) mcNumbers.add(fromName);
+  }
+  const candidates = mcNumbers.size
+    ? await q
+        .select()
+        .from(creatives)
+        .where(
+          and(
+            eq(creatives.clientId, clientId),
+            inArray(creatives.mcNumber, [...mcNumbers]),
+            isNull(creatives.archivedAt),
+          ),
+        )
+    : [];
+  // The newest live version per family; within one version the latest upload.
+  const newest = new Map<string, { row: CreativeRow; version: number }>();
+  for (const row of candidates) {
+    const family = row.fileName ? versionFamilyKey(row.fileName) : null;
+    if (!family) continue;
+    const best = newest.get(family.key);
+    const newer =
+      !best ||
+      family.version > best.version ||
+      (family.version === best.version &&
+        (row.createdAt > best.row.createdAt ||
+          (row.createdAt === best.row.createdAt && row.id > best.row.id)));
+    if (newer) newest.set(family.key, { row, version: family.version });
+  }
+  const replaced: Array<{ from: CreativeRow; to: CreativeRow }> = [];
+  const rows: CreativeRow[] = [];
+  const inShare = new Set<number>();
+  for (const c of current) {
+    const family = c.fileName ? versionFamilyKey(c.fileName) : null;
+    const best = family ? newest.get(family.key) : undefined;
+    const row = best && family && best.version > family.version ? best.row : c;
+    if (row.id !== c.id) replaced.push({ from: c, to: row });
+    // The newer version is already in the share (added by hand, or another
+    // old version swapped to it first): one tile, at the first place.
+    if (inShare.has(row.id)) continue;
+    inShare.add(row.id);
+    rows.push(row);
+  }
+  return { rows, replaced };
+}
+
+export type RefreshPreviewItem = {
+  id: number;
+  fileName: string | null;
+  fileId: string | null;
+  kind: CreativeMediaKind;
+};
+
+export type ShareRefreshPreview =
+  | { ok: true; replaced: Array<{ from: RefreshPreviewItem; to: RefreshPreviewItem }> }
+  | { ok: false; status: 404 | 409; error: string };
+
+/**
+ * What a refresh of this share would swap, for the confirm dialog — read only,
+ * nothing is written. The same refusals as refreshShare, so the dialog never
+ * offers a refresh the server will turn down.
+ */
+export async function previewShareRefresh(
+  clientId: number,
+  shareId: string,
+): Promise<ShareRefreshPreview> {
+  const [share] = await db
+    .select()
+    .from(shareGalleries)
+    .where(and(eq(shareGalleries.clientId, clientId), eq(shareGalleries.id, shareId)));
+  if (!share) return { ok: false, status: 404, error: "share not found" };
+  if (share.archivedAt !== null) {
+    return { ok: false, status: 409, error: "share is archived" };
+  }
+  const existing = JSON.parse(share.metadata ?? "null") as SnapshotMetadata | null;
+  if (!existing) return { ok: false, status: 409, error: "share has no snapshot" };
+
+  const frozen = existing.creatives ?? [];
+  const live = frozen.length
+    ? await db
+        .select()
+        .from(creatives)
+        .where(
+          and(
+            eq(creatives.clientId, clientId),
+            inArray(
+              creatives.id,
+              frozen.map((c) => c.id),
+            ),
+          ),
+        )
+    : [];
+  const liveById = new Map(live.map((r) => [r.id, r]));
+  const { replaced } = await planVersionSwaps(
+    db,
+    clientId,
+    frozen.map((c) => liveById.get(c.id) ?? c),
+  );
+
+  // The stored mime decides what a file is (creativeMediaKind) — a zip gets
+  // its poster, not an <img> of the archive.
+  const fileIds = replaced
+    .flatMap((s) => [s.from.fileId, s.to.fileId])
+    .filter((id): id is string => !!id);
+  const files = fileIds.length
+    ? await db
+        .select({ id: uploadedFiles.id, mimeType: uploadedFiles.mimeType })
+        .from(uploadedFiles)
+        .where(and(eq(uploadedFiles.clientId, clientId), inArray(uploadedFiles.id, fileIds)))
+    : [];
+  const mimeById = new Map(files.map((f) => [f.id, f.mimeType]));
+  const item = (c: CreativeRow): RefreshPreviewItem => ({
+    id: c.id,
+    fileName: c.fileName,
+    fileId: c.fileId,
+    kind: creativeMediaKind(c.fileId ? mimeById.get(c.fileId) : null, c.fileName),
+  });
+  return {
+    ok: true,
+    replaced: replaced.map((s) => ({ from: item(s.from), to: item(s.to) })),
+  };
+}
+
 export type RefreshShareResult =
   | {
       ok: true;
@@ -422,56 +567,9 @@ export async function refreshShare(
     const refreshedCreatives = overlay(existing.creatives ?? [], liveCreatives);
     const refreshedAssets = overlay(existing.assets ?? [], liveAssets);
 
-    // Newer versions. A family's versions share the MC number, so the
-    // candidates are read by it (indexed) — not the client's whole library,
-    // which is thousands of rows. Both the column and the filename's own MC
-    // number are asked for, in case one was edited apart from the other.
-    const mcNumbers = new Set<number>();
-    for (const c of refreshedCreatives) {
-      if (c.mcNumber !== null) mcNumbers.add(c.mcNumber);
-      const fromName = c.fileName ? parseCreativeFilename(c.fileName).mcNumber : null;
-      if (fromName !== null) mcNumbers.add(fromName);
-    }
-    const candidates = mcNumbers.size
-      ? await tx
-          .select()
-          .from(creatives)
-          .where(
-            and(
-              eq(creatives.clientId, clientId),
-              inArray(creatives.mcNumber, [...mcNumbers]),
-              isNull(creatives.archivedAt),
-            ),
-          )
-      : [];
-    // The newest live version per family; within one version the latest upload.
-    const newest = new Map<string, { row: (typeof candidates)[number]; version: number }>();
-    for (const row of candidates) {
-      const family = row.fileName ? versionFamilyKey(row.fileName) : null;
-      if (!family) continue;
-      const best = newest.get(family.key);
-      const newer =
-        !best ||
-        family.version > best.version ||
-        (family.version === best.version &&
-          (row.createdAt > best.row.createdAt ||
-            (row.createdAt === best.row.createdAt && row.id > best.row.id)));
-      if (newer) newest.set(family.key, { row, version: family.version });
-    }
-    const replaced: Array<{ from: number; to: number }> = [];
-    const creativeRows: typeof refreshedCreatives = [];
-    const inShare = new Set<number>();
-    for (const c of refreshedCreatives) {
-      const family = c.fileName ? versionFamilyKey(c.fileName) : null;
-      const best = family ? newest.get(family.key) : undefined;
-      const row = best && family && best.version > family.version ? best.row : c;
-      if (row.id !== c.id) replaced.push({ from: c.id, to: row.id });
-      // The newer version is already in the share (added by hand, or another
-      // old version swapped to it first): one tile, at the first place.
-      if (inShare.has(row.id)) continue;
-      inShare.add(row.id);
-      creativeRows.push(row);
-    }
+    const swaps = await planVersionSwaps(tx, clientId, refreshedCreatives);
+    const creativeRows = swaps.rows;
+    const replaced = swaps.replaced.map((s) => ({ from: s.from.id, to: s.to.id }));
 
     // The files are the items' lookup table: the newer versions' files come in,
     // and a replaced version's file leaves — the link should not keep serving

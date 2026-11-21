@@ -12,6 +12,7 @@ import {
 } from "@/db/schema";
 import {
   addToShare,
+  previewShareRefresh,
   refreshShare,
   resolveShareSelection,
   shareThumbs,
@@ -267,6 +268,54 @@ describe("refreshShare — newer versions", () => {
     expect(snap.creatives!.map((c) => c.id)).toEqual([v.a2]);
     expect(snap.files!.map((f) => f.id)).toEqual(["f-a2"]);
     expect(await commentKeys("s1")).toEqual({ k1: `c-${v.a2}` });
+  });
+
+  it("previews the swaps the refresh then makes, and writes nothing", async () => {
+    const v = await seedVersions();
+    await seedShare("s1", {
+      mcIds: [], assetIds: [], matrix: [],
+      creativeIds: [creativeIds[0], v.a1, v.p1, v.z1],
+    });
+    await db.insert(shareComments).values({
+      id: "k1", shareGalleryId: "s1", itemKey: `c-${v.a1}`, authorName: "Krisz", body: "fix",
+    });
+    const [before] = await db.select().from(shareGalleries).where(eq(shareGalleries.id, "s1"));
+
+    const preview = await previewShareRefresh(erste.id, "s1");
+    expect(preview).toEqual({
+      ok: true,
+      replaced: [
+        {
+          from: { id: v.a1, fileName: "ERSTE_SZA_MC420_a_BF_n1_1080x1920.jpg", fileId: "f-a1", kind: "image" },
+          to: { id: v.a2, fileName: "ERSTE_SZA_MC420_a_BF_n2_1080x1920.jpg", fileId: "f-a2", kind: "image" },
+        },
+        {
+          from: { id: v.z1, fileName: "ERSTE_SZA_MC420_a_BF_n1_300x250.zip", fileId: "f-z1", kind: "html5" },
+          to: { id: v.z2, fileName: "ERSTE_SZA_MC420_a_BF_n2_300x250.zip", fileId: "f-z2", kind: "html5" },
+        },
+      ],
+    });
+    // Read only: the share row and its comments are untouched.
+    const [after] = await db.select().from(shareGalleries).where(eq(shareGalleries.id, "s1"));
+    expect(after).toEqual(before);
+    expect(await commentKeys("s1")).toEqual({ k1: `c-${v.a1}` });
+
+    // The refresh makes exactly the swaps the dialog showed; then none are left.
+    const result = await refreshShare(erste.id, "s1");
+    expect(result.ok && result.replaced).toEqual(
+      preview.ok && preview.replaced.map((p) => ({ from: p.from.id, to: p.to.id })),
+    );
+    expect(await previewShareRefresh(erste.id, "s1")).toEqual({ ok: true, replaced: [] });
+  });
+
+  it("preview refuses an archived share and another client's share", async () => {
+    await seedShare("s1", { mcIds: [], assetIds: [], matrix: [], creativeIds: [creativeIds[0]] });
+    expect(await previewShareRefresh(telekom.id, "s1")).toMatchObject({ ok: false, status: 404 });
+    await db
+      .update(shareGalleries)
+      .set({ archivedAt: "2026-10-02 00:00:00" })
+      .where(eq(shareGalleries.id, "s1"));
+    expect(await previewShareRefresh(erste.id, "s1")).toMatchObject({ ok: false, status: 409 });
   });
 });
 

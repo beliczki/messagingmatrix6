@@ -3314,3 +3314,88 @@ Ismert korlát: ha az előnézet és a Refresh gomb megnyomása között új ver
 - [x] **DEPLOYOLVA `mm6-erste`** (15:17 UTC): 44 s, a legkevesebb szabad memória 1286 MB, a swap legfeljebb 604 MB. HEAD `9be22f7`, 6.132.0, `/login` 200, `/share/0FVkKhe4V3H3` 200 (ez a `curl` a viewCount-ot 1-gyel növelte), a refresh GET 401, az error logba nem jött új sor.
 - [x] Deploy után: Robi megnyomja a Refresh-t a BlackFriday TCÜ share-en, és az ablakban a 18295 → 18303 és 18302 → 18304 párnak kell látszania. Utána DB-ben ellenőrizni: a kreatívok sorrendje, az n1 fájlok kikerültek a `files`-ból, a kommentszám változatlan, az audit sorban ott a `replaced`.
   - Robi megnyomta (2026-11-21 15:19 UTC). DB: a sorrend `18296,18297,18292,18303,18294,18293,18298,18299,18300,18304,18301`, az n1 fájlok (`o_YrF6…`, `3C8XaR…`) kikerültek a `files`-ból, az n2 fájlok bekerültek, a kommentszám 0 (előtte is 0), az audit sor `replaced: [{18295→18303},{18302→18304}]`.
+
+## 2026-11-22 — Szabályfájlok: az AGENTS.md a forrás, a CLAUDE.md csak importálja (TERV, Robi jóváhagyására vár)
+
+Kérés: a Learning session adta át Robi kérését. A repó szabályfájljai igazodjanak az új globális szabályokhoz (`~/.claude/CLAUDE.md` = `~/.agents/AGENTS.md`, plusz `~/.claude/rules/claude-code.md`). A repó szabályainak forrása az AGENTS.md legyen, mert a Codex ezt olvassa. Nevezze meg a Drive-mappát és a szemantikai modellt, és egyetlen szabály se vesszen el.
+
+**Touches:** a gyökérben lévő `AGENTS.md` és `CLAUDE.md`. A szomszédjai: a globális szabályfájl, a `claude-code.md` és a `.claude/settings.json` Stop-hookja (erre a szöveg hivatkozik). A szabályfájlokról magukról nincs Drive-dokumentum, ez megállapítás. App-kódot a változás nem érint.
+**Door:** kétirányú, `git revert` visszacsinálja. A hatósugár: minden későbbi agent-session ebben a repóban (Claude Code, Codex).
+**Prediction:**
+- A Codex az összefésült AGENTS.md-t olvassa, a Claude Code ugyanazt az `@AGENTS.md` importon át.
+- Az alábbi listában szereplő szabályok mind megmaradnak, kivéve azokat, amiket Robi D2–D4-ben átír.
+- Nincs verzióemelés, mert ez tooling/config változás.
+- Ismeretlen: a Codex követi-e az AGENTS.md-ben lévő relatív hivatkozásokat. Ezt nem mértem.
+**Seam:** egy friss session betöltött utasításai.
+
+### Mai állapot (megfigyelve, 2026-11-22)
+- **Az AGENTS.md a régebbi tartalom**, csak a fájl dátuma újabb (2026-10-21). A tartalma megegyezik a 2026-05-24-i commitéval (`3d27182`). Ez a régi CLAUDE.md, amiben „Claude” helyén „Codex” áll, ezért hibás útvonalak kerültek bele: `~/.Codex/AGENTS.md`, `.Codex/settings.json`. Még `6.0.0-pre` állapotot ír. A CLAUDE.md 2026-08-13-i (`2af65c0`), tartalomban ez az újabb: `6.0.0` utáni semver, `todo-archive.md`.
+- **Elavult tények mindkettőben:**
+  - „currently `6.1.0`”, a valóság 6.132.0;
+  - „All share the same SQLite at `db/matrix.db`”, valójában Postgres a Hetzneren, helyi gépről a :5433 tunnelen át;
+  - „167+ tests as of Phase 10”, ma 1119 teszt van;
+  - „todo.md … kept small, read fully”, ma 3388 sor.
+- **Drive-mappa (jelöltek):**
+  - `~/GoogleDrive/Data/MessagingMatrix/`: benne van az `MM6_SYSTEM_OVERVIEW.md` (2026-05-15), a `Dev Reports/`, a `Humanody integration/` és a design-fájlok.
+  - `~/GoogleDrive/Data/Beliczki.hu/MessagingMatrix/`: üres, 2026-10-10-én jött létre.
+  - Ügyfélmappák a leadásokhoz: `ERSTE HU/_messagingmatrix.ai`, `Telekom/_messagingmatrix.ai`.
+  - A customBrainben nem találtam jegyzetet arról, melyik a projekt mappája.
+- **Szemantikai modell: még nincs.** Van egy tanulmány és roadmap: a Google Doc `1m2bS-eLqyXCsOzWmCTYf-qiAbLzaHLm2D4oB_kRitmE`, 2026-11-02, újraolvasva 11-05-én (brain: „Messaging matrix — Szemantikai modell roadmap”, `d9f4c6b2`). Ennek P1 szakasza, az „olvasható szemantikai modell”, nem készült el.
+- **A meglévő jelentés-dokumentumok:**
+  - `docs/REBUILD_SPEC.md`: a fájl 2026-09-06-i. Gitben már nincs (az utolsó commit, ami érintette, 2026-04-26-i).
+  - `docs/MM6_PURPOSE_STATE_CAPABILITIES.md`: 2026-09-06, 6.39.0-s állapot, valószínűleg elavult.
+  - `docs/MM6_SYSTEM_OVERVIEW.md`: 2026-05-08, egyezik a Drive-on lévő példánnyal.
+  - A `docs/` könyvtár gitignore-olt, minden fájlja csak ezen a gépen létezik.
+
+### Robi döntései (ajánlással)
+- **D1 Drive-mappa:** ajánlom a `~/GoogleDrive/Data/MessagingMatrix/`-t, mert ott vannak a projekt dokumentumai. Az üres `Beliczki.hu/MessagingMatrix/` lenne az új otthon? Az ügyfélmappák külön sorban szerepelnének.
+- **D2 verziószám:** a „currently X” sor kikerül, helyette: „a jelenlegi verzió a `package.json`-ban van”. Ez minden bumpnál elavult.
+- **D3 todo.md:** a szabály marad (lean fájl + `todo-archive.md`). A mostani 3388 sor archívumba görgetése külön feladat, ebbe nem kerül bele.
+- **D4 elavult tények:**
+  - SQLite helyett Postgres: Hetzner, helyben a :5433 tunnel; az integrációs tesztekhez docker Postgres kell a :55432-n.
+  - A tesztszám helyett: „`npm test` (vitest)”.
+  - A CHANGELOG-nál: „már létezik”.
+- **D5 (nem ebben a változásban):** a gitignore-olt `docs/` jelentés-dokumentumai a „Repo = code, Drive = documents” szabály szerint a Drive-ra valók. Ez külön feladat.
+
+### Szeletek
+- [x] **S1 AGENTS.md mint egyetlen forrás.**
+  - Alapja a CLAUDE.md újabb tartalma, minden agentre általánosítva.
+  - A globális hivatkozás: `~/.agents/AGENTS.md`.
+  - A hibás `.Codex` útvonalak javítva.
+  - Új szakasz: „Meaning: Drive folder and semantic model”. Tartalma D1, a „nincs még modell” megállapítás a roadmap-dokumentummal, és a jelentés-dokumentumok dátummal, az elavulás jelzésével.
+  - D2–D4 Robi döntése szerint. A nyelv marad angol.
+- [x] **S2 CLAUDE.md:** `@AGENTS.md`, alatta egyetlen Claude-only sor: a `.claude/settings.json` Stop-hook figyelmeztetése.
+- [x] **S3 Ellenőrzés** (részben, lásd a review-t):
+  - Szabályonkénti lista, minden régi szabály ott van az új AGENTS.md-ben, vagy D2–D4 szerint szándékosan változott:
+    - hol élnek a tervek (todo, archive, REBUILD_SPEC, component-inventory);
+    - semver egyetlen `package.json`-ban;
+    - bump-emlékeztető, nincs csendes bump, a javaslat formája;
+    - patch/minor/major heurisztika, a majort a user dönti, kétes esetben a magasabb;
+    - CHANGELOG: `[Unreleased]` alá, Added/Changed/Fixed/Removed, összefoglal, nem duplikál;
+    - mi nem számít befejezett munkának;
+    - todo checkpoint alulra;
+    - Stop-hook;
+    - dev portok 6000–6003;
+    - migrációhoz integrációs teszt.
+  - Friss `claude -p` a repóban, ami szó szerint idézi a Drive-mappa sorát: ez bizonyítja, hogy az import feloldódik. `codex exec -s read-only` ugyanígy.
+- [ ] **S4 Commit:** csak az `AGENTS.md`, a `CLAUDE.md` és a saját todo-hunk. Push csak Robi go-jára. Nincs bump.
+
+Planning review: ez nem tartozik a kötelező esetek közé (nincs új réteg, séma-, auth- vagy deploy-változás, és major dependency-emelés sincs). Ezért nem kértem tőle véleményt, Robi kérheti. A `codex` most már telepítve van: `~/.local/bin/codex`.
+
+### Review (2026-11-22) — Robi: „Mehet az ajánlással” (D1–D4 az ajánlás szerint)
+- **AGENTS.md:** szó szerint a régi CLAUDE.md, ezekkel a változtatásokkal:
+  - fejléc: minden agentnek szól, és a globális `~/.agents/AGENTS.md`-re hivatkozik;
+  - új „Meaning: Drive folder and semantic model” szakasz;
+  - D2: a „currently 6.1.0” helyett „the current version is the one in that file”;
+  - D4: SQLite helyett Postgres a :5433 tunnelen, a tesztszám helyett a :55432-es teszt-Postgres;
+  - a tooling-sor a `.codex/` setting és „this file” kiegészítést kapta;
+  - a Stop-hook sor átkerült a CLAUDE.md-be.
+- **Ellenőrzés:** `git diff --word-diff` a régi CLAUDE.md-hez képest, és csak a fenti változások látszanak. A régi AGENTS.md-ből szándékosan kimaradt:
+  - a `6.0.0-pre` szabályok, amiket a 6.0.0 graduálás meghaladt;
+  - „create CHANGELOG on first bump”, mert a fájl létezik;
+  - „todo.md large, read with tail”, mert D3 szerint a lean + read fully szabály marad;
+  - a hibás `.Codex` útvonalak.
+- **Privacy:** a repó publikus (GitHub), ezért a tanulmány Google Doc linkje nem került a fájlba, csak a címe és a brain-jegyzet neve.
+- **Codex:** egy friss `codex exec -s read-only` fájlolvasás nélkül szó szerint visszaidézte a Drive-mappa sorát. Az AGENTS.md tehát betöltődik.
+- **Claude Code:** NEM ellenőrzött. A `claude -p` „OAuth session expired” hibával leállt, ezért nem tudtam friss Claude-sessionben próbálni az `@AGENTS.md` importot. A következő friss session indulásakor kiderül, hogy az import feloldódik-e.
+- **Mellékes:** a `claude -p` figyelmeztetett, hogy a `.claude/settings.local.json` egyik Bash allow-szabályában a `*` túl tág. Nem nyúltam hozzá.

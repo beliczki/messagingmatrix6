@@ -4,7 +4,7 @@
 A `scripts/gen-collisions-doc.ts` precedensét követi: újrafuttatható riport-generátor, ezért marad
 a repóban — szemben az egyszeri `renumber-*` scriptekkel.
 
-Eredmények és értelmezés: **`docs/REPORT_RECONCILIATION_STUDY.md`**.
+Eredmények és értelmezés: **`REPORT_RECONCILIATION_STUDY.md`** (a projekt Drive-mappájában, `mm6-docs/`; lásd `AGENTS.md` → Meaning).
 
 ## Futtatás
 

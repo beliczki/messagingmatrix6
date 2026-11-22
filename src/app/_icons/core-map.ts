@@ -2,7 +2,8 @@ import type { IconName } from "./Icon";
 
 /**
  * Semantic name → Streamline Core icon, hand-curated from
- * docs/ICON_SET_STUDY.md §3. The generator (scripts/gen-icons.ts) reads this
+ * ICON_SET_STUDY.md §3 (project Drive folder, mm6-docs/). The generator
+ * (scripts/gen-icons.ts) reads this
  * and never guesses: Core's names do not follow from lucide's, and its Remix
  * variants are not even a suffix away from its own Line names.
  *

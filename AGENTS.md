@@ -7,15 +7,16 @@ Project-level guidance for every agent working in this repo: Claude Code, Codex 
 - **Project Drive folder:** `~/GoogleDrive/Data/MessagingMatrix/`. Supporting documents go here, not into the repo. Client deliverables (exports, shared sheets) go to the client folders, `~/GoogleDrive/Data/ERSTE HU/_messagingmatrix.ai/` and `~/GoogleDrive/Data/Telekom/_messagingmatrix.ai/`.
 - **Semantic model:** none yet. A study and roadmap towards one exists: the Google Doc "A kódtól a megbízható rendszermodellig — MM6 és Bizi" (2026-11-02, re-read 2026-11-05); customBrain holds it as "Messaging matrix — Szemantikai modell roadmap". Its first model stage, a readable semantic model, has not been built. Until it exists, a plan says that no model covers the change.
 - **Meaning documents that exist.** Give the date of the one you rely on, and check `git log` for code that changed after it:
-  - `docs/REBUILD_SPEC.md`: the v6 design spec, with the multi-tenancy delta D1–D11 layered on top (file dated 2026-09-06).
-  - `docs/MM6_PURPOSE_STATE_CAPABILITIES.md`: purpose, state and capabilities as of 6.39.0 (2026-09-06). Likely out of date.
-  - `MM6_SYSTEM_OVERVIEW.md` in the Drive folder (2026-05-15). `docs/` has the same copy.
-  - `docs/` is gitignored, so these files exist only on Robi's Mac. Moving them to the Drive folder is open work.
+  - `mm6-docs/REBUILD_SPEC.md` in the Drive folder: the v6 design spec, with the multi-tenancy delta D1–D11 layered on top (file dated 2026-09-06).
+  - `mm6-docs/MM6_PURPOSE_STATE_CAPABILITIES.md` in the Drive folder: purpose, state and capabilities as of 6.39.0 (2026-09-06). Likely out of date.
+  - `MM6_SYSTEM_OVERVIEW.md` in the Drive folder (2026-05-15).
+  - The other studies and reports from the former `docs/` are in the Drive folder's `mm6-docs/`; its Erste spreadsheets are in the ERSTE client folder's `mm6-docs/` (moved 2026-11-22).
+  - `docs/` stays gitignored as a scratch folder: `scripts/gen-*` write their reports there (move them to Drive), and `import-erste`, `reimport-media` and `seed-keywords` default to the Erste source sheet there, so pass its path.
 
 ## Where plans live
 - **`tasks/todo.md`** — lean active roadmap + recent checkpoints. **Read first, read fully** (kept small on purpose). New session checkpoints append to the bottom; open work is the "Nyitott roadmap" section.
-- **`tasks/todo-archive.md`** — full verbatim history (Phase 0–10 logs, every deploy/session checkpoint 2026-04 → 2026-07, ~4000 lines). The long-term memory — nothing gets deleted, only appended. Read it (tail/offset/grep) when you need the detail behind a roadmap pointer. When `todo.md`'s checkpoints pile up, roll the old ones into here and leave a one-line pointer.
-- **`docs/REBUILD_SPEC.md`** — v6 design spec; multi-tenancy delta D1–D11 layered on top.
+- **`tasks/todo-archive.md`** — full verbatim history (Phase 0–10 logs, every deploy/session checkpoint 2026-04 → 2026-11-11, ~9100 lines). The long-term memory — nothing gets deleted, only appended. Read it (tail/offset/grep) when you need the detail behind a roadmap pointer. When `todo.md`'s checkpoints pile up, roll the old ones into here and leave a one-line pointer.
+- **`REBUILD_SPEC.md`** (Drive folder, `mm6-docs/`) — v6 design spec; multi-tenancy delta D1–D11 layered on top.
 - **`tasks/component-inventory.md`** — semantic class names already in use. Check before inventing a new block name.
 
 ## Versioning

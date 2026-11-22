@@ -1,6 +1,6 @@
 # Tests
 
-This directory holds the test suite for v6. Strategy and tree shape are defined in [`docs/REBUILD_SPEC.md`](../docs/REBUILD_SPEC.md) §16.
+This directory holds the test suite for v6. Strategy and tree shape are defined in `REBUILD_SPEC.md` §16 (the v6 design spec, in the project's Drive folder under `mm6-docs/`; see `AGENTS.md` → Meaning).
 
 ## Layout (target — built test-first as features land)
 
@@ -18,4 +18,4 @@ This directory holds the test suite for v6. Strategy and tree shape are defined 
 
 ## Runners
 
-See `docs/REBUILD_SPEC.md` §16.5 for `vitest.config.ts` projects, `playwright.config.ts`, and the `package.json` scripts (`test`, `test:watch`, `test:e2e`, `test:fast`, `test:all`).
+See `REBUILD_SPEC.md` §16.5 for `vitest.config.ts` projects, `playwright.config.ts`, and the `package.json` scripts (`test`, `test:watch`, `test:e2e`, `test:fast`, `test:all`).

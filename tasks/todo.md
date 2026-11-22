@@ -3399,3 +3399,115 @@ Planning review: ez nem tartozik a kötelező esetek közé (nincs új réteg, s
 - **Codex:** egy friss `codex exec -s read-only` fájlolvasás nélkül szó szerint visszaidézte a Drive-mappa sorát. Az AGENTS.md tehát betöltődik.
 - **Claude Code:** NEM ellenőrzött. A `claude -p` „OAuth session expired” hibával leállt, ezért nem tudtam friss Claude-sessionben próbálni az `@AGENTS.md` importot. A következő friss session indulásakor kiderül, hogy az import feloldódik-e.
 - **Mellékes:** a `claude -p` figyelmeztetett, hogy a `.claude/settings.local.json` egyik Bash allow-szabályában a `*` túl tág. Nem nyúltam hozzá.
+
+## 2026-11-22 — AGENTS.md „Deploy” szakasz (TERV, Robi jóváhagyására vár)
+
+Kérés: a Learning session adta át Robi kérését. Az MM6 deploy-tudása kerüljön az AGENTS.md-be egy „Deploy” szakaszba. A box-szintű tények helye a `~/.agents/infra-map.md`. A repó publikus, ezért nem kerülhet bele IP, ssh-user, szerverport, kulcsnév, szerverútvonal, és titok semmiképp.
+
+**Touches:**
+- `AGENTS.md`: új „Deploy” szakasz.
+- A Claude-memória 3 jegyzete és a `MEMORY.md` index.
+- Szomszédok: `deploy/bin/mm6-deploy` (a forrás, nem változik), `~/.agents/infra-map.md` „Box B” (csak olvasom), a globális szabály „Read before you touch → Deploy” pontja.
+- A deployról nincs Drive-dokumentum. A tudás a scriptben, a memóriában és a todo checkpointjaiban van.
+
+**Door:** kétirányú, `git revert` és a memória visszaírása visszacsinálja. Hatósugár: minden későbbi deployt ez a szöveg vezet.
+
+**Prediction:**
+- Egy friss agent az AGENTS.md-ből meg tudja mondani a deploy sorrendjét, a migrációs szabályt és a rollbacket.
+- A szöveg nem tartalmaz IP-t, usert, szerverportot, kulcsnevet vagy szerverútvonalat. Ellenőrzés: `grep` a fájlon.
+- App-kód nem változik, verzióemelés nincs.
+
+**Seam:** a betöltött AGENTS.md (a Codex-próba úgy, mint a múltkor).
+
+### Összevetés: memória (`reference_hetzner_box.md`, 2026-06-27) ↔ infra-map Box B ↔ megfigyelés (2026-11-21 pm2 lista)
+- **A memória elavult:**
+  - `mm-server-telekom` futó appként szerepel, de az infra-mapben nincs, és a 11-21-i pm2 listában sincs. Ott ez az öt app futott: `custombrain`, `mm-server-erste`, `mm-server-proficio`, `mm6-erste`, `mm6-telekom`.
+  - „Postgres 5432 free”: azóta ott fut a Supabase Postgres.
+  - Ezekben az infra-map a helyes.
+- **Box-szintű tények, amik nincsenek az infra-mapben.** Ezeket NEM írom a repóba, itt jelzem, az infra-map gazdája vegye fel őket:
+  1. Hozzáférés: a box kulcsa egy `.ppk`-ból konvertált OpenSSH kulcs. A `~/.ssh/mm pub` nevű fájl félrevezető név, használhatatlan.
+  2. Docker 29 és Compose v5 (2026-06, nem ellenőriztem újra).
+  3. A pm2 alatt fut a `pm2-logrotate` modul is (megfigyelve 2026-11-21).
+  4. A Mac-tunnel részletei: a `com.mm6.db-tunnel` launchd agent (autossh, KeepAlive), a plist és a log helye, kézi tartalék-parancs. Ezek a `project_db_tunnel_launchagent.md` memóriában vannak.
+  5. Az MM6 thumbnail-cache (`STORAGE_ROOT`) mindkét deploy `.env`-jében a Hetzner volume-on van, nem a gyökérlemezen (memória: `project_mm6_object_store.md`).
+  6. A régi `supabase-mm6_mm6-minio-data` docker volume (~8 GB a `/`-n) rollback-pontként megmaradt, a törléséről Robi még nem döntött. Az infra-map csak annyit ír, hogy ez „volt” az adat helye.
+  7. A boxon telepített `mm6-deploy` és `mm6-maint` (a repó `deploy/bin/` másolatai) helye nincs az infra-mapben.
+- **A mai AGENTS.md-ben van két helyi port** (`localhost:5433`, `:55432`). Ezeket a tegnapi D4 tette bele. Az infra-map szabálya szerint port nem kerülhet repófájlba.
+  - Javaslat: helyettük „a megosztott Postgres helyi tunnelje” és „a `mm6-test-pg` teszt-Postgres”, hivatkozással az infra-map „Mac” szakaszára.
+  - A 6000–6003 dev-portok maradnak, mert a `package.json` scriptjeiben amúgy is ott vannak.
+
+### A „Deploy” szakasz tartalma (angolul, szerver-adat nélkül)
+1. **Hol:** az infra-map Box B sorai, `mm6-erste` és `mm6-telekom`. Egy kódbázis, tenantonként egy deploy, mindkettő ugyanazt a Postgrest és MinIO-t használja.
+2. **Parancs:** a boxon `mm6-deploy <tenant>`, a forrása `deploy/bin/mm6-deploy`. A lépései, ahogy a scriptben vannak:
+   - `git pull --ff-only`;
+   - ha a lockfile változott, `npm ci`;
+   - build a `.next-build`-be, közben az élő app kiszolgál;
+   - maintenance oldal fel;
+   - csere;
+   - `pm2 restart`;
+   - várakozás, amíg a `/login` 200-at ad;
+   - maintenance oldal le;
+   - a `.next-old` törlése.
+   - A script megáll, ha a telepített példánya eltér a repóétól.
+3. **Előtte:**
+   - Robi go-ja tenantonként.
+   - Planning review a globális szabály szerint.
+   - Push előbb, mert a box az originről húz.
+   - A szabad memória és a lemez ellenőrzése: a box a kapacitás-kockázat, lásd az infra-mapet.
+   - Az előző HEAD feljegyzése.
+   - **Sorrend: Telekom, utána ERSTE.**
+   - Napközben is mehet: a build ~45–160 s, a kiesés ~1 s a maintenance oldal mögött.
+4. **Közben:** szabad memória figyelése. Ha az elérhető memória ~120 MB alá esik, a `next build` leállítása.
+5. **Migráció:**
+   - A helyi `DATABASE_URL` az éles DB, ezért helyben soha nem fut `db:migrate`.
+   - Az `mm6-deploy` NEM migrál. Ha új `db/migrations/*.sql` jön: a boxon pull, utána `db:migrate` a deploy env-jével, utána `mm6-deploy`, egy menetben.
+   - Mivel a két tenant egy DB-n van, a migráció mindkettőt egyszerre éri. A másik tenant a régi kóddal fut az új sémán, amíg őt is deployolod. Ezért a migráció legyen additív, és a második tenant menjen közvetlenül utána.
+   - Migrációt mindig `main`-ről generálunk.
+   - ⚠️ Megjegyzés: a todo-ban nem találtam leírt migrációs deployt az `mm6-deploy` mellett. Ez a lépéssor a régi kézi deployokból (6.33–6.73) és a scriptből összerakott eljárás, nem megfigyelt.
+6. **Rollback:**
+   - Bukott build: semmi nem változott, a régi build szolgál ki.
+   - Az app nem jön fel: a maintenance oldal fent marad, a `.next-old` megvan. Ilyenkor vissza kell cserélni, `pm2 restart`, `mm6-maint off`.
+   - **Sikeres deploy után a `.next-old` már törölve van**, ilyenkor a rollback `git revert`, push, és újra `mm6-deploy`. Ha a lockfile is mozgott, a következő deploy magától `npm ci`-t futtat.
+   - Migrációnál a DROP-ot előre leírjuk a tervbe.
+   - (A tegnapi CA-kérésben tévesen „`.next-old` swap” szerepelt rollbackként egy sikeres deploy után.)
+7. **Utána:**
+   - HEAD és verzió;
+   - pm2 online, a restartok száma csak eggyel nő;
+   - `/login` 200, egy share oldal 200 (ez a view count-ot növeli);
+   - egy új route bejelentkezés nélkül 401;
+   - az error logba nem jött új sor;
+   - nem maradt `.next-old` vagy `.next-build`;
+   - a `/_next/image` 404-et ad (`images.unoptimized` a 16.4.5 óta).
+8. **Tanulságok:**
+   - nginx mögött a `req.url` a helyi bind cím, ezért abszolút URL-hez a `requestOrigin()` kell;
+   - a build a root layoutot a DB-n prerendereli, ezért érvényes `DATABASE_URL` kell a build előtt;
+   - a boxon a storage root más fájlrendszeren van, mint a temp, ezért `copyFile` kell, soha `rename` (EXDEV);
+   - helyben épített build megölte az élő appot, ezért van a `.next-build`;
+   - a boxon telepített script egyszer elcsúszott a repóétól, ezért van a `cmp` védelem.
+
+### Memória
+- `project_next_origin_behind_nginx.md` → egysoros mutató az AGENTS.md Deploy szakaszára (a tartalma teljesen átkerül).
+- `project_mcp_per_user_tokens.md`: csak a „Deploy coupling” mondat helyére jön egy mutató. Az MCP-token tényei maradnak.
+- `reference_hetzner_box.md` → egysoros mutató az infra-map Box B-re és az AGENTS.md Deployra. **Csak akkor, ha az 1–2. hiányzó tény bekerült az infra-mapbe.** Addig a két sor a jegyzetben marad, különben elvesznek.
+- A `MEMORY.md` index sorai ennek megfelelően.
+
+### Szeletek
+- [x] **S1** AGENTS.md „Deploy” szakasz (1–8), plusz a két helyi port lecserélése infra-map-hivatkozásra (ha Robi jóváhagyja).
+- [x] **S2** Ellenőrzés:
+  - `grep` a fájlon IP-re, `root@`-ra, `/var/www`-ra, `/opt`-ra, `.ssh`-ra és szerverportra: nulla találat;
+  - Codex-próba: vissza tudja-e mondani a sorrendet és a migrációs szabályt.
+- [x] **S3** Memória: a fenti 3 jegyzet és a `MEMORY.md`.
+- [ ] **S4** Commit: csak az `AGENTS.md` és a saját todo-hunk. Push csak Robi go-jára. Nincs bump.
+- [ ] **Robinak / a Learning sessionnek:** a 7 hiányzó box-tényt az infra-map gazdája vegye fel. Én a globális fájlt nem szerkesztem.
+
+### Review (2026-11-22) — Robi: „Mehet”
+- **AGENTS.md:** új „Deploy” szakasz az 1–8. pont szerint. A két helyi port helyett hivatkozás az infra-map „Mac” szakaszára.
+- **Ellenőrzés:**
+  - `grep` IP-re, `root@`-ra, `/var/www`-ra, `/opt/`-ra, `/mnt/`-re, `.ssh`-ra, a kulcsnévre és a szerverportokra (5432/5433/55432/6001/6002/9000): nulla találat.
+  - Codex, fájlolvasás nélkül, helyesen visszamondta: a Telekom megy elsőnek; migrációnál pull, `db:migrate` a `.env`-ből, aztán deploy, additívan; sikeres deploy után `git revert`, push, újradeploy, mert a `.next-old` már nincs meg.
+- **Memória:**
+  - a `project_next_origin_behind_nginx` mutató lett;
+  - a `project_mcp_per_user_tokens` deploy-mondata mutató lett;
+  - a `reference_hetzner_box` mutató lett, de a kulcs eredetéről szóló és a Docker-verziós sor benne maradt, amíg az infra-map fel nem veszi őket;
+  - a `MEMORY.md` index frissült.
+- **A 7 hiányzó box-tény** ment a Learning sessionnek. Az infra-mapet nem szerkesztettem.

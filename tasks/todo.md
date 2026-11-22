@@ -198,6 +198,78 @@ skalár `axis` mind újraszabályozásra szorulna. Ha egyszer mégis kell, ez a 
 
 ## 🟡 NEXT — green-light után, alacsony blokk
 
+### EPIC CA — Kreatív-attribúció: saját adatgyűjtés (AdForm API + Meta API) + Performance/Attribution nézet a Monitoringon (TERV, 2026-10-27 — jóváhagyásra vár)
+
+**User-döntések (2026-10-27):** a projekt része; az ügynökségtől **semmit nem kérünk** — minden adatot mi húzunk
+API-ból (AdForm, Meta). A régi R1–R6 (2026-09-16 felmérés) ezzel **felülírva**: R1 kiesik, R2–R5 beolvad ide.
+Kísérleti design, amire a matek épül:
+- **AdForm:** audience-en belül az aktív kreatívok **random rotálnak** → audience-en belül a kreatív-különbség
+  **causalis** (post-view konverzióra is: az abszolút szám nem inkrementális, de a *relatív* különbség igen).
+- **Meta:** ad seten belül a győztes kreatív kap mindent → ad seten belüli ad-összehasonlítás **torzított, nem
+  használjuk**. Kampányon belül azonos budgetű ad setek rotálnak → az **ad set a kísérleti egység**, metrika
+  per költés (konv / 1000 HUF), csak azonos targetingű ad setek között.
+
+**A matek (v1, TS-ben, nincs Python sidecar):**
+- **SRM-őr:** audience-en belül a kreatívok impresszió-aránya tényleg egyenletes-e (χ²). Ha nem, a réteg
+  „nem randomizált" jelzést kap és kimarad a causalis számításból — ez véd a csendben bekapcsolt optimalizálás ellen.
+- **Empirical Bayes beta-binomiális** CTR/CVR kreatívonként, rétegen (audience × hónap) belül → hihetőségi
+  intervallum + P(legjobb). Minimum-minta küszöb alatt „kevés adat", nem rangsor.
+- **Dimenzió-hatás:** rétegzett (Mantel–Haenszel-típusú) összevont lift a mátrix-dimenziókra (topic, variáns,
+  méret, üzenetelem) — a randomizáció miatt elég, GLMM nem kell v1-hez.
+
+**Lépések (mindegyik külön szelet, `tsc` + vitest után):**
+- [ ] **CA0 (0 kód) Minta-riport.** ⚠️ **2026-10-27 módosítás (user): AdForm API most NINCS** — a user maga
+      rakja össze és tölti le az AdForm-riportot, abból dolgozunk. Kell egy minta-xlsx ezekkel: nap, kampány,
+      **line item** (a kísérleti réteg), Banner/Adgroups (pmmid + méret), impressions, clicks, és a konverziók
+      **tracking pointonként (e2e, vhk) × post-click / post-view** bontásban. Helye: `~/GoogleDrive/Data/ERSTE HU/_riports/`.
+      A régi spike-szöveg (API) alább, későbbre:
+- [ ] ~~CA0-API~~ **(később) Hozzáférés + spike.** AdForm API kliens-hitelesítő (client id/secret, scope) + Meta system-user
+      token (`ads_read`) + ad account id. Spike: egy valós lekérdezés mindkettőből → **lockolni**, milyen dimenziók
+      jönnek (AdForm: nap × line item × banner × tracking point × post-click/post-view; Meta: ad × nap × `actions`
+      attribution-ablakonként). Az AdForm-mezőneveket a spike dönti el, nem feltételezzük. Env-nevek: a
+      `.env.example:42-48` már foglalja az `ADFORM_CLIENT_ID/SECRET/TOKEN_URL/API_BASE/SCOPE`-ot (kód még nem olvassa),
+      ezeket használjuk; Meta-hoz új: `META_ACCESS_TOKEN`, `META_AD_ACCOUNT_ID`. Kimenet: valós minta-JSON a
+      tesztekhez. Hitelesítő **csak env-ben a boxon**, soha nem fájlban/URL-ben.
+- [ ] **CA1 (minor, migráció) Séma.** A mostani `monitoring` sor egyetlen `conversions` int-et tárol és nincs benne a
+      kísérleti egység — ez a T2-gond mechanizmusa. Javaslat: (a) `monitoring` kap `source` (`xlsx|api`),
+      `campaign_id`, `unit_id` (AdForm line item / Meta ad set), `unit_name` oszlopot, a unique kulcsba a `unit_id`;
+      (b) **új `monitoring_conversions` tábla** hosszú formában: `monitoring_id`, `event` (tracking point / Meta
+      action_type), `attribution` (`pc|pv|1d_click|7d_click|1d_view`…), `count`, `value`. Így új esemény/ablak nem
+      igényel új oszlopot. Integrációs teszt a migrációra.
+- [ ] **CA2 (minor) AdForm ingest — most az xlsx-importer bővítése** (`parseAdformReport`, `adform-report.ts:307`)
+      az új riport-formára (line item + tracking point × pc/pv → `monitoring_conversions`); a régi „Creative rep"
+      forma továbbra is olvasható. Az API-változat (alább) későbbre.
+      ~~AdForm API ingest.~~ `src/lib/adform-api.ts` (OAuth client-credentials + stats lekérdezés) →
+      ugyanaz a `parsePmmid` / `buildMessageResolver` / `resolveProduct` út, mint az xlsx-é. Upsert **nap-ablakra**
+      (az ablak napjai cserélődnek, nem a teljes periódus) → ez megoldja a W3.j-6 újraimportot is. Az xlsx-feltöltő
+      marad fallbacknek. Unbounded olvasás → lapozott helper.
+- [ ] **CA3 (minor) Meta API ingest.** `src/lib/meta-api.ts`: Insights `level=ad`, napi bontás, `spend/impressions/
+      clicks/actions` attribution-ablakonként + ad set/kampány id és budget. Kulcs: hirdetésnév-szám+variáns, üres
+      `-a_` nem eldobás (volt R2), `platform=meta`. A 2026-09-16-i B-kategória (név ≠ pmmid `m_`) és a régi
+      számozású ütközések (312/111/41c/129) → Ad ID-re kulcsolt override (a W3.h szabály-mintával, túléli az újrahúzást).
+- [ ] **CA4 (minor) Sync-indítás — csak a Meta-hoz kell** (AdForm = meglévő feltöltő). „Sync now" a Monitoring
+      jobb toolbarján (dátum-ablakkal). Cron nem (user-döntés).
+- [ ] **CA4b (minor) MCP: attribúció lekérdezhető** (user, 2026-10-27). Új read-scope tool (pl. `attribution_query`:
+      kliens-szűrők platform/audience/hónap/esemény → kreatív-becslések intervallummal, dimenzió-hatás, SRM/kevés-adat
+      jelzés) — ugyanazt a CA5 stats libet hívja, mint a UI, nincs külön számítás. MCP settings oldal prózája
+      (`McpTab.tsx`) kézzel frissítendő.
+- [ ] **CA5 (minor) Stats lib.** `src/lib/attribution/` tiszta függvények: SRM, EB beta-binomiális, rétegzett lift,
+      P(legjobb), Meta ad set-összehasonlítás per költés. Vitest **szimulációval ismert igazságra** (beültetett
+      lift visszajön-e, SRM jelez-e torzított rotációnál, kis mintán nem rangsorol-e).
+- [ ] **CA6 (minor, UI) Monitoring: Performance | Attribution nézet.** Tab-bar a Monitoring tetején (meglévő
+      tab-bar minta). **Performance** = a mostani tábla + CTR/CVR/CPA + `event`/`attribution` szűrő. **Attribution** =
+      kreatív forest plot intervallummal rétegenként, dimenzió-hatás panel, SRM / kevés-adat jelzések, Meta ad set
+      nézet külön. Grafikonok előtt `dataviz` skill; component-inventory frissítés.
+- [ ] **CA7 (patch) Takarítás.** A legacy R1–R6 jelölése lezártnak; `MessageMetricRow` kap `clicks`-et, ha a
+      dashboard is CTR-t mutatna (csak ha kéri).
+
+**Döntések (user, 2026-10-27):** (1) KPI-események az AdForm tracking pointjaiból: **e2e** = end-to-end online
+igénylés, **vhk** = visszahívást kérek — külön eseményként tároljuk, a nézetben választható. (2) **DV360 bent van**:
+azt is az AdForm adserver szolgálja ki, tehát az AdForm API-ból jön, egy helyen. ⚠️ A DV360-sorokon az AdForm
+cost ~0 (a vásárlás a DV360-ban van) → **DV360 csak adserver-adatból** (CTR/CVR), költés-arányosítás nincs, és
+nem is lesz (user megerősítette).
+(3) **Kézi sync** v1-hez; cron nem.
+
 ### ~~P — Preview-generálás a Creative Library jobb toolbarjából~~ — **✅ KÉSZ (6.87.0, 2026-09-12)**
 
 **User:** „jó lenne a hetzner boxra is feltenni a chromiumot és ott is képesnek lenni preview képet
@@ -1935,7 +2007,7 @@ ugyanígy viselkedett). **Újrafuttatás:** Chrome előtérben, nem takarva — 
 hirdetés nem jelent meg — az első linknél ellenőrizni kell, hogy a demo-ad egyáltalán injektálódik-e a
 bejelentkezett fiókkal.
 
-### Javasolt terv — CPA-szintű hozzárendelés (DÖNTÉSRE VÁR, nem indult el)
+### Javasolt terv — CPA-szintű hozzárendelés (FELÜLÍRVA 2026-10-27 → EPIC CA a NEXT szekcióban)
 
 **Push-back először:** a T2 nem kód, hanem riport-definíció. A leggyorsabb 80%: az ügynökségtől (vagy az
 AdForm riport-builderben) **egy** módosítás — a „Creative rep" kapjon `Conversions` bontást tracking

@@ -904,7 +904,7 @@ Kérés: egy másik session adta át. Ez a 2026-11-04-i vizsgálat kis fixe (arc
   - Élesbe egyik sem kerül, a `--omit=dev` szerint.
 
 ### S4 Deploy-terv (nem futtattam; minden lépés Robi külön go-jára)
-1. **Bump**, Robi szavára: 6.132.0 → 6.132.1 (patch). A CHANGELOG `[Unreleased]` része `[6.132.1] — <dátum>` lesz. Saját commit ezen az ágon.
+1. ✅ **Bump** (Robi: „Yes, bump”, 2026-11-23): 6.132.0 → 6.132.1 (patch), `npm version --no-git-tag-version`. A `package.json` és a lock két gyökér-verziója változott, a CHANGELOG-ban a bejegyzés a `[6.132.1] — 2026-11-23` alatt van. Saját commit ezen az ágon.
 2. **Rebase a `main`-re**, utána Robi merge-el. Egy másik session a todo-t archiválja a `main`-en.
 3. **Planning review:**
    - request: `~/agent-bus/requests/<YYYYMMDD-HHMM>-mm6-6.132.1-deps-patch-deploy.md` (cél, diff, a fenti mérések, rollback);

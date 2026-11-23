@@ -5,6 +5,8 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.132.1] — 2026-11-23
+
 ### Fixed
 - Security: dependency patch that closes every production `npm audit` finding (2 high, 5 moderate).
   zod 4.4.1 → 4.6.7 (GHSA-mrhx-c7xc-m3w5: validating an oversized array could exhaust memory —

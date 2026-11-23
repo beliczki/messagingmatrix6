@@ -957,3 +957,34 @@ Kérés: egy másik session adta át. Ez a 2026-11-04-i vizsgálat kis fixe (arc
   - **(6)** A pre-flight mindkét tenant HEAD-jét **és** a régi `package-lock.json` sha256-ját rögzíti. Az `npm ci` miatt ez a valódi rollback-pont.
   - **(3)** A Node 20.20.2 → 24.x (TIP-061, EOL) és a Next 16.4.6 nem ide tartozik. A Node-csere a következő, külön szelet.
   - **(7)** A memória-őr 120 MB-nál rendben van.
+
+### Planning review — Codex: OK with changes (`~/agent-bus/answers/20261123-1145-mm6-6.132.1-deps-patch-deploy.codex.md`)
+- **Ütközés a CA-val, Robi dönt:**
+  - Codex: maintenance oldal fel és a tenant leállítása az `npm ci` előtt.
+  - CA: az `npm ci` mehet az élő app alatt, off-peak, a pm2 error logot figyelve.
+  - **Ajánlás: a CA-é.** Precedens: a 6.128.4 (2026-11-11, Next 16.4.5) pontosan így ment mindkét tenanton, `mm6-deploy`-jal, csendes időszakban. Az error log üres maradt, az `npm ci` alatt is (archív, ~9059. és 9076. sor).
+  - A Codex változata a scripten kívüli kézi lépéseket kívánna (a script maga futtatja az `npm ci`-t, a lock-jelölőt is ő írja).
+  - A mechanizmus-javítás (telepítés mellékkönyvtárba + csere, vagy a gate az `npm ci` elé) külön szelet, ahogy a CA javasolja.
+- **Beépítve a deploy-tervbe:**
+  - **Teljes rollback** (a 6.128.4-es lockfile-mozgató terv szerint, archív ~9079. sor). Ha az app nem jön fel:
+    1. a boxon `git reset --hard <régi HEAD>`;
+    2. `npm ci` (a régi lockkal);
+    3. a `.next-old` vissza;
+    4. `pm2 restart`;
+    5. `mm6-maint off`, csak ha a `/login` 200.
+    - Ha a régi lockkal az `npm ci` is bukik, a maintenance oldal fent marad, és Robi dönt.
+  - **Clean-tree gate:**
+    - helyben a working tree tiszta a commit után;
+    - a boxon mindkét checkoutban `git status --porcelain` üres a pre-flightban.
+  - **SHA és megállás:**
+    - a deployolt SHA a review-zott commitok fast-forward merge-e a `main`-re (merge commit nélkül, hogy a box ugyanazt építse);
+    - ha a Telekom bármelyik ellenőrzése bukik, az Erste nem megy.
+  - **Bejelentkezett ellenőrzés** (egyezik a CA 4. pontjával): `tools/list` a baseline-hoz mérve, és egy share oldal 200 **mindkét** tenanton.
+    - Javaslat, tokenkezelés nélkül: ennek a sessionnek a csatolt mm6 MCP connectora full scope-pal 52 toolt lát, ugyanannyit, mint a baseline. Ezen át csak olvasó hívások mennek:
+      - előbb `matrix_status`, hogy kiderüljön, melyik tenanté;
+      - a tool-szám a deploy előtt és után;
+      - `get_mc_preview_files` hibás `sizes` payloaddal → `isError` validációs hiba.
+    - A másik tenantot Robi ellenőrzi a saját tokenjével, vagy ott ez kimarad.
+  - **Pontosság:** a CHANGELOG már kimondja, hogy a nagy, hibás tömb OOM-útja nyitva marad; a body-limit follow-up él, külön sessionben.
+  - **Node:** a Node 20 EOL miatt a 24.x a következő, külön szelet, a meglévő runtime mellé telepítve.
+- **Megjegyzés:** a 6.128.4-nél a lock gyökér-verzióját szándékosan nem emelték, hogy egy puszta bump ne indítson `npm ci`-t. Itt a lock úgyis változik (`npm update`), és az `npm version` is emelte. A következő bumpnál a `package-lock.json` verziómezőjét érdemes békén hagyni (`npm version` helyett kézzel a `package.json`-ban).

@@ -544,43 +544,81 @@ Kérés: a Head of Dev 2026-11-23-i üzenete; a Head of Security szondája (2026
 - Helyben: a teljes tesztcsomag (1119 teszt) Node 24.13.1-en zöld (a zod-session baseline-ja, 2026-11-23). Az MM6-at helyben eddig is Node 24-en fejlesztettük.
 - Natív modulok: a sharp, a `@next/swc`, a `@unrs`, a `@rollup` és az esbuild N-API-s vagy önálló bináris, Node-főverziótól független. A playwright `>=18`, a next és a sharp `>=20.9.0`.
 - **Egyetlen gond: a `better-sqlite3` 11.10.0.** A GitHub release-ben csak `node-v115` és `node-v127` linux-x64 prebuild van (Node 20 és 22), `node-v137` (Node 24) nincs. Node 24-en a `npm ci` tehát a boxon forrásból fordítana (node-gyp), ami a 4 GB-os boxon lassú és memóriaigényes. A 12.10–12.12 verziókban van `node-v137` prebuild, a 13.x-ben nincs.
-  - Az app futás közben nem használja: az `src`-ben csak kommentben szerepel. Két régi script használja (`scripts/seed-perf.ts`, `scripts/backfill-to-pg.mjs`).
+  - Az app futás közben nem használja: az `src`-ben csak kommentben szerepel. Két régi script használja (`scripts/seed-perf.ts`, `scripts/backfill-to-pg.mjs`). *(Pontosítva 2026-11-23: csak a `backfill-to-pg.mjs` importálja; a `seed-perf.ts` a PG-s `src/db`-t használja.)*
   - Javaslat (Robi dönt): **(a)** `better-sqlite3` → 12.12.0, egy függőség-patch a Node-csere előtt. Vagy **(b)** a függőség és a két script törlése. Vagy **(c)** fordítás a boxon.
-- A `mm6-deploy` csak lockfile-változáskor futtat `npm ci`-t (`node_modules/.mm6-lock-sha`). Node-csere után ezt kézzel kell kikényszeríteni (a stamp törlése), különben a régi ABI-jú natív modulok maradnak.
+- A `mm6-deploy` csak lockfile-változáskor futtat `npm ci`-t (`node_modules/.mm6-lock-sha`). Node-csere után ezt kézzel kell kikényszeríteni (a stamp törlése), különben a régi ABI-jú natív modulok maradnak. *(v2: az N2/N4 nem futtat `npm ci`-t, mert a P1 után minden natív modul N-API. Az első Node 24-es telepítés és build előbb izoláltan fut (P2), élesben pedig az N8-ban, a stamp törlésével.)*
 
-**Sorrend (javaslat, Robi dönt):**
-1. A B box-session kernel-151 + reboot ablaka **előbb**, külön ablakban.
-2. A régi MM kivezetésének 1. lépése (fent), így a Node-csere csak három appot érint.
-3. Az mm6 függőség-patchei: a zod-patch (`claude/exciting-leakey-7043bd`, `13386ba`), a `better-sqlite3` (a) szerint, és a body-limit szeletei, amíg még a régi Node-on futnak, hogy egy hiba egy változáshoz legyen köthető.
-4. Node 24 egymás mellé, appokként (lent).
-5. A system Node cseréje a végén.
+**Terv v2 (2026-11-23 23:45; a v1 Codex-Stopja után; review-kérés: `~/agent-bus/requests/20261123-2345-mm6-boxb-node24-v2.md`, benne a box-útvonalak és a parancsok).** A v1 „Sorrend” és „Lépések” része helyett ez érvényes. Az előfeltételek (kernel, régi MM, zod) megvannak, lent.
+
+**A fő változás:** a P1 (`better-sqlite3` törlése) után a boxon minden natív modul N-API (megfigyelve, `nm -D`, 8/8), a `.next` pedig Node-verziótól független JS. Ezért az N2/N4 csak futtatókörnyezet-csere: nincs `mm6-deploy`, `npm ci`, build, stamp-törlés vagy PATH-váltás, és így PATH sem ég be a pm2 env-be. Egy közbülső, rendes `mm6-deploy` Node 20-on buildel, és a megőrzött pin miatt Node 24-en fut tovább.
 
 **Lépések (mindegyik Robi külön go-jával; a pm2-lépések előtt szólok a B box-sessionnek):**
-- [ ] **N1. Node 24 egymás mellé:** a hivatalos 24.x LTS tarball (a legfrissebb biztonsági kiadás) egy verziózott mappába (az útvonal az infra-mapbe kerül, nem ide). Ellenőrzés: a `SHASUMS256.txt` aláírással; `<node24>/bin/node -v`. A system Node érintetlen. Visszaállítás: a mappa törlése.
-- [ ] **N2. mm6-telekom:**
-  - `PATH=<node24>/bin:$PATH` alatt: a stamp törlése, majd `mm6-deploy telekom` (ez `npm ci` + build Node 24-gyel);
-  - az ecosystemben `interpreter: "<node24>/bin/node"`, aztán `pm2 delete mm6-telekom && pm2 start ecosystem.config.cjs --only mm6-telekom && pm2 save`;
-  - ellenőrzés: az AGENTS.md „After” listája, a `pm2 jlist`-ben `node_version` 24, és a hibalog;
-  - visszaállítás: `interpreter: "node"`, ugyanez a pm2-sor. Az N-API-modulok Node 20 alatt is futnak, a `better-sqlite3`-at az app nem tölti be. Ez következtetés, ezért a visszaállítást az N2-ben ki is próbálom: a Node 20-ra visszaváltva a `/login` 200-at ad.
-- [ ] **N3.** Figyelés 24–48 óráig: a restart-számláló, a hibalog, a memória.
-- [ ] **N4. mm6-erste:** ugyanaz, mint N2.
-- [ ] **N5. custombrain:** az igényeit a customBrain státusz-session adta át (2026-11-23; a gépszintű részletek a közös jegyzetmappában: `custombrain-node24-igenyek-2026-11-23.md`).
-  - Nem kell `npm install`, rebuild vagy build: tiszta JavaScript, natív modul nincs. **A csere közben a customBrain mappájában nem futhat `npm install`** (lockfile nincs a gitben, egy telepítés mást hozna).
-  - A hét cron-sora teljes úton a system Node-ot hívja. Ezért **a customBrain az N6-tal, a helyben cserélt system Node-dal megy át**, és a cron-sorokhoz nem kell nyúlni. Kanárinak (Robi dönt) választható a pin, vagy egyetlen cron-sor (`agenda-sync`). Ehhez a hét sort át kellene írni, és N6 után visszaírni.
-  - Az újraindítás a customBrain saját Deploy-szabálya szerint megy (stop, a port felszabadítása, start). **Soha nem `pm2 restart all`**, és démon-újraindítás után pid-ellenőrzés kell (a régi folyamat kétszer is a porton ragadt).
-  - Ami változik: a beépített `fetch` undicija 6.24.1-ről 7.x-re lép (20 hívás 11 fájlban). A graphology két csomagját Node 24-en még nem próbálták.
-  - Utána: a jegyzet ellenőrzőlistája (a `/proc/<pid>/exe`, a port pid-je, a hibanapló, 10 percen és 1 órán belül a cron-naplók, másnap a mentés). Végül szólok a customBrain-sessionnek, ő a brain MCP-n át ellenőriz.
-- [ ] **N6. System Node csere** (amikor minden app 24-en fut és stabil):
-  - a mostani `nodejs` .deb mentése (`/var/cache/apt/archives`, vagy `apt download nodejs=20.20.2-1nodesource1`);
-  - a NodeSource repó 24.x-re, `apt install nodejs`, majd `pm2 update` (a démon is az új Node-ra áll; ez minden pm2-folyamatot újraindít, ezért utána jön a customBrain pid-ellenőrzése, és az mm6 két tenantjáé is);
-  - az interpreter-pinek visszaállítása `"node"`-ra, és `pm2 save`.
-  - Visszaállítás: a mentett .deb `dpkg -i`, `pm2 update`.
-  - A postgres-meta konténer saját Node-ja ettől nem változik (lent külön tétel).
-- [ ] **N7.** `engines: { node: ">=24" }` a `package.json`-ban, commit; bump: patch.
+- [ ] **P1. 6.132.2 (Node 20), telekom → erste.** Előtte push. Tenantonként: rollback-másolat a `node_modules`-ról és a `.next`-ről; `mm6-maint on` **a deploy előtt**, így az `npm ci`, a build és a restart is maint mögött fut (becsült kiesés 2–4 perc, éjjel); `mm6-deploy`. Ellenőrzés: a DEPLOY.md „After” listája, a `better-sqlite3` nincs a `node_modules`-ban, minden `.node` N-API, egy hitelesített olvasás. Visszaállítás: a másolatok vissza + `git reset --hard 1b3e7ec` + restart, utána revert az originen.
+- [ ] **N1. Node 24.22.3 egymás mellé:** hivatalos tarball verziózott, root-tulajdonú mappába; a GPG-aláírás (`SHASUMS256.txt.asc`) és a sha256 ellenőrzése. A pinek a verziózott útvonalra mennek, nem a `current` linkre. Visszaállítás: a mappa törlése.
+- [ ] **N2. telekom:**
+  - **N2a, próba a boxon (a staging helyett):** egy ideiglenes, második folyamat Node 24-en, pm2-n kívül, egy szabad localhost-porton: `/login` 200, munkamenet nélkül 401, `/_next/image` 404, egy asset 200, hibamentes stderr, RSS; utána leállítva.
+  - **N2b, átállás:** az interpreter-pin az ecosystemben, maint mögött `pm2 delete` + `start` (csak ez olvassa újra az ecosystemet), `pm2 save`. Ellenőrzés: `/proc/<pid>/exe` és `node_version` 24.22.3, a DEPLOY.md-próbák, egy hitelesített próba (Robi böngészőjében a mátrix-oldal; vagy az MM MCP-n egy olvasás), hibalog.
+  - **N2c, visszaállítási próba:** a pin vissza `"node"`-ra (`exe` = system Node, `/login` 200, a hitelesített próba), aztán újra Node 24.
+- [ ] **N3.** Figyelés 24–48 óráig: restart-számláló, hibalog, RSS a `max_memory_restart` alatt.
+- [ ] **N4. erste:** ugyanaz, mint N2.
+- [ ] **N5. customBrain** (a customBrain-sessionnek előtte és utána szólok):
+  - **N5.0:** a régi, hibásan újrainduló customBrain systemd unit letiltása (Robi go-jával).
+  - **N5.1, cron-kanári:** az `agenda-sync` egyszer kézzel, Node 24-gyel.
+  - **N5.2, szerver:** a saját szabálya szerint (stop, a port felszabadítása), majd `pm2 delete` és `pm2 start --interpreter <node24>`. Ellenőrzés: a port pid-je egyezik a pm2 pid-jével, `exe`, `/stats`. Smoke a brain MCP-n: `brain_stats`, `search` (kimenő `fetch`, undici 7), `map`/`spider` (graphology).
+  - Visszaállítás: ugyanez `--interpreter node`-dal.
+- [ ] **N6. System Node, vezérelt ablakban:**
+  - `pm2 save` + dump-mentés; a 20.20.2 .deb letöltése; NodeSource `node_24.x`; pontosan `24.22.3-1nodesource1`, különben stop; `NEEDRESTART_SUSPEND=1`.
+  - Mindkét tenanton maint, customBrain stop + port szabad, `systemctl restart pm2-root` (nem `pm2 update`).
+  - A démon, a logrotate és az appok `exe`-je ellenőrizve; a pinek ugyanabban az ablakban vissza `"node"`-ra (delete/start); customBrain start + port-ellenőrzés; maint off; `pm2 save`.
+  - Visszaállítás állapotonként a review-kérésben. Az egymás melletti Node egy hétig tartalék.
+  - Utána: a customBrain ellenőrzőlistája, a Security Signal újramérése.
+- [ ] **N7.** `engines: { node: ">=24" }` a `package.json`-ban, commit; bump: patch; a következő rendes deployjal megy ki.
 
-**Door:** N1–N5 appokként kétirányú (pin vissza), egy-egy app a hatókör. N6 az egész box pm2-ét érinti, a mentett .deb-bel visszafordítható. A kiesés appokként egy pm2-restart (kb. 1 s, a maintenance-oldal mögött).
+**Restartok:** tenantonként P1 1, N2/N4 3, N6 1, mind maint mögött; customBrain 2 (N5, N6), néhány másodperc, maint nélkül. **Adat:** a DB-ben nem változik semmi, kivéve a DEPLOY.md share-oldal-próbájának +1 nézettségét. **Staging:** az MM6-nak nincs; az N2a a helyettesítője, a telekom a kanári. Ez Robi kifejezett kivétele kell legyen (`dependencies.md`). **Body-limit:** az S2–S4 deployja N4 után jöhet, de nem az N6 napján.
 
-**Prediction:** az app viselkedése nem változik, a tesztek Node 24-en ma is zöldek. A deploy idejét a `npm ci` növeli. Ismeretlen: a Next 16.4.5 és a playwright viselkedése a box Node 24-én (helyben 24.13.1-en fut), és a customBrain igényei.
+**Door:** P1–N5 appokként kétirányú (pin vissza, az N2c ki is próbálja), egy-egy app a hatókör. N6 az egész box pm2-ét érinti, a mentett .deb-bel és a lépésenkénti visszaállítással visszafordítható. Kifelé semmi nem megy.
+
+**Prediction:** az app viselkedése nem változik; helyben a 120 követett tesztfájl Node 24.13.1-en zöld. Megmutatja: az N2a/N2b próbái, az `exe`/`node_version`, a hibalog, az N3 restart-számlálója és RSS-e. Ismeretlen: a Next 16.4.5 a box 24.22.3-án; a customBrain undici 7-es `fetch`-e és a graphology (N5.2 smoke).
+
+**v2.1 — a v2-review (CA és Codex: OK with changes, 2026-11-23 23:18–23:19) módosításai:**
+- **Tiszta checkout:** a P1-commitot egy friss klónban ellenőrzöm (`npm ci`, lint, `tsc`, vitest), mert a munkafában más sessionök fájljai is vannak. A push előtt az `origin/main..main` csak docs-commitokat és az enyémet tartalmazza.
+- **Próbák a maint mögött:** a maintenance gate minden proxizott kérésre 503-at ad, az MCP-re is. Ezért az oldal levétele előtt csak loopback-próbák futnak (`/login`, 401, asset); a hitelesített próba közvetlenül utána jön, és ha elbukik, azonnal visszaállítás következik. A P1-nél a `mm6-deploy` maga veszi le az oldalt, a hitelesített próba ezután jön.
+- **N2a:** külön dist-másolatról fut (`.next-rehearsal`), hogy ne írjon a közös `.next/cache`-be; előtte a Postgres `max_connections` és az aktív kapcsolatok száma (a pool 10/folyamat). Utána a másolat törlődik.
+- **N2c csak a telekomon;** az N4 kihagyja.
+- **P2 (új), izolált eszközlánc-próba N1 után:** friss klón a boxon, a repó mappáin kívül; `npm ci` és build Node 24 / npm 11 alatt. Élő appot és `node_modules`-t nem érint. **N8 (új):** az N6 utáni első deploy előtt a stamp törlése, és teljes maint + rollback-másolat (`node_modules` és `.next`), mint a P1-ben.
+- **Az N2–N6 ablakban** minden közbülső `mm6-deploy` után újra ellenőrzöm, hogy minden `.node` N-API. Az ablak határideje: az N6 legkésőbb N4 + 3 nap. Addig egy ideiglenes sor jelzi az infra-map „Box B” részében, hogy az appok pinelve vannak.
+- **N6:**
+  - a `pm2 save` után a dumpban a két régi MM-app és a leállított customBrain `stopped`, a resurrect után azonnal `pm2 jlist`;
+  - az apt előtt és után `pm2 -v` és a globális modulok listája;
+  - minden visszaállítási állapotban a csomagforrás is visszaáll, utána `apt update`;
+  - a végén `exe`, listener, `stopped` régi appok, mentett állapot;
+  - tenantonként egy maint-ablak, de két indulás (resurrect + unpin).
+  - Az N6 előtt friss kontextusú reviewer nézi meg, security szempontból is (közös démon, nagy hatókör).
+  - Az egymás melletti Node egy hét után törlődik.
+- **Mellékhatások:**
+  - az N5.2 `search` kimenő embedding-hívást tesz, ez a szokásos app-működés;
+  - az `agenda-sync` kézi futtatása előtt megnézem, mit ír, és fut-e közben egy ütemezett példány. Amit ír, azt a Node visszaállítása nem vonja vissza, a következő futás felülírja.
+- **Staging:** Robi kifejezett kivétele kell (lent rögzítve, amikor megadja).
+
+### Végrehajtó session, előfeltételek (2026-11-23 22:05 UTC, csak olvasva a boxon)
+Végrehajtó: a „B box Node 24” side-session (az MM6 státusz-session indította, Robi kérése: „kéne egy node frissítés a gépen külön sessiönben vigyél végig”).
+- [x] Kernel + reboot ablak: megvolt, a box a 151-es kernelen fut, boot 11:21 UTC.
+- [x] Régi MM kivezetés 1. lépés: mindkét régi app `stopped` a pm2-ben.
+- [x] zod-patch: kint (6.132.1, mindkét tenant HEAD-je `1b3e7ec`). Az `origin/main` azóta csak docs-ot és a már kint lévő nginx-snippetet hozza; `src/` és `deploy/bin/` nem változott.
+- **Robi döntései (2026-11-23 ~23:10):** `better-sqlite3` → (b) törlés, patch-deployként (6.132.2) Node 20-on, a csere előtt; a Node-csere megy a body-limit S2–S4 előtt (azok deployja N4 után); a „B box-session” kilétét az MM6 státusz-session mondja meg; a customBrain előbb kanáriként (pm2-pin), a cron-sorok az N6-tal.
+- [ ] `better-sqlite3` (b): helyben kész (a függőség, a `@types`, a `serverExternalPackages`-bejegyzés és a `scripts/backfill-to-pg.mjs` törölve; a lockfile-ból 32 csomag ment ki, más nem változott). Commit, push, deploy telekom → erste: Robi go-jára. Pontosítás a fenti megfigyeléshez: csak a `scripts/backfill-to-pg.mjs` importálja; a `seed-perf.ts` a PG-s `src/db`-t használja, csak egy komment említi. A `next.config.ts` `serverExternalPackages`-ében is szerepel. A 12.10.1–12.12.0-ban van Node 24-es (node-v137) linux-x64 prebuild, a 13.x-ben nincs (GitHub releases, 2026-11-23).
+- [x] Body-limit S2–S4: még nincs megírva (S1 és S1b kint). Robi: a Node-csere megy előbb, az S2–S4 deployja N4 után.
+- Megfigyelve: a box 24.x legfrissebb kiadása a 24.22.3 (2026-11-10, security; npm 11.19.1, ABI 137); ez fut az A, C és D boxon is. A v26 2026-10-28 óta Active LTS.
+- Mellék-lelet, nem ennek a tervnek a része: a boxon van egy engedélyezett, régi customBrain systemd unit, amely boot óta 5 másodpercenként sikertelenül újraindul (hiányzó env-fájl; Node-ot nem indít, a portot nem fogja). A CA szerint az N5 előtt le kell tiltani (N5.0).
+- Helyben a (b) után: `tsc` 0 hiba; eslint 0 hiba, 146 figyelmeztetés, mint a baseline (a `.claude/worktrees/` nélkül; azokkal 438, a háromszorosa); vitest: a 120 követett tesztfájl zöld. A 14 bukás egy másik session nem követett S0-tesztfájljából jön (`request-body-limit.test.ts`).
+- **Planning review v1** (`~/agent-bus/requests/20261123-2307-mm6-boxb-node24.md`): CA **OK with changes**, Codex **Stop**. A Codex kifogásai:
+  - az `mm6-deploy` `npm ci`-je az élő app alatt, maint nélkül fut;
+  - az N6 `pm2 update`-je mindent egyszerre indít újra, a customBrain port-szabálya nélkül;
+  - az N6 visszaállítása nem teljes, és a csomagverzió nincs rögzítve;
+  - staging nincs, és a `/login` önmagában kevés;
+  - a todo és a kérés ellentmond egymásnak.
+  - → Terv v2 (fent).
+- **Planning review v2:** `~/agent-bus/requests/20261123-2345-mm6-boxb-node24-v2.md`: CA **OK with changes**, Codex **OK with changes**, Stop nincs. A módosítások a fenti v2.1-ben.
 
 ### Mellékes tételek (külön, nem ebbe a cserébe)
 - [ ] **postgres:16 konténer (16.14):** a többi boxon 16.15–16.16 fut. A minor-frissítés image-csere, adatmigráció nélkül, de a közös DB mindkét tenantot és a többi appot érinti. Előtte `pg_dump`; az infra-map szerint az image-ek `:latest`-en vannak, és véletlenül nem pullolunk. Hogy van-e újabb `postgres:16` image, azt nem néztem meg.

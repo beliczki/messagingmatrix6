@@ -1012,3 +1012,45 @@ Kérés: egy másik session adta át. Ez a 2026-11-04-i vizsgálat kis fixe (arc
     - `/login` 200, `/_next/image` 404, `POST /mcp` token nélkül 401;
     - a share `3_Ml4cJyfDkA` 200; ez a view count-ot 26 → 27-re emelte.
   - **Bejelentkezett MCP-próba a Telekomon: nem futott,** nincs hozzá token ebben a sessionben. A connector az „ERSTE MessagingMatrix”, 52 toollal.
+- [x] **DEPLOYOLVA `mm6-erste`** (10:58 UTC, Robi: „Yes, deploy erste”):
+  - előtte 2436 MB elérhető memória, HEAD `9be22f7`, a követett fájlok tiszták;
+  - 94 s, az `npm ci` 33 s (733 csomag);
+  - a legkevesebb elérhető memória 1351 MB, a swap legfeljebb 1069 MB;
+  - a deploy alatt 0 új sor jött az error logba;
+  - ugyanaz a 23 Turbopack trace-warning, mint a Telekomnál (ismert tech-adósság).
+  - **Ellenőrzés:**
+    - HEAD `1b3e7ec`, 6.132.1, a lock-jelölő egyezik;
+    - `npm ls`: ugyanazok az új verziók, mint a Telekomon; a boxon `npm audit --omit=dev`: 0;
+    - szó szerinti `hono` 0 fájlban;
+    - nincs `.next-old` és `.next-build`;
+    - pm2 online, a restart-szám 2 → 3;
+    - `/login` 200, `/_next/image` 404, `POST /mcp` token nélkül 401;
+    - `/share/0FVkKhe4V3H3` 200; ez a view count-ot 1-gyel emelte.
+  - **Error log a deploy után:** 3 → 12 sor. A 9 új sor 11:00:18-kor az ismert AWS SDK figyelmeztetés: az SDK 2027 januárja utáni kiadásai `node >=22`-t kérnek, a box `v20.20.2`-n fut. Az első S3-használatkor íródik ki, a korábbi deployoknál is megjelent. Hiba nincs, de ez is a Node-csere mellett szól.
+  - **Bejelentkezett MCP-próba** (az „ERSTE MessagingMatrix” connectoron, a deploy előtt és után):
+    - a `matrix_status` (2945 MC, 180 audience, 92 topic) és a `list_products` (7 termék) kimenete azonos;
+    - a `tools/call` az új buildön zod-validálással fut;
+    - a connector 52 toolt lát; ez a session elején lekért lista, a deploy után nem kértem le újra.
+  - **Nem futott:**
+    - a hibás payloados hívás. A kliensoldal ugyanazzal a sémával validál, így ilyen kérés el sem indul;
+    - a bejelentkezett próba a Telekomon.
+
+### Review (2026-11-23)
+- **Jóslat és megfigyelés:**
+  - az audit 0 lett, helyben és mindkét boxon is;
+  - a lockfile pontosan a szimulált;
+  - a `tsc`, az eslint, a vitest és a `tools/list` nem változott;
+  - a hono nincs a bundle-ben.
+- **Amit a jóslat kihagyott:**
+  - 11-04 óta két új hono-advisory jött; a terv ezt a mai audit-futásból vette fel, H1 döntéssel;
+  - a zod-patch nem zárja a nagy, hibás tömb OOM-útját, csak 34–60%-ra csökkenti. A body-limit follow-up kártyán indult, külön sessionben fut.
+- **Az `npm ci` az élő app alatt** mindkét tenanton hibasor nélkül ment (45 s és 33 s). A CA 1. pontja szerinti `MODULE_NOT_FOUND`-ot nem láttam, így a mechanizmus-javításra (telepítés mellékkönyvtárba) most nincs bizonyíték.
+- **Tanulság, javaslat** (Robi dönt, hova kerüljön):
+  - az `npm version` a `package-lock.json` gyökér-verzióját is emeli;
+  - a `mm6-deploy` a lock sha256-ja alapján dönt az `npm ci`-ről, ezért egy puszta bump is `npm ci`-t indít az élő app alatt. A 6.128.4 ezt kézzel kerülte el;
+  - helye: egy sor az AGENTS.md „Versioning” részébe: „bump only `package.json`, by hand, not `npm version`”;
+  - még jobb, ha ellenőrzés futja magától: a deploy-script csak a `packages` részt hash-elné, a gyökér-verziót nem.
+- **Nyitott follow-upok:**
+  - body-size limit (fut, `mm6-json-body-limits-and`);
+  - Node 20 → 24 (TIP-061);
+  - dev-audit: vitest 4 (major).

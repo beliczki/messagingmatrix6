@@ -9,10 +9,11 @@
 // that is unique by construction.
 //
 //   npx tsx --env-file=.env.local scripts/export-creatives-for-reading.ts \
-//     --dir round2 --missing [--mc 33,311,348] [--client erste]
+//     --dir round2 --missing [--mc 33,311,348] [--dims 1080x1080] [--client erste]
 //
 //   --missing   only creatives with no image_text yet (the usual case)
 //   --mc        restrict to these MC numbers
+//   --dims      restrict to one stored file_dimensions value, e.g. 1080x1080
 //   --dir       subdirectory under "problematic creatives" (default: round2)
 import { mkdirSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -36,6 +37,7 @@ async function main() {
   const onlyMissing = args.includes("--missing");
   const mcs = (get("--mc") ?? "").split(",").map((s) => Number(s.trim())).filter(Boolean);
   const clientKey = get("--client") ?? "erste";
+  const dims = get("--dims");
 
   const [client] = await db.select().from(clients).where(eq(clients.key, clientKey)).limit(1);
   if (!client) throw new Error(`nincs ilyen kliens: ${clientKey}`);
@@ -56,6 +58,7 @@ async function main() {
       or(isNull(uploadedFiles.mimeType), ne(uploadedFiles.mimeType, HTML5_PACKAGE_MIME)),
       ...(mcs.length ? [inArray(creatives.mcNumber, mcs)] : []),
       ...(onlyMissing ? [isNull(creatives.imageText)] : []),
+      ...(dims ? [eq(creatives.fileDimensions, dims)] : []),
     ));
 
   const root = join(BASE, dir);

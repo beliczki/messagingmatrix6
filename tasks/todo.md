@@ -715,6 +715,7 @@ Ehhez jön ennek a sessionnek a saját költsége: ~150 ezres kontextus, minden 
   - **Megfigyelve utána:** ugyanaz a fájl-id (`1SJUW9Sh…`), 621 651 bájt, modifiedTime 21:14:33.623Z, a Drive-szerver md5-je `ec41f5a8…` = a javított másolat. A Drive-ról közvetlenül (`rclone cat`, a mount-cache nélkül) letöltött fájl bájtra azonos a javítottal, `unzip -t` tiszta, a `verify_patch.py` az alaphoz képest: nem várt eltérés 0, a sor-attribútumok és a 2054 képlet azonos, 2493/2493 célsor = DB.
   - **Rollback:** a Drive megőrizte az előző revíziót (11:00:32 UTC, `0B6MahnrpfUMVV2Rh…`, nincs kitűzve, tehát a Drive 30 nap után törölheti), és ott van a helyi alap (`tabla-csere/mc-export 11.alap.xlsx`). Visszaállítás: `cat alap > mount`, ugyanígy.
   - **Nem ellenőrzött:** hogy a Google Sheets jól mutatja-e az `inlineStr` cellákat és megtartja-e a szűrőt (308 látható sor). Ez Robi ellenőrzése Sheetsben.
+  - **Megfigyelve 21:21 UTC:** Robi Sheets-megnyitása újramentette a fájlt (ugyanaz az id, 547 656 bájt, md5 `3b167aee…`, új revízió). openpyxl-lel az élesen lévő javítotthoz képest: mindkét lapon 0 értékeltérés, a rejtett sorok (3536, tehát 308 látható) és a szűrő azonos. A Sheets az `inlineStr` cellákat shared stringgé alakította. Tanulság: a Sheets megnyitáskor is írhat, ezért csere közben a fájlnak zárva kell lennie.
 - [x] **K5 (eredeti terv; lefutott, lásd fent)** Táblába írás XML-szerkesztéssel: a `sheet2.xml`-ben csak a kör sorainak S–W celláit írom (inline string, a szomszéd sorok stílusával), a W-t a DB-ből. Ellenőrzés: openpyxl-diff az eredetihez (csak a várt cellák változtak), szűrő, rejtett sorok és Q-képletek változatlanok, Excelben javítás nélkül nyílik. Friss reviewer. **Robi go** (és zárja be a fájlt a böngészőben) → csere az rclone mounton ugyanazon a fájl-id-n; Drive `modifiedTime` + újraletöltés + diff.
 - [x] **K6** Review-szakasz ide, az átadó jegyzet frissítése. Bump nincs (a szkript tooling, az adat nem kód).
 
@@ -768,3 +769,36 @@ Kérés (Robi): amikor a Codex a leadást gyártja, adjon mellé egy `manifest.j
 - Bump: nincs, amíg csak szkript használja (tooling); a 2. lépcső (feltöltés) minor lesz.
 
 **Nyitott (Robi):** a kulcsszó-forma (az ajánlásom: 3–6, kisbetű, vessző); hol él a Codex leadás-folyamata; felülírhatja-e a manifest a meglévő `image_text`-et újrafeltöltéskor (az ajánlásom: nem, csak üreset tölt, a kulcsszavakkal egyezően). Lehetséges folytatás: a meglévő kreatívok kulcsszavai a már leolvasott `image_text` / `image_description`-ből, egy szöveges Codex-menettel, ugyanezzel a manifesttel.
+
+## 2026-11-23 — mc-export tábla-csere szkript a repóba (KÉSZ; Robi: „Igen, emeld be a repóba teszttel”)
+
+A ma használt két scratchpad-szkript (`patch_sheet.py`, `verify_patch.py`, most `round4-1080-codex/tabla-csere/`) TS-ben, a repóban, teszttel. Az adat nem megy át tokenen: helyi XML-szerkesztés, ellenőrzés a DB ellen, csere fájlművelettel.
+
+**Touches:** új `src/lib/xlsx-sheet-patch.ts` (cellaolvasó + cellaíró egy xlsx lapján, jszip, a többi zip-tag és minden más sor bájtra változatlan), új `scripts/patch-mc-export.ts` (CLI), új `tests/unit/xlsx-sheet-patch.test.ts`. A `gen-mc-export.ts`-hez nem nyúlok; az oszlopokat a fejléc neve alapján keresem (`creative_id`, `image_text` … `updated_at`), nem betűjel alapján. Szemantikai modell nincs, a REBUILD_SPEC ezt a táblát nem tárgyalja.
+
+**Door:** a kód kétirányú (új fájlok, az app nem importálja). Maga a csere (`--in-place`) ügyfélfájlt ír felül: alkalmanként Robi go-ja kell hozzá, ahogy ma.
+
+**A reviewer három jelzése, amit javítok** (ma nem tüzeltek):
+- megosztott-stringes kulcscella (A): a python csak `<v>`-t olvasott, a sharedStrings-t nem;
+- önzáró `<row …/>`: a python sor-regexe a következő sor `</row>`-jáig nyelt volna;
+- `<c>`, ahol nem az `r=` az első attribútum: a python kihagyta, és a sor újraépítésekor elveszett volna.
+
+**Mechanizmus-ellenőrzés (új):** a W (`updated_at`) írása azt állítja, hogy a sor a DB-vel egyezik. Ezért a célsorok többi, a `creatives`-ből jövő oszlopát (a `matrix_status` és a `link` kivételével) a szkript összeveti a DB-vel, és eltérésnél nem ír. A nem célsoroknál csak jelez: a W eltér a DB-től, archivált, vagy hiányzik a táblából.
+
+**Prediction:** a mai alapon és a mai id-listákkal futtatva a TS-kimenet `sheet2.xml`-je bájtra egyezik a python-kimenetével (`tabla-csere/mc-export 11.javitott.xlsx`), mert a célcellák már léteztek, és a stílusukat megtartom. A célsorok többi oszlopa egyezik a DB-vel. Ismeretlen: hogy a számcellák formája (pl. `101` vs `101.0`) egyezik-e a DB-értékkel, ezt a futás mutatja.
+
+**Seam:** `patchSheetCells(buf, { sheet, keyHeader, updates })` és `readSheet(buf, sheet)`. Unit-teszt kézzel írt XML-ből épített mini-xlsx-en, a várt értékek a tesztben literálok.
+
+**Szeletek:**
+- [x] **T1** Unit-teszt (előbb piros, a modul hiánya miatt): 11 eset `tests/unit/xlsx-sheet-patch.test.ts`-ben.
+- [x] **T2** `src/lib/xlsx-sheet-patch.ts` a zöldig.
+- [x] **T3** `scripts/patch-mc-export.ts <xlsx> --ids <fájl>[,<fájl>] [--out <xlsx> | --in-place] [--remote <rclone-útvonal>] [--client erste]`. Kapcsoló nélkül csak jelent. `--in-place`: a futás elején és az írás előtt a fájl md5-je azonos; `--remote` esetén a Drive-szerver md5-je is azonos az írás előtt; írás helyben (truncate, nem rename → ugyanaz a fájl-id); utána a visszaolvasott md5 = a kimenet. A szerver-oldali utóellenőrzés parancsát kiírja.
+- [x] **T4** Párhuzamos futás a mai alapon (scratchpad-másolatokon, a Drive-ot csak olvasva):
+  - A DB-ellenőrzés 0 hibát talált: minden célsor aktív és benne van a táblában, a célsorok többi oszlopa = DB (a `101.0` → `101` normalizálás kell hozzá, és bevált); a nem célsoroknál nincs elmaradás. 2493 sor × 5 cella, célsor = DB 2493/2493.
+  - **A jóslat bevált:** a TS-kimenet és az élesbe ment python-kimenet tagonként azonos (név, sorrend, dátum, tartalom), 621 651 bájt mindkettő.
+  - **Elsőre nem jött be:** a JSZip két mappa-bejegyzést tett a zipbe (`xl/`, `xl/worksheets/`), és új dátumot adott a `sheet2.xml`-nek. A unit-teszt nem fogta meg, mert a fixture-ben is voltak mappák. Erre lett egy új, előbb piros teszt (nincs új zip-tag, a dátum marad), és a javítás (`createFolders: false`, `date`). Ami nem tartható meg: a tagok unix mód-bitjei (az eredetin 0600, a JSZip nem olvassa őket). Az Excel és a Sheets nem nézi ezeket, a kódban ez dokumentálva van.
+  - A három út próbája: szándékosan elavított célsor-oszlop (18229 `file_name`) → „NEM írok”, a fájl érintetlen; `--remote` eltérő Drive-példánnyal → elutasítva, írás nélkül; `--in-place` scratch-fájlon → helyben írva, a visszaolvasott md5 = a kimenet.
+- [x] **T5** typecheck 0 hiba; eslint a három új fájlon 0 hiba; a unit suite 46 fájl, 434 teszt zöld. Az integrációs suite-ot nem futtattam: app-kódot és sémát nem érint, a szkript csak olvasta az éles DB-t. Diff-review: önellenőrzés a terv ellen (kétirányú ajtó, új fájlok). Bump nincs (tooling, az app nem importálja).
+
+**Használat legközelebb** (Robi go-ja és a böngészőben zárt fájl után):
+`npx tsx --env-file=.env.local scripts/patch-mc-export.ts "<mount>/mc-export NN.xlsx" --ids <id-lista.txt> --in-place --remote "gdrive:Data/ERSTE HU/_messagingmatrix.ai/mc-export NN.xlsx"`, előtte ugyanez `--in-place` nélkül (csak jelentés).

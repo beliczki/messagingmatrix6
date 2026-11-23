@@ -223,7 +223,7 @@ A `getActiveClient()` a SQLite→PG váltáskor lett async; a route-okat akkor j
 
 ### npm audit — zod és társai (vizsgálat 2026-11-04, archív „Archivált 2026-11-22” C))
 - [ ] **Kis fix (patch):** `npm update zod body-parser qs fast-uri ip-address`, zod `^4.6.6`. 2026-11-22-én még a sérülékeny verziók futnak (zod 4.4.1); külön task-kártya javasolva („mm6: zod és társai biztonsági patch”).
-- [ ] **Alapos fix (Robi dönt):** a JSON-végpontoknak nincs saját méretkorlátjuk (az nginx 200M-ja vonatkozik rájuk); alacsony nginx-limit a feltöltési útvonalak kivételével vagy közös, korlátos JSON-olvasó, plusz `.max()` a 18 tömbre.
+- [ ] **Alapos fix (Robi dönt):** a JSON-végpontoknak nincs saját méretkorlátjuk (az nginx 200M-ja vonatkozik rájuk); alacsony nginx-limit a feltöltési útvonalak kivételével vagy közös, korlátos JSON-olvasó, plusz `.max()` a 18 tömbre. **Terv: a fájl alján, „2026-11-23 — Terv: kérés-törzs méretkorlát”.**
 
 ### MCP token `scope`: nincs check constraint (6.84.0 óta dokumentálva, archív A) MCP token-scope #3)
 - [ ] Az ismeretlen `scope` érték `full`-ra szélesedik (`resolveBearerClient`); egy elgépelt kézi SQL teljes jogot ad. Szűkítés `read`-re + check constraint = egy migrációs szelet; a user dönt.
@@ -1054,3 +1054,315 @@ Kérés: egy másik session adta át. Ez a 2026-11-04-i vizsgálat kis fixe (arc
   - body-size limit (fut, `mm6-json-body-limits-and`);
   - Node 20 → 24 (TIP-061);
   - dev-audit: vitest 4 (major).
+
+## 2026-11-23 — Terv: kérés-törzs méretkorlát (az npm-audit „alapos fix”-e) — Robi review-jára vár
+
+Robi 2026-11-23: „indítsd a zod kártyát, és aztán térjünk át az alapos fixre”. A kis fix (`npm update …`) külön sessionben fut (`claude/exciting-leakey-7043bd` worktree), ez a terv nem nyúl a `package.json`-hoz.
+
+**Touches:**
+- Komponens: a HTTP route-réteg (`src/app/api/**/route.ts`, `src/app/share/[id]/comments/route.ts`, `src/app/mcp/route.ts`), a közös wrapperek (`withSession` / `withAdmin`, `src/lib/scoped.ts`), az MCP tool-sémák (`src/lib/mcp.ts`; a tömb-limit **operation contract változás**), a három `messages/bulk-*` route sémája, a `deploy/nginx/` snippetek, és a boxon a két tenant nginx vhostja.
+- Szomszédok: mögötte a zod-validálás és az entity-réteg; előtte az nginx és (az `/mcp`-n) az SDK saját 4 MiB-os korlátja.
+- Dokumentum: `REBUILD_SPEC.md` (Drive `mm6-docs/`, 2026-09-06) §4 Backend API, §4.4 Files & uploads, §4.9a Monitoring ingest. **A spec nem mond semmit a kérés-törzs méretéről**: ez lelet, nem hiány, amit kitalálással töltök ki. A limit értékei új szabály, Robi dönt. Szemantikai modell nincs.
+
+**Mechanizmus (egy mondat):** az appban egyetlen kérés-törzsnek sincs mérethatára, minden route a teljes törzset memóriába olvassa (`req.json()` 31 fájlban, `req.formData()` 4-ben, `req.text()` 1-ben), mielőtt bármit ellenőrizne, és az egyetlen korlát az nginx szerverszintű `client_max_body_size 200M`-je (mindkét vhost, location-szintű felülírás és `limit_req` nincs; a boxon olvasva 2026-11-23). Proxy/middleware fájl nincs, ezért a Next 10 MiB-os `proxyClientMaxBodySize`-a sem érvényes (a `node_modules/next` 16.4.5 kódja szerint csak a proxy-hoz klónozott törzsre hat).
+
+**Testvérek (ugyanez a mechanizmus):**
+1. **Új, belépés nélküli:** a `POST /api/render/public` és a `POST /api/auth/login` bármilyen auth vagy ellenőrzés előtt `req.json()`-t hív; a `POST /share/[id]/comments` egy érvényes share-id után (a share-linkek nyilvánosak). Bárki küldhet 200 MB-ot.
+   - **Mérve helyben, 2026-11-23** (csak `new Request(…).json()`, Node 24.13.1, nem a teljes app; a box Node 20.20.2): 50 MB → +203 MB heap, 863 MB RSS, 0,5 s; 100 MB → +402 MB heap, 1415 MB RSS, 1,1 s; 190 MB → +761 MB heap, 2149 MB RSS, 2,5 s blokkolt event loop.
+   - A pm2 `max_memory_restart` 900 MiB (erste) és 700 MiB (telekom), a box-on kb. 2,2 GB available (2026-11-04-i jegyzet). Következtetés, nem megfigyelés: egy névtelen 100 MB-os kérés valószínűleg pm2-restartot vált ki, néhány párhuzamos kimerítheti a box memóriáját. Élesben szándékosan nem próbáltam (az DoS lenne a production ellen).
+2. **Ismert, belépés után:** a zod 4.4.1 `issues`-robbanása (2026-11-04-i mérés, archív C). A kis fix javítja a zod-ot, de a korlátlan tömböket nem.
+3. **Feltöltések:** a `req.formData()` a teljes multipart törzset puffereli, és csak utána jön az 50 MB-os ellenőrzés (`files/upload`, `import/xlsx`); az `adform-snapshots` és a `monitoring/import` route-ban méret-ellenőrzés egyáltalán nincs.
+4. **Template-írás:** a `PUT /api/templates/[name]/[file]` (admin) `req.text()`-tel korlát nélkül olvas.
+5. **Tömbök:** 18 korlátlan bemeneti zod-tömb: az `mcp.ts`-ben 14 (a 17 `z.array`-ből 2 az `outputSchema`-ban van, 1 a `preview_generate` `.max(20)`-a), és a bulk-copy 2, a bulk-move 1, a bulk-delete 1. Ez egyezik a 2026-11-04-i jegyzettel; az első számolásom (20) a két kimeneti sémát is beleszámolta. Az MCP-n a 4 MiB-on belül egy `read` token string-tömbje 1,5 GB heapet foglalt (2026-11-04, archív C).
+
+**Megoldás (v3, a második review-kör után; a gate-ről Robi döntött 2026-11-23: „Ötvözet”):**
+- **Él (nginx, a boxon):** szerverszinten `client_max_body_size 1m`; `location ^~ /mcp` 5m (az SDK legfeljebb 4 MiB-ot olvas); horgonyzott regex a négy feltöltési route-ra (`^/api/(files/upload|import/xlsx|adform-snapshots|monitoring/import)$`) 60m (50 MB fájl + multipart-overhead); `^/api/templates/[^/]+/[^/]+$` 5m. A gate és a proxy-fejlécek közös snippetbe kerülnek: `deploy/nginx/mm6-proxy-common.conf`. Ez a repóba mehet, mert nincs benne port; a két maintenance-snippet már ott van, és a boxon lévő példány egyezik a repóéval (`cmp`, 2026-11-23). A vhost-diff portokat tartalmaz, ezért nem kerül a repóba: a review-kérésben van (`~/agent-bus/requests/20261123-1125-mm6-body-size-limit-v2.md`).
+- **App, a mechanizmus helye — az „ötvözet”, v3:**
+  - A `limitBody(req, maxBytes)` (`src/lib/body-limit.ts`) a `withSession` / `withAdmin` wrapperben **a handler meghívása előtt** olvassa végig a törzset, bájtszámlálóval. A `Content-Length`-előszűrés ezt is megelőzi, még a `readSession` előtt fut.
+  - Ha a törzs túllépi a limitet, a wrapper lezárja a forrást, és 413-at ad (`{ error: "payload_too_large", maxBytes }`). **A handler ilyenkor le sem fut, tehát mellékhatás sincs.**
+  - A limit alatt a handler egy új `NextRequest`-et kap a már beolvasott bájtokkal. Ebben az eredeti fejlécek (a multipart boundary-vel együtt), a cookie-k, a `nextUrl` és a `signal` is benne vannak.
+  - **Miért v3:** a v2-ben a handler a lenyelt limit-hiba után még írhatott. A Codex egy memóriában futó próbával megmutatta: a `POST /api/drafts` 413-at adott, közben a `createDraft` és a `writeAudit` egyszer lefutott (`req.json().catch(() => null)` → `{}` → `createDraft`). A CA ugyanezt jelezte; szerinte kb. 75 `.catch`-es body-olvasás van a kódban.
+  - A v3-ban a túlcsordulás el sem jut a handlerig, ezért nem kell külön hibatípus vagy jelző, és a wrapper nem nyúl a válaszhoz (az `/mcp` SSE-streamjéhez sem).
+  - Ára egy másolat a limitig (alapból 1 MiB; a feltöltéseknél 60 MiB, amit a `formData()` ma is a memóriában tart).
+  - 411 nincs. `Content-Length` nélkül a gate a limitig olvas, és csak utána utasít el.
+  - A `withSession` / `withAdmin` alapból 1 MiB; `{ maxBodyBytes }` opció a négy feltöltéshez (60 MiB) és a template-íráshoz (5 MiB). A három nyilvános route és az `/mcp` közvetlenül hívja. GET/HEAD és törzs nélküli kérés kimarad. A 31 + 5 (`entity-route.ts`) hívási hely nem változik.
+  - Az első héten minden app-413 naplózódik route-tal és bájtszámmal (CA). Az nginx 413-ai az nginx access logban látszanak (status 413).
+  - Prototípus (v2, helyben, a Next 16.4.5 `NextRequest`-jén): a bájtszámláló 1,13 MiB után megáll, és lezárja a forrást; a limit alatt a JSON, az UTF-8 és a multipart ép marad. A route-runtime-ban még nem próbáltam, ezt S0 mutatja meg.
+- **Tömbök: sima `.max(n)` a javított zodon, `boundedArray` nélkül.**
+  - A v2-es `boundedArray` (`z.unknown()…pipe(…)`) a Codex szerint az MCP `tools/list`-ben `"sizes": {}`-t hirdetne: a tömb-típus és az elem-séma elveszne. A Settings → MCP másik konverziót használ, ezért ott nem látszana.
+  - **Helyben megfigyelve a zod-session worktree-jében (zod 4.6.7):**
+    - `z.array(el).max(50)` 501 hibás elemmel → 1 issue, 0 elem-hívás;
+    - kb. 4 MiB-nyi (2 097 152) hibás elemmel → 1 issue, 0 elem-hívás, +16 MB heap (ez maga a tömb), 2 ms.
+    - A 4.4.1-en ugyanez 502 issue, illetve 501 elem-hívás volt.
+  - Tehát a javított zodon a `.max()` már az elemek előtt elutasít, és a séma `maxItems`-ként hirdeti a limitet. **S3 a zod-patch merge-e után jön**, a teszt pedig a `tools/list`-en keresztül fut (tömb-típus, elem-séma, `maxItems`, a meglévő `min` és `optional` is megmarad), a zod-session mentett `tools/list` baseline-jához mérve.
+  - A limitek műveletenként:
+    - `sizes` (`get_mc_preview_files`, `show_mc_previews`, `show_draft_previews`, `generate_test_creative`, `draft_update`): méretenként egy elem. A repo template-jeiben 3–4 méret van, élesben nem tudom → 50.
+    - `show_mc_previews.variants`: egy betű a–z-ig (`mc_create` szerződés) → 26.
+    - `preview_generate.mc_labels`: marad 20.
+    - Batch-tömbök (`prodlist_upsert.rows`, `audience_create_batch`, `topic_create_batch`, `mc_create_batch`, `mc_update_batch`, `mc_copy_batch` ×2, `mc_move_batch`, REST bulk-copy ×2 / bulk-move / bulk-delete): batch-méret szerződés nincs. A legnagyobb eddigi batch ismeretlen; S0-ban az `audit_log`-ból DB-oldali aggregálással nézem meg (`db-reads.md`). Addig 500.
+  - A tool-sémák `.max()`-a **operation contract változás**: a Touches-ban és a CHANGELOG-ban is szerepel.
+- **Kívül esik, külön tétel:** a `POST /api/drafts` olvashatatlan törzzsel is üres draftot hoz létre (`.catch(() => null)` → `{}`). Ez nem a méretkorlát hibája, és a v3 után a túlcsordulás nem éri el. Hogy szándékos-e (üres „új draft”), az Robi döntése.
+
+**Door:**
+- S1 (nginx): a globális definíció szerint egyirányú, mert `git revert` nem vonja vissza (a vhost nincs a repóban, és a repo nyilvános, a portok nem kerülhetnek bele). A visszaállítás olcsó: a két vhost mentése, `nginx -t && systemctl reload nginx`, másodpercek. Hatókör: mindkét tenant minden kérése. Ezért külön reviewer nézi a diffet.
+- S2–S4 (app): kétirányú (git), de a hatókör széles: deploy után minden POST/PUT/PATCH mindkét tenanton átmegy a gate-en, és egy túl alacsony limit legitim mentést törne 413-mal.
+**Prediction:**
+- Változik:
+  - a limit fölötti törzs 413-at kap. `Content-Length`-tel azelőtt, hogy az app bármit beolvasna; nélküle a limitet átlépő chunk után. A handler nem fut le, írás nincs.
+  - Az nginx HTML 413-at ad, az app JSON-t.
+  - A `.max()` fölötti tömb az elemek validálása előtt hibát kap: a REST-en 400, az MCP-n HTTP 200 `result.isError: true`-val, 0 tool-handler-hívással (Codex v3).
+  - Az MCP `tools/list` a tömböknél `maxItems`-et hirdet.
+- Ugyanaz marad: minden mai legitim kérés (UI-mentések, 50 MB-ig feltöltés, MCP-hívások, az `/mcp` SSE-streamje), és a `tools/list` a `maxItems`-en kívül bájtra azonos. Mutatja: a teljes `npm test` zöld, a `tools/list`-diff, deploy után a `/login` 200, egy share-oldal 200, egy szokásos mátrix-mentés mindkét tenanton.
+- S0-ban pirosnak várom, utána zöld (még nem futott, tehát nem megfigyelés):
+  - route-szintű vitest: `POST /api/render/public` 2 MiB-os törzzsel → 413; ugyanez az `auth/login` és a `share/[id]/comments` route-ra;
+  - **413 és nincs mellékhatás:** `POST /api/drafts` a limit fölött → 413, a `createDraft` és a `writeAudit` 0-szor fut (Codex); ugyanez a visszaállítási utakon (`messages/[id]/restore` és az `entity-route.ts` restore-ja; a Codex „If-Match restoration paths”-ként említi, az `If-Match` fejlécet a kód a `drafts/[id]`-ben olvassa);
+  - wrapper-teszt: a forrás a limit után nem olvasódik tovább; a `Content-Length`-előszűrés a `readSession` előtt fut; a cookie-k, a `signal` és a multipart átmegy;
+  - zod (a javított verzión): bulk-copy 501 labellel → 400, 0 elem-hívás.
+- Ismeretlen:
+  - a legnagyobb legitim törzs route-onként (S0, a hívási helyekből; ami 1 MiB fölé mehet, **S1 előtt** az nginx- és az app-limitbe is bekerül);
+  - hogy a valódi Next route-runtime-ban a forrás lezárása teljes 413-választ ad-e, kapcsolat-reset nélkül (S0, `next start` helyben);
+  - a legnagyobb eddigi batch (S0, `audit_log`).
+
+**Seam:** a `limitBody`, a `withSession` / `withAdmin` (`src/lib/scoped.ts`), a három nyilvános route handlere, a `POST /api/drafts` handlere, és az MCP `tools/list`.
+
+**Tesztek (S0-ban írom):**
+- pontosan a limit és limit + 1 bájt; chunked, `Content-Length` nélkül; üres törzs; UTF-8 többbájtos karakter (a bájtot számolja); `withAdmin`; multipart; `/mcp` SSE-vel;
+- „413 és nincs írás” a drafts és a restore route-on;
+- a `tools/list` megmaradó sémái.
+- Reprodukció egy izolált helyi appon (`next start` a teszt-DB-vel): 100 MB-os POST a `/api/render/public`-ra, a folyamat RSS-e előtte és utána, és a válasz teljes-e. Élesben nem.
+
+**Szeletek v3** (S0 → S1-review → S1 → S1b → S2 → S3 → S4; S3 a zod-patch merge-e után):
+- [ ] **S0** Tesztek + a helyi reprodukció; az `audit_log`-ból a legnagyobb batch (DB-oldali aggregálással, `db-reads.md`); a `monitoring/import` és az `adform-snapshots` legitim maximuma; a 31 + 5 hívási hely legnagyobb legitim törzse. Ha bármelyik 1 MiB fölé mehet, a limitje S1 előtt az nginxbe és az appba is bekerül. Alkalmazáskód még nem változik.
+- [ ] **S1-review** A két vhost teljes, effektív konfigja (`nginx -T`, benne `grep client_max_body_size`, hogy a `nginx.conf` és a `conf.d` ne írja felül) és a `mm6-proxy-common.conf`, a mentéssel és a visszaállítással, külön reviewernél, **S1 előtt**. A `proxy_request_buffering` mindenhol marad alapértelmezett (on).
+- [x] **S1 — KÉSZ 2026-11-23 16:21 UTC** (Robi: „Igen, mehet mindkettő”; a B box-sessionnek előtte és utána is szóltam):
+  - Mindkét vhost valódi fájlja a review-zott eredetivel egyezett (sha), az időbélyeges mentés után cseréltem. A `sites-enabled` symlinkek érintetlenek, `nginx -t` rendben, reload. Az `nginx -T` szerint: szerverszinten 1m, `/mcp` 5m, feltöltés 60m, template 5m.
+  - A közös snippet a repóban van (`deploy/nginx/mm6-proxy-common.conf`), a boxon lévő példány egyezik vele (`cmp`).
+  - Ellenőrzés mindkét tenanton, írás nélkül:
+    - 2 MiB-os POST a `/api/render/public`-ra → 413;
+    - kis login-POST → 401;
+    - 49,9 MiB-os feltöltés session nélkül → 401;
+    - 2 MiB-os POST az `/mcp`-re → 401, 6 MiB-os → 413;
+    - 2 MiB-os template-PUT → 401;
+    - `/login` 200, `/_next/image` 404.
+  - Az erste `/artifacts/` 403, a `/__deploy-status.json` 404, mindkettő ugyanaz, mint előtte. Az nginx error logban csak a próbák „too large body” sorai és az `/artifacts/` próba sorai jelentek meg. A pm2 appok online, egyik sem indult újra; a brain 200.
+  - Nem próbáltam élesben: a maintenance-oldalt, mert az a felhasználóknak is megjelent volna. A config szerint minden proxyzó location behúzza a gate-et.
+  - Az eredeti terv lépései:
+  - időbélyeges mentés, `nginx -t`, reload;
+  - utána mindkét tenanton: 2 MiB-os POST a `/api/render/public`-ra 413; egy kb. 49,9 MB-os feltöltés átmegy; a `/login` 200; az `/mcp` 401 token nélkül; a maintenance-oldal továbbra is megjelenik;
+  - visszaállítás: a mentés vissza, `nginx -t && systemctl reload nginx`;
+  - az infra-map Box B sorát a gazdája (Learning) frissíti, jelzem neki.
+- [ ] **S1b** `next start -H 127.0.0.1` mindkét tenantnál (pm2), plusz smoke, hogy az nginx a 127.0.0.1-re proxyz. A CA kötelezőnek javasolja, olcsó és kétirányú. Robi dönt.
+- [ ] **S2** `limitBody` + a wrapperek + a három nyilvános route + `/mcp` + 413-naplózás; az `adform-snapshots` és a `monitoring/import` megkapja a hiányzó méret-ellenőrzést. S0 tesztjei zöldek.
+- [ ] **S3** (a zod-patch merge-e után, és csak ha a merge-elt lockfile-ban a mért zod-verzió van) `.max(n)` a 18 korlátlan tömbre, egyenként; a meglévő `mc_labels` `.max(20)` marad. A „0 elem-hívás” tesztet a merge utáni lockfile-on megismétlem; `tools/list`-diff a baseline-hoz.
+  - **Plusz, zod-verziótól függetlenül:** `new McpServer(info, { maxToolInputElements: 50_000 })` a `buildMcpServer`-ben. Az SDK 1.32.1 `validateToolInput`-ja a zod-validálás **előtt** megszámolja a tömbelemeket és az objektumkulcsokat, és a limit fölött `InvalidParams`-ot dob (ellenőrizve: `node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js` 210–212). Egy teljes mezős `mc_update_batch`-sor kb. 39 elem, tehát az 500-as batch kb. 20 000 elem. A testvér-session (`mm6: JSON body limits…`) szerint a `tools/list`-et nem változtatja. Teszt az SDK Clienten és `InMemoryTransport`-on át, mert a meglévő tesztek közvetlenül a handlert hívják, és kihagyják a `validateToolInput`-ot.
+- [ ] **S4** Verify (`npm test`, `tsc`, lint), diff-review külön reviewerrel (security), deploy telekom → erste Robi go-jával, az AGENTS.md teljes „After” listájával.
+  - **Bump: minor (6.133.0).** A v3-körben a CA is visszavonta a patch-javaslatát: az AGENTS.md szerint a felhasználó által látható viselkedésváltozás minor, és a `tools/list` `maxItems` MCP-szerződés-változás. Robi dönt.
+
+**Nyitott kérdések Robinak:**
+1. ~~Gate-típus~~ — eldöntve: ötvözet (2026-11-23). A v3 ezen belül marad, csak a handler előtt olvas.
+2. A limitek: JSON 1 MiB, `/mcp` 5m, feltöltés 60m, template-írás 5m?
+3. Tömb-limitek: `sizes` 50, `variants` 26, `mc_labels` 20, batch 500 (S0 után véglegesítve)?
+4. S1b (`-H 127.0.0.1`) kötelező szelet legyen?
+5. Bump: minor vagy patch?
+
+**Planning review:** kérve 2026-11-23 10:55: `~/agent-bus/requests/20261123-1055-mm6-body-size-limit.md`; a válaszok ugyanezen a néven az `~/agent-bus/answers/`-ben (a Codexé `.codex.md`).
+
+### Planning review — Chief Architect: **OK with changes** (2026-11-23 10:57; a Codex még fut)
+Tanács, nem utasítás; amit átveszek, Robi jóváhagyásával kerül a szeletekbe.
+- **Rangsor:** a belépés nélküli DoS a zod-hiba előtt, és S1 (nginx) jön először. Egyezik a tervvel.
+- **Gate:** a `Content-Length`-alapú gate a wrapperekben, nem a streamelő olvasó. Feltétele, hogy az app csak a 127.0.0.1-en figyeljen. **A boxon olvasva (2026-11-23): mindkét app minden interfészen figyel (`*:<port>`), csak a ufw zár** (OpenSSH és Nginx Full engedve). → Új szelet javaslat: **S1b** `next start -H 127.0.0.1` mindkét tenantnál (pm2 indítóparancs), Robi dönt.
+- **411:** csak POST/PUT/PATCH-re, és csak ha nincs sem `Content-Length`, sem `Transfer-Encoding`. A gate a `readSession` **előtt** fut, és a teszt bizonyítja, hogy a törzs nem olvasódik be.
+- **nginx:** `location ^~ /mcp`, horgonyzott feltöltési regex (`^/api/(files/upload|import/xlsx|adform-snapshots|monitoring/import)$`). A proxy-fejlécek és a maintenance-gate egy közös include-snippetbe kerülnek, amelyet mindhárom location behúz.
+- **Limitek:** kiindulásnak rendben vannak. S0-ban a `monitoring/import` és az `adform-snapshots` legitim maximumát külön kell nézni. Az MCP tool-sémák `.max()`-a **operation contract változás**: bekerül a Touches-ba és a CHANGELOG-ba.
+- **Rollback és ellenőrzés:**
+  - vhost-mentés időbélyeggel, reload előtt `nginx -t`;
+  - S1 után 40 MB-os feltöltés **mindkét** tenanton;
+  - az első héten a 413-ak naplózása (route + `Content-Length`).
+- **Kívül esik, külön tétel:** a box Node 20.20.2-je EOL; `limit_req` a login és a render/public route-ra. Egyik sem ennek a fixnek a része.
+- **Bump:** patch elég, Robi dönt.
+
+### Planning review — Codex: **Stop** (2026-11-23) → újratervezés
+A „Stop” azt jelenti, hogy ebben a formában nem hajtom végre. A pontjai és amit átvennék:
+1. **A `.max()` nem állítja meg az elemvalidálást.** **Helyben megfigyelve (zod 4.4.1):** `z.array(el).max(50)` 501 hibás elemmel 502 issue-t ad, és 501 jó elemnél is mind az 501 elem-validátor lefut. Ha egy hossz-gate jön az elemek **előtt** (`z.unknown().superRefine(…fatal…).pipe(z.array(el))`), 1 issue lesz és 0 elem-hívás. → S3: hossz-gate az elemvalidálás előtt, a sémában (így az MCP SDK validálása is elé kerül). A teszt az elem-validátor hívásszámát nézi (0), nem csak a 400-at. A javított zodon (a zod-session után) újramérem.
+2. **Gate: a CA és a Codex ellentmond.** A CA a `Content-Length`-alapú gate-et ajánlja a wrapperekben; a Codex a valódi bájtszámláló olvasót, mert a 411 új szerződés, és az nginx `Content-Length`-garanciája nincs igazolva. **Javaslatom (Robi dönt), a kettő ötvözete:** a `withSession` / `withAdmin` a kérés törzsét egy bájtszámláló streamre cseréli. Így a handlerek `req.json()` / `formData()` / `text()` hívása a limitnél megáll, és a wrapper 413-at ad. Mellé jön egy `Content-Length`-előszűrés az olcsó elutasításhoz. 411 nincs, a fejlécben nem kell megbízni, és a 31 + 5 hívási hely változatlan marad. A három nyilvános route és az `/mcp` ugyanezt a függvényt hívja.
+3. **Leltár és tesztek:**
+   - Az `src/lib/entity-route.ts` további 5 JSON-olvasást tartalmaz. Ezek a `withSession` alatt futnak, a wrapperes megoldás lefedi őket.
+   - Tesztek: pontosan a limit, és limit + 1 bájt; chunked; üres törzs; UTF-8 többbájtos karakter (bájt, nem karakter); `withAdmin`; multipart; MCP.
+   - A feltöltés megmaradását egy kb. 49,9 MB-os fájl bizonyítja, nem 40 MB-os.
+   - A tömb-limitek műveletenként, indoklással (a feed-limit nem általános batch-szerződés).
+4. **Az nginx-diff S1 előtt kap külön review-t:** a konkrét konfig-diffel, a kivételek illesztésével, időbélyeges mentéssel és visszaállítási lépésekkel (a CA közös include-snippetjével együtt). S4 hivatkozik az AGENTS.md teljes „After” listájára.
+5. **Bizonyíték-státusz:**
+   - A tesztek még nem futottak, ezért nem „megfigyelten pirosak” (fent javítva).
+   - S0 egy reprodukáló paranccsal indul egy izolált, helyi appon (`next start` a teszt-DB-vel), nem élesben.
+   - A production OOM következtetés marad.
+   - A spec (2026-09-06) **elavult lehet**: azóta 31 commit érintette az `src/app/api`, a `scoped.ts` és az `entity-route.ts` fájlokat.
+
+**Következő:** Robi a gate-ről döntött („Ötvözet”). A v2 fent van, és 2026-11-23 11:25-kor újra kiment mindkét reviewernek: `~/agent-bus/requests/20261123-1125-mm6-body-size-limit-v2.md` (benne a portokat tartalmazó vhost-diff, ami a repóba nem kerülhet). Nyitott még a limitek, a tömb-limitek és az S1b.
+
+### Planning review v2 — CA: **OK with changes**, Codex: **Stop** (2026-11-23) → v3 fent
+- **Közös fő pont:** a v2-ben a 413-felülírás nem akadályozta meg az írást, ha a handler lenyelte a hibát. A Codex próbája: a `POST /api/drafts` 413-at adott, a `createDraft` és a `writeAudit` közben lefutott. → v3: a wrapper a handler előtt olvas.
+- **Codex:** a `boundedArray` elrontaná a `tools/list` sémáját (`"sizes": {}`). → v3: sima `.max(n)` a javított zodon, ahol ez már az elemek előtt elutasít (helyben megfigyelve, zod 4.6.7). S3 a zod-patch után jön.
+- **Codex:** a bump legyen minor. **CA:** patch. → Robi dönt, a terv a minort javasolja.
+- **CA:** az S1b legyen kötelező; `nginx -T` az S1-review-ban; a `proxy_request_buffering` maradjon alapértelmezett.
+- **Mindkettő szerint jó:** az nginx-diff és a snippet-öröklés.
+- **v3 review:** kérve 11:50-kor, `~/agent-bus/requests/20261123-1150-mm6-body-size-limit-v3.md`.
+
+### Planning review v3 — Codex: **OK with changes**, CA: **OK with changes** (2026-11-23) — Stop nincs
+A végrehajtáskor betartandó pontosítások:
+- **Sorrend:** `Content-Length`-előszűrés (csak fejléc) → auth (`readSession` / admin / `resolveBearerClient`, mind csak fejléc) → korlátos olvasás → handler. Auth nélkül a törzs nem olvasódik be (ma is 401 olvasás nélkül). Teszt: auth nélküli kérés `Content-Length` nélkül, a törzs érintetlen.
+- **Az új kérés:** `new NextRequest(req.url, { method, headers, body: bytes, signal: req.signal })`. A `content-length` a tényleges bájtszám lesz, a `transfer-encoding` kiesik. A wrapper-teszt a `nextUrl.searchParams`-ot is nézi.
+- **A `signal`-átadás nem megszakítás** (Codex próbája): a korlátos olvasás maga álljon le kliens-bontáskor; erre is kell teszt.
+- **Feltöltési memória:** S0-ban mérem egy elfogadott, kb. 50 MB-os feltöltés **csúcs-RSS-ét** (a puffer, a `formData()` és a `Buffer.from` együtt; a CA becslése kb. 3×, vagyis kb. 180 MB, a telekom `max_memory_restart`-ja 700 MiB). Ha 250 MB fölött van, a négy feltöltési route a számlált streamet kapja, nem a puffert.
+- **Node 20.20.2:** a valódi-Next próbák (teljes 413 reset nélkül, bontás, multipart, `signal`) S0-ban és S2 után is a box Node-verzióján futnak, nem csak a helyi 24-en. A Node-csere (TIP-061) nem ennek a tervnek a része.
+- **A drafts- és restore-teszt** `Content-Length` nélküli túlcsordulással is fut, a restore érvényes `If-Match`-csel.
+- **`/mcp`:** `tools/call` és a JSON-válasz (`enableJsonResponse`) ép marad; a sorrend ugyanaz, mint fent.
+- **Külön tétel, nem ebbe a diffbe:** a write-route-ok `.catch`-es body-olvasásainak listája (CA), köztük a drafts üres-draft viselkedése.
+- **S1b:** mindkét reviewer szerint bekerül (a CA szerint kötelező).
+- A limitek (1m / 5m / 60m / 5m; 50 / 26 / 20 / 500) kiindulásnak mindkettőjüknek rendben vannak.
+
+**Robi döntése (2026-11-23): „Igen, mind”.** Mehetnek a limitek (JSON 1 MiB, `/mcp` 5m, feltöltés 60m, template-írás 5m), a tömb-limitek (`sizes` 50, `variants` 26, `mc_labels` 20, batch 500, S0 után véglegesítve), az S1b kötelező szeletként, és a bump minor (6.133.0). A deployok és az S1 (nginx) továbbra is külön go-t kapnak.
+
+### S0 — eredmények (2026-11-23)
+- **Legitim JSON-törzsek** (élő DB, csak olvasó tranzakció, DB-oldali aggregálás; a hívási helyekkel összevetve):
+  - a legnagyobb `config`-érték 3367 bájt, a legnagyobb `messages`-sor JSON-ként 3967 bájt, a legnagyobb `text_formatting`-sor 417 bájt;
+  - 3009 message, 189 audience, 102 topic (a két tenant együtt). A reorder- és share-szelekciós tömbök tehát legfeljebb néhány ezer id-ből, néhányszor 10 KB-ból állnak.
+  - Az 1 MiB-os JSON-limit így kb. 250× tartalékot hagy. **Egyik JSON-route sem kap kivételt**, az nginx-diff marad.
+- **Batch-maximum** (`audit_log`, `bulk_*` sorok, DB-oldalon csoportosítva): `messages bulk_update` 154, `bulk_copy` 147 (ez a létrehozott példányok száma), `bulk_move` 7, `bulk_create` 5. Telekomon nincs bulk-sor. → **a batch-limit 500 marad** (kb. 3× tartalék).
+- **Feltöltések** (`uploaded_files`): a creative-ok p99-e 8,8 MB, az asseteké 0,9 MB. Két videó nagyobb 40 MB-nál (61,6 és 53,0 MB, 2026-08-17). Ezek nem a `files/upload` útvonalon jöttek, mert annak az 50 MB-os limitje az első commit óta él; aznap a import-scriptek dolgoztak (`git log` 2026-08-17). A 60m-es feltöltési limit tehát lefed minden legitim kérést.
+- A `monitoring/import` és az `adform-snapshots` fájlmérete nincs eltárolva, ezért ismeretlen. Mindkettő a 60m-es feltöltési location alá kerül.
+- Az MCP `asset_upload` leírása „max 10MB decoded” base64-et ígér, de az SDK legfeljebb 4 MiB-os törzset olvas (2026-11-04-i jegyzet). Ez meglévő eltérés, nem ennek a fixnek a része, külön jelzem.
+- **Tesztek, megfigyelten pirosak** (`tests/integration/api/request-body-limit.test.ts`, 2026-11-23): 18-ból 14 bukik, 4 védőteszt zöld (az auth nélküli kérés 401-et kap, és a törzséből egy bájt sem olvasódik; a pontosan limitnyi törzs eljut a handlerig). A bukások ma ezt mutatják, a limit + 1 bájtos (vagy +1 MiB-os) törzzsel:
+  - `render/public` 404, `auth/login` 401: mindkettő a teljes törzs beolvasása után;
+  - a share-komment **létrejön** (201), a draft **létrejön** (201), az archivált audience érvényes `If-Match`-csel **visszaáll** (200);
+  - a feltöltés a teljes, limit fölötti törzset beolvassa, és csak utána bukik meg a multipart-parszoláson; a template-írás 404-et ad a beolvasás után;
+  - ugyanez `Content-Length`-tel és nélküle is.
+- **Feltöltési memória** (helyben, Node 24.13.1, a Next `NextRequest`-jén, nem a route-runtime-ban; 50 MB-os fájl): a mai út (`formData()` az eredeti streamen) +102 MB RSS, a v3 pufferelős útja +201 MB, a kétszerese. A boxon most a két mm6-folyamat 339 és 179 MB-on fut, a pm2 küszöbe 900 és 700 MiB, available 1747 MB.
+  - **Döntés (a CA javaslata szerint, a jóváhagyott ötvözeten belül):** a négy feltöltési route a **számlált streamet** kapja, nem a puffert. Ott a limit fölött a stream hibával áll le, és a wrapper 413-at ad. A négy route egyike sem tud írni parszolt űrlap nélkül; a teszt ezt is ellenőrzi (nincs `uploaded_files`-sor). A JSON- és szöveg-route-ok pufferelnek (1 MiB, illetve 5 MiB), ez elhanyagolható.
+- **Még nyitott S0-ból:**
+  - a Node 20.20.2-es próbák, mert helyben csak Node 24 van (letöltés kell, Robi engedélyével);
+  - a valódi `next start`-os reprodukció. Ezt az S2 utánra teszem, ott egyszerre mutatja a hibát (a régi builden) és a javítást.
+- **S1-review előkészítés:**
+  - `nginx -T` (2026-11-23): `client_max_body_size` csak a három vhostban van (a két mm6-ban 200M, a proficióban 50M); `http`-szintű beállítás és `proxy_request_buffering` sehol nincs, tehát az alapértelmezett „on” él.
+  - A telekom-diff tartalmilag megegyezik az erstéével (más a port és a tenant, és nincs `/artifacts`).
+  - A diffet egy friss kontextusú reviewer nézi (2026-11-23).
+- **S1-review (friss kontextusú reviewer, 2026-11-23): OK with changes.** Átvett javítások az S1 lépéseibe:
+  - A `sites-enabled` vhostok symlinkek a `sites-available`-be. **A mentés és a szerkesztés a valódi fájlon** történik (`sites-available`, vagy `cp -aL`); a linkre `sed -i` vagy `mv` nem mehet. Reload után `nginx -T | grep client_max_body_size` és a hibalog; a repó snippetjét `cmp`-vel vetem össze a box példányával.
+  - **Az utóellenőrzés nem írhat élesbe.** A 49,9 MB-os feltöltés **session nélkül** megy, és 401-et vár (ezzel igazolja, hogy átjutott az nginxen), nem írja a MinIO-t és a DB-t. Plusz: 2 MiB-os POST `/mcp`-re token nélkül → 401; 6 MiB-os POST `/mcp`-re → 413; 2 MiB-os PUT `/api/templates/a/b` session nélkül → 401.
+  - Pontosítás: az 50 MB-os app-limit csak a `files/upload` és az `import/xlsx` route-ban van, az `adform-snapshots` és a `monitoring/import` route-nak a 60m lesz az egyetlen korlátja (az S2 adja hozzá az app-oldalit).
+  - Opcionális: `error_page 413` JSON-nal, mert a `MonitoringUpload` `r.json()`-t hív. Csak 60 MiB fölött számít.
+  - Meglévő, nem ennek a változásnak a hibája: az MCP `asset_upload` / `creative_upload` 10 MB-os base64-et hirdet, a transport legfeljebb 4 MiB-ot olvas.
+
+## 2026-11-23 — Régi MM kivezetése a B boxon (TERV, Robi go-jára vár)
+
+Kérés: a Head of Dev 2026-11-23-i üzenete; a Head of Security szerint Robi döntése „Vezessük ki”. **Robi ebben a sessionben még nem erősítette meg.** A régi MM másik repó, abba nem írok. Box-tények: infra-map, „Box B”, a `proficio.messagingmatrix.ai → mm-server-proficio` és az `mm-server-erste` sor.
+
+### ⚠ Lelet (2026-11-23, csak olvasva): élő kulcsszivárgás
+- A `mm-server-proficio` buildjében (2026-02-08) **három nyilvánosan kiszolgált JS-fájl tartalmazza a `.env` `VITE_ANTHROPIC_API_KEY` értékét** (`assets/Settings-*.js`, `assets/ai-assistant-*.js`, `assets/templates-*.js`). Mindhárom HTTP 200-zal letölthető, és a letöltött válaszban benne van a kulcs. A `VITE_` előtagú változókat a Vite a böngésző-bundle-be égeti.
+- Az elmúlt 14 napban ezt a három fájlt 13, 23 és 12 alkalommal töltötték le, 8–15 különböző user agenttel. **A kulcsot kompromittáltnak kell tekinteni.**
+- Ugyanez az érték az mm6 két tenantjának és a customBrainnek a `.env`-jében nincs meg. A `VITE_SUPABASE_PW`, a `JWT_SECRET` és az `MCP_BEARER_TOKEN` egyik build-fájlban sincs benne. A `/.env` és a `/.git/config` útvonal az SPA `index.html`-jét adja (ugyanaz a sha, mint a `/`-é), tehát ott nincs szivárgás.
+- **A kulcs törölve:** Robi 2026-11-23-án ezt írta: „ezt már letörröltük”. Ezt én nem ellenőriztem, a kulccsal semmit nem próbáltam ki. A kiszolgálás 11:25 UTC óta leállt (lent, 1. lépés).
+
+### Használja-e még valaki (2026-11-23, csak olvasva)
+- `mm-server-erste`: nincs vhost, a portját kívülről a ufw zárja, élő kapcsolata 0, és az MM6 repó nem hivatkozik rá. Csak a boxról érhető el.
+- `mm-server-proficio`: nincs saját access logja. A kérései a közös `access.log`-ba mennek, a customBrainé és a default szerveré mellé, és ez a log **14 napig** él, nem 30-ig.
+  - 14 nap alatt a felülete bundle-jét 151-szer töltötték le böngésző user agenttel (124-szer 2026-11-09-én, utána naponta 1–5-ször), 18 különböző kliensről.
+  - Író API-hívás nem volt, csak scanner-POST-ok, amelyek 301-et kaptak.
+  - Nem néztem meg, hogy a régi frontend a saját API-ját hívja-e, vagy közvetlenül a Google-t. Ezért az API-hívások hiánya nem bizonyítja, hogy senki nem használja. Hogy a 18 kliens valódi felhasználó-e (például Proficio), azt Robi dönti el.
+- Adat: mindkét app mappájában SQLite-fájlok vannak (`db/*.db`), és mindkettőnek van `.env`-je titkokkal. Rollback-pontként a helyükön maradnak.
+
+### Lépések
+**Door:** az 1. lépés visszafordítható, de kifelé látszik (a proficio domain megszűnik); a 2. lépés egyirányú.
+- [x] **0.** Robi 2026-11-23: „Igen, állítsd le” (ezzel a „Vezessük ki” megerősítve). A kulcsot Robi szerint már törölték („ezt már letörröltük”, 2026-11-23).
+- [x] **1. Leállítás — KÉSZ 2026-11-23 11:25 UTC** (a B box-session reboot-ablaka után, vele egyeztetve):
+  - Időbélyeges mentés a boxon: a proficio vhost valódi fájlja és a pm2 dump (`…-20261123-112459`); a `sites-enabled` bejegyzés symlink maradt.
+  - **Sorrend a tervtől eltérően:** előbb a vhost, utána a pm2. Így a kulcsos fájlok azonnal elérhetetlenné váltak, és 502-es pillanat sem volt.
+  - A vhost `location /`-ja `return 410;`, a szöveges „megszűnt” oldal helyett, mert szöveget nem adtál. `nginx -t` ok, reload.
+  - `pm2 stop mm-server-proficio mm-server-erste`, `pm2 save` (11:25:30): a mentett dumpban mindkettő `stopped`, ezért a következő reboot sem hozza vissza őket. A két régi port nem figyel.
+  - Kívülről ellenőrizve: a proficio domain `/` és a három kulcsos fájl 410-et ad, az erste és a telekom `/login`-ja 200, a brain 200, az nginx error logban nincs új sor.
+  - Az eredeti terv lépései:
+  - `pm2 stop mm-server-proficio mm-server-erste`, majd `pm2 save`;
+  - a proficio vhost a valódi fájl időbélyeges mentése után egy statikus „megszűnt” oldalt ad (a szövegét Robi adja), vagy 410-et;
+  - ellenőrzés: a proficio domain a megszűnt-oldalt adja, a három kulcsos fájl nem tölthető le, az mm6 két tenantjának `/login`-ja 200, a customBrain él;
+  - visszaállítás: `pm2 start mm-server-proficio mm-server-erste`, `pm2 save`, a vhost-mentés vissza, `nginx -t && systemctl reload nginx`.
+- [ ] **2. Törlés** (külön go, az 1. után néhány nappal): a két app mappája (benne a SQLite-fájlokkal és a `.env`-ekkel) tömörítve a Hetzner kötetre, csak rootnak olvashatóan; titkot tartalmaz, ezért nem kerül a Drive-ra titkosítás nélkül. Utána `pm2 delete` mindkettőre, `pm2 save`, a vhost és a symlink törlése, `certbot delete --cert-name proficio.messagingmatrix.ai`. Visszaállítás csak az archívumból lehetséges.
+- [ ] **3.** Az infra-map Box B sorait a gazdája (Learning) frissíti, jelzem neki.
+- Ha az 1. lépés a Node-csere előtt lefut, a régi MM-et nem kell Node 24 alatt tesztelni.
+
+## 2026-11-23 — B box: Node 20 → 24 (TERV, Robi lépésenkénti go-jára vár)
+
+Kérés: a Head of Dev 2026-11-23-i üzenete; a Head of Security szondája (2026-11-23): a B box system Node-ja 20.20.2, EOL (2026-04-30). Végrehajtó: ez a session (a Head of Dev kijelölése, nem go). Box-tények: infra-map „Box B”. Előzmény: `~/SecAudit/tasks/node24-migration.md` (2026-09-06, az A boxra írták; azóta az A box minden appja 24.22.3-on fut, a módszer ott bevált).
+
+**Touches:** a B box pm2-appjainak futtatókörnyezete (mm6-erste, mm6-telekom, custombrain; a régi MM a kivezetés 1. lépéséig), az mm6 build a boxon (`mm6-deploy` → `npm ci` + `npm run build`), a pm2 démon (`pm2-root.service`), és a tenantok `ecosystem.config.cjs`-e (ez a boxon a repón kívül van, git nem követi). Szemantikai modell nincs, a meaning-dokumentumok a futtatókörnyezetről nem szólnak. Szabvány: `~/.agents/standards/dependencies.md` (a futtatókörnyezet egymás mellé települ; a kockázatos app megy először).
+
+**Megfigyelve (2026-11-23):**
+- A boxon: Node 20.20.2 a NodeSource csomagból (`nodesource.list`), x86_64. A pm2 rootként fut, `pm2-root.service`. Minden app `interpreter: node` (a PATH-ból), fork módban; a tenantok ecosystem-fájljában `interpreter: "node"`, `next start -p <port>`. Build-eszközök vannak (python3, make, g++).
+- Helyben: a teljes tesztcsomag (1119 teszt) Node 24.13.1-en zöld (a zod-session baseline-ja, 2026-11-23). Az MM6-at helyben eddig is Node 24-en fejlesztettük.
+- Natív modulok: a sharp, a `@next/swc`, a `@unrs`, a `@rollup` és az esbuild N-API-s vagy önálló bináris, Node-főverziótól független. A playwright `>=18`, a next és a sharp `>=20.9.0`.
+- **Egyetlen gond: a `better-sqlite3` 11.10.0.** A GitHub release-ben csak `node-v115` és `node-v127` linux-x64 prebuild van (Node 20 és 22), `node-v137` (Node 24) nincs. Node 24-en a `npm ci` tehát a boxon forrásból fordítana (node-gyp), ami a 4 GB-os boxon lassú és memóriaigényes. A 12.10–12.12 verziókban van `node-v137` prebuild, a 13.x-ben nincs.
+  - Az app futás közben nem használja: az `src`-ben csak kommentben szerepel. Két régi script használja (`scripts/seed-perf.ts`, `scripts/backfill-to-pg.mjs`).
+  - Javaslat (Robi dönt): **(a)** `better-sqlite3` → 12.12.0, egy függőség-patch a Node-csere előtt. Vagy **(b)** a függőség és a két script törlése. Vagy **(c)** fordítás a boxon.
+- A `mm6-deploy` csak lockfile-változáskor futtat `npm ci`-t (`node_modules/.mm6-lock-sha`). Node-csere után ezt kézzel kell kikényszeríteni (a stamp törlése), különben a régi ABI-jú natív modulok maradnak.
+
+**Sorrend (javaslat, Robi dönt):**
+1. A B box-session kernel-151 + reboot ablaka **előbb**, külön ablakban.
+2. A régi MM kivezetésének 1. lépése (fent), így a Node-csere csak három appot érint.
+3. Az mm6 függőség-patchei: a zod-patch (`claude/exciting-leakey-7043bd`, `13386ba`), a `better-sqlite3` (a) szerint, és a body-limit szeletei, amíg még a régi Node-on futnak, hogy egy hiba egy változáshoz legyen köthető.
+4. Node 24 egymás mellé, appokként (lent).
+5. A system Node cseréje a végén.
+
+**Lépések (mindegyik Robi külön go-jával; a pm2-lépések előtt szólok a B box-sessionnek):**
+- [ ] **N1. Node 24 egymás mellé:** a hivatalos 24.x LTS tarball (a legfrissebb biztonsági kiadás) egy verziózott mappába (az útvonal az infra-mapbe kerül, nem ide). Ellenőrzés: a `SHASUMS256.txt` aláírással; `<node24>/bin/node -v`. A system Node érintetlen. Visszaállítás: a mappa törlése.
+- [ ] **N2. mm6-telekom:**
+  - `PATH=<node24>/bin:$PATH` alatt: a stamp törlése, majd `mm6-deploy telekom` (ez `npm ci` + build Node 24-gyel);
+  - az ecosystemben `interpreter: "<node24>/bin/node"`, aztán `pm2 delete mm6-telekom && pm2 start ecosystem.config.cjs --only mm6-telekom && pm2 save`;
+  - ellenőrzés: az AGENTS.md „After” listája, a `pm2 jlist`-ben `node_version` 24, és a hibalog;
+  - visszaállítás: `interpreter: "node"`, ugyanez a pm2-sor. Az N-API-modulok Node 20 alatt is futnak, a `better-sqlite3`-at az app nem tölti be. Ez következtetés, ezért a visszaállítást az N2-ben ki is próbálom: a Node 20-ra visszaváltva a `/login` 200-at ad.
+- [ ] **N3.** Figyelés 24–48 óráig: a restart-számláló, a hibalog, a memória.
+- [ ] **N4. mm6-erste:** ugyanaz, mint N2.
+- [ ] **N5. custombrain:** az igényeit a customBrain státusz-session adta át (2026-11-23; a gépszintű részletek a közös jegyzetmappában: `custombrain-node24-igenyek-2026-11-23.md`).
+  - Nem kell `npm install`, rebuild vagy build: tiszta JavaScript, natív modul nincs. **A csere közben a customBrain mappájában nem futhat `npm install`** (lockfile nincs a gitben, egy telepítés mást hozna).
+  - A hét cron-sora teljes úton a system Node-ot hívja. Ezért **a customBrain az N6-tal, a helyben cserélt system Node-dal megy át**, és a cron-sorokhoz nem kell nyúlni. Kanárinak (Robi dönt) választható a pin, vagy egyetlen cron-sor (`agenda-sync`). Ehhez a hét sort át kellene írni, és N6 után visszaírni.
+  - Az újraindítás a customBrain saját Deploy-szabálya szerint megy (stop, a port felszabadítása, start). **Soha nem `pm2 restart all`**, és démon-újraindítás után pid-ellenőrzés kell (a régi folyamat kétszer is a porton ragadt).
+  - Ami változik: a beépített `fetch` undicija 6.24.1-ről 7.x-re lép (20 hívás 11 fájlban). A graphology két csomagját Node 24-en még nem próbálták.
+  - Utána: a jegyzet ellenőrzőlistája (a `/proc/<pid>/exe`, a port pid-je, a hibanapló, 10 percen és 1 órán belül a cron-naplók, másnap a mentés). Végül szólok a customBrain-sessionnek, ő a brain MCP-n át ellenőriz.
+- [ ] **N6. System Node csere** (amikor minden app 24-en fut és stabil):
+  - a mostani `nodejs` .deb mentése (`/var/cache/apt/archives`, vagy `apt download nodejs=20.20.2-1nodesource1`);
+  - a NodeSource repó 24.x-re, `apt install nodejs`, majd `pm2 update` (a démon is az új Node-ra áll; ez minden pm2-folyamatot újraindít, ezért utána jön a customBrain pid-ellenőrzése, és az mm6 két tenantjáé is);
+  - az interpreter-pinek visszaállítása `"node"`-ra, és `pm2 save`.
+  - Visszaállítás: a mentett .deb `dpkg -i`, `pm2 update`.
+  - A postgres-meta konténer saját Node-ja ettől nem változik (lent külön tétel).
+- [ ] **N7.** `engines: { node: ">=24" }` a `package.json`-ban, commit; bump: patch.
+
+**Door:** N1–N5 appokként kétirányú (pin vissza), egy-egy app a hatókör. N6 az egész box pm2-ét érinti, a mentett .deb-bel visszafordítható. A kiesés appokként egy pm2-restart (kb. 1 s, a maintenance-oldal mögött).
+
+**Prediction:** az app viselkedése nem változik, a tesztek Node 24-en ma is zöldek. A deploy idejét a `npm ci` növeli. Ismeretlen: a Next 16.4.5 és a playwright viselkedése a box Node 24-én (helyben 24.13.1-en fut), és a customBrain igényei.
+
+### Mellékes tételek (külön, nem ebbe a cserébe)
+- [ ] **postgres:16 konténer (16.14):** a többi boxon 16.15–16.16 fut. A minor-frissítés image-csere, adatmigráció nélkül, de a közös DB mindkét tenantot és a többi appot érinti. Előtte `pg_dump`; az infra-map szerint az image-ek `:latest`-en vannak, és véletlenül nem pullolunk. Hogy van-e újabb `postgres:16` image, azt nem néztem meg.
+- [ ] **supabase studio (Next 16.2.6):** csak a 127.0.0.1-en érhető el, ezért alacsony prioritás. Frissítése image-pull a studióra.
+
+## 2026-11-23 — AGENTS.md méretkapu pre-commit hookban (TERV, Robi go-jára vár)
+
+Kérés: a Learning session üzenete, Robi szavával („Igen, szólj nekik”). A Codex a projekt `AGENTS.md`-jét csak 32 768 bájtig olvassa, a többit szó nélkül levágja. Minta: `~/bizi/.githooks/pre-commit` (`2b39634`, csak olvastam).
+
+**Megfigyelve (2026-11-23):**
+- Az `AGENTS.md` most 9 894 bájt, jóval a bizi 26 000 bájtos küszöbe alatt.
+- A `core.hooksPath` itt a klón saját `.git/config`-jában van beállítva, abszolút úton a `.git/hooks`-ra. Ez az alapértelmezett hely, és csak `*.sample` fájlok vannak benne, tehát ma egyetlen hook sem fut.
+- Ki állította be: nem tudom. A projekt egyik Claude-átiratában sem szerepel (grep a session-átiratokon), és a többi repóban (customBrain, confAi2, HINT-map, nexus, brandBrain) nincs beállítva. Mivel az alapértelmezett helyre mutat, az átírással semmi nem vész el.
+- A `core.hooksPath` a közös configban van, ezért a worktree-kre is hat. A relatív `.githooks` worktree-nként oldódik fel. Ahol még nincs `.githooks` (például a zod-session ága a merge előtt), ott ugyanúgy nem fut hook, mint ma.
+
+**Touches:** repó-tooling (`.githooks/pre-commit`, új), ennek a klónnak a git configja, és egy sor az `AGENTS.md` „Workflow notes” részében. Az app futását nem érinti, szemantikai modell nincs.
+
+**Door:** kétirányú. A commit `git revert`-tel visszavonható; a config visszaállítása: `git config core.hooksPath /Users/robertbeliczki/messagingmatrix6/.git/hooks`.
+
+**Prediction:** ha az `AGENTS.md` a commitban van és 26 000 bájt fölött van, a commit elutasul; ha alatta, átmegy; ha nincs a commitban, a hook semmit nem csinál. A hook a stage-elt változatot méri (`git show :AGENTS.md`), így egy pathspec-es commit is átmegy rajta. Próba egy eldobható worktree-ben, a bizi mintájára: túlméret → elutasítva; normál és `AGENTS.md` nélküli commit → átmegy.
+
+**Szeletek:**
+- [ ] **H1** `.githooks/pre-commit` a bizi mintájára (POSIX sh, futtatható). A hibaüzenet a Codex 32 768 bájtos határát nevezi meg; „Méret” sor nincs az `AGENTS.md` tetején, ezért arra nem hivatkozik.
+- [ ] **H2** Egy sor az `AGENTS.md` „Workflow notes”-ába: „Once per clone: `git config core.hooksPath .githooks` (the AGENTS.md size gate)”. Enélkül egy új klónban a kapu csendben hiányzik.
+- [ ] **H3** `git config core.hooksPath .githooks` ezen a Macen, és a három próba egy eldobható worktree-ben.
+- [ ] **H4** Commit: `.githooks/pre-commit`, `AGENTS.md`, és a `tasks/todo.md`-ből **csak ennek a szakasznak** a hunkjai. A ma írt többi todo-szakasz (a régi MM-é a kulcsszivárgással együtt) addig ne kerüljön a nyilvános repóba, amíg a kulcs nincs visszavonva és a fájlok nincsenek offline. Push Robi go-jára. Bump nincs, mert ez tooling.
+
+### Állapot, 2026-11-23 délután
+- **A zod-patch kint van:** 6.132.1 (`13386ba`), az origin/main-en, mindkét tenanton deployolva (erste 10:58 UTC; Robi go-ja a zod-sessionben). Ezzel a body-limit S3-ja (`.max()` a javított zodon) nem vár tovább; a „0 elem-hívás” tesztet a merge-elt lockfile-on futtatom.
+- Ez a checkout 4 committal az origin/main mögött van, és itt nem commitolt todo-szakaszok vannak. A következő commit előtt pullolok, és a todo.md végét kézzel fésülöm össze.

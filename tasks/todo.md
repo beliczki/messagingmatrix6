@@ -906,8 +906,8 @@ Kérés: egy másik session adta át. Ez a 2026-11-04-i vizsgálat kis fixe (arc
 ### S4 Deploy-terv (nem futtattam; minden lépés Robi külön go-jára)
 1. ✅ **Bump** (Robi: „Yes, bump”, 2026-11-23): 6.132.0 → 6.132.1 (patch), `npm version --no-git-tag-version`. A `package.json` és a lock két gyökér-verziója változott, a CHANGELOG-ban a bejegyzés a `[6.132.1] — 2026-11-23` alatt van. Saját commit ezen az ágon.
 2. **Rebase a `main`-re**, utána Robi merge-el. Egy másik session a todo-t archiválja a `main`-en.
-3. **Planning review:**
-   - request: `~/agent-bus/requests/<YYYYMMDD-HHMM>-mm6-6.132.1-deps-patch-deploy.md` (cél, diff, a fenti mérések, rollback);
+3. **Planning review** (Robi: „Yes, request review”, 2026-11-23; a CA webhook 200, a Codex fut):
+   - request: `~/agent-bus/requests/20261123-1145-mm6-6.132.1-deps-patch-deploy.md` (cél, diff, a fenti mérések, rollback, 3 nyitott kérdés: `npm ci` az élő app alatt, a hono frissessége, Node 20 EOL);
    - CA webhook és `codex exec -s read-only`;
    - „Stop” esetén nincs deploy.
 4. **Push** az `origin main`-re.
@@ -940,3 +940,20 @@ Kérés: egy másik session adta át. Ez a 2026-11-04-i vizsgálat kis fixe (arc
   - Korlát nélkül 10 MiB-nál még OOM.
   - A REST `bulk-*` route-okat ma csak az nginx 200M-ja korlátozza.
 - **Dev-audit:** a vitest 3 → 4 (major), plusz a drizzle-kit és a typescript-eslint lánca. Külön feladat, a `dependencies.md` szerint ütemezve.
+
+### Planning review — Chief Architect: OK with changes (`~/agent-bus/answers/20261123-1145-mm6-6.132.1-deps-patch-deploy.md`)
+- **Beépítve:**
+  - **(8)** A CHANGELOG nem állítja, hogy a patch zárja az OOM-utat. A bejegyzés kimondja, hogy a hibás elemű nagy tömb validálása továbbra is memóriát visz (a régi 34–60 %-át, mérve), és ezt a külön body-size limit zárja.
+  - **(5)** A todo-változás commitolva; a merge pontosan a saját commitjaimat viszi.
+  - **(2, opcionális)** `npm view … dist.attestations`: a hono 4.13.20 és a @hono/node-server 2.1.11 SLSA provenance-szal jött, a GitHub Actions trusted publisher a `honojs/hono` és a `honojs/node-server` repóból. Az `npm audit signatures` 728 csomag registry-aláírását igazolta, ebből 139-nek attestation-je is van. `overrides` nincs, a legújabb marad.
+- **A deploy-tervbe (S4) kerül:**
+  - **(1)** Az `npm ci` előbb törli a `node_modules`-t. A telepítés ablakában egy lusta `require` vagy dinamikus import (egy route chunk első hívása) `MODULE_NOT_FOUND`-ot dobhat. Ezért off-peak megy, és az `npm ci` alatt a pm2 error logot figyelem. Ha ilyen sor jön, az a következő szelet (telepítés mellékkönyvtárba + csere), nem most.
+    - ⚠️ Eltérés: az AGENTS.md szerint napközben is mehet. Ez a lockfile nélküli deployokra igaz; az időpontot Robi dönti el.
+  - **(2)** A build után a boxon `grep -rl 'hono' .next/server`: a hono nincs a bundle-ben. Ezzel zárul a nyitott rés.
+  - **(4)** Egy ellenőrzés, ami tényleg zod-ot futtat a boxon (a 401-es próba nem éri el):
+    - bejelentkezett `tools/list` = 52 tool;
+    - egy tool-hívás hibás payloaddal validációs hibát ad. A Codex a másik terv kapcsán megfigyelte, hogy ez HTTP 200, `result.isError: true` alakban jön.
+    - Token kell hozzá. Robi futtatja, vagy a meglévő mm6 MCP connectorral, ha az ezen a tenanton van. Tokent nem kezelek.
+  - **(6)** A pre-flight mindkét tenant HEAD-jét **és** a régi `package-lock.json` sha256-ját rögzíti. Az `npm ci` miatt ez a valódi rollback-pont.
+  - **(3)** A Node 20.20.2 → 24.x (TIP-061, EOL) és a Next 16.4.6 nem ide tartozik. A Node-csere a következő, külön szelet.
+  - **(7)** A memória-őr 120 MB-nál rendben van.

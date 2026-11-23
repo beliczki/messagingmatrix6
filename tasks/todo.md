@@ -18,7 +18,7 @@
 
 ## Jelen állapot (2026-11-22)
 
-- **Verzió: `6.132.0`**, él mindkét tenanton a Hetzner boxon: `erste.messagingmatrix.ai` (pm2 `mm6-erste`) és `telekom.messagingmatrix.ai` (pm2 `mm6-telekom`). Deploy: `AGENTS.md` → Deploy.
+- **Verzió: `6.132.0`**, él mindkét tenanton a Hetzner boxon: `erste.messagingmatrix.ai` (pm2 `mm6-erste`) és `telekom.messagingmatrix.ai` (pm2 `mm6-telekom`). Deploy: `DEPLOY.md`.
 - Phase 0–10 + a 2026-08/09-es epicek mind leszállítva: DCO/Agentic mátrix, Creative Library rebuild, DRAFT-modell (draft = `messages` sor `audience IS NULL`), draft-variánsok, státusz-takarítás (6 státusz), monitoring periódus-tartomány + nap-grain, Drive-linkek, feed diff-alap + „semmi nem tűnik el", dashboard napi áttekintő, Channels-entitás, MCP per-user tokenek.
 - **Átrendezés 2026-09-10:** minden lezárt epic-log és a 2026-09-10 előtti checkpointok szó szerint átkerültek a `todo-archive.md`-be („Archivált 2026-09-10 — todo.md átrendezés" szekció). Itt csak a nyitott munka maradt.
 - **Átrendezés 2026-11-22:** a 2026-09-10 → 2026-11-11 checkpointok és a lezárt roadmap-tételek törzse szintén szó szerint az archívban („Archivált 2026-11-22 — todo.md frissítés”); a nyitott tételeik mutatója a „Session checkpointok” alatt.

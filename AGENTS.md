@@ -27,6 +27,8 @@ Semver (`major.minor.patch`), tracked in the single `package.json` at repo root.
 
 > Suggested bump: `6.1.0` → `6.1.1` (patch). Reason: <one sentence>.
 
+**How to bump:** change the `version` field in `package.json` by hand, and leave `package-lock.json` alone; its own version fields may lag behind. Never run `npm version`: it rewrites the lockfile too. `mm6-deploy` runs `npm ci` whenever the lockfile's hash changes, so a version bump on its own would reinstall `node_modules` under the live app.
+
 ### Bump heuristic
 
 Regular semver is live (we are post-`6.0.0`). Bump on finished work, per category:

@@ -553,13 +553,31 @@ Kérés: a Head of Dev 2026-11-23-i üzenete; a Head of Security szondája (2026
 **A fő változás:** a P1 (`better-sqlite3` törlése) után a boxon minden natív modul N-API (megfigyelve, `nm -D`, 8/8), a `.next` pedig Node-verziótól független JS. Ezért az N2/N4 csak futtatókörnyezet-csere: nincs `mm6-deploy`, `npm ci`, build, stamp-törlés vagy PATH-váltás, és így PATH sem ég be a pm2 env-be. Egy közbülső, rendes `mm6-deploy` Node 20-on buildel, és a megőrzött pin miatt Node 24-en fut tovább.
 
 **Lépések (mindegyik Robi külön go-jával; a pm2-lépések előtt szólok a B box-sessionnek):**
-- [ ] **P1. 6.132.2 (Node 20), telekom → erste.** Előtte push. Tenantonként: rollback-másolat a `node_modules`-ról és a `.next`-ről; `mm6-maint on` **a deploy előtt**, így az `npm ci`, a build és a restart is maint mögött fut (becsült kiesés 2–4 perc, éjjel); `mm6-deploy`. Ellenőrzés: a DEPLOY.md „After” listája, a `better-sqlite3` nincs a `node_modules`-ban, minden `.node` N-API, egy hitelesített olvasás. Visszaállítás: a másolatok vissza + `git reset --hard 1b3e7ec` + restart, utána revert az originen.
-- [ ] **N1. Node 24.22.3 egymás mellé:** hivatalos tarball verziózott, root-tulajdonú mappába; a GPG-aláírás (`SHASUMS256.txt.asc`) és a sha256 ellenőrzése. A pinek a verziózott útvonalra mennek, nem a `current` linkre. Visszaállítás: a mappa törlése.
-- [ ] **N2. telekom:**
+- [ ] **P1. 6.132.2 (Node 20), telekom → erste.** *(Push 2026-11-23: `origin/main` = `2623caa`; Robi: „Igen, push + telekom”. **Telekom kész 22:29 UTC:**
+  - deploy 85 s, `npm ci` lefutott, a maint mögött 1 s alatt felállt; minimum 1256 MB elérhető memória;
+  - HEAD `2623caa`, 6.132.2, a stamp egyezik, restart 1, a hibalog üres; nincs `.next-old`/`.next-build`; `/login` 200 (loopback és publikus), munkamenet nélkül 401, `/_next/image` 404; a `better-sqlite3` nincs, 8/8 natív modul N-API;
+  - a share-oldal-próba kimaradt.
+  - Hitelesített próba (Robi belépett a Chrome-jában, én csak olvastam): a dashboard és a mátrix betölt, minden API-hívás 200, a konzolban nincs hiba. A mátrix `mc: 0/0`-ja nem hiba: a telekom mind a 64 MC-je `DRAFT`, audience nélkül (DB-ben megnézve), a rács pedig csak az elhelyezett sorokat mutatja. A dashboard „64 MCS in 64 cells” felirata a draftokat is beszámolja; ez régi, külön apróság.
+  - **Erste kész 22:39 UTC** (Robi: „Igen, mehet”): deploy 81 s, minimum 1491 MB elérhető memória; ugyanazok az ellenőrzések rendben. Hitelesített próba: MCP `matrix_status` 200 az új folyamaton (a connector az erste vhostját éri). A hibalog régi sorai az AWS SDK `NodeVersionSupportWarning`-jai (az SDK a Node 20-at már nem támogatja); Node 24-en ezeknek el kell tűnniük.
+  - Rollback-másolatok a boxon tenantonként (útvonal az infra-mapben).)*
+- [x] **P1 kész mindkét tenanton.**
+- [x] **P2. Izolált Node 24-es próba-build — kész 22:41 UTC** (Robi: „Igen, mehet”): friss klón a tenant-mappákon kívül, Node 24.22.3 / npm 11.19.1.
+  - `npm ci` 34 s, build 87 s, mindkettő exit 0; 8/8 N-API; minimum 776 MB elérhető memória; a klón és az `.env`-másolat utána törölve.
+  - **Lelet:** az npm 11.19.1 figyelmeztet, hogy 5 csomag install-scriptje „not yet covered by allowScripts”: négy `esbuild`-verzió (`node install.js`) és az `unrs-resolver` (`napi-postinstall … check`). Mind fejlesztői vagy build-eszköz; a futó app (next, sharp) nincs köztük. Hogy az npm lefuttatta-e őket, a figyelmeztetésből nem derül ki. Az N8-ban ellenőrizni kell, hogy a boxon működik-e a tsx és az esbuild (a `db:migrate` is használhatja). Előtte push. Tenantonként: rollback-másolat a `node_modules`-ról és a `.next`-ről; `mm6-maint on` **a deploy előtt**, így az `npm ci`, a build és a restart is maint mögött fut (becsült kiesés 2–4 perc, éjjel); `mm6-deploy`. Ellenőrzés: a DEPLOY.md „After” listája, a `better-sqlite3` nincs a `node_modules`-ban, minden `.node` N-API, egy hitelesített olvasás. Visszaállítás: a másolatok vissza + `git reset --hard 1b3e7ec` + restart, utána revert az originen.
+- [x] **N1. Node 24.22.3 egymás mellé** — **kész 2026-11-23 22:31 UTC** (Robi: „Igen, mehet”):
+  - Good signature (Antoine du Hamel, EdDSA `5BE8A3F6…B168D356`), a tarball sha256-ja egyezik az aláírt sorral és a nodejs.org fájljával;
+  - `node` v24.22.3, ABI 137, npm 11.19.1; nincs csoport- vagy mások által írható fájl; a system Node érintetlen (20.20.2); az útvonal az infra-mapben.
+  - Az eredeti szöveg: hivatalos tarball verziózott, root-tulajdonú mappába; a GPG-aláírás (`SHASUMS256.txt.asc`) és a sha256 ellenőrzése. A pinek a verziózott útvonalra mennek, nem a `current` linkre. Visszaállítás: a mappa törlése.
+- [x] **N2. telekom — kész 2026-11-23 22:47 UTC** (Robi: „Igen, mehet most”; a B box-session értesítése nélkül: „Mehet nélküle”, az MM6-session nem válaszolt):
+  - **N2a** (22:44): próbafolyamat Node 24.22.3-on a telekom buildjének másolatával egy szabad localhost-porton. `/login` 200 két másodperc után („Ready in 489ms”), munkamenet nélkül 401, `/_next/image` 404, asset 200, `/api/config-public` 200, RSS 141 MB, a kimenet hibamentes. Postgres-kapcsolatok: 17 → 18 a 100-ból. Leállítva, a dist-másolat törölve.
+  - **N2b** (22:45:47–55, maint 8 s): pin + delete/start. `exe` = a Node 24-es bináris, `node_version` 24.22.3; a pm2 PATH-jában nincs Node 24; `/login` 200 loopbackon és publikusan, 401, `/_next/image` 404; a hibalog üres. Hitelesített próba Robi Chrome-jában (ő lépett be, én csak olvastam): a dashboard, a Drafts és az Audiences betölt, a konzolban nincs hiba.
+  - **N2c**: vissza Node 20-ra (22:46:33–42, maint 9 s): `exe` = system Node, `/login` 200, Drafts betölt. **A pm2 a `"node"`-ot a system Node-ra oldja fel**, így ez az ismeretlen lezárult. Aztán újra Node 24 (22:47:09–16, maint 7 s), `pm2 save`; a dumpban a telekom a pinnel szerepel.
+  - Mellék-lelet, nem Node-függő: a Telekom-DooH draft-előnézetei `/api/templates/Telekom-DooH/[[css]]`-t kérnek, és 404-et kapnak (Node 24-en 20-szor, Node 20-on 21-szer; a `/api/render` közben 200). Be nem helyettesített template-token; külön tétel.
+  - Az eredeti szöveg:
   - **N2a, próba a boxon (a staging helyett):** egy ideiglenes, második folyamat Node 24-en, pm2-n kívül, egy szabad localhost-porton: `/login` 200, munkamenet nélkül 401, `/_next/image` 404, egy asset 200, hibamentes stderr, RSS; utána leállítva.
   - **N2b, átállás:** az interpreter-pin az ecosystemben, maint mögött `pm2 delete` + `start` (csak ez olvassa újra az ecosystemet), `pm2 save`. Ellenőrzés: `/proc/<pid>/exe` és `node_version` 24.22.3, a DEPLOY.md-próbák, egy hitelesített próba (Robi böngészőjében a mátrix-oldal; vagy az MM MCP-n egy olvasás), hibalog.
   - **N2c, visszaállítási próba:** a pin vissza `"node"`-ra (`exe` = system Node, `/login` 200, a hitelesített próba), aztán újra Node 24.
-- [ ] **N3.** Figyelés 24–48 óráig: restart-számláló, hibalog, RSS a `max_memory_restart` alatt.
+- [ ] **N3.** *(Indult 2026-11-23 22:47 UTC; N4 legkorábban 11-24 22:47, legkésőbb 11-25 22:47 UTC; N6 legkésőbb N4 + 3 nap.)* Figyelés 24–48 óráig: restart-számláló, hibalog, RSS a `max_memory_restart` alatt.
 - [ ] **N4. erste:** ugyanaz, mint N2.
 - [ ] **N5. customBrain** (a customBrain-sessionnek előtte és utána szólok):
   - **N5.0:** a régi, hibásan újrainduló customBrain systemd unit letiltása (Robi go-jával).
@@ -598,7 +616,7 @@ Kérés: a Head of Dev 2026-11-23-i üzenete; a Head of Security szondája (2026
 - **Mellékhatások:**
   - az N5.2 `search` kimenő embedding-hívást tesz, ez a szokásos app-működés;
   - az `agenda-sync` kézi futtatása előtt megnézem, mit ír, és fut-e közben egy ütemezett példány. Amit ír, azt a Node visszaállítása nem vonja vissza, a következő futás felülírja.
-- **Staging:** Robi kifejezett kivétele kell (lent rögzítve, amikor megadja).
+- **Staging-kivétel — Robi, 2026-11-23: „Igen, kivétel”.** Staging helyett az N2a box-próba fut, a telekom a kanári.
 
 ### Végrehajtó session, előfeltételek (2026-11-23 22:05 UTC, csak olvasva a boxon)
 Végrehajtó: a „B box Node 24” side-session (az MM6 státusz-session indította, Robi kérése: „kéne egy node frissítés a gépen külön sessiönben vigyél végig”).

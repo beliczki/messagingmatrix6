@@ -988,3 +988,27 @@ Kérés: egy másik session adta át. Ez a 2026-11-04-i vizsgálat kis fixe (arc
   - **Pontosság:** a CHANGELOG már kimondja, hogy a nagy, hibás tömb OOM-útja nyitva marad; a body-limit follow-up él, külön sessionben.
   - **Node:** a Node 20 EOL miatt a 24.x a következő, külön szelet, a meglévő runtime mellé telepítve.
 - **Megjegyzés:** a 6.128.4-nél a lock gyökér-verzióját szándékosan nem emelték, hogy egy puszta bump ne indítson `npm ci`-t. Itt a lock úgyis változik (`npm update`), és az `npm version` is emelte. A következő bumpnál a `package-lock.json` verziómezőjét érdemes békén hagyni (`npm version` helyett kézzel a `package.json`-ban).
+
+### 6.132.1 deploy — Robi: „CA but right now, off peak does not make sense presently”
+- Robi döntött: a CA változata (`npm ci` az élő app alatt, a script alapértelmezése), és most, nem off-peak.
+- [x] Push: `5c939e4..1b3e7ec`, fast-forward a `main`-re. A box ezt a 4 review-zott commitot építi.
+- [x] **Pre-flight a boxon** (10:53 UTC):
+  - lemez 46%, 1973 MB elérhető memória, 1553 MB szabad swap, Node 20.20.2;
+  - a telepített `mm6-deploy` egyezik a repóval (`c3438a49…`);
+  - mindkét tenant HEAD-je `9be22f7` (6.132.0), a lock sha256 `94a433f64dfd…`, ez egyezik a jelölővel; ez a rollback-pont;
+  - a checkoutokban csak régi, követetlen fájlok vannak (`.env` mentések, `ecosystem.config.cjs`), követett fájl nem változott;
+  - az erste error logban 3 régebbi sor 08:04-ről: Server Action-próba („Server Reference ID … Received "x"”). Az mm6-ban nincs Server Action, ez nem ehhez a deployhoz tartozik.
+- [x] **DEPLOYOLVA `mm6-telekom`** (10:54 UTC):
+  - 105 s, az `npm ci` 45 s (733 csomag);
+  - a legkevesebb elérhető memória 897 MB, a swap legfeljebb 1016 MB;
+  - az error logba 0 új sor jött, az `npm ci` alatt sem.
+  - **Ellenőrzés:**
+    - HEAD `1b3e7ec`, 6.132.1, a lock-jelölő egyezik;
+    - a boxon `npm ls`: zod 4.6.7, body-parser 2.4.0, qs 6.17.1, fast-uri 3.1.9, ip-address 10.7.6, hono 4.13.20, @hono/node-server 2.1.11;
+    - a boxon `npm audit --omit=dev`: 0;
+    - `.next/server`: szó szerinti `hono` 0 fájlban; a 12 találat mind „honor/honour” kommentben és egy user-agent regexben, tehát a hono nincs a bundle-ben;
+    - nincs `.next-old` és `.next-build`;
+    - pm2 online, a restart-szám 2 → 3;
+    - `/login` 200, `/_next/image` 404, `POST /mcp` token nélkül 401;
+    - a share `3_Ml4cJyfDkA` 200; ez a view count-ot 26 → 27-re emelte.
+  - **Bejelentkezett MCP-próba a Telekomon: nem futott,** nincs hozzá token ebben a sessionben. A connector az „ERSTE MessagingMatrix”, 52 toollal.

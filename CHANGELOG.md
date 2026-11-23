@@ -5,6 +5,13 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+### Fixed
+- Security: dependency patch that closes every production `npm audit` finding (2 high, 5 moderate).
+  zod 4.4.1 → 4.6.7 (GHSA-mrhx-c7xc-m3w5: validating an oversized array could exhaust memory —
+  MCP tools and the bulk message routes validate with zod); under the MCP SDK and its unused express
+  and hono branches: body-parser 2.4.0, qs 6.17.1, fast-uri 3.1.9, ip-address 10.7.6, hono 4.13.20,
+  @hono/node-server 2.1.11. No behaviour change: the MCP tool list and its schemas are unchanged.
+
 ## [6.132.0] — 2026-11-21
 
 ### Added

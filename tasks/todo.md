@@ -807,3 +807,136 @@ Teendők:
   - A 3064–3070. sor (share nézet linkben) nem nyitott, a 6.126.0 leszállította.
 - **D:** az npm-audit jegyzet az archív C) részében van, szó szerint. A worktree tiszta volt, eltávolítottam; a `claude/festive-galileo-ac1dfd` ág törölve (`378caa3`, a reflogban még megvan).
 - **Tanulság (javaslat):** az rclone mountra `cp -p` helyett `cat src > dst` és `cmp` kell; ez most a `reference_docs_dir` memóriában van. Ha gyakran kell, egy kis `scripts/`-mentes shell-függvény a Drive-ra másoláshoz. Robi dönt.
+
+## 2026-11-23 — Függőség-patch: az `npm audit --omit=dev` találatainak zárása (TERV, Robi jóváhagyására vár)
+
+Kérés: egy másik session adta át. Ez a 2026-11-04-i vizsgálat kis fixe (archív „Archivált 2026-11-22” C), roadmap: TECH-ADÓSSÁG → „npm audit”). Az alapos fix (JSON-méretkorlát, `.max()` a 18 tömbre, alacsonyabb nginx-limit) nem része, csak follow-up.
+
+### Mai állapot (megfigyelve, 2026-11-23, helyben)
+- **Az audit most 7 találatot ad, nem 5-öt** (2 high, 5 moderate). A 11-04-i öt mellé két új jött, mindkettő moderate, és mindkettő az MCP SDK (`@modelcontextprotocol/sdk` 1.32.1) függősége:
+  - `hono` ≤4.13.15, 5 advisory (helyben 4.13.13);
+  - `@hono/node-server` 2.0.0–2.1.5, 2 advisory (helyben 2.1.4).
+- Telepítve: zod 4.4.1, body-parser 2.3.0, qs 6.16.0, fast-uri 3.1.8, ip-address 10.7.3, iconv-lite 0.7.2. A `package-lock.json` a 6.128.3 óta nem változott. A zod-ot használó kód (`mcp.ts`, `mcp/tools`, a három `messages/bulk-*` route) sem változott 11-04 óta (`git log`).
+- **A hono elérhetősége:** az SDK-ban csak a Node-os `server/streamableHttp.js` és egy példa importálja. Az mm6 két belépőpontja a `server/mcp.js` és a `server/webStandardStreamableHttp.js`. Ezek statikus import-gráfja 18 fájl, és nincs benne hono, express vagy `streamableHttp.js`. Csomag csak öt van benne: ajv, ajv-formats, content-type, zod, zod-to-json-schema. Élesben tehát valószínűleg nem töltődik be. A box bundle-jét nem néztem meg.
+- **Szimuláció a lock másolatán** (`npm update … --package-lock-only`, `npm audit --omit=dev --package-lock-only`):
+  - **(A) csak az öt csomag:** zod 4.6.7, body-parser 2.4.0, qs 6.17.1, fast-uri 3.1.9, ip-address 10.7.6, iconv-lite 0.7.3 (a body-parser alatt). Ez pontosan a 11-04-i jóslat. Utána **2 moderate marad** (hono, @hono/node-server).
+  - **(B) az öt + `hono @hono/node-server`:** ugyanez, plusz hono 4.13.20 és @hono/node-server 2.1.11. Az audit **0 találatot ad**. A lock diffje 60 sor: ez a 9 csomag, plusz a lock gyökér-verziója (6.128.3 → 6.132.0, a `package.json`-hoz igazodik).
+- **Engines:** minden célverzió fut a box Node 20.20.2-jén (`@hono/node-server` ≥20, body-parser ≥18, a többi lazább).
+- **Frissesség:** a hono 4.13.20 tegnap jelent meg (2026-11-22), a @hono/node-server 2.1.11 2026-11-20-án. Az első javító verziók régebbiek: hono 4.13.16 (11-01), @hono/node-server 2.1.6 (11-02). Az `npm update` a tartomány legújabbját hozza; a régebbit csak `overrides`-szal lehetne rögzíteni, ezt nem ajánlom.
+- **A zod-advisory** (GHSA-mrhx-c7xc-m3w5, 2026-10-01): a `$ZodArray` minden hibás elemre külön issue-t gyűjt, plafon és korai leállás nélkül. Ez a hossz-korlát nélküli tömbökre vonatkozik, 4.6.6 javítja.
+- **Mérés a zod 4.4.1-gyel** (a `bulk-copy` séma másolata, csupa hibás elem, Node 24, 2 GB heap):
+  - 1 MiB: 524 288 issue, +553 MB heap, 742 ms;
+  - 4 MiB: 2 097 152 issue, +1556 MB heap, 2,9 s.
+  - Ez egyezik a 11-04-i számokkal. Ugyanezt a mérést a frissítés után is lefuttatom: ebből derül ki, hogy a patch tényleg zárja-e a mi sémáinkon az OOM-utat, vagy ahhoz az alapos fix kell.
+
+### Robi döntése (ajánlással)
+- **H1:** a hono is bekerüljön? **Ajánlás: igen, (B).**
+  - Ugyanaz a mechanizmus: tranzitív patch az SDK tartományán belül.
+  - A „kész” feltétele az audit 0.
+  - Élesben a hono valószínűleg be sem töltődik, ezért a friss verzió kockázata kicsi.
+  - Ha nem: (A), és a 2 moderate marad.
+
+### Terv
+**Touches:**
+- `package.json`: zod `^4.4.1` → `^4.6.6`.
+- `package-lock.json`: 6 (A) vagy 8 (B) csomag, plusz az iconv-lite.
+- Alkalmazáskód nem változik.
+- Ahol a zod fut: az MCP végpont (`src/app/mcp/route.ts`, `src/lib/mcp.ts`, a toolok `inputSchema`-ja és az SDK), a `src/app/api/mcp/tools` (Settings → MCP leírás `z.toJSONSchema`-val) és a három `messages/bulk-*` route.
+- Szemantikai modell nincs. A meaning-dokumentumok (REBUILD_SPEC 2026-09-06, PURPOSE 2026-09-06) nem szólnak a függőségekről, ez megállapítás.
+- Forrás: a 2026-11-04-i vizsgálat (archív C) és `~/.agents/standards/dependencies.md`.
+
+**Door:**
+- A commit kétirányú (`git revert`).
+- A deploy (külön lépés) szintén kétirányú: revert, push, `mm6-deploy`. A lockfile változása miatt a script `npm ci`-t futtat.
+- Hatósugár: minden zod-validált bemenet mindkét tenanton. Migráció és adatváltozás nincs.
+
+**Prediction:**
+- `npm audit --omit=dev`: 0 találat (B), illetve 2 moderate (A).
+- `tsc`, eslint, vitest: ugyanaz, mint a baseline. A baseline most fut a régi függőségekkel, a száma ide kerül.
+- Ismeretlen: a zod 4.4 → 4.6 minor emelés változtat-e a típus-inferencián, a hibaüzenetek alakján vagy a JSON Schema kimeneten.
+- Ami nem változhat: az MCP `tools/list` válasza (52 tool, `scope: full`), mert az agentek ezt látják. A régi zod-dal már lementettem a baseline-t.
+
+**Seam:**
+- `npm audit --omit=dev`.
+- A repó saját ellenőrzései.
+- Az MCP `tools/list` JSON-ja, régi és új zod-dal összevetve. Scratch-script `InMemoryTransport`-tal, a teszt-DB URL-jével, handler nem fut.
+- A zod-memóriamérés a frissítés előtt és után.
+
+**Szeletek:**
+- [x] **S1** `npm pkg set dependencies.zod='^4.6.6'`, `npm update zod body-parser qs fast-uri ip-address` (B esetén `hono @hono/node-server` is). Utána `npm audit --omit=dev`, `npm ls` a régi verziók nélkül, és a lock diffje csak a várt csomagokat tartalmazza.
+- [x] **S2** `npx tsc --noEmit`, eslint és `npm test` (a `mm6-test-pg` fut), a baseline-hoz mérve. Ugyanitt a `tools/list` diff és a zod-mérés.
+- [x] **S3** CHANGELOG az `[Unreleased]` alatt. Verziójavaslat: 6.132.0 → 6.132.1 (patch); a bump csak Robi szavára. Commit a saját ágon: `package.json`, `package-lock.json`, `CHANGELOG.md`, a saját todo-szakasz. Push nincs. Commit előtt rebase a `main`-re, mert egy másik session a todo-t archiválja.
+- [ ] **S4** Deploy-terv Robinak, nem futtatom:
+  - planning review (CA + Codex) a commit után;
+  - push;
+  - `telekom`, utána `erste`, mindegyik Robi külön go-jára;
+  - a boxon `npm ci` fut (lockfile változott), ezért az idő és a memória is nagyobb lehet;
+  - utána a boxon `npm ls zod hono` és `npm audit --omit=dev`, plusz az AGENTS.md „After” lista.
+
+### Eredmény (2026-11-23) — Robi: „Yes, B”
+- **S1:**
+  - `npm audit --omit=dev` → **found 0 vulnerabilities**.
+  - A `package-lock.json` bájtra azonos a szimulált (B) lockkal: 60 soros diff, csak a 9 várt csomag.
+  - `npm ls` tiszta. Az új verziók: zod 4.6.7, body-parser 2.4.0, qs 6.17.1, fast-uri 3.1.9, ip-address 10.7.6, iconv-lite 0.7.3 (a body-parser alatt), hono 4.13.20, @hono/node-server 2.1.11.
+  - A `package.json`-ban csak a zod sora változott (`^4.6.6`).
+- **S2, a repó ellenőrzései** (előtte a régi függőségekkel is lefuttatva, baseline):
+  - `tsc --noEmit`: tiszta, előtte és utána is.
+  - eslint: 0 hiba, 146 warning; a kimenet bájtra azonos a baseline-éval.
+  - vitest: 120 fájl, 1119 teszt zöld, előtte és utána is.
+  - A jóslat teljesült. Az ismeretlen (típus-inferencia, hibaüzenet-alak, JSON Schema) nem okozott eltérést.
+- **MCP `tools/list`:** a régi és az új zod-dal **bájtra azonos** (52 tool, `scope: full`, 65 308 bájt). Az agentek ugyanazokat a sémákat látják.
+- **zod-mérés** (a `bulk-copy` séma másolata, csupa hibás elem, Node 24, 2 GB heap):
+
+  | Törzs | zod 4.4.1 | zod 4.6.7 |
+  |---|---|---|
+  | 1 MiB | 524 288 issue, +553 MB, 742 ms | 524 288 issue, **+190 MB**, 173 ms |
+  | 4 MiB | 2 097 152 issue, +1556 MB, 2,9 s | 2 097 152 issue, **+931 MB**, 713 ms |
+  | 10 MiB | (nem mértem) | **OOM**, a folyamat leáll (exit 134) |
+  | 4 MiB, `.max(1000)` a tömbökön | (nem mértem) | **2 issue, 0 MB, 1 ms** |
+
+  - **Következtetés:** a 4.6.7 hibás elemenként továbbra is egy issue-t gyűjt a hossz-korlát nélküli tömbön. Kevesebb memóriát és időt visz, de 10 MiB-nál még mindig OOM.
+  - Az MCP-t az SDK 4 MiB-ra korlátozza. A 4 MiB-os kérés +931 MB-ot foglal, ez a pm2 `max_memory_restart` értéke (erste 900 MiB, telekom 700 MiB) fölött van, így valószínűleg újraindítást vált ki. Ezt nem mértem a boxon.
+  - A REST `bulk-*` route-okat csak az nginx 200M-ja korlátozza, ott az OOM-út nyitva marad.
+  - A `.max()` a 4.6.7-ben korán leáll, tehát az alapos fix (`.max()` a 18 tömbre plus JSON-méretkorlát) hatásos. **Ez follow-up, nem része ennek a változásnak.**
+- **A teljes `npm audit` (dev is):** 16 találat (3 critical, 13 moderate), mind dev-függőség, ez nem része a feladatnak.
+  - critical: `vitest` 3.2.4 és `@vitest/ui`, a `tinypool`-on át; a javítás a vitest 4.x-ben van, ez major. A Vitest UI szerver futása közben érinti a fejlesztői gépet.
+  - moderate: `drizzle-kit` (az esbuild-kit/esbuild láncon), `typescript-eslint` (minimatch), `postcss-selector-parser`.
+  - Élesbe egyik sem kerül, a `--omit=dev` szerint.
+
+### S4 Deploy-terv (nem futtattam; minden lépés Robi külön go-jára)
+1. **Bump**, Robi szavára: 6.132.0 → 6.132.1 (patch). A CHANGELOG `[Unreleased]` része `[6.132.1] — <dátum>` lesz. Saját commit ezen az ágon.
+2. **Rebase a `main`-re**, utána Robi merge-el. Egy másik session a todo-t archiválja a `main`-en.
+3. **Planning review:**
+   - request: `~/agent-bus/requests/<YYYYMMDD-HHMM>-mm6-6.132.1-deps-patch-deploy.md` (cél, diff, a fenti mérések, rollback);
+   - CA webhook és `codex exec -s read-only`;
+   - „Stop” esetén nincs deploy.
+4. **Push** az `origin main`-re.
+5. **Pre-flight a boxon:**
+   - szabad lemez és memória;
+   - mindkét tenant HEAD-je, ez a rollback-pont;
+   - a deploy-script egyezik-e a repóéval.
+6. **`mm6-deploy telekom`.**
+   - A lockfile változott, ezért a script a build előtt `npm ci`-t futtat. Utoljára 2026-09-12-én mértük: 702 csomag, 30 s.
+   - Közben a memóriát mintavételezem. Ha az elérhető memória ~120 MB alá esik, leállítom a `next build`-et.
+   - ⚠️ Az `npm ci` az élő app alatt cseréli a `node_modules`-t. Ha ezután a build bukik, a régi `.next` az új `node_modules`-szal szolgál ki, amíg egy deploy sikerül vagy a lock visszaáll (a script megjegyzése is ezt írja, 54–56. sor). Patch-szintű tranzitív emelésnél ezt elfogadhatónak tartom.
+7. **Ellenőrzés utána (telekom):**
+   - HEAD a pusholt commit, a `package.json` 6.132.1;
+   - a boxon `npm ls zod hono @hono/node-server body-parser` az új verziókat mutatja, és `npm audit --omit=dev` 0;
+   - pm2 online, a restart-szám csak eggyel nő;
+   - `/login` 200, `POST /mcp` token nélkül 401;
+   - az error logba nem jön új sor;
+   - nem maradt `.next-old` vagy `.next-build`;
+   - `/_next/image` 404.
+8. **`mm6-deploy erste`**: ugyanez, plusz egy share oldal 200 (ez a view count-ot 1-gyel növeli).
+9. **Rollback:**
+   - Ha a build bukik, semmi nem cserélődik, de a `node_modules` már az új (lásd 6.).
+   - Ha az app nem jön fel: a `.next-old` visszacserélése, `pm2 restart`, `mm6-maint off <tenant>`.
+   - Sikeres deploy után: `git revert`, push, `mm6-deploy`. A régi lock miatt ez újra `npm ci`-t futtat.
+   - Migráció nincs.
+
+### Follow-upok (nem ebben a változásban)
+- **Alapos fix (Robi dönt):** `.max()` a 18 tömbre és korlátos JSON-olvasó, vagy alacsony nginx-limit a feltöltések kivételével.
+  - A fenti mérés szerint a zod 4.6.7 a `.max()`-os tömbön korán leáll.
+  - Korlát nélkül 10 MiB-nál még OOM.
+  - A REST `bulk-*` route-okat ma csak az nginx 200M-ja korlátozza.
+- **Dev-audit:** a vitest 3 → 4 (major), plusz a drizzle-kit és a typescript-eslint lánca. Külön feladat, a `dependencies.md` szerint ütemezve.

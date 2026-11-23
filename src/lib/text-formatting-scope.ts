@@ -1,6 +1,6 @@
 // Pure scope-matching helpers for text-formatting rules. Lives in its own
 // module — separate from src/lib/entities/text-formatting.ts which pulls in
-// the DB layer (better-sqlite3, native-only) — so that client bundles can
+// the DB layer (the Postgres driver, server-only) — so that client bundles can
 // import these helpers transitively (e.g. via patterns.ts → feed-spans.ts)
 // without dragging Node-only deps into the browser.
 //

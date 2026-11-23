@@ -5,6 +5,14 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.132.2] — 2026-11-23
+
+### Removed
+- The unused `better-sqlite3` dependency (and its types and its `serverExternalPackages` entry), with
+  the one-off SQLite → Postgres backfill script, its only importer. The app has run on Postgres only
+  since the migration; this native module had no Node 24 prebuild and would have been compiled from
+  source on every install under the coming Node 24 runtime.
+
 ## [6.132.1] — 2026-11-23
 
 ### Fixed

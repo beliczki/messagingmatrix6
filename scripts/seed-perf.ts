@@ -117,8 +117,8 @@ async function main() {
             headline: `MC${mcNumber}${variants[v]} headline`,
           });
         }
-        // Flush every 100 rows — better-sqlite3 caps SQL variables around
-        // 32k. messages has ~46 columns, so 100 × 46 ≈ 4600 vars per insert.
+        // Flush every 100 rows — Postgres caps bind parameters at 65535 per
+        // statement. messages has ~46 columns, so 100 × 46 ≈ 4600 per insert.
         if (batch.length >= 100) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           db.insert(messages).values(batch as any).run();

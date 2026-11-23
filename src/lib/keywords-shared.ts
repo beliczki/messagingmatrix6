@@ -1,10 +1,10 @@
 // Pure constants + types used by both the server-side entity layer
-// (`src/lib/entities/keywords.ts`, which pulls in `db` / `better-sqlite3`) and
+// (`src/lib/entities/keywords.ts`, which pulls in `db` and its Postgres driver) and
 // client-side React code (Settings → Keywords tab UI). Lives in its own file
 // so the client bundle doesn't transitively import the `db` module —
-// importing from `entities/keywords.ts` in a "use client" file fails Next.js
-// build with "Module not found: Can't resolve 'fs'" because `better-sqlite3`
-// is server-only. Mirror of the `text-formatting-scope.ts` split pattern.
+// importing from `entities/keywords.ts` in a "use client" file drags the
+// server-only DB driver into the browser bundle and fails the Next.js build.
+// Mirror of the `text-formatting-scope.ts` split pattern.
 
 export const KEYWORD_FORMS = ["audiences", "topics"] as const;
 export type KeywordForm = (typeof KEYWORD_FORMS)[number];

@@ -10,7 +10,7 @@ const config: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
   // playwright: imported by src/lib/preview-shooter.ts from API routes — must
   // stay external or the build bundles a broken browser resolver.
-  serverExternalPackages: ["better-sqlite3", "playwright", "playwright-core"],
+  serverExternalPackages: ["playwright", "playwright-core"],
   // Nothing here imports next/image, yet the optimizer still answers on
   // /_next/image without auth. This turns the endpoint off (404), so image
   // optimizer advisories stop reaching this app.

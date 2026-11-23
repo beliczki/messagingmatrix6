@@ -1381,3 +1381,122 @@ Kérés: a Learning session üzenete, Robi szavával („Igen, szólj nekik”).
 ### Állapot, 2026-11-23 délután
 - **A zod-patch kint van:** 6.132.1 (`13386ba`), az origin/main-en, mindkét tenanton deployolva (erste 10:58 UTC; Robi go-ja a zod-sessionben). Ezzel a body-limit S3-ja (`.max()` a javított zodon) nem vár tovább; a „0 elem-hívás” tesztet a merge-elt lockfile-on futtatom.
 - Ez a checkout 4 committal az origin/main mögött van, és itt nem commitolt todo-szakaszok vannak. A következő commit előtt pullolok, és a todo.md végét kézzel fésülöm össze.
+
+## 2026-11-23 — mc-export 11.xlsx: képleírás az 1080x1080-as kreatívokra (LEFUTOTT 21:14 UTC; nyitott: Robi Sheets-ellenőrzése)
+
+Kérés: a `local_2a015641` session átadó jegyzete (`mc-export-11-handover-2026-11-23.md`), Robi: „csak jóváhagyás után írj a DB-be vagy a táblába”. A kör (163 vagy 434) nyitott.
+
+**Megfigyelve (2026-11-23 16:30 UTC, élő DB + a Drive-on lévő xlsx, ami 11:59 óta nem változott):**
+- 579 aktív Erste kreatív 1080x1080 (`file_dimensions` és fájlnév egyezik). 145 olvasott (118 `kepleltar-v1`, 27 `kepleltar-video-v1`), **434 olvasatlan**: 431 kép (275 png, 156 jpg), 3 mp4; 145 MC, 258 (MC, betű) design. Mind a 434 sha256-ja különböző, tehát duplikátum-szűréssel nem spórolunk.
+- A táblában a 434-ből **163 látszik** Robi szűrőjével (mind kép, 30 MC, 63 design); 268 kép + 3 videó rejtett sorban van.
+- `export-creatives-for-reading.ts --missing` méretszűrő nélkül **2794** fájlt írna ki (minden méret). Kell egy `--dims` szűrő.
+- A meglévő olvasatok mintája: a szöveg soronként, „ERSTE”-vel kezdve, a THM pontosan; a leírás magyar, legfeljebb 3 mondat (átlag 107 / 196 karakter). Az eredeti olvasó-promptot nem találtam (repo, mappák), a mintákból rakom össze.
+- Az `image_read_model`-t csak a `gen-mc-export.ts` olvassa (az xlsx V oszlopa), logika nem épül rá.
+- Táblaoszlopok: S `image_text`, T `image_description`, U `image_read_at`, V `image_read_model`, W `updated_at`. Az import a DB-ben az `updated_at`-et is átírja, ezért a W-t is frissíteni kell, különben a tábla és a DB eltér.
+- Képköltség, mérve ebben a sessionben (`get_usage` különbség): egy 1080x1080 kép ≈ 1,6–1,7 ezer input token.
+
+**Touches:** `creatives.image_text / image_description / image_read_at / image_read_model / updated_at` (élő DB, Erste), a `scripts/export-creatives-for-reading.ts` (új `--dims` kapcsoló), és az ERSTE mappában lévő `mc-export 11.xlsx` „Creative export” füle (S–W oszlop). Szemantikai modell nincs. A REBUILD_SPEC ezt a mezőt nem tárgyalja (nem kerestem benne célzottan).
+
+**Door:**
+- DB: egyirányú (éles adat), de kis sugarú és visszaállítható: csak `image_text IS NULL` sorok kapnak értéket, az audit őrzi az előtte-értéket (null). Rollback: `UPDATE creatives SET image_text=NULL, image_description=NULL, image_read_at=NULL, image_read_model=NULL WHERE id IN (<a kör id-listája>) AND image_read_at >= '<futás kezdete>';`
+- Tábla: a Drive megőrzi az előző revíziót, és helyi másolat is lesz róla. Közösen használt ügyfélfájl, ezért ezt a lépést egy friss kontextusú reviewer is megnézi.
+
+**Prediction:** a kör minden sorában az S–V kitöltve, a W megegyezik a DB-vel; minden más cella, a szűrő, a rejtett sorok és a Q-képletek bájtra/értékre változatlanok. Az import száraz futása `írva: N, nincs találat: 0, többértelmű: 0`. Ismeretlen: mennyi plan-keretet eszik (ezt a pilot méri), és hogy a Sonnet-olvasó hozza-e a THM-pontosságot (ezt a pilot vak próbája méri).
+
+**Seam:** az `import-image-readings.ts` (a leltár-xlsx → DB), és az xlsx cellái a csere előtt/után összevetve.
+
+**Fordulat (Robi, 2026-11-23 17:20): az olvasást a Codex végzi, 3 csomagban, csomagonként egy xlsx és a letöltött képek egy mappában.** Ez a Codex saját munkamappája, a repón és az élesen kívül (globális szabály: Robi közvetlen kérésére a Codex ott végrehajthat). A DB-be és a táblába továbbra is Claude ír, Robi go-jára. Az alábbi Sonnet-becslés ezzel elavult, csak összevetésnek marad.
+
+**Codex-csomagok** (`~/ERSTE Addressable AI Agent/problematic creatives/round4-1080-codex/`): `csomag-1/-2/-3` = 144 / 144 / 143 kép (48 / 49 / 48 MC, egy MC egy csomagban; a látható 163-ból 71 / 37 / 55). Mappánként `kepek/`, `kepleltar.xlsx` (a régi 4 oszlop, útvonal `kepek/idNNNN__…`) és `OLVASD-EL.md` (a szabályok a 36 meglévő 1080x1080 olvasatból). A 3 mp4-et a `view_image` nem nyitja: a záró kockájuk a `round4-1080-video/`-ban, azokat Claude olvassa (`kepleltar-video-v1`).
+
+**Pilot (megfigyelve, Codex 0.171, gpt-6-astra, xhigh):**
+- 1. pilot, 10 kép (5 vak, már olvasott + 5 új): 313 s, 95 898 Codex-token. Minden THM és összeg karakterre egyezett, de a sorrend a képi helyet követte (a kör a logó elé került; az én „fentről lefelé” szabályom hibája), a telefon- és kártyaképernyőt szinte teljesen átírta, és egyszer „Személyi kölcsön”-t írt a képen álló „Személyi Kölcsön” helyett (a képen ellenőriztem).
+- Az `OLVASD-EL.md` javítva: kötött sorrend (logó → főszöveg → THM → kör → gomb → lábjegyzet → tárgyszöveg), tárgyról csak cím-szintű szöveg, a fotó véletlen feliratai nem kellenek, a nagybetűre külön figyelmeztetés.
+- 2. pilot, 7 kép (ugyanaz az 5 vak + a 2 `[olvashatatlan]`-os): 208 s, 70 228 token. **Az 5 vakból 5 helyes.** Az egy kiírt eltérés a régi olvasaté: az id13803-nál a `kepleltar-v1` egy sorba írta, hogy „ERSTE | VISA” (szó szerinti függőleges vonallal).
+- Extrapoláció: ~30 s és ~10 ezer Codex-token képenként, csomagonként ~72 perc és ~1,45 M token, a három együtt ~4,3 M; párhuzamosan ~75 perc. Hogy ez a Codex-keret mekkora része, nem tudom.
+
+**Token-becslés — elavult (olvasás Sonnet-subagentekkel, 40 kép/agent, 8 kép/kör; a kimenet ~150–300 token/olvasat, becslés):**
+| kör | agent | egyedi input | összes feldolgozott input (cache-elt újraolvasással) | output |
+|---|---|---|---|---|
+| pilot | 1 | ~40 ezer | ~0,1 M | ~5 ezer |
+| 163 | 4–5 | ~0,3 M | ~1,0 M | ~40 ezer |
+| 434 | 11 + 3 videó | ~0,8 M | ~2,7 M | ~110 ezer |
+Ehhez jön ennek a sessionnek a saját költsége: ~150 ezres kontextus, minden körömben újraküldve (cache). Ezért kevés kört csinálok (az agentek egyszerre indulnak, rövid riporttal). Hogy ez a plan-keret hány százaléka, nem tudom; a pilot előtt/után leolvasom (16:30-kor: 5 órás 22%, heti 50%).
+
+**Szeletek:**
+- [x] **K1** `--dims` kapcsoló az `export-creatives-for-reading.ts`-be (nincs commitolva). Export: `round4-1080/` 434 fájl (431 kép + 3 mp4); videókockák: `round4-1080-video/` (11 záró kártya, 4 kontaktlap; ebből a 18203, 18205, 18300 kell).
+- [x] **K2 Pilot** — Codexszel, két körben, lásd fent. Az 5 vakból 5 helyes.
+- [x] **K3** **Robi go** → a három csomag párhuzamosan: `codex exec -s workspace-write --skip-git-repo-check -C <csomag> "Olvasd el az OLVASD-EL.md fájlt…"`. Claude utána ellenőrzi: minden sor kitöltve, az A/B oszlop és a sorszám változatlan, nincs `[olvashatatlan]` a THM-ben, szúrópróba MC-nként. A 3 videót Claude olvassa.
+  - **Lefutott (Robi go: „Igen, indítsd”), 16:46–17:04 UTC:** 144 / 144 / 143 sor kitöltve, csomagonként ~16 perc és ~283–316 ezer Codex-token (képenként ~7 s, a pilot negyede). A fejléc, az A/B oszlop és a sorrend változatlan.
+  - Szúrópróba a képen (Claude): 4 véletlen kép szövege karakterre helyes. **A THM viszont egy helyen hibás:** az id17164 képén `THM: 0,74 – 8,92%` áll, a Codex `9,02%`-ot írt. Mind az 5 `n4` munkáshitel-fájl `9,02`-t kapott; a fájlnevük `8_98`-at mond (elavult szelet), a kép 8,92-t.
+  - **Valódi elírás az ügyfélkreatívon:** az id16188 (befektetés, „Vedd kézbe a befektetéseid”) képén „piacokegy helyen” áll; a Codex betűhíven átírta. Az id16188 telefonsorát (`[olvashatatlan]`) kivettem.
+  - A 3 videó olvasata kész (`round4-1080-video/kepleltar-video.xlsx`), a száraz import: `írva: 3`.
+- [x] **K3b** Független számellenőrzés: második Codex-menet `SZAMOK.md` szerint, csak a számok, nagyítva, a `kepleltar.xlsx` megnyitása nélkül → `szamok.csv` (5–8 perc és ~150–180 ezer token csomagonként; az xlsx-ekhez nem nyúlt). A számjegyek 431-ből 423-nál egyeztek. A 8 eltérést Claude a képen döntötte el:
+  - 5× az első menet tévedett: `n4` munkáshitel, `9,02%` → `8,92%` (17164, 17176, 17192, 17204, 17218);
+  - 1× az első menet egy kivágott részletet írt le (15168: hiányzott a logó, a THM és a gomb, a leírás „üres” felső és alsó részt mondott) → átírva;
+  - 2× az első menetnek volt igaza (16894, 16895: a szám az ikonon is szerepel).
+  - Ezen felül javítva: 16891 és 17247 (hiányzó `ERSTE`), 15143 („Sharpie” → „Nincs szöveg a képen.”), 16188 (az `[olvashatatlan]` telefonsor törölve). Napló: `round4-1080-codex/claude-javitasok.tsv` (a 16188 előtte készült, nincs benne).
+  - Ami nem számot érint (kihagyott gomb, logó), azt a számellenőrzés nem fogja meg. Ehhez a „nem ERSTE-vel kezdődik” jelzés és 4 véletlen szúrópróba maradt (4/4 helyes).
+- [x] **K4** Száraz futás: csomag-1/2/3 `írva: 144 / 144 / 143`, videó `írva: 3`; nincs találat 0, többértelmű 0. **Éles import (Robi: „Igen, mehet”), kezdés 2026-11-23 17:15:47 UTC:** 434 írva, 434 audit-sor; mind az 579 db 1080x1080-nak van olvasata (549 `kepleltar-v1`, 30 `kepleltar-video-v1`). Rollback: `round4-1080-codex/import-id-lista.txt` + `import-start-utc.txt`.
+- [x] **K4b Méret-testvérek** (Robi, import közben: „az azonos nevűek, csak méretben különbözőek kitölthetők ez alapján, mert csak méretmutációk; esetleg egy plusz CTA-ban különböznek”). Kulcs: a fájlnév a WxH nélkül, a kiterjesztéssel együtt. A 687 már saját olvasattal bíró testvérből 283 karakterre azonos a 1080-assal, 391 csak egy plusz sorban tér el (szinte mindig `Érdekel`), 13 más szövegű, THM-eltérés 0. **2059 testvér kitöltve** (2053 kép `kepleltar-v1-1080`, 6 videó `kepleltar-video-v1-1080`), kezdés 17:18:15 UTC, 2059 audit-sor. A leírás képi elrendezése a többi méreten eltérhet; ezt a címke jelzi. Rollback: `round4-1080-meret-testverek/import-id-lista.txt` + `import-start-utc.txt`. Az Erste 3844 aktív kreatívjából most 3530-nak van olvasata, 314-nek nincs (nincs 1080-as testvérük).
+- [x] **K4 (eredeti terv; lefutott, lásd fent)** `import-image-readings.ts <csomag>/kepleltar.xlsx --model kepleltar-v1 --dry` mindhárom csomagra (a videókra `--model kepleltar-video-v1`) → `nincs találat: 0, többértelmű: 0`. **Robi go** → éles import, id-lista mentve a rollbackhez.
+- [x] **K5 (lecserélve 2026-11-23 21:14 UTC)** 2493 sor (434 + 2059) S–W-je a DB-ből, `patch_sheet.py` (scratchpad). Megfigyelve: csak a célsorok S–W cellái változtak, a többi zip-tag bájtra azonos, a sor-attribútumok (rejtett, magasság) és a 2054 képlet azonos, a sheetData-n kívüli rész azonos, 2493/2493 célsor egyezik a DB-vel, Excel javítás nélkül nyitja („mc-export 11.xlsx”, 2 lap). Drive: modifiedTime 2026-11-23T10:59:55Z, 496 889 bájt, md5 `cf852335…` = az alap. **Friss reviewer: OK with changes.** A fájlban hibát nem talált: expat-parse tiszta, `unzip -t` tiszta, 2493 sor × 5 cella változott, minden más bájtra azonos, 0 vezérlőkarakter, a W stílusa (quotePrefix) megmaradt. Jelzett, de itt nem tüzelő hibák a `patch_sheet.py`-ban: megosztott-stringes A-cella, önzáró `<row/>`, olyan `<c>`, ahol nem az `r=` az első attribútum. Kozmetikai: a `sharedStrings` `count` elavult (az Excel így is javítás nélkül nyitja), a `sortState` (W szerint) nem egyezik a sorrenddel (ez már előtte is így volt). Nem ellenőrzött: hogyan kezeli a Google Sheets az `inlineStr`-t és a Google `roundtripDataChecksum`-ot. Ezt a csere után Sheetsben kell megnézni. Az ellenőrzőm képlet-számolása a `<filter>` tagot is számolta; újraszámolva 398 → 398 valódi képlet-tag.
+  - **Újraellenőrizve 2026-11-23 21:10 UTC** (a kontextus törlése után): a Drive-fájl md5-je még mindig az alapé (`cf852335…`); a `verify_patch.py` újrafuttatva: 2493/2493 célsor = DB, nem várt eltérés 0. A tábla 10:59:55-ös alapja óta a célsorokon kívül csak a 18198–18200 változott (az archiválás, 11:52 UTC), és ezek már nincsenek a táblában. Az Erste-kreatívok utolsó változása 17:21:30 UTC.
+  - A javított másolat, az alap és a két szkript a `/tmp`-ből kimentve: `round4-1080-codex/tabla-csere/` (`mc-export 11.javitott.xlsx`, md5 `ec41f5a8…`; `mc-export 11.alap.xlsx`, md5 `cf852335…`).
+  - **Csere (Robi: „Igen, mehet”), 21:14:33 UTC:** közvetlenül előtte a Drive-fájl md5-je az alapé volt, a `viewedByMeTime` 10:59:55 (azóta senki nem nyitotta meg), az Erste-kreatívok utolsó változása 17:21:30. Helyben felülírva a mounton (`cat >`, nem `mv`), az rclone 10 s alatt feltöltötte.
+  - **Megfigyelve utána:** ugyanaz a fájl-id (`1SJUW9Sh…`), 621 651 bájt, modifiedTime 21:14:33.623Z, a Drive-szerver md5-je `ec41f5a8…` = a javított másolat. A Drive-ról közvetlenül (`rclone cat`, a mount-cache nélkül) letöltött fájl bájtra azonos a javítottal, `unzip -t` tiszta, a `verify_patch.py` az alaphoz képest: nem várt eltérés 0, a sor-attribútumok és a 2054 képlet azonos, 2493/2493 célsor = DB.
+  - **Rollback:** a Drive megőrizte az előző revíziót (11:00:32 UTC, `0B6MahnrpfUMVV2Rh…`, nincs kitűzve, tehát a Drive 30 nap után törölheti), és ott van a helyi alap (`tabla-csere/mc-export 11.alap.xlsx`). Visszaállítás: `cat alap > mount`, ugyanígy.
+  - **Nem ellenőrzött:** hogy a Google Sheets jól mutatja-e az `inlineStr` cellákat és megtartja-e a szűrőt (308 látható sor). Ez Robi ellenőrzése Sheetsben.
+- [x] **K5 (eredeti terv; lefutott, lásd fent)** Táblába írás XML-szerkesztéssel: a `sheet2.xml`-ben csak a kör sorainak S–W celláit írom (inline string, a szomszéd sorok stílusával), a W-t a DB-ből. Ellenőrzés: openpyxl-diff az eredetihez (csak a várt cellák változtak), szűrő, rejtett sorok és Q-képletek változatlanok, Excelben javítás nélkül nyílik. Friss reviewer. **Robi go** (és zárja be a fájlt a böngészőben) → csere az rclone mounton ugyanazon a fájl-id-n; Drive `modifiedTime` + újraletöltés + diff.
+- [x] **K6** Review-szakasz ide, az átadó jegyzet frissítése. Bump nincs (a szkript tooling, az adat nem kód).
+
+**Eldöntve (Robi):** a kör 434 + 2059 méret-testvér; az xlsx-írás XML-szerkesztéssel; a címke `kepleltar-v1` (a testvéreken `kepleltar-v1-1080`). **Nyitott:** Robi Sheets-ellenőrzése (S–W, szűrő); a `--dims` kapcsoló nincs commitolva.
+
+**Review (2026-11-23):**
+- *A jóslat bevált:* a kör minden sorában kitöltött az S–V, a W = DB, minden más cella, a szűrő, a rejtett sorok és a képletek változatlanok; a száraz importok `nincs találat: 0, többértelmű: 0`. A kör menet közben nőtt Robi döntésére (+2059 testvér).
+- *Ami nem jött be:* a pilot vak próbája (5/5 helyes) nem fedte le az `n4` munkáshitel-családot, ahol a Codex első menete mind az 5 fájlon hibás THM-et írt (9,02% a képen álló 8,92% helyett). A független számellenőrzés (K3b) mind az ötöt megfogta, és egy kivágott részletet is (15168).
+- *Ismeretlenek:* a Sonnet-olvasó nem kellett (Codex olvasott); a Codex-költség: a 3 csomag ~0,9 M token, a számellenőrzés ~0,5 M token.
+- *Lecke (javaslat, Robi dönt):* a független, csak-szám második menet legyen minden olvasási kör kötelező lépése. Önműködő ellenőrzésként: az `import-image-readings.ts` egy `--szamok <csv>` kapcsolóval megtagadhatná az importot, ha a `image_text` THM-je és a második menet száma eltér. Ha ez túl sok, akkor egy sor az olvasási kör leírásába (`OLVASD-EL.md`-minta).
+
+## 2026-11-23 — Kreatív-manifest: leírás és kulcsszavak a leadással együtt (TERV, 1. lépcső, Robi go-jára vár)
+
+Kérés (Robi): amikor a Codex a leadást gyártja, adjon mellé egy `manifest.json`-t MC-nként és variánsonként, és a mátrix ebből töltse ki a kreatívok adatait. Döntések: **1. lépcső = manifest + betöltő szkript, felületi változás nélkül**; a `visual_keyword` **csak ott kap értéket, ahol üres**. A `copy_keyword` a headline és a copy kulcsszavai, a `visual_keyword` a vizuális leírás kulcsszavai.
+
+**Megfigyelve (2026-11-23, élő DB, Erste, 3844 aktív kreatív):**
+- `visual_keyword`: 3093 kitöltve, ebből 3033 szó szerint a fájlnévben van (kampány-szelet, pl. `BeErste3Q2_personas`), a maradék 60 egy régebbi elnevezés szelete (`MCx_b_BefCast`). Csak a 2026-08-13 előtt létrehozott kreatívokon; a 2026-09-03 óta feltöltött 751 mind üres.
+- Az Erste `creativeParsingRules`-ban (config tábla) nincs `visualKeyword` szabály, ezért a feltöltés nem tölti. A régi értékek valószínűleg a régi Erste-forrástábla „Visual_keyword” oszlopából jöttek (`src/lib/import-xlsx.ts:438`); ezt importfuttatással nem ellenőriztem.
+- `copy_keyword`: sehol nincs kitöltve (0). Csak az `import-xlsx` írná, a „Visual_description” oszlopból (`:439`), és az MCP `creative_upload` explicit értékként.
+- Eddigi forma: egy token, szóköz és vessző nélkül, aláhúzással összefűzve. Képleírásból egyik sem jött; az audit szerint senki nem írt kulcsszót olvasásból.
+- REBUILD_SPEC (2026-09-06) §3.4: a `visual_keyword` „Filter taxonomy”, §6.4: a feltöltéskor a fájlnévből auto-parse. A `copy_keyword` jelentését nem írja le. **A döntéssel a `visual_keyword` jelentése kettős lesz:** a régi sorokon fájlnév-szelet, az újakon a vizuális leírás kulcsszavai. Robi így döntött („Csak az üreseket”).
+
+**Touches:** új `src/lib/creative-manifest.ts` (zod-séma + `applyCreativeManifest`), új `scripts/import-creative-manifest.ts` (vékony CLI), a `creatives` hat mezője (`image_text`, `image_description`, `image_read_at`, `image_read_model`, `copy_keyword`, `visual_keyword`) + `updated_at`, és az `audit_log`. Az `import-image-readings.ts`-hez nem nyúlok. Szemantikai modell nincs.
+
+**Door:** a kód kétirányú. Az adat: csak üres mezőt tölt, minden írás auditált (előtte-érték: null); rollback a futás id-listájával, mezőnként vissza nullra.
+
+**A manifest formája (javaslat):**
+```json
+{ "version": 1, "client": "erste", "source": "codex",
+  "groups": [
+    { "mc": 101, "variant": "c",
+      "image_text": "ERSTE\nSzemélyi kölcsön\n…", "image_description": "…",
+      "copy_keyword": "személyi kölcsön, fix kamat, karrierváltás",
+      "visual_keyword": "férfi, kávézó, szemüveg, laptop",
+      "files": ["ERSTE_SZK_MC101_c_…_n1_1080x1080.png", "…_300x250.png"] } ] }
+```
+- Egy csoport = azonos adatú fájlok (jellemzően egy MC + variáns + verzió). Ha egy méreten más a szöveg, az külön csoport.
+- Párosítás: pontos `file_name` egyezés a kliens aktív kreatívjai között. Ha a talált kreatív MC-je vagy variánsa eltér a csoportétól, nem ír, hanem hibát jelez. Nincs találat vagy több találat esetén is jelez.
+- Csak üres mezőt tölt (mind a hatot). `image_read_model = codex-manifest`, hogy látszódjon: „adott”, nem „olvasott”.
+- Kulcsszó-forma: 3–6 kulcsszó, kisbetűvel, magyarul, vesszővel elválasztva (Robi még nem hagyta jóvá).
+
+**Prediction:** a száraz futás fájlonként listázza: írandó mezők / már kitöltött, kihagyott mezők / nincs találat / többértelmű / MC-eltérés. Változatlan marad minden kitöltött mező és minden, a manifestben nem szereplő kreatív. Ismeretlen: a Codex leadás-folyamata hol él, vagyis hová kerül a manifest-utasítás.
+
+**Seam:** `applyCreativeManifest(db, clientId, manifest, { dry })`. A 2. lépcső (feltöltés) ugyanezt hívja majd. Integrációs teszt a teszt-Postgresen: üres mezőt tölt; kitöltött `visual_keyword`-öt nem ír felül; ismeretlen fájlt jelez; MC-eltérésnél nem ír; a `dry` semmit nem ír.
+
+**Szeletek:**
+- [ ] **M1** Zod-séma + `applyCreativeManifest` + integrációs teszt (előbb piros).
+- [ ] **M2** `scripts/import-creative-manifest.ts <manifest.json> [--client erste] [--dry]`, összesítő riporttal.
+- [ ] **M3** A formaleírás a Codexnek: a séma a repóban a szerződés; a rövid utasítás oda kerül, ahol a Codex leadás-promptja él (Robi mondja meg, hol).
+- [ ] **M4** Az első valódi leadáson: száraz futás → Robi go → éles.
+- Bump: nincs, amíg csak szkript használja (tooling); a 2. lépcső (feltöltés) minor lesz.
+
+**Nyitott (Robi):** a kulcsszó-forma (az ajánlásom: 3–6, kisbetű, vessző); hol él a Codex leadás-folyamata; felülírhatja-e a manifest a meglévő `image_text`-et újrafeltöltéskor (az ajánlásom: nem, csak üreset tölt, a kulcsszavakkal egyezően). Lehetséges folytatás: a meglévő kreatívok kulcsszavai a már leolvasott `image_text` / `image_description`-ből, egy szöveges Codex-menettel, ugyanezzel a manifesttel.

@@ -6,31 +6,6 @@ A fejlécek státusza (pl. „TERV, Robi jóváhagyására vár”) a megírás 
 
 ## Lezárt roadmap-tételek (a `todo.md` NOW és NEXT részéből, áthelyezve 2026-11-23)
 
-### ~~Telekom mm6 instance a boxra — `telekom.messagingmatrix.ai`~~ — **✅ ÉL (2026-09-12)**
-Tanulmány: `docs/TELEKOM_DEMO_STUDY.md`. A tanulmány A-csomagja (infra) **leszállítva ~1,5 óra alatt**.
-- [x] **T1** Backup: `/var/www/messagingmatrix-telekom` → `/var/backups/mm5-legacy/messagingmatrix-telekom-20260912` (a **v5 SQLite adat megvan**: `messaging-matrix.db` 1.1M + 4.5M WAL + a `.before-v5.1.0` backup). Mentve a régi nginx vhost és a v5 ecosystem is ugyanide.
-- [x] **T2** `pm2 delete mm-server-telekom` + `pm2 save`. **A v5 `mm-server-erste` (3003) és `mm-server-proficio` (3005) FUT TOVÁBB** — külön döntés kell rájuk (lásd Nyitott döntések).
-- [x] **T3** `/var/www/mm6-telekom` — lokális klón az `mm6-erste`-ből, majd `git remote` → GitHub és ff az `origin/main` tipjére: **`a12e47c` (6.90.0)**.
-- [x] **T4** `.env`: `ACTIVE_CLIENT_KEY=telekom`, `PORT=6002`, **saját** `JWT_SECRET` + `MCP_BEARER_TOKEN` (nem az Erste-é), **közös** `DATABASE_URL` és MinIO bucket (a scope `client_id`-n / `telekom/...` prefixen van). `TEMPLATES_ROOT=/var/www/mm6-telekom-templates` — **a checkouton kívül**, a tanulmány R2 kockázata miatt; a repo sablonjaival feltöltve.
-- [x] **T5** `npm ci` (702 csomag, 30s) + `npm run build` — hiba nélkül.
-- [x] **T6** Kliens **id=9 `telekom`** + admin user (`beliczki.robert@gmail.com`) létrehozva. ⚠️ A `scripts/seed-multi.ts` **nem használható**: benne az ismert unawaited `getActiveClient()` hiba (tech-adósság szekció) — egyszeri saját scripttel ment, ami utána törölve lett.
-- [x] **T7** `ecosystem.config.cjs` (`mm6-telekom`, 6002, `max_memory_restart: 700M`) + `pm2 start` + `pm2 save`.
-- [x] **T8** nginx vhost átírva az Erste mintájára (`/mcp` no-buffering blokk + `client_max_body_size 200M`, proxy→6002; a v5 `/assets` alias kivezetve). Certbot cert **változatlan**, 2026-11-30-ig érvényes. `nginx -t` OK → reload.
-- [x] **T9** Health publikusan: `/`→307 · `/login`→200 · `/matrix|/drafts|/creative-library|/shares|/feeds|/monitoring`→307 · `/mcp`→401 · `/api/templates`→401 · http→https 301. **Valódi login 200** (token `cid:9`, role admin), rossz jelszó 401. **Erste-regresszió: nincs** (`/` 307, `/login` 200, `/matrix` 307, `/mcp` 401).
-
-**Megfigyelés (nem hiba, de figyelni kell):** az `mm6-erste` egyszer újraindult a build ablakában (18:57, restart 145→146) — `unstable restarts 0`, 1252ms alatt felállt, a logban csak a régi AWS-SDK node>=22 figyelmeztetés, OOM-kill nincs. Ma amúgy is 4× indult újra (14:19, 14:29, 17:16 = a 6.90.0 deploy, 18:57). **Viszont a box most két Next appot futtat 3,7G RAM-on** (erste 287M + telekom 273M), és az Erste `max_memory_restart`-ja 900M — a következő nagy buildnél érdemes a telekomot `pm2 stop`-olni.
-
-**Worktree (2026-09-12, `TENANT_FORK_STRATEGY.md` §6):** `../mm6-telekom` = `feat/telekom-demo` ág,
-közös `.git`, külön `node_modules`, saját `.env.local`-ban **beleírt** `ACTIVE_CLIENT_KEY=telekom`
-(így egy `npx tsx` sem futhat véletlenül Erste-scope-ban). Indítás: `npm run dev:telekom` (6002).
-Ellenőrizve: a worktree a `telekom` klienst látja (id=9, 0 audience / 0 topic / 0 MC).
-**Routing szabály — a merge ezen múlik, nem a worktreen** (részletek: `docs/TELEKOM_DEMO_STUDY.md` §11):
-megosztott kódban talált hiba → **egyenesen `main`** (mint a `c8432cb` empty-state fix);
-Telekom-specifikus feature → `feat/telekom-*` ág, napokban él; adat és config → **sehova**, az a DB-ben él.
-Migrációt **mindig `main`-ről** generálni (G2), `if (client.key === "telekom")` **tilos** (G3).
-
-**Állapot:** a site **üres, de működik** — nincs benne audience/topic/MC, a branding default (szürke), a sablonok az Erste-ék. A tanulmány B–E csomagja (arculat, sablonok, adat, dramaturgia) jön.
-
 ### ~~Box deploy — 6.83.0~~ — **✅ DEPLOYOLVA (2026-09-11)** — törzs: `todo-archive.md` „Archivált 2026-11-22” A)
 
 ### M12 — Mátrix szűrő-pillek: kijelölt érték a pillben + product tag a sor/oszlop-fejléceken (user, 2026-09-10)
@@ -61,6 +36,59 @@ Apróságok, screenshotból (`/matrix`, Product + Status `multi-pill`):
 ### ~~M8 — Creative Library size filter csoportosított dropdown~~ — **KIVEZETVE (user, 2026-09-10)** — törzs: `todo-archive.md` „Archivált 2026-11-22” A)
 
 ### ~~MCP token-scope #3: `draft`~~ — **✅ KÉSZ (6.84.0, 2026-09-12)** — törzs: `todo-archive.md` „Archivált 2026-11-22” A) (a nyitott `scope`-döntés: TECH-ADÓSSÁG)
+
+## 2026-11-12 — Share: videós share-ben se Image preview, se képletöltés; WebM letöltés (Robi jóváhagyta: „igen, mehet a terv, fix minőség jó”)
+
+Robi kérése: ha egy share-ben videók vannak, az Image preview kapcsoló és a képformátumos letöltés értelmetlen. A videó legyen letölthető WebM-ben is, a Download all menüben és a részletes nézet Download gombján is, formátumválasztó legördülővel.
+
+**Gyökérok, Image preview:** a `canImagePreview` (`ShareGallery.tsx:264`) minden nem-képes creative-ot cserélhetőnek számol: a videót és a HTML5-csomagot is. A kép-mód viszont csak MC-n cserél (`item.kind === "matrix" && imageMode`), creative-ra az `imageSrcFor` nem ad képet. Tiszta videós share-ben ezért a kapcsoló 0-s számlálóval kirajzolódik, és nem csinál semmit. Javítás: a feltétel ugyanaz legyen, amit a kártyák használnak, vagyis legyen MC a share-ben. A mobil Actions menü ugyanazt a flaget kapja.
+
+**Download all:**
+- A képformátum-sorok csak akkor jelennek meg, ha van konvertálható kép (MC-preview vagy raszteres creative).
+- A videósorok (as Original MP4, as WebM) csak akkor, ha van videó.
+- Vegyes share-ben két csoport jelenik meg, címkével, ahogy most a Preview images · N. Mindegyik csak a saját fajtáját konvertálja, a többi eredetiben megy.
+
+**WebM a szerveren:** a boxon ffmpeg 6.1.1 fut libvpx-vp9 és libopus kódolóval, 2 vCPU-n, 3.8 GB memóriával. Az nginx `location /` timeoutja 300 s, mindkét tenanton.
+- `?as=webm` ugyanazon a `/share/[id]/file/[fileId]` route-on, amelyen a képkonverzió is megy.
+- Kódolás: VP9 + Opus, fix minőséggel (CRF), knob nélkül.
+- Cache a stillek mellé: `<client>/.thumbs/<fileId>.webm`. Másodszorra azonnal jön.
+- Folyamatonként egyszerre egy kódolás fut, ugyanarra a fájlra legfeljebb egy (single-flight). Publikus, bejelentkezés nélküli úton ez tartja korlátban a CPU-t: egy videó legfeljebb egyszer kódolódik.
+- A `downloadCount` nő, ahogy a képkonverziónál.
+- Ha a forrás már WebM, a sor nem jelenik meg (mint a képformátumoknál).
+
+Lépések:
+- [x] 1. Mérés a boxon: MC412a 1920x1080, 10 s, 6.2 MB MP4, hang nélkül. VP9 CRF 32, `-cpu-used 4`: 29.7 s, 441 KB; `-cpu-used 6`: 31.2 s (nem gyorsabb). A mintát Range-kéréssel húztam le, így nem számított letöltésnek. Tanulság: az ffmpeg `-nostdin` nélkül a heredoc maradékát parancsként olvasta, ezért a takarítás elmaradt; a mappát utána kézzel töröltem. Az appban is `-nostdin` megy.
+- [x] 2. `canImagePreview` = van MC a share-ben (`ShareGallery.tsx`). A mobil Actions menü ugyanezt a flaget kapja.
+- [x] 3. `src/lib/video-formats.ts` (kliensbiztos: formátumlista, címke, `isConvertibleVideo`, `withVideoFormat`) és `src/lib/video-convert.ts`: ffmpeg `nice -n 10` alatt, a cache a stillek mellett (`<client>/.thumbs/<fileId>-v1.webm`), egy fájlra egy futás, folyamatonként egy kódolás. Eltérés a tervtől: nem a stillek 2-es ffmpeg-keretét használja, hanem saját, egyhelyes sort, mert egy kódolás már mindkét magot viszi. Bekötés: `?as=webm` a share file route-on; 400, ha a fájl nem videó vagy már WebM; 503, ha nem sikerül. Új integrációs tesztek a `share-file-convert.test.ts`-ben: valódi 1 s-os klip, VP9 64x48, a második kérés a cache-ből jön, a `downloadCount` 2; képre és WebM-re 400.
+- [x] 4. `ItemDownloadMenu` → `VideoDownloadMenu`: as Original MP4, as WebM. A WebM-et fetch-csel tölti, a gomb közben „Converting…” (spinnerrel), hiba esetén „Conversion failed”. Közvetlen linkkel ~30 s-ig semmi nem látszana.
+- [x] 5. `BulkDownloadRows` és `bulkEntry`: a képformátumok csak akkor jelennek meg, ha van kép (`pictureCount`), a WebM csak akkor, ha van videó (`videoCount`). Ha MC vagy kép is van mellette, a WebM saját „Videos · N” címke alatt áll. Az „as Original” mellé a videók kiterjesztése is kiíródik (MP4). Új mód: `{ mode: "video", as }`. A mobil Actions menü ugyanezeket kapja.
+- [x] Mellékesen: a `DownloadMenu` resize-figyelője a scroll-kezelőt hívta, a `contains(window)` kivételt dobott, és a menü nyitva maradt. Mostantól saját `onResize` zárja be. Átméretezéssel ellenőrizve.
+- [x] 6. Ellenőrzés helyi dev szerveren, az éles DB-vel:
+  - Videós share (WyEy2p): nincs Image preview. A Download all, a részletes nézet és a mobil Actions menü is „as Original MP4” és „as WebM” sort mutat.
+  - Egy WebM-letöltés végig: „Converting…”, utána 200. A helyi cache-ben VP9 1080x1920, 10.04 s, 492 KB. Mellékhatás az éles DB-ben: a WyEy2p `downloadCount` +1, a `viewCount` néhány oldalbetöltéssel nőtt.
+  - MC-share (d1zZ7rcWrpMn): van Image preview (20), a menü változatlan, WebM nélkül.
+  - Képes share (zYivZmN1jRkl): változatlan.
+  - Vegyes share (videó és kép vagy MC együtt) nem volt az utolsó 40 ERSTE share-ben, azt nem láttam.
+  - vitest: 119 fájl, 1107 teszt zöld. tsc tiszta.
+- [x] 7. CHANGELOG az `[Unreleased]` alatt. Verziójavaslat: 6.128.4 → 6.129.0 (minor). Nincs commitolva.
+
+### 6.129.0 deploy — Chief Architect: OK with changes (`~/agent-bus/answers/20261112-1459-mm6-6.129.0-webm-deploy.md`)
+- [x] Push `5afc63b..358d711` (Robi: „Igen, push + deploy”). Pre-flight: 12 GB szabad a `/`-en, 2120 MB elérhető memória, mindkét tenant `5afc63b`, pm2 online, a deploy-script `c3438a49`.
+- [x] Deploy felfüggesztve, Robi döntött: „Igen, építsd be”. Az 1. és 2. pont beépítve, a verzió marad 6.129.0, mert még nem ment élesbe.
+  1. Felső korlát bemenetenként: execFile `timeout` 240 s, SIGKILL (az nginx 300 s alatt), `-threads 2`, és előellenőrzés: a forrás mérete legfeljebb 150 MB, ffprobe-hossz legfeljebb 60 s, felbontás legfeljebb 1080p. Felette 422, a gomb azt mondja: használd az Original-t.
+  2. A várósor korlátja: folyamatonként legfeljebb 2 várakozó kódolás, felette 503 `Retry-After`-rel. A Download all sorban kér (`for` + `await`), ezt ellenőriztem.
+  - Mellé: egy naplósor kódolásonként (fileId, ms, be/ki bájt), hogy látszódjon a visszaélés.
+  - 3. (memória): a 150 MB-os korlát lefedi. 4. (Cache-Control): az eredeti bájtok ágával egyezik (`public, max-age=86400`), nem változtatok. 5. (`.thumbs` takarítása törléskor + méretriport): külön feladat, a stillekre is igaz.
+  - Beépítve: a forrásméret előre a DB-ből jön, a hossz és a felbontás ffprobe-bal a kódolás előtt. A korlát feletti fájl memóriában marad, így nem töltjük le újra. 422 esetén a gomb „Too long for WebM”, 503 esetén „Busy — try again”. A sor: legfeljebb 2 várakozó, unit teszttel (`tests/unit/video-convert-queue.test.ts`). Integrációs teszt: 2560x1440 és 61 s → 422, kódolás és letöltésszámlálás nélkül. Naplósor: `[video-convert] <fileId> webm WxH Ns Nms in= out=`.
+- [ ] Nyitott, külön feladat (CA 5. pont): a `.thumbs` alatti WebM-ek (és a stillek) törlése, amikor a fájl vagy a share törlődik, plusz méretriport.
+- [x] Commit `fc5065d` (a korlátok), push `358d711..fc5065d`.
+- [x] **DEPLOYOLVA `mm6-telekom`** (14:07 UTC): 52 s, `npm ci` nem futott, a legkevesebb szabad memória 1152 MB, a swap legfeljebb 694 MB. HEAD `fc5065d`, 6.129.0, next 16.4.5, `/login` 200, `/` 307, `/_next/image` 404, az error log üres. Előtte ellenőrizve: `nice`, `ffmpeg`, libvpx-vp9 és libopus megvan.
+  - WebM-próba (`3_Ml4cJyfDkA`, 1080x1920, 10 s, 13.6 MB): hidegen **110 s**, 2.9 MB; a második kérés 0.13 s, a cache-ből. A legkevesebb szabad memória 1392 MB. A naplósor megjelent. A share `downloadCount`-ja +2.
+- [x] **DEPLOYOLVA `mm6-erste`** (14:13 UTC): 51 s, a legkevesebb szabad memória 909 MB, a swap legfeljebb 755 MB. HEAD `fc5065d`, 6.129.0, `/login` 200, `/_next/image` 404. Az error logban csak az ismert AWS SDK Node 20 figyelmeztetés van.
+  - WebM-próba (WyEy2p, MC412a 1920x1080, 10 s, 6.2 MB): hidegen 29.8 s, 441 KB; másodszor 0.05 s. A legkevesebb szabad memória 1755 MB. A WyEy2p `downloadCount`-ja +2.
+- [ ] **Tanulság:** a kódolási idő erősen tartalomfüggő. A Telekom-klip 11 s/s, az ERSTE-klip 3 s/s. Ilyen tartalom mellett a 240 s-os időkorlát kb. 20 s-nyi videót enged, nem 60 s-ot. Ami túllépi, azt most minden kérés újra 240 s-ig kódolja, majd 503-at kap.
+  - Javaslat: a lejárt kódolást ugyanúgy jegyezze meg, mint a korlát fölöttit (422, „Too long for WebM”).
+  - Mérjünk gyorsabb beállítást (`-deadline realtime` vagy `-cpu-used 5`) ugyanazon a klipen.
 
 ## 2026-11-12 — Videó kezdőképe az utolsó előtti másodperc + mély link a nyitott előnézetre + WebM-tanulság (Robi: „Igen, mehet”, a library-ben is)
 
@@ -284,4 +312,472 @@ Planning review: ez nem tartozik a kötelező esetek közé (nincs új réteg, s
 - **Codex:** egy friss `codex exec -s read-only` fájlolvasás nélkül szó szerint visszaidézte a Drive-mappa sorát. Az AGENTS.md tehát betöltődik.
 - **Claude Code:** NEM ellenőrzött. A `claude -p` „OAuth session expired” hibával leállt, ezért nem tudtam friss Claude-sessionben próbálni az `@AGENTS.md` importot. A következő friss session indulásakor kiderül, hogy az import feloldódik-e.
 - **Mellékes:** a `claude -p` figyelmeztetett, hogy a `.claude/settings.local.json` egyik Bash allow-szabályában a `*` túl tág. Nem nyúltam hozzá.
+
+## 2026-11-22 — AGENTS.md „Deploy” szakasz (TERV, Robi jóváhagyására vár)
+
+Kérés: a Learning session adta át Robi kérését. Az MM6 deploy-tudása kerüljön az AGENTS.md-be egy „Deploy” szakaszba. A box-szintű tények helye a `~/.agents/infra-map.md`. A repó publikus, ezért nem kerülhet bele IP, ssh-user, szerverport, kulcsnév, szerverútvonal, és titok semmiképp.
+
+**Touches:**
+- `AGENTS.md`: új „Deploy” szakasz.
+- A Claude-memória 3 jegyzete és a `MEMORY.md` index.
+- Szomszédok: `deploy/bin/mm6-deploy` (a forrás, nem változik), `~/.agents/infra-map.md` „Box B” (csak olvasom), a globális szabály „Read before you touch → Deploy” pontja.
+- A deployról nincs Drive-dokumentum. A tudás a scriptben, a memóriában és a todo checkpointjaiban van.
+
+**Door:** kétirányú, `git revert` és a memória visszaírása visszacsinálja. Hatósugár: minden későbbi deployt ez a szöveg vezet.
+
+**Prediction:**
+- Egy friss agent az AGENTS.md-ből meg tudja mondani a deploy sorrendjét, a migrációs szabályt és a rollbacket.
+- A szöveg nem tartalmaz IP-t, usert, szerverportot, kulcsnevet vagy szerverútvonalat. Ellenőrzés: `grep` a fájlon.
+- App-kód nem változik, verzióemelés nincs.
+
+**Seam:** a betöltött AGENTS.md (a Codex-próba úgy, mint a múltkor).
+
+### Összevetés: memória (`reference_hetzner_box.md`, 2026-06-27) ↔ infra-map Box B ↔ megfigyelés (2026-11-21 pm2 lista)
+- **A memória elavult:**
+  - `mm-server-telekom` futó appként szerepel, de az infra-mapben nincs, és a 11-21-i pm2 listában sincs. Ott ez az öt app futott: `custombrain`, `mm-server-erste`, `mm-server-proficio`, `mm6-erste`, `mm6-telekom`.
+  - „Postgres 5432 free”: azóta ott fut a Supabase Postgres.
+  - Ezekben az infra-map a helyes.
+- **Box-szintű tények, amik nincsenek az infra-mapben.** Ezeket NEM írom a repóba, itt jelzem, az infra-map gazdája vegye fel őket:
+  1. Hozzáférés: a box kulcsa egy `.ppk`-ból konvertált OpenSSH kulcs. A `~/.ssh/mm pub` nevű fájl félrevezető név, használhatatlan.
+  2. Docker 29 és Compose v5 (2026-06, nem ellenőriztem újra).
+  3. A pm2 alatt fut a `pm2-logrotate` modul is (megfigyelve 2026-11-21).
+  4. A Mac-tunnel részletei: a `com.mm6.db-tunnel` launchd agent (autossh, KeepAlive), a plist és a log helye, kézi tartalék-parancs. Ezek a `project_db_tunnel_launchagent.md` memóriában vannak.
+  5. Az MM6 thumbnail-cache (`STORAGE_ROOT`) mindkét deploy `.env`-jében a Hetzner volume-on van, nem a gyökérlemezen (memória: `project_mm6_object_store.md`).
+  6. A régi `supabase-mm6_mm6-minio-data` docker volume (~8 GB a `/`-n) rollback-pontként megmaradt, a törléséről Robi még nem döntött. Az infra-map csak annyit ír, hogy ez „volt” az adat helye.
+  7. A boxon telepített `mm6-deploy` és `mm6-maint` (a repó `deploy/bin/` másolatai) helye nincs az infra-mapben.
+- **A mai AGENTS.md-ben van két helyi port** (`localhost:5433`, `:55432`). Ezeket a tegnapi D4 tette bele. Az infra-map szabálya szerint port nem kerülhet repófájlba.
+  - Javaslat: helyettük „a megosztott Postgres helyi tunnelje” és „a `mm6-test-pg` teszt-Postgres”, hivatkozással az infra-map „Mac” szakaszára.
+  - A 6000–6003 dev-portok maradnak, mert a `package.json` scriptjeiben amúgy is ott vannak.
+
+### A „Deploy” szakasz tartalma (angolul, szerver-adat nélkül)
+1. **Hol:** az infra-map Box B sorai, `mm6-erste` és `mm6-telekom`. Egy kódbázis, tenantonként egy deploy, mindkettő ugyanazt a Postgrest és MinIO-t használja.
+2. **Parancs:** a boxon `mm6-deploy <tenant>`, a forrása `deploy/bin/mm6-deploy`. A lépései, ahogy a scriptben vannak:
+   - `git pull --ff-only`;
+   - ha a lockfile változott, `npm ci`;
+   - build a `.next-build`-be, közben az élő app kiszolgál;
+   - maintenance oldal fel;
+   - csere;
+   - `pm2 restart`;
+   - várakozás, amíg a `/login` 200-at ad;
+   - maintenance oldal le;
+   - a `.next-old` törlése.
+   - A script megáll, ha a telepített példánya eltér a repóétól.
+3. **Előtte:**
+   - Robi go-ja tenantonként.
+   - Planning review a globális szabály szerint.
+   - Push előbb, mert a box az originről húz.
+   - A szabad memória és a lemez ellenőrzése: a box a kapacitás-kockázat, lásd az infra-mapet.
+   - Az előző HEAD feljegyzése.
+   - **Sorrend: Telekom, utána ERSTE.**
+   - Napközben is mehet: a build ~45–160 s, a kiesés ~1 s a maintenance oldal mögött.
+4. **Közben:** szabad memória figyelése. Ha az elérhető memória ~120 MB alá esik, a `next build` leállítása.
+5. **Migráció:**
+   - A helyi `DATABASE_URL` az éles DB, ezért helyben soha nem fut `db:migrate`.
+   - Az `mm6-deploy` NEM migrál. Ha új `db/migrations/*.sql` jön: a boxon pull, utána `db:migrate` a deploy env-jével, utána `mm6-deploy`, egy menetben.
+   - Mivel a két tenant egy DB-n van, a migráció mindkettőt egyszerre éri. A másik tenant a régi kóddal fut az új sémán, amíg őt is deployolod. Ezért a migráció legyen additív, és a második tenant menjen közvetlenül utána.
+   - Migrációt mindig `main`-ről generálunk.
+   - ⚠️ Megjegyzés: a todo-ban nem találtam leírt migrációs deployt az `mm6-deploy` mellett. Ez a lépéssor a régi kézi deployokból (6.33–6.73) és a scriptből összerakott eljárás, nem megfigyelt.
+6. **Rollback:**
+   - Bukott build: semmi nem változott, a régi build szolgál ki.
+   - Az app nem jön fel: a maintenance oldal fent marad, a `.next-old` megvan. Ilyenkor vissza kell cserélni, `pm2 restart`, `mm6-maint off`.
+   - **Sikeres deploy után a `.next-old` már törölve van**, ilyenkor a rollback `git revert`, push, és újra `mm6-deploy`. Ha a lockfile is mozgott, a következő deploy magától `npm ci`-t futtat.
+   - Migrációnál a DROP-ot előre leírjuk a tervbe.
+   - (A tegnapi CA-kérésben tévesen „`.next-old` swap” szerepelt rollbackként egy sikeres deploy után.)
+7. **Utána:**
+   - HEAD és verzió;
+   - pm2 online, a restartok száma csak eggyel nő;
+   - `/login` 200, egy share oldal 200 (ez a view count-ot növeli);
+   - egy új route bejelentkezés nélkül 401;
+   - az error logba nem jött új sor;
+   - nem maradt `.next-old` vagy `.next-build`;
+   - a `/_next/image` 404-et ad (`images.unoptimized` a 16.4.5 óta).
+8. **Tanulságok:**
+   - nginx mögött a `req.url` a helyi bind cím, ezért abszolút URL-hez a `requestOrigin()` kell;
+   - a build a root layoutot a DB-n prerendereli, ezért érvényes `DATABASE_URL` kell a build előtt;
+   - a boxon a storage root más fájlrendszeren van, mint a temp, ezért `copyFile` kell, soha `rename` (EXDEV);
+   - helyben épített build megölte az élő appot, ezért van a `.next-build`;
+   - a boxon telepített script egyszer elcsúszott a repóétól, ezért van a `cmp` védelem.
+
+### Memória
+- `project_next_origin_behind_nginx.md` → egysoros mutató az AGENTS.md Deploy szakaszára (a tartalma teljesen átkerül).
+- `project_mcp_per_user_tokens.md`: csak a „Deploy coupling” mondat helyére jön egy mutató. Az MCP-token tényei maradnak.
+- `reference_hetzner_box.md` → egysoros mutató az infra-map Box B-re és az AGENTS.md Deployra. **Csak akkor, ha az 1–2. hiányzó tény bekerült az infra-mapbe.** Addig a két sor a jegyzetben marad, különben elvesznek.
+- A `MEMORY.md` index sorai ennek megfelelően.
+
+### Szeletek
+- [x] **S1** AGENTS.md „Deploy” szakasz (1–8), plusz a két helyi port lecserélése infra-map-hivatkozásra (ha Robi jóváhagyja).
+- [x] **S2** Ellenőrzés:
+  - `grep` a fájlon IP-re, `root@`-ra, `/var/www`-ra, `/opt`-ra, `.ssh`-ra és szerverportra: nulla találat;
+  - Codex-próba: vissza tudja-e mondani a sorrendet és a migrációs szabályt.
+- [x] **S3** Memória: a fenti 3 jegyzet és a `MEMORY.md`.
+- [x] **S4** Commit: csak az `AGENTS.md` és a saját todo-hunk. Push csak Robi go-jára. Nincs bump. (`7238029`, pusholva)
+- [ ] **Robinak / a Learning sessionnek:** a 7 hiányzó box-tényt az infra-map gazdája vegye fel. Én a globális fájlt nem szerkesztem.
+
+### Review (2026-11-22) — Robi: „Mehet”
+- **AGENTS.md:** új „Deploy” szakasz az 1–8. pont szerint. A két helyi port helyett hivatkozás az infra-map „Mac” szakaszára.
+- **Ellenőrzés:**
+  - `grep` IP-re, `root@`-ra, `/var/www`-ra, `/opt/`-ra, `/mnt/`-re, `.ssh`-ra, a kulcsnévre és a szerverportokra (5432/5433/55432/6001/6002/9000): nulla találat.
+  - Codex, fájlolvasás nélkül, helyesen visszamondta: a Telekom megy elsőnek; migrációnál pull, `db:migrate` a `.env`-ből, aztán deploy, additívan; sikeres deploy után `git revert`, push, újradeploy, mert a `.next-old` már nincs meg.
+- **Memória:**
+  - a `project_next_origin_behind_nginx` mutató lett;
+  - a `project_mcp_per_user_tokens` deploy-mondata mutató lett;
+  - a `reference_hetzner_box` mutató lett, de a kulcs eredetéről szóló és a Docker-verziós sor benne maradt, amíg az infra-map fel nem veszi őket;
+  - a `MEMORY.md` index frissült.
+- **A 7 hiányzó box-tény** ment a Learning sessionnek. Az infra-mapet nem szerkesztettem.
+
+## 2026-11-22 — Nyitott kérdések lezárva; `docs/` → Drive; todo archiválás; a régi MinIO volume (TERV, Robi jóváhagyására vár)
+
+Robi (2026-11-22): „szándékos volt, mérlegeljük, nem kell flex webm, open működik, mini mehet törlésre kukába a régi mini IO volume, maradjon, csináljuk a docs mozgatást és frissítsük archiváljuk a todo-t”.
+
+### Lezárva (Robi döntése, 2026-11-22)
+- A 3 MC288a sor törlése szándékos volt.
+- Flex-WebM változat nem kell.
+- A `?open=` élesben működik (Robi kipróbálta).
+- A `.claude/settings.local.json` széles wildcardja marad.
+
+### Mit érint
+- **Szemantikai modell:** nincs. Ez dokumentum- és tárhely-szervezés, az app viselkedését nem érinti. Szabály: a globális „Repo = code, Drive = documents” (2026-10-16), és az AGENTS.md „Meaning” és „Where plans live” része.
+- **A) `docs/` → Drive:** kétirányú ajtó. Az eredetik a Kukába mennek, onnan visszahozhatók. A Drive egy rclone mounton (`gdrive:`) át íródik.
+- **B) todo archiválás:** kétirányú (`git revert`).
+- **C) a MinIO volume törlése:** **egyirányú.** A `docker volume rm`-nek nincs kukája, a 7,9 GB végleg eltűnik.
+- **D) npm-audit ág:** a jegyzet átvétele kétirányú. Az ág commitja (`378caa3`) a törlés után még a reflogban marad.
+
+### A) `docs/` → Drive (26 fájl, megnézve 2026-11-22)
+| Hova | Mi |
+|---|---|
+| `~/GoogleDrive/Data/MessagingMatrix/mm6-docs/` (új) | 12 .md: REBUILD_SPEC, MM6_PURPOSE_STATE_CAPABILITIES, MM6_MCP_E2E_TEST, PLATFORM_STRUCTURE_FILES, REPORT_RECONCILIATION_STUDY, SZALLASHU_DEMO_STUDY, TELEKOM_DEMO_STUDY, TENANT_FORK_STRATEGY, ICON_SET_STUDY, BUGHUNT_2026-08-25…, mc-collisions.md, variant-splits.md. Plusz a `mc-collisions.html` és a 2 AdForm-képernyőkép (jpg). |
+| `~/GoogleDrive/Data/ERSTE HU/_messagingmatrix.ai/mm6-docs/` (új) | 9 xlsx: az ERSTE „15 March” mátrix, Creative rep 04 és 05, Erste_Vallalkozo, adfrom_current_SZK_feed, erste-SZK-feed v1-27 és v1-28, orphan-mcs, mc-export. |
+| Kukába, másolás nélkül | `MM6_SYSTEM_OVERVIEW.md`: bájtra azonos a Drive-on lévővel (`cmp`). `~$ERSTE….xlsx`: 165 bájtos Excel-zárfájl. |
+
+- **Miért új almappák:** az rclone mount a Google Sheeteket 0 bájtos `.xlsx`-ként mutatja, és a MessagingMatrix gyökerében már van egy natív Sheet ugyanazzal a névvel, mint az ERSTE „15 March” fájl. Új mappában nem lehet névütközés.
+- **Menet fájlonként:**
+  1. `cp -p`, aztán `cmp`.
+  2. A Drive connectoron ellenőrzöm, hogy a fájl ott van és a mérete egyezik. Ez bizonyítja a feltöltést, nem csak az rclone cache-t.
+  3. Ezután megy az eredeti a `~/.Trash`-be.
+
+  A `docs/` üresen és gitignore-olva marad.
+- **Repo-hivatkozások, fájlonként:**
+  - `AGENTS.md`: a meaning-dokumentumok útvonalai, a `docs/` mondat és a REBUILD_SPEC sor;
+  - `tests/README.md` (2 sor), `scripts/recon/README.md` (1 sor);
+  - `src/app/_icons/core-map.ts` (csak komment).
+- **A scriptek nem változnak:**
+  - a `gen-*` scriptek továbbra is a `docs/`-ba írnak, az most munkamappa;
+  - az `import-erste`, a `reimport-media` és a `seed-keywords` kapcsolóval kapja az xlsx útvonalát;
+  - az `import-erste-sample`-nek nincs ilyen kapcsolója, és az alapútvonala megszűnik. Ez egy 2026-05-ös, régi script.
+- **Memória:** `reference_spec.md`, `reference_docs_dir.md`.
+- **Előrejelzés:** a `src/`-ben nincs olyan futásidejű olvasás, ami a `docs/`-ból olvasna (`grep`: csak a core-map.ts kommentje). Útvonal nélkül a fenti scriptek „file not found” hibát adnak. A `tsc` nem változik.
+
+### B) todo.md: frissítés és archiválás (most 3585 sor, az archív 6173)
+- **B0, Robi dönt.** A másik session EPIC CA részei 2026-11-20 óta nincsenek commitolva. Az egyik a 201. sornál van (+72 soros terv), a másik a 2010. sornál (a régi R-terv fejléce „FELÜLÍRVA”). A 2010-es abban a 2026-09-16-os szakaszban van, amit archiválnék.
+  - **Ajánlás:** a saját nevükön, külön commitban commitolom őket („docs(todo): EPIC CA terv, 2026-10-27, jóváhagyásra vár — másik sessionből”), és csak utána archiválok.
+  - **Alternatíva:** a 2026-09-16-os „Ügynökségi riportok” szakasz a todo-ban marad, amíg az a session nem commitol.
+- **B1, archívba szó szerint** (a végére, „Archivált 2026-11-22” fejléc alá):
+  - minden checkpoint 2026-11-12 előttről (most a 478–3198. sor);
+  - a roadmap lezárt tételeinek törzse (✅, KIVEZETVE, ELVETVE: Telekom instance, Box deploy 6.83.0, D Design tab, D8, P, M1, M7, M8, MCP draft scope); a fejlécük és egy pointer marad;
+  - a D) pont npm-audit jegyzete.
+
+  Ellenőrzés: egy script összeveti a kivett szöveget az archívba írttal, és a kettőnek egyeznie kell.
+- **B2, frissítés:**
+  - „Jelen állapot (2026-09-10)” → 2026-11-22: a 6.132.0 fut mindkét tenanton;
+  - az archivált rész nyitott tételei egy-egy soros pointerrel a roadmapbe kerülnek: H1–H16 riport-egyeztetés (R1–R6-ot az EPIC CA felülírta), react-hooks és Turbopack tech-adósság, a „Filter to these” éles próbája;
+  - a D) pont két nyitott javaslata;
+  - kipipálom, ami kész: a 6.131.0 bump és deploy, a BlackFriday Refresh, a két S4 commit, és a C) után a MinIO;
+  - a fenti „Lezárva” döntések.
+- **AGENTS.md:** az archív leírása („2026-04 → 2026-07, ~4000 lines”) az új állapotra frissül.
+- **Előrejelzés:** a todo.md kb. 700–800 sor lesz, és egy nyitott tétel sem tűnik el pointer nélkül.
+
+### C) A régi MinIO volume — VÉGLEGES törlés
+Box B, csak olvasva, 2026-11-22:
+- `supabase-mm6_mm6-minio-data`: 7,9 GB a `/`-n, 2026-06-28-án jött létre.
+- Egyetlen konténer sem hivatkozik rá (`docker ps -a --filter volume=`). A `supabase-mm6-minio` konténer a bind mountról fut (`/mnt/HC_Volume_104001329/minio`).
+- Kulcsonkénti összevetés: a régiben 22 754 objektum van, az élőben 22 862. **A régiből egy sem hiányzik az élőből.** A régibe 2026-10-31 óta semmi nem írt.
+- A `/` most 68%-os (25G/38G), utána kb. 47% lesz.
+
+Teendők:
+- [ ] `docker volume rm supabase-mm6_mm6-minio-data`. **Ennek nincs kukája,** a „kukába” itt végleges törlést jelent.
+- A compose fájl még deklarálja a `mm6-minio-data:` volume-ot (83. sor), de egy szolgáltatás sem csatolja. Egy `docker compose up` legfeljebb egy üres volume-ot hozna létre. Nem nyúlok hozzá.
+- Utána: `df`, a MinIO `/minio/health/live` 200-at ad, a `/login` 200-at ad mindkét tenanton.
+- Az infra-map 169. sorát (rollback-pont) a gazdája frissíti: a Learning sessionnek jelzem.
+
+### D) npm-audit ág (`claude/festive-galileo-ac1dfd`) — mérlegelés
+- Egyetlen commit van rajta (`378caa3`, 2026-11-04), csak `tasks/todo.md` +36 sor, kódváltozás nincs. Ez az npm audit elérhetőségi vizsgálata, amit a CA a 3182. sorban 2026-11-06-ra kért. Eredménye: a zod élesben csak auth után érhető el; egy belépett felhasználó vagy egy `full` token egyetlen kéréssel OOM-ba viheti a saját tenantja folyamatát; a többi csomag nem érhető el.
+- 12 committal le van maradva a main mögött.
+- **Ajánlás:** nem git-merge. A jegyzetet szó szerint átveszem a B1-gyel, a két javaslatát (kis fix, illetve JSON-méretkorlát) a roadmapbe teszem, aztán törlöm a worktree-t (tiszta) és a helyi ágat.
+- **A mai állapot:** a sérülékeny verziók még futnak. Helyben ezek vannak fent: `zod 4.4.1`, `body-parser 2.3.0`, `qs 6.16.0`, `fast-uri 3.1.8`, `ip-address 10.7.3`, és a `package-lock.json` a 6.128.3 óta nem változott. A kis fix (`npm update …`, zod `^4.6.6`) egy függőség-patch deployjal együtt, ezért külön feladat.
+
+### Szeletek
+- [x] **S1** B0: az EPIC CA részek külön commitban, ha Robi így dönt.
+- [x] **S2** A: másolás, `cmp`, Drive-ellenőrzés, Kuka; a repo-hivatkozások egyenként; memória.
+- [x] **S3** B és D: archiválás az ellenőrző összevetéssel, frissítés, az npm-audit jegyzet átvétele; a worktree és az ág törlése.
+- [x] **S4** C: a volume törlése, utána ellenőrzés.
+- [x] **S5** Commit: `AGENTS.md`, `tests/README.md`, `scripts/recon/README.md`, `core-map.ts` (komment), `todo.md`, `todo-archive.md`. Push csak Robi go-jára. Bump nincs, mert ez doksi és tooling.
+- A CA-review nem kell: egyik felsorolt kategóriába sem esik. Ha Robi kéri, a C) előtt kérek.
+
+### Review (2026-11-22) — Robi: „Mehet, törléssel”
+- **S1:** az EPIC CA két része `de31a8c`-ben, a tartalmuk változatlan. A working tree-ben ezután csak a saját változásaim maradtak.
+- **S4, MinIO:**
+  - `docker volume rm supabase-mm6_mm6-minio-data` lefutott, a törlés előtt 0 konténer használta.
+  - A `/` 68%-ról (25G) 46%-ra (17G) ment le.
+  - Utána: a MinIO `/minio/health/live` 200, az erste és a telekom `/login` 200, az élő tárolóban 22 862 objektum (ugyanannyi, mint előtte).
+- **S2, `docs/`:**
+  - 24 fájl került a két új `mm6-docs/` mappába, mindegyiknél `cmp` egyezés. A Drive API-n mind a 24 fájl megvan egyező mérettel, duplikátum nincs.
+  - A 26 eredeti a `~/.Trash/mm6-docs-2026-11-22/` mappában van.
+  - **Menet közben:** a `cp -p` az rclone mounton (macfuse) xattr-hibát adott, és az xlsx-eknél a tartalmat sem írta végig. A fájlokat `cat`-tel újraírtam, és csak ezután jött a `cmp` és a Drive-ellenőrzés.
+  - Repo-hivatkozások: `AGENTS.md`, `tests/README.md`, `scripts/recon/README.md`, `core-map.ts` (komment).
+  - Memória: `reference_spec.md`, `reference_docs_dir.md`, `MEMORY.md`.
+- **S3, todo:**
+  - 3674 → 773 sor a scripttel, ezzel a review-val együtt kb. 810. Az archívba 2965 sor került (most 9137 sor).
+  - A script minden tartomány első és utolsó sorát ellenőrizte, és bizonyította, hogy a kivett sorok sorrendben, egyezően az archívban vannak.
+  - **Eltérés a tervtől:** a Telekom instance szakasza a todo-ban maradt, mert élő szabály van benne (a `../mm6-telekom` worktree és a G2/G3 routing). Ehelyett a D6–D8 szakasz ment, mert mindhárom tétele lezárult.
+  - A nyitott tételek mutatói: „Session checkpointok” (H1–H16, Next 16 tech-adósság, Assets → Share éles ellenőrzés, „Filter to these”), TECH-ADÓSSÁG (npm audit két javaslata, MCP `scope` check constraint).
+  - A 3064–3070. sor (share nézet linkben) nem nyitott, a 6.126.0 leszállította.
+- **D:** az npm-audit jegyzet az archív C) részében van, szó szerint. A worktree tiszta volt, eltávolítottam; a `claude/festive-galileo-ac1dfd` ág törölve (`378caa3`, a reflogban még megvan).
+- **Tanulság (javaslat):** az rclone mountra `cp -p` helyett `cat src > dst` és `cmp` kell; ez most a `reference_docs_dir` memóriában van. Ha gyakran kell, egy kis `scripts/`-mentes shell-függvény a Drive-ra másoláshoz. Robi dönt.
+
+## 2026-11-23 — Függőség-patch: az `npm audit --omit=dev` találatainak zárása (TERV, Robi jóváhagyására vár)
+
+Kérés: egy másik session adta át. Ez a 2026-11-04-i vizsgálat kis fixe (archív „Archivált 2026-11-22” C), roadmap: TECH-ADÓSSÁG → „npm audit”). Az alapos fix (JSON-méretkorlát, `.max()` a 18 tömbre, alacsonyabb nginx-limit) nem része, csak follow-up.
+
+### Mai állapot (megfigyelve, 2026-11-23, helyben)
+- **Az audit most 7 találatot ad, nem 5-öt** (2 high, 5 moderate). A 11-04-i öt mellé két új jött, mindkettő moderate, és mindkettő az MCP SDK (`@modelcontextprotocol/sdk` 1.32.1) függősége:
+  - `hono` ≤4.13.15, 5 advisory (helyben 4.13.13);
+  - `@hono/node-server` 2.0.0–2.1.5, 2 advisory (helyben 2.1.4).
+- Telepítve: zod 4.4.1, body-parser 2.3.0, qs 6.16.0, fast-uri 3.1.8, ip-address 10.7.3, iconv-lite 0.7.2. A `package-lock.json` a 6.128.3 óta nem változott. A zod-ot használó kód (`mcp.ts`, `mcp/tools`, a három `messages/bulk-*` route) sem változott 11-04 óta (`git log`).
+- **A hono elérhetősége:** az SDK-ban csak a Node-os `server/streamableHttp.js` és egy példa importálja. Az mm6 két belépőpontja a `server/mcp.js` és a `server/webStandardStreamableHttp.js`. Ezek statikus import-gráfja 18 fájl, és nincs benne hono, express vagy `streamableHttp.js`. Csomag csak öt van benne: ajv, ajv-formats, content-type, zod, zod-to-json-schema. Élesben tehát valószínűleg nem töltődik be. A box bundle-jét nem néztem meg.
+- **Szimuláció a lock másolatán** (`npm update … --package-lock-only`, `npm audit --omit=dev --package-lock-only`):
+  - **(A) csak az öt csomag:** zod 4.6.7, body-parser 2.4.0, qs 6.17.1, fast-uri 3.1.9, ip-address 10.7.6, iconv-lite 0.7.3 (a body-parser alatt). Ez pontosan a 11-04-i jóslat. Utána **2 moderate marad** (hono, @hono/node-server).
+  - **(B) az öt + `hono @hono/node-server`:** ugyanez, plusz hono 4.13.20 és @hono/node-server 2.1.11. Az audit **0 találatot ad**. A lock diffje 60 sor: ez a 9 csomag, plusz a lock gyökér-verziója (6.128.3 → 6.132.0, a `package.json`-hoz igazodik).
+- **Engines:** minden célverzió fut a box Node 20.20.2-jén (`@hono/node-server` ≥20, body-parser ≥18, a többi lazább).
+- **Frissesség:** a hono 4.13.20 tegnap jelent meg (2026-11-22), a @hono/node-server 2.1.11 2026-11-20-án. Az első javító verziók régebbiek: hono 4.13.16 (11-01), @hono/node-server 2.1.6 (11-02). Az `npm update` a tartomány legújabbját hozza; a régebbit csak `overrides`-szal lehetne rögzíteni, ezt nem ajánlom.
+- **A zod-advisory** (GHSA-mrhx-c7xc-m3w5, 2026-10-01): a `$ZodArray` minden hibás elemre külön issue-t gyűjt, plafon és korai leállás nélkül. Ez a hossz-korlát nélküli tömbökre vonatkozik, 4.6.6 javítja.
+- **Mérés a zod 4.4.1-gyel** (a `bulk-copy` séma másolata, csupa hibás elem, Node 24, 2 GB heap):
+  - 1 MiB: 524 288 issue, +553 MB heap, 742 ms;
+  - 4 MiB: 2 097 152 issue, +1556 MB heap, 2,9 s.
+  - Ez egyezik a 11-04-i számokkal. Ugyanezt a mérést a frissítés után is lefuttatom: ebből derül ki, hogy a patch tényleg zárja-e a mi sémáinkon az OOM-utat, vagy ahhoz az alapos fix kell.
+
+### Robi döntése (ajánlással)
+- **H1:** a hono is bekerüljön? **Ajánlás: igen, (B).**
+  - Ugyanaz a mechanizmus: tranzitív patch az SDK tartományán belül.
+  - A „kész” feltétele az audit 0.
+  - Élesben a hono valószínűleg be sem töltődik, ezért a friss verzió kockázata kicsi.
+  - Ha nem: (A), és a 2 moderate marad.
+
+### Terv
+**Touches:**
+- `package.json`: zod `^4.4.1` → `^4.6.6`.
+- `package-lock.json`: 6 (A) vagy 8 (B) csomag, plusz az iconv-lite.
+- Alkalmazáskód nem változik.
+- Ahol a zod fut: az MCP végpont (`src/app/mcp/route.ts`, `src/lib/mcp.ts`, a toolok `inputSchema`-ja és az SDK), a `src/app/api/mcp/tools` (Settings → MCP leírás `z.toJSONSchema`-val) és a három `messages/bulk-*` route.
+- Szemantikai modell nincs. A meaning-dokumentumok (REBUILD_SPEC 2026-09-06, PURPOSE 2026-09-06) nem szólnak a függőségekről, ez megállapítás.
+- Forrás: a 2026-11-04-i vizsgálat (archív C) és `~/.agents/standards/dependencies.md`.
+
+**Door:**
+- A commit kétirányú (`git revert`).
+- A deploy (külön lépés) szintén kétirányú: revert, push, `mm6-deploy`. A lockfile változása miatt a script `npm ci`-t futtat.
+- Hatósugár: minden zod-validált bemenet mindkét tenanton. Migráció és adatváltozás nincs.
+
+**Prediction:**
+- `npm audit --omit=dev`: 0 találat (B), illetve 2 moderate (A).
+- `tsc`, eslint, vitest: ugyanaz, mint a baseline. A baseline most fut a régi függőségekkel, a száma ide kerül.
+- Ismeretlen: a zod 4.4 → 4.6 minor emelés változtat-e a típus-inferencián, a hibaüzenetek alakján vagy a JSON Schema kimeneten.
+- Ami nem változhat: az MCP `tools/list` válasza (52 tool, `scope: full`), mert az agentek ezt látják. A régi zod-dal már lementettem a baseline-t.
+
+**Seam:**
+- `npm audit --omit=dev`.
+- A repó saját ellenőrzései.
+- Az MCP `tools/list` JSON-ja, régi és új zod-dal összevetve. Scratch-script `InMemoryTransport`-tal, a teszt-DB URL-jével, handler nem fut.
+- A zod-memóriamérés a frissítés előtt és után.
+
+**Szeletek:**
+- [x] **S1** `npm pkg set dependencies.zod='^4.6.6'`, `npm update zod body-parser qs fast-uri ip-address` (B esetén `hono @hono/node-server` is). Utána `npm audit --omit=dev`, `npm ls` a régi verziók nélkül, és a lock diffje csak a várt csomagokat tartalmazza.
+- [x] **S2** `npx tsc --noEmit`, eslint és `npm test` (a `mm6-test-pg` fut), a baseline-hoz mérve. Ugyanitt a `tools/list` diff és a zod-mérés.
+- [x] **S3** CHANGELOG az `[Unreleased]` alatt. Verziójavaslat: 6.132.0 → 6.132.1 (patch); a bump csak Robi szavára. Commit a saját ágon: `package.json`, `package-lock.json`, `CHANGELOG.md`, a saját todo-szakasz. Push nincs. Commit előtt rebase a `main`-re, mert egy másik session a todo-t archiválja.
+- [ ] **S4** Deploy-terv Robinak, nem futtatom:
+  - planning review (CA + Codex) a commit után;
+  - push;
+  - `telekom`, utána `erste`, mindegyik Robi külön go-jára;
+  - a boxon `npm ci` fut (lockfile változott), ezért az idő és a memória is nagyobb lehet;
+  - utána a boxon `npm ls zod hono` és `npm audit --omit=dev`, plusz az AGENTS.md „After” lista.
+
+### Eredmény (2026-11-23) — Robi: „Yes, B”
+- **S1:**
+  - `npm audit --omit=dev` → **found 0 vulnerabilities**.
+  - A `package-lock.json` bájtra azonos a szimulált (B) lockkal: 60 soros diff, csak a 9 várt csomag.
+  - `npm ls` tiszta. Az új verziók: zod 4.6.7, body-parser 2.4.0, qs 6.17.1, fast-uri 3.1.9, ip-address 10.7.6, iconv-lite 0.7.3 (a body-parser alatt), hono 4.13.20, @hono/node-server 2.1.11.
+  - A `package.json`-ban csak a zod sora változott (`^4.6.6`).
+- **S2, a repó ellenőrzései** (előtte a régi függőségekkel is lefuttatva, baseline):
+  - `tsc --noEmit`: tiszta, előtte és utána is.
+  - eslint: 0 hiba, 146 warning; a kimenet bájtra azonos a baseline-éval.
+  - vitest: 120 fájl, 1119 teszt zöld, előtte és utána is.
+  - A jóslat teljesült. Az ismeretlen (típus-inferencia, hibaüzenet-alak, JSON Schema) nem okozott eltérést.
+- **MCP `tools/list`:** a régi és az új zod-dal **bájtra azonos** (52 tool, `scope: full`, 65 308 bájt). Az agentek ugyanazokat a sémákat látják.
+- **zod-mérés** (a `bulk-copy` séma másolata, csupa hibás elem, Node 24, 2 GB heap):
+
+  | Törzs | zod 4.4.1 | zod 4.6.7 |
+  |---|---|---|
+  | 1 MiB | 524 288 issue, +553 MB, 742 ms | 524 288 issue, **+190 MB**, 173 ms |
+  | 4 MiB | 2 097 152 issue, +1556 MB, 2,9 s | 2 097 152 issue, **+931 MB**, 713 ms |
+  | 10 MiB | (nem mértem) | **OOM**, a folyamat leáll (exit 134) |
+  | 4 MiB, `.max(1000)` a tömbökön | (nem mértem) | **2 issue, 0 MB, 1 ms** |
+
+  - **Következtetés:** a 4.6.7 hibás elemenként továbbra is egy issue-t gyűjt a hossz-korlát nélküli tömbön. Kevesebb memóriát és időt visz, de 10 MiB-nál még mindig OOM.
+  - Az MCP-t az SDK 4 MiB-ra korlátozza. A 4 MiB-os kérés +931 MB-ot foglal, ez a pm2 `max_memory_restart` értéke (erste 900 MiB, telekom 700 MiB) fölött van, így valószínűleg újraindítást vált ki. Ezt nem mértem a boxon.
+  - A REST `bulk-*` route-okat csak az nginx 200M-ja korlátozza, ott az OOM-út nyitva marad.
+  - A `.max()` a 4.6.7-ben korán leáll, tehát az alapos fix (`.max()` a 18 tömbre plus JSON-méretkorlát) hatásos. **Ez follow-up, nem része ennek a változásnak.**
+- **A teljes `npm audit` (dev is):** 16 találat (3 critical, 13 moderate), mind dev-függőség, ez nem része a feladatnak.
+  - critical: `vitest` 3.2.4 és `@vitest/ui`, a `tinypool`-on át; a javítás a vitest 4.x-ben van, ez major. A Vitest UI szerver futása közben érinti a fejlesztői gépet.
+  - moderate: `drizzle-kit` (az esbuild-kit/esbuild láncon), `typescript-eslint` (minimatch), `postcss-selector-parser`.
+  - Élesbe egyik sem kerül, a `--omit=dev` szerint.
+
+### S4 Deploy-terv (nem futtattam; minden lépés Robi külön go-jára)
+1. ✅ **Bump** (Robi: „Yes, bump”, 2026-11-23): 6.132.0 → 6.132.1 (patch), `npm version --no-git-tag-version`. A `package.json` és a lock két gyökér-verziója változott, a CHANGELOG-ban a bejegyzés a `[6.132.1] — 2026-11-23` alatt van. Saját commit ezen az ágon.
+2. **Rebase a `main`-re**, utána Robi merge-el. Egy másik session a todo-t archiválja a `main`-en.
+3. **Planning review** (Robi: „Yes, request review”, 2026-11-23; a CA webhook 200, a Codex fut):
+   - request: `~/agent-bus/requests/20261123-1145-mm6-6.132.1-deps-patch-deploy.md` (cél, diff, a fenti mérések, rollback, 3 nyitott kérdés: `npm ci` az élő app alatt, a hono frissessége, Node 20 EOL);
+   - CA webhook és `codex exec -s read-only`;
+   - „Stop” esetén nincs deploy.
+4. **Push** az `origin main`-re.
+5. **Pre-flight a boxon:**
+   - szabad lemez és memória;
+   - mindkét tenant HEAD-je, ez a rollback-pont;
+   - a deploy-script egyezik-e a repóéval.
+6. **`mm6-deploy telekom`.**
+   - A lockfile változott, ezért a script a build előtt `npm ci`-t futtat. Utoljára 2026-09-12-én mértük: 702 csomag, 30 s.
+   - Közben a memóriát mintavételezem. Ha az elérhető memória ~120 MB alá esik, leállítom a `next build`-et.
+   - ⚠️ Az `npm ci` az élő app alatt cseréli a `node_modules`-t. Ha ezután a build bukik, a régi `.next` az új `node_modules`-szal szolgál ki, amíg egy deploy sikerül vagy a lock visszaáll (a script megjegyzése is ezt írja, 54–56. sor). Patch-szintű tranzitív emelésnél ezt elfogadhatónak tartom.
+7. **Ellenőrzés utána (telekom):**
+   - HEAD a pusholt commit, a `package.json` 6.132.1;
+   - a boxon `npm ls zod hono @hono/node-server body-parser` az új verziókat mutatja, és `npm audit --omit=dev` 0;
+   - pm2 online, a restart-szám csak eggyel nő;
+   - `/login` 200, `POST /mcp` token nélkül 401;
+   - az error logba nem jön új sor;
+   - nem maradt `.next-old` vagy `.next-build`;
+   - `/_next/image` 404.
+8. **`mm6-deploy erste`**: ugyanez, plusz egy share oldal 200 (ez a view count-ot 1-gyel növeli).
+9. **Rollback:**
+   - Ha a build bukik, semmi nem cserélődik, de a `node_modules` már az új (lásd 6.).
+   - Ha az app nem jön fel: a `.next-old` visszacserélése, `pm2 restart`, `mm6-maint off <tenant>`.
+   - Sikeres deploy után: `git revert`, push, `mm6-deploy`. A régi lock miatt ez újra `npm ci`-t futtat.
+   - Migráció nincs.
+
+### Follow-upok (nem ebben a változásban)
+- **Alapos fix (Robi dönt):** `.max()` a 18 tömbre és korlátos JSON-olvasó, vagy alacsony nginx-limit a feltöltések kivételével.
+  - A fenti mérés szerint a zod 4.6.7 a `.max()`-os tömbön korán leáll.
+  - Korlát nélkül 10 MiB-nál még OOM.
+  - A REST `bulk-*` route-okat ma csak az nginx 200M-ja korlátozza.
+- **Dev-audit:** a vitest 3 → 4 (major), plusz a drizzle-kit és a typescript-eslint lánca. Külön feladat, a `dependencies.md` szerint ütemezve.
+
+### Planning review — Chief Architect: OK with changes (`~/agent-bus/answers/20261123-1145-mm6-6.132.1-deps-patch-deploy.md`)
+- **Beépítve:**
+  - **(8)** A CHANGELOG nem állítja, hogy a patch zárja az OOM-utat. A bejegyzés kimondja, hogy a hibás elemű nagy tömb validálása továbbra is memóriát visz (a régi 34–60 %-át, mérve), és ezt a külön body-size limit zárja.
+  - **(5)** A todo-változás commitolva; a merge pontosan a saját commitjaimat viszi.
+  - **(2, opcionális)** `npm view … dist.attestations`: a hono 4.13.20 és a @hono/node-server 2.1.11 SLSA provenance-szal jött, a GitHub Actions trusted publisher a `honojs/hono` és a `honojs/node-server` repóból. Az `npm audit signatures` 728 csomag registry-aláírását igazolta, ebből 139-nek attestation-je is van. `overrides` nincs, a legújabb marad.
+- **A deploy-tervbe (S4) kerül:**
+  - **(1)** Az `npm ci` előbb törli a `node_modules`-t. A telepítés ablakában egy lusta `require` vagy dinamikus import (egy route chunk első hívása) `MODULE_NOT_FOUND`-ot dobhat. Ezért off-peak megy, és az `npm ci` alatt a pm2 error logot figyelem. Ha ilyen sor jön, az a következő szelet (telepítés mellékkönyvtárba + csere), nem most.
+    - ⚠️ Eltérés: az AGENTS.md szerint napközben is mehet. Ez a lockfile nélküli deployokra igaz; az időpontot Robi dönti el.
+  - **(2)** A build után a boxon `grep -rl 'hono' .next/server`: a hono nincs a bundle-ben. Ezzel zárul a nyitott rés.
+  - **(4)** Egy ellenőrzés, ami tényleg zod-ot futtat a boxon (a 401-es próba nem éri el):
+    - bejelentkezett `tools/list` = 52 tool;
+    - egy tool-hívás hibás payloaddal validációs hibát ad. A Codex a másik terv kapcsán megfigyelte, hogy ez HTTP 200, `result.isError: true` alakban jön.
+    - Token kell hozzá. Robi futtatja, vagy a meglévő mm6 MCP connectorral, ha az ezen a tenanton van. Tokent nem kezelek.
+  - **(6)** A pre-flight mindkét tenant HEAD-jét **és** a régi `package-lock.json` sha256-ját rögzíti. Az `npm ci` miatt ez a valódi rollback-pont.
+  - **(3)** A Node 20.20.2 → 24.x (TIP-061, EOL) és a Next 16.4.6 nem ide tartozik. A Node-csere a következő, külön szelet.
+  - **(7)** A memória-őr 120 MB-nál rendben van.
+
+### Planning review — Codex: OK with changes (`~/agent-bus/answers/20261123-1145-mm6-6.132.1-deps-patch-deploy.codex.md`)
+- **Ütközés a CA-val, Robi dönt:**
+  - Codex: maintenance oldal fel és a tenant leállítása az `npm ci` előtt.
+  - CA: az `npm ci` mehet az élő app alatt, off-peak, a pm2 error logot figyelve.
+  - **Ajánlás: a CA-é.** Precedens: a 6.128.4 (2026-11-11, Next 16.4.5) pontosan így ment mindkét tenanton, `mm6-deploy`-jal, csendes időszakban. Az error log üres maradt, az `npm ci` alatt is (archív, ~9059. és 9076. sor).
+  - A Codex változata a scripten kívüli kézi lépéseket kívánna (a script maga futtatja az `npm ci`-t, a lock-jelölőt is ő írja).
+  - A mechanizmus-javítás (telepítés mellékkönyvtárba + csere, vagy a gate az `npm ci` elé) külön szelet, ahogy a CA javasolja.
+- **Beépítve a deploy-tervbe:**
+  - **Teljes rollback** (a 6.128.4-es lockfile-mozgató terv szerint, archív ~9079. sor). Ha az app nem jön fel:
+    1. a boxon `git reset --hard <régi HEAD>`;
+    2. `npm ci` (a régi lockkal);
+    3. a `.next-old` vissza;
+    4. `pm2 restart`;
+    5. `mm6-maint off`, csak ha a `/login` 200.
+    - Ha a régi lockkal az `npm ci` is bukik, a maintenance oldal fent marad, és Robi dönt.
+  - **Clean-tree gate:**
+    - helyben a working tree tiszta a commit után;
+    - a boxon mindkét checkoutban `git status --porcelain` üres a pre-flightban.
+  - **SHA és megállás:**
+    - a deployolt SHA a review-zott commitok fast-forward merge-e a `main`-re (merge commit nélkül, hogy a box ugyanazt építse);
+    - ha a Telekom bármelyik ellenőrzése bukik, az Erste nem megy.
+  - **Bejelentkezett ellenőrzés** (egyezik a CA 4. pontjával): `tools/list` a baseline-hoz mérve, és egy share oldal 200 **mindkét** tenanton.
+    - Javaslat, tokenkezelés nélkül: ennek a sessionnek a csatolt mm6 MCP connectora full scope-pal 52 toolt lát, ugyanannyit, mint a baseline. Ezen át csak olvasó hívások mennek:
+      - előbb `matrix_status`, hogy kiderüljön, melyik tenanté;
+      - a tool-szám a deploy előtt és után;
+      - `get_mc_preview_files` hibás `sizes` payloaddal → `isError` validációs hiba.
+    - A másik tenantot Robi ellenőrzi a saját tokenjével, vagy ott ez kimarad.
+  - **Pontosság:** a CHANGELOG már kimondja, hogy a nagy, hibás tömb OOM-útja nyitva marad; a body-limit follow-up él, külön sessionben.
+  - **Node:** a Node 20 EOL miatt a 24.x a következő, külön szelet, a meglévő runtime mellé telepítve.
+- **Megjegyzés:** a 6.128.4-nél a lock gyökér-verzióját szándékosan nem emelték, hogy egy puszta bump ne indítson `npm ci`-t. Itt a lock úgyis változik (`npm update`), és az `npm version` is emelte. A következő bumpnál a `package-lock.json` verziómezőjét érdemes békén hagyni (`npm version` helyett kézzel a `package.json`-ban).
+
+### 6.132.1 deploy — Robi: „CA but right now, off peak does not make sense presently”
+- Robi döntött: a CA változata (`npm ci` az élő app alatt, a script alapértelmezése), és most, nem off-peak.
+- [x] Push: `5c939e4..1b3e7ec`, fast-forward a `main`-re. A box ezt a 4 review-zott commitot építi.
+- [x] **Pre-flight a boxon** (10:53 UTC):
+  - lemez 46%, 1973 MB elérhető memória, 1553 MB szabad swap, Node 20.20.2;
+  - a telepített `mm6-deploy` egyezik a repóval (`c3438a49…`);
+  - mindkét tenant HEAD-je `9be22f7` (6.132.0), a lock sha256 `94a433f64dfd…`, ez egyezik a jelölővel; ez a rollback-pont;
+  - a checkoutokban csak régi, követetlen fájlok vannak (`.env` mentések, `ecosystem.config.cjs`), követett fájl nem változott;
+  - az erste error logban 3 régebbi sor 08:04-ről: Server Action-próba („Server Reference ID … Received "x"”). Az mm6-ban nincs Server Action, ez nem ehhez a deployhoz tartozik.
+- [x] **DEPLOYOLVA `mm6-telekom`** (10:54 UTC):
+  - 105 s, az `npm ci` 45 s (733 csomag);
+  - a legkevesebb elérhető memória 897 MB, a swap legfeljebb 1016 MB;
+  - az error logba 0 új sor jött, az `npm ci` alatt sem.
+  - **Ellenőrzés:**
+    - HEAD `1b3e7ec`, 6.132.1, a lock-jelölő egyezik;
+    - a boxon `npm ls`: zod 4.6.7, body-parser 2.4.0, qs 6.17.1, fast-uri 3.1.9, ip-address 10.7.6, hono 4.13.20, @hono/node-server 2.1.11;
+    - a boxon `npm audit --omit=dev`: 0;
+    - `.next/server`: szó szerinti `hono` 0 fájlban; a 12 találat mind „honor/honour” kommentben és egy user-agent regexben, tehát a hono nincs a bundle-ben;
+    - nincs `.next-old` és `.next-build`;
+    - pm2 online, a restart-szám 2 → 3;
+    - `/login` 200, `/_next/image` 404, `POST /mcp` token nélkül 401;
+    - a share `3_Ml4cJyfDkA` 200; ez a view count-ot 26 → 27-re emelte.
+  - **Bejelentkezett MCP-próba a Telekomon: nem futott,** nincs hozzá token ebben a sessionben. A connector az „ERSTE MessagingMatrix”, 52 toollal.
+- [x] **DEPLOYOLVA `mm6-erste`** (10:58 UTC, Robi: „Yes, deploy erste”):
+  - előtte 2436 MB elérhető memória, HEAD `9be22f7`, a követett fájlok tiszták;
+  - 94 s, az `npm ci` 33 s (733 csomag);
+  - a legkevesebb elérhető memória 1351 MB, a swap legfeljebb 1069 MB;
+  - a deploy alatt 0 új sor jött az error logba;
+  - ugyanaz a 23 Turbopack trace-warning, mint a Telekomnál (ismert tech-adósság).
+  - **Ellenőrzés:**
+    - HEAD `1b3e7ec`, 6.132.1, a lock-jelölő egyezik;
+    - `npm ls`: ugyanazok az új verziók, mint a Telekomon; a boxon `npm audit --omit=dev`: 0;
+    - szó szerinti `hono` 0 fájlban;
+    - nincs `.next-old` és `.next-build`;
+    - pm2 online, a restart-szám 2 → 3;
+    - `/login` 200, `/_next/image` 404, `POST /mcp` token nélkül 401;
+    - `/share/0FVkKhe4V3H3` 200; ez a view count-ot 1-gyel emelte.
+  - **Error log a deploy után:** 3 → 12 sor. A 9 új sor 11:00:18-kor az ismert AWS SDK figyelmeztetés: az SDK 2027 januárja utáni kiadásai `node >=22`-t kérnek, a box `v20.20.2`-n fut. Az első S3-használatkor íródik ki, a korábbi deployoknál is megjelent. Hiba nincs, de ez is a Node-csere mellett szól.
+  - **Bejelentkezett MCP-próba** (az „ERSTE MessagingMatrix” connectoron, a deploy előtt és után):
+    - a `matrix_status` (2945 MC, 180 audience, 92 topic) és a `list_products` (7 termék) kimenete azonos;
+    - a `tools/call` az új buildön zod-validálással fut;
+    - a connector 52 toolt lát; ez a session elején lekért lista, a deploy után nem kértem le újra.
+  - **Nem futott:**
+    - a hibás payloados hívás. A kliensoldal ugyanazzal a sémával validál, így ilyen kérés el sem indul;
+    - a bejelentkezett próba a Telekomon.
+
+### Review (2026-11-23)
+- **Jóslat és megfigyelés:**
+  - az audit 0 lett, helyben és mindkét boxon is;
+  - a lockfile pontosan a szimulált;
+  - a `tsc`, az eslint, a vitest és a `tools/list` nem változott;
+  - a hono nincs a bundle-ben.
+- **Amit a jóslat kihagyott:**
+  - 11-04 óta két új hono-advisory jött; a terv ezt a mai audit-futásból vette fel, H1 döntéssel;
+  - a zod-patch nem zárja a nagy, hibás tömb OOM-útját, csak 34–60%-ra csökkenti. A body-limit follow-up kártyán indult, külön sessionben fut.
+- **Az `npm ci` az élő app alatt** mindkét tenanton hibasor nélkül ment (45 s és 33 s). A CA 1. pontja szerinti `MODULE_NOT_FOUND`-ot nem láttam, így a mechanizmus-javításra (telepítés mellékkönyvtárba) most nincs bizonyíték.
+- **Tanulság, javaslat** (Robi dönt, hova kerüljön):
+  - az `npm version` a `package-lock.json` gyökér-verzióját is emeli;
+  - a `mm6-deploy` a lock sha256-ja alapján dönt az `npm ci`-ről, ezért egy puszta bump is `npm ci`-t indít az élő app alatt. A 6.128.4 ezt kézzel kerülte el;
+  - helye: egy sor az AGENTS.md „Versioning” részébe: „bump only `package.json`, by hand, not `npm version`”;
+  - még jobb, ha ellenőrzés futja magától: a deploy-script csak a `packages` részt hash-elné, a gyökér-verziót nem.
+- **Nyitott follow-upok:**
+  - body-size limit (fut, `mm6-json-body-limits-and`);
+  - Node 20 → 24 (TIP-061);
+  - dev-audit: vitest 4 (major).
 

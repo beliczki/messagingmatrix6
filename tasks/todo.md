@@ -630,6 +630,7 @@ Kérés: a Head of Dev 2026-11-23-i üzenete; a Head of Security szondája (2026
     - **Következmény:** a régi MM `better-sqlite3`-a ABI-kötött, ezért az N6 után a régi MM nem indul el; a visszaállítási pontja megszűnik. A pm2 leállítva tartja.
     - **A `/opt/node` törlése** egy hét múlva csak akkor, ha sem a pm2-dump, sem a tenantok ecosystemje nem hivatkozik rá.
     - **Robi döntése:** app-szintű Node 20-tartalék az N6 után. Vagy (a) a 20.20.2 .deb kibontva egymás mellé, egy hétre; vagy (b) kapu: a customBrain memóriája ≥24 óráig lapos. *(Mérve: 296 MB 09:13-kor, 350 MB 09:34-kor; Node 20-on nyugalomban 229,7 MB.)*
+      - **Robi: (a). Kész 2026-11-24 10:08 UTC.** A NodeSource 20.20.2 .deb letöltve (a sha256 és a méret az apt-index szerinti), és kibontva egymás mellé, root-tulajdonban; nincs csoport- vagy mások által írható fájl. `node -v` 20.20.2, ABI 115, npm 10.8.2. A `node` bináris bájtra azonos a mostani system Node-dal. A .deb az N6 visszaállításához is megmarad. Útvonalak: infra-map.
     - **Utómunka, nem az N6 része, Robi döntése:** az N6 után egy kézi `apt upgrade` vagy egy libc-frissítés maint nélkül újraindítja a pm2-root-ot. Lehetőségek: needrestart-kivétel a pm2-unitokra, vagy `apt-mark hold nodejs`.
     - A reviewer egy fájlt írt a boxra (egy üres GPG-kulcstartót a root home-ban); a törlése Robi go-jára vár.
 - [ ] **N7.** `engines: { node: ">=24" }` a `package.json`-ban, commit; bump: patch; a következő rendes deployjal megy ki.

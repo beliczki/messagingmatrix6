@@ -645,7 +645,20 @@ Kérés: a Head of Dev 2026-11-23-i üzenete; a Head of Security szondája (2026
     - **Eltérés a tervtől:** nincs. A régi MM az N6 óta nem indul (ABI-kötött modul): infra-map.
 - [ ] **N6.6 utóellenőrzés:** a customBrain ellenőrzőlistája (10 perc: gmail- és backfill-napló; 1 óra: export, agenda; másnap: backup, repos), és a Security Signal újramérése (a „Node v20 EOL” sor zárható). A body-limit S2–S4 deployja nem ma (az N6 napja).
   - 10 perc, kész: a 11:40-es gmail- és backfill-futás már Node 24-en ment, hibamentesen (gmail failed=0; backfill ok=1, fail=0). A naplóban egy `fetch failed` (UND_ERR_SOCKET) a 11:20-as futásból van, még Node 20-on; azóta két futás tiszta.
+  - 1 óra, kész (16:30 UTC-kor nézve): 11:37 óta 80 customBrain-cronfutás Node 24-en; az export (16:01) és az agenda (16:15) hibamentes, a gmail, a backfill és a youtube is. A customBrain 16:30-kor 114 MB, restart 0; a gráf-újraépítés 20,0–22,1 s. Hátravan: másnap a backup (03:00) és a repos (04:30), és a Security Signal.
 - [x] **N7.** `engines: { node: ">=24" }` a `package.json`-ban, commit; bump: patch; a következő rendes deployjal megy ki. *(Robi, 2026-11-24: „Go N7”. Az `engines` átírva; a `package-lock.json` gyökér-`engines`-e `>=20` marad, az AGENTS.md szerint a lockfile-hoz nem nyúlok. Egy másolaton `npm ci --dry-run` ezzel az eltéréssel rc 0. A bump Robi külön döntése: „Yes, bump” → 6.132.3, CHANGELOG-sorral.)*
+- [x] **N8. Az első élő `npm ci` Node 24 / npm 11 alatt: a 6.133.0 deployja, kész 2026-11-24 16:29 UTC.** *(Robi: „bumpold a 6.133-at a share soldalt és push és deploy”, az MM6 státusz-sessionen át; ebben a sessionben: „folytassuk legyen már kint”.)*
+  - Tenantonként: rollback-másolat a `node_modules`-ról és a `.next`-ről (~1 GB), a stamp törlése, `mm6-maint on` a deploy előtt, `mm6-deploy`. Memória-figyelés 2 másodpercenként, 120 MB alatt a build leállítása (nem kellett).
+  - **telekom** 16:24:58–16:26:26: 88 s maint, `npm ci` 32 s (700 csomag), a legkevesebb elérhető memória 1124 MB. **erste** 16:27:59–16:29:26: 87 s maint, `npm ci` 33 s, a legkevesebb 1071 MB.
+  - Ellenőrzés mindkettőn:
+    - HEAD `4942f28`, 6.133.0, a stamp a lockfile-é;
+    - restart +1, a system Node 24.22.3;
+    - `/login` 200, a share-oldal 200 (+1 nézettség), az `/api/share-galleries` munkamenet nélkül 401, az `/_next/image` 404;
+    - nincs `.next-old`/`.next-build`, a hibalogban nincs új sor;
+    - `better-sqlite3` nincs, a 8 `.node` mind N-API.
+    - Hitelesített próba: erste MCP `matrix_status`; mindkét tenant Shares oldala Robi Chrome-jában betölt az új előnézet-oszloppal és nézetméret-választóval, a konzol hibamentes.
+  - **Az allowScripts-lelet (P2) lezárva:** az npm 11.19.1 élesben is figyelmeztet az 5 nem engedélyezett install-scriptre (négy `esbuild`, `unrs-resolver`), de a tsx (v4.21.0, egy TS-fájl lefut), az esbuild (`transformSync`) és az `unrs-resolver` (betölt) működik. A build 46 Turbopack import-trace figyelmeztetése ugyanaz, mint a P2-ben.
+  - Visszaállítás, ha kellene: maint on, `pm2 stop`, a két mappa vissza a másolatból, `git reset --hard 2623caa`, `pm2 start`, `/login` 200, maint off. A másolatok útvonala az infra-mapben; a 6.132.1-es másolatok (2 × 1,1 GB) még megvannak, a törlésük Robi döntése.
 
 **Restartok:** tenantonként P1 1, N2/N4 3, N6 1, mind maint mögött; customBrain 2 (N5, N6), néhány másodperc, maint nélkül. **Adat:** a DB-ben nem változik semmi, kivéve a DEPLOY.md share-oldal-próbájának +1 nézettségét. **Staging:** az MM6-nak nincs; az N2a a helyettesítője, a telekom a kanári. Ez Robi kifejezett kivétele kell legyen (`dependencies.md`). **Body-limit:** az S2–S4 deployja N4 után jöhet, de nem az N6 napján.
 

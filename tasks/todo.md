@@ -577,8 +577,23 @@ Kérés: a Head of Dev 2026-11-23-i üzenete; a Head of Security szondája (2026
   - **N2a, próba a boxon (a staging helyett):** egy ideiglenes, második folyamat Node 24-en, pm2-n kívül, egy szabad localhost-porton: `/login` 200, munkamenet nélkül 401, `/_next/image` 404, egy asset 200, hibamentes stderr, RSS; utána leállítva.
   - **N2b, átállás:** az interpreter-pin az ecosystemben, maint mögött `pm2 delete` + `start` (csak ez olvassa újra az ecosystemet), `pm2 save`. Ellenőrzés: `/proc/<pid>/exe` és `node_version` 24.22.3, a DEPLOY.md-próbák, egy hitelesített próba (Robi böngészőjében a mátrix-oldal; vagy az MM MCP-n egy olvasás), hibalog.
   - **N2c, visszaállítási próba:** a pin vissza `"node"`-ra (`exe` = system Node, `/login` 200, a hitelesített próba), aztán újra Node 24.
-- [ ] **N3.** *(Indult 2026-11-23 22:47 UTC; N4 legkorábban 11-24 22:47, legkésőbb 11-25 22:47 UTC; N6 legkésőbb N4 + 3 nap.)* Figyelés 24–48 óráig: restart-számláló, hibalog, RSS a `max_memory_restart` alatt.
-- [ ] **N4. erste:** ugyanaz, mint N2.
+- [x] **N3.** *(Robi, 2026-11-24 08:49 UTC: „now” → az N4 10 óra figyelés után ment, a 24 óra előtt.)* *(Indult 2026-11-23 22:47 UTC; N4 legkorábban 11-24 22:47, legkésőbb 11-25 22:47 UTC; N6 legkésőbb N4 + 3 nap.)* Figyelés 24–48 óráig: restart-számláló, hibalog, RSS a `max_memory_restart` alatt.
+  - **Köztes riport, 2026-11-24 08:47 UTC (10 óra, csak olvasva; a folytató „B box Node 24” session):**
+    - A telekom online, `exe` és `node_version` 24.22.3, a 22:47:14-es folyamat. Restart 0, instabil 0. A Postgres 16.16-ra váltást (08:10, B2) restart nélkül élte túl.
+    - RSS 163 MB, a csúcs (VmHWM) 266 MB, a limit 700 MiB. A box elérhető memóriája 2306 MB.
+    - Hibalog: 150 sor, mind egy szkenner-sorozatból (07:27:23–26 UTC, 50 kérés `Next-Action: x` fejléccel → „Server Reference ID did not match”, 400). Ugyanez a sorozat az erstét (Node 20) 00:27-kor érte, és a 11-15 óta rotált logokban is megvan. Nem Node-függő.
+    - AWS SDK `NodeVersionSupportWarning`: a telekom logjában Node 20-on sem volt soha (11-15 óta), mert az ablakban a folyamat nem hozott létre S3-klienst; a hiánya ezért önmagában nem bizonyít. Kontrollált próba a telekom telepített SDK-jával (`@aws-sdk/client-s3` 3.1075.0, csak kliens-létrehozás, kérés nélkül): Node 20.20.2-n kiírja, Node 24.22.3-on nem. Az erstén (Node 20) ma is megjelent. A figyelmeztetés szövege szerint a 2027. január első hete után kiadott SDK-verziók Node >=22-t kérnek.
+- [x] **N4. erste — kész 2026-11-24 08:51 UTC** (Robi: „now”; a B box-session előtte értesítve):
+  - **N4a** (08:50): próbafolyamat Node 24.22.3-on, az erste buildjének másolatával, egy szabad localhost-porton.
+    - `/login` 200 két másodperc után („Ready in 478ms”); munkamenet nélkül 401; `/_next/image` 404; asset 200; `/api/config-public` 200.
+    - RSS 140 MB, a kimenet hibamentes; Postgres-kapcsolatok 10 → 11 a 100-ból.
+    - Leállítva, a másolat törölve. A `/favicon.ico` 404, az élő erstén is.
+  - **N4b** (08:51:14–18, maint 4 s): pin + delete/start.
+    - `exe` = a Node 24-es bináris, `node_version` 24.22.3, a listener pid-je = a pm2 pid; restart 0.
+    - `/login` 200 loopbackon és publikusan, 401, `/_next/image` 404; a hibalog 0 új sor.
+    - Hitelesített próba: MCP `matrix_status` 200 az új folyamaton (180 audience, 92 topic, 2945 MC). Előtte egy `/mcp` 400: a connector újrakapcsolódása, Node 20-on is így volt a P1 restartja után (22:30).
+    - `pm2 save` 08:51:40; a dumpban mindkét tenant a pinnel, a két régi MM `stopped`.
+  - N2c nincs, a terv szerint. Az N6 határideje így 2026-11-27 08:51 UTC.
 - [ ] **N5. customBrain** (a customBrain-sessionnek előtte és utána szólok):
   - **N5.0:** a régi, hibásan újrainduló customBrain systemd unit letiltása (Robi go-jával).
   - **N5.1, cron-kanári:** az `agenda-sync` egyszer kézzel, Node 24-gyel.

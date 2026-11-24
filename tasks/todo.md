@@ -193,7 +193,7 @@ A `getActiveClient()` a SQLite→PG váltáskor lett async; a route-okat akkor j
 - **Nyitott / megfigyelés:** nonDCO-ban a fájlnév-szám termékenként ismétlődhet → egy nonDCO szám megjelenhet két product-topicban (külön cella/pmmid, nem ütközik; a user DCO-szabálya nem tiltja). Ha nonDCO-egyediség kell, a scriptbe within-nonDCO ütközés-feloldás kell. Video-only channel (YT) + PRG/GSN/GNW méret-map: később. Deferred: nonDCO auto-topicok üres sorként a DCO nézetben (Slice-4 topic-scoping).
 
 ### npm audit — zod és társai (vizsgálat 2026-11-04, archív „Archivált 2026-11-22” C))
-- [ ] **Kis fix (patch):** `npm update zod body-parser qs fast-uri ip-address`, zod `^4.6.6`. 2026-11-22-én még a sérülékeny verziók futnak (zod 4.4.1); külön task-kártya javasolva („mm6: zod és társai biztonsági patch”).
+- [x] **Kis fix (patch):** `npm update zod body-parser qs fast-uri ip-address`, zod `^4.6.6`. 2026-11-22-én még a sérülékeny verziók futnak (zod 4.4.1); külön task-kártya javasolva („mm6: zod és társai biztonsági patch”). **Kész:** 6.132.1 (2026-11-23), mindkét tenanton kint; a lockfile-ban zod 4.6.7. Törzs: `todo-done.md`, „2026-11-23 — Függőség-patch”.
 - [ ] **Alapos fix (Robi dönt):** a JSON-végpontoknak nincs saját méretkorlátjuk (az nginx 200M-ja vonatkozik rájuk); alacsony nginx-limit a feltöltési útvonalak kivételével vagy közös, korlátos JSON-olvasó, plusz `.max()` a 18 tömbre. **Terv: a fájl alján, „2026-11-23 — Terv: kérés-törzs méretkorlát”.**
 
 ### MCP token `scope`: nincs check constraint (6.84.0 óta dokumentálva, archív A) MCP token-scope #3)

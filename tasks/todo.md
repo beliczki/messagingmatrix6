@@ -645,7 +645,7 @@ Kérés: a Head of Dev 2026-11-23-i üzenete; a Head of Security szondája (2026
     - **Eltérés a tervtől:** nincs. A régi MM az N6 óta nem indul (ABI-kötött modul): infra-map.
 - [ ] **N6.6 utóellenőrzés:** a customBrain ellenőrzőlistája (10 perc: gmail- és backfill-napló; 1 óra: export, agenda; másnap: backup, repos), és a Security Signal újramérése (a „Node v20 EOL” sor zárható). A body-limit S2–S4 deployja nem ma (az N6 napja).
   - 10 perc, kész: a 11:40-es gmail- és backfill-futás már Node 24-en ment, hibamentesen (gmail failed=0; backfill ok=1, fail=0). A naplóban egy `fetch failed` (UND_ERR_SOCKET) a 11:20-as futásból van, még Node 20-on; azóta két futás tiszta.
-- [ ] **N7.** `engines: { node: ">=24" }` a `package.json`-ban, commit; bump: patch; a következő rendes deployjal megy ki.
+- [x] **N7.** `engines: { node: ">=24" }` a `package.json`-ban, commit; bump: patch; a következő rendes deployjal megy ki. *(Robi, 2026-11-24: „Go N7”. Az `engines` átírva; a `package-lock.json` gyökér-`engines`-e `>=20` marad, az AGENTS.md szerint a lockfile-hoz nem nyúlok. Egy másolaton `npm ci --dry-run` ezzel az eltéréssel rc 0. A bump Robi külön döntése.)*
 
 **Restartok:** tenantonként P1 1, N2/N4 3, N6 1, mind maint mögött; customBrain 2 (N5, N6), néhány másodperc, maint nélkül. **Adat:** a DB-ben nem változik semmi, kivéve a DEPLOY.md share-oldal-próbájának +1 nézettségét. **Staging:** az MM6-nak nincs; az N2a a helyettesítője, a telekom a kanári. Ez Robi kifejezett kivétele kell legyen (`dependencies.md`). **Body-limit:** az S2–S4 deployja N4 után jöhet, de nem az N6 napján.
 

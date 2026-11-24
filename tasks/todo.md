@@ -397,10 +397,10 @@ Robi 2026-11-23: „indítsd a zod kártyát, és aztán térjünk át az alapos
   - Mellékes: a `custombrain`-t 16:29:24 és 16:29:44 között valaki más leállította és elindította (új pid), még az első lépésem előtt. Nem én voltam, és nem néztem utána, ki. Az én `pm2 save`-jeim (16:30:36, 16:31:21) már az online állapotát rögzítették.
   - Visszaállítás: a mentett ecosystem-fájlok vissza, ugyanaz a `pm2 delete` / `pm2 start --only`, majd `pm2 save`.
   - Az infra-map Box B sorát a gazdája (Learning) frissíti, szóltam neki.
-- [ ] **S2** `limitBody` + a wrapperek + a három nyilvános route + `/mcp` + 413-naplózás; az `adform-snapshots` és a `monitoring/import` megkapja a hiányzó méret-ellenőrzést. S0 tesztjei zöldek.
-- [ ] **S3** (a zod-patch merge-e után, és csak ha a merge-elt lockfile-ban a mért zod-verzió van) `.max(n)` a 18 korlátlan tömbre, egyenként; a meglévő `mc_labels` `.max(20)` marad. A „0 elem-hívás” tesztet a merge utáni lockfile-on megismétlem; `tools/list`-diff a baseline-hoz.
+- [x] **S2** `limitBody` + a wrapperek + a három nyilvános route + `/mcp` + 413-naplózás; az `adform-snapshots` és a `monitoring/import` megkapja a hiányzó méret-ellenőrzést. S0 tesztjei zöldek.
+- [x] **S3** (a zod-patch merge-e után, és csak ha a merge-elt lockfile-ban a mért zod-verzió van) `.max(n)` a 18 korlátlan tömbre, egyenként; a meglévő `mc_labels` `.max(20)` marad. A „0 elem-hívás” tesztet a merge utáni lockfile-on megismétlem; `tools/list`-diff a baseline-hoz.
   - **Plusz, zod-verziótól függetlenül:** `new McpServer(info, { maxToolInputElements: 50_000 })` a `buildMcpServer`-ben. Az SDK 1.32.1 `validateToolInput`-ja a zod-validálás **előtt** megszámolja a tömbelemeket és az objektumkulcsokat, és a limit fölött `InvalidParams`-ot dob (ellenőrizve: `node_modules/@modelcontextprotocol/sdk/dist/cjs/server/mcp.js` 210–212). Egy teljes mezős `mc_update_batch`-sor kb. 39 elem, tehát az 500-as batch kb. 20 000 elem. A testvér-session (`mm6: JSON body limits…`) szerint a `tools/list`-et nem változtatja. Teszt az SDK Clienten és `InMemoryTransport`-on át, mert a meglévő tesztek közvetlenül a handlert hívják, és kihagyják a `validateToolInput`-ot.
-- [ ] **S4** Verify (`npm test`, `tsc`, lint), diff-review külön reviewerrel (security), deploy telekom → erste Robi go-jával, az AGENTS.md teljes „After” listájával.
+- [x] **S4** Verify (`npm test`, `tsc`, lint), diff-review külön reviewerrel (security), deploy telekom → erste Robi go-jával, az AGENTS.md teljes „After” listájával.
   - **Bump: minor (6.133.0).** A v3-körben a CA is visszavonta a patch-javaslatát: az AGENTS.md szerint a felhasználó által látható viselkedésváltozás minor, és a `tools/list` `maxItems` MCP-szerződés-változás. Robi dönt.
 
 **Nyitott kérdések Robinak:**
@@ -845,7 +845,7 @@ A ma használt két scratchpad-szkript (`patch_sheet.py`, `verify_patch.py`, mos
 **Használat legközelebb** (Robi go-ja és a böngészőben zárt fájl után):
 `npx tsx --env-file=.env.local scripts/patch-mc-export.ts "<mount>/mc-export NN.xlsx" --ids <id-lista.txt> --in-place --remote "gdrive:Data/ERSTE HU/_messagingmatrix.ai/mc-export NN.xlsx"`, előtte ugyanez `--in-place` nélkül (csak jelentés).
 
-## 2026-11-24 — Shares oldal: előnézet-oszlop, méretválasztó, szűrősáv (JÓVÁHAGYVA, build folyik)
+## 2026-11-24 — Shares oldal: előnézet-oszlop, méretválasztó, szűrősáv (KÉSZ az ágon; bump és deploy Robi go-jára vár)
 
 Robi kérése (szó szerint): „erre az oldalra kéne a cím elé egy 3 mini thumbnailes, preview a shareből, legyen létethető a preview, 1080x1080 vagy 300x250 vagy ha az sincs négyzetes szerű méretekből legyen a preview, ne a mréeteket sorolja fel a preview, hanem a shareben lévő mc és mc vrainatokat, a toolbárba beerülhetnegy egy 32 64 128 256 pixeles thumbnail size selector egy view boxba, ez a magasságát adja meg a preview thumnailnek, és kéne egy filter az oldal ttetejére mint a creative libraryba, share névre, mc-re, kreatívon lévő szövegre lehessen szürni és product lehullóra is”.
 0. lépés (2026-11-24): Robi „Igen, építsd”; a „létethető” = **léptethető** (nyilakkal tovább lehet lapozni a share további MC-ire).
@@ -887,8 +887,34 @@ Robi jóváhagyása (2026-11-24): „Mehet”; a léptetés hármasával; a pick
 8. Fájl-thumbnál a választott magasság kétszereséhez legközelebbi meglévő szélesség-tier (80/200/400/800).
 
 **Szeletek:**
-- [ ] **S1** `share-list.ts` + unit-tesztek (előbb piros). Független.
+- [x] **S1** `share-list.ts` + unit-tesztek (előbb piros). Független.
 - [ ] **S2** Route: `previews` / `products` / `searchText` a lista-válaszban; a `shareThumbs` a csoportokra épül; integrációs teszt (előbb piros). S1 után.
 - [ ] **S3** UI: Preview oszlop, léptetés, „View” doboz a méretválasztóval. S2 után.
 - [ ] **S4** UI: szűrősáv (szöveg, Product, Clear) a fejlécben; a `toolbar__count` a szűrt számot mutatja. S2 után, S3-tól független.
-- [ ] **S5** Ellenőrzés: `npx tsc --noEmit`, eslint, `npm test` (unit + integráció). Helyi `dev:erste` böngészős próba; ez az élő DB-t olvassa, ezért csak nézelődés: nincs Refresh, Archive, és nem nyitok meg `/share/[id]` oldalt (az view-t számol). `component-inventory.md` frissítése, review-szakasz, minor bump-javaslat.
+- [x] **S5** Ellenőrzés: `npx tsc --noEmit`, eslint, `npm test` (unit + integráció). Helyi `dev:erste` böngészős próba; ez az élő DB-t olvassa, ezért csak nézelődés: nincs Refresh, Archive, és nem nyitok meg `/share/[id]` oldalt (az view-t számol). `component-inventory.md` frissítése, review-szakasz, minor bump-javaslat.
+
+### Review (2026-11-24)
+
+**Ami elkészült** (`claude/shares-preview-filter-5b03b5`):
+- `src/lib/share-list.ts` (új, tiszta): méretválasztás, MC-csoportosítás, a kreatívon lévő szöveg, a szűrő-mezők és a sor-szűrő.
+- `src/lib/share-snapshot.ts`: új `sharePreviews` (minden MC egy képpel, URL-lel) és `shareSearchTexts` (a `creatives.image_text` id szerint, kliensre szűrve, 500-as darabokban). A `shareThumbs` (picker) mostantól a `sharePreviews` első 4 elemét adja.
+- `GET /api/share-galleries`: soronként `previews`, `products`, `searchText`. A meglévő mezők és a `?thumbs=1` változatlanok.
+- `SharesView.tsx`: Preview oszlop a Title előtt (3 kép, ‹ › hármasával), szűrősáv a fejlécben (szöveg + Product + Clear), „View” doboz a jobb toolbarban (32/64/128/256, alap 64). A fejléc „N selected” száma a látható kijelölteket számolja, és van külön üres állapot arra, ha a szűrőre nincs találat.
+- `component-inventory.md`: `share-preview-strip`, `shares-view-controls`, `shares-table__cell--preview`.
+
+**Ellenőrzés:** `npx tsc --noEmit` 0 hiba. `npm run lint` 0 hiba, 145 warning; a módosított fájlokban eggyel kevesebb, mint előtte (a `rows`-useMemo warning megszűnt, a `RefreshThumb` `<img>`-warningja régi). `npm test`: 123 fájl, 1149 teszt zöld. Az új tesztek előbb pirosak voltak: unit 14 (`tests/unit/share-list.test.ts`), integráció 5 (`tests/integration/api/share-galleries-list.test.ts`, benne a picker testvér-tesztje: ma ugyanazt az MC-t 3× adta).
+**Böngészős próba: nem volt.** Az oldal az élő DB valódi admin-belépését kéri, Robi a próbát kihagyatta. A képek helyben amúgy sem töltődnének be, mert a dev-env-ben nincs S3. A UI-t tehát csak a typecheck és a lint látta, szemmel senki: ez az első éles megnyitáskor derül ki.
+
+**Jóslat vs. eredmény:**
+- Bejött: az API új mezői, a `creatives`-ből olvasott szöveg (a snapshotban nincs), a picker javítása ugyanabból a csoportosítóból.
+- Nem láttam előre, menet közben derült ki, és teszt fedi:
+  1. **Archivált share:** a nyilvános fájl-proxy archivált share-re 404-et ad (`share-file.ts`). Ezért archivált share-nél a lista nem ad kép-URL-t, csak az MC-címkéket mutatja (§6.10b: archivált = nem nézhető).
+  2. **SVG:** a `/share/[id]/file?thumb=` SVG-re nem a thumb-ágon fut, hanem a teljes fájlt adja, és **letöltést számol**. A lista SVG-re nem ad URL-t, így egy oldalbetöltés soha nem növeli a Downloads-t. Az élő share-ekben ma nincs SVG (png 987, jpeg 98, mp4 28, zip 12).
+- Ismeretlen maradt: a matrix-cella előnézete a teljes PNG. Ha a lista ettől lassú, külön szelet: `?thumb=` a `/publicshortcut` matrix-ágára.
+
+**Leletek, nem ebben a változásban (Robi dönt):**
+- [ ] **Meglévő, rejtett hiba:** a nyilvános galéria (`ShareGallery.tsx` `thumbSrc`) SVG-fájlra is `?thumb=`-et kér, és ez letöltésnek számít, holott a §6.10 szerint a thumbnail sosem számít. Ma 0 SVG van share-ben. Mechanizmus-javítás: a file route `?thumb=` kérése sose számoljon letöltést (SVG-re szolgálja ki magát a fájlt, számláló nélkül).
+- [ ] **REBUILD_SPEC §6.10b elavult** (Drive, 2026-09-06): nincs benne a Refresh, és most már a Preview oszlop, a szűrősáv és a View doboz sem.
+
+**Verzió:** javaslat `6.132.2` → `6.133.0` (minor: új, felhasználónak látható funkció és új API-mezők). Robi dönt; a `package.json` és a `CHANGELOG.md` érintetlen. Deploy: nem történt; Robi külön go-ja kell, a B box Node-cseréje (N4–N8) után.
+

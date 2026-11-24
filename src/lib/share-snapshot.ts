@@ -702,12 +702,14 @@ export type SharePreview = {
  * `sharePreviewGroups` chooses (share-list.ts) — the Shares list steps through
  * them. The URLs are the share's own public ones, the ones its viewer loads: a
  * file through /share/{id}/file, a matrix cell through a signed /publicshortcut
- * preview.
+ * preview. An archived share gets no URLs — its MCs are still listed — because
+ * its public link no longer serves it (§6.10b: archived = not viewable).
  */
 export async function sharePreviews(
   clientId: number,
-  shares: Array<{ id: string; metadata: string | null }>,
+  shares: Array<{ id: string; metadata: string | null; archivedAt: string | null }>,
 ): Promise<Map<string, SharePreview[]>> {
+  const archived = new Set(shares.filter((s) => s.archivedAt !== null).map((s) => s.id));
   const groupsById = new Map<string, PreviewGroup[]>();
   const messageIds = new Set<number>();
   for (const share of shares) {
@@ -745,6 +747,9 @@ export async function sharePreviews(
     result.set(
       shareId,
       groups.map(({ label, size, ref }): SharePreview => {
+        if (archived.has(shareId)) {
+          return { label, size, kind: ref.kind, url: null };
+        }
         if (ref.kind === "matrix") {
           const v = previewVersion.get(`${ref.messageId}|${ref.size}`);
           if (!v || !secret) return { label, size, kind: "matrix", url: null };
@@ -757,13 +762,20 @@ export async function sharePreviews(
           };
         }
         if (ref.kind === "file") {
-          // An HTML5 package's ?thumb= is its poster, so it pictures too.
-          const visual = creativeMediaKind(ref.mimeType) !== "other";
+          // Only what the share file proxy answers from its `?thumb=` branch:
+          // a raster still, a video's or an HTML5 package's poster. Anything
+          // else (an SVG, a non-picture) falls through to the whole-file serve,
+          // which counts as a DOWNLOAD — every Shares page load would add one.
+          const kind = creativeMediaKind(ref.mimeType);
+          const thumbable =
+            kind === "video" ||
+            kind === "html5" ||
+            (kind === "image" && ref.mimeType !== "image/svg+xml");
           return {
             label,
             size,
             kind: "file",
-            url: visual ? `/share/${shareId}/file/${ref.fileId}` : null,
+            url: thumbable ? `/share/${shareId}/file/${ref.fileId}` : null,
           };
         }
         return { label, size, kind: "none", url: null };
@@ -783,7 +795,7 @@ const THUMBS_PER_SHARE = 4;
  */
 export async function shareThumbs(
   clientId: number,
-  shares: Array<{ id: string; metadata: string | null }>,
+  shares: Array<{ id: string; metadata: string | null; archivedAt: string | null }>,
 ): Promise<Map<string, Array<string | null>>> {
   const previews = await sharePreviews(clientId, shares);
   const result = new Map<string, Array<string | null>>();

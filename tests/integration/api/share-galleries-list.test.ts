@@ -35,17 +35,17 @@ type ListRow = {
   searchText: string;
 };
 
-function req(token: string): NextRequest {
+function req(token: string, query = ""): NextRequest {
   return {
-    url: "http://localhost/api/share-galleries",
+    url: `http://localhost/api/share-galleries${query}`,
     headers: new Headers({ authorization: `Bearer ${token}` }),
     cookies: { get: () => undefined },
   } as unknown as NextRequest;
 }
 
-async function list(): Promise<ListRow[]> {
+async function list(query = ""): Promise<ListRow[]> {
   const [u] = await db.select().from(users).limit(1);
-  const res = await GET(req(await signSession(u)), { params: Promise.resolve({}) });
+  const res = await GET(req(await signSession(u), query), { params: Promise.resolve({}) });
   expect(res.status).toBe(200);
   return ((await res.json()) as { shares: ListRow[] }).shares;
 }
@@ -149,6 +149,34 @@ describe("GET /api/share-galleries — Shares list previews and filter data", ()
     const [row] = await list();
     expect(row!.searchText).toBe("");
     expect(row!.previews).toEqual([{ label: "MC9a", size: null, kind: "none", url: null }]);
+  });
+
+  it("gives no URL for a file the proxy cannot thumbnail, so the list never counts a download", async () => {
+    await db.insert(uploadedFiles).values({
+      id: "f-svg", clientId: erste.id, filename: "v.svg", originalFilename: "v.svg",
+      storagePath: "x/v.svg", mimeType: "image/svg+xml", category: "creative",
+    });
+    const [{ id: svg }] = await db
+      .insert(creatives)
+      .values({ clientId: erste.id, mcNumber: 20, mcVariant: "a", fileId: "f-svg", fileName: "v.svg", fileDimensions: "1080x1080" })
+      .returning();
+    await seedShare("s1", { mcIds: [], assetIds: [], matrix: [], creativeIds: [svg] });
+    const [row] = await list();
+    expect(row!.previews).toEqual([{ label: "MC20a", size: "1080x1080", kind: "file", url: null }]);
+  });
+
+  it("lists an archived share's MCs without pictures: its public links no longer serve them", async () => {
+    await seedShare("s1", {
+      mcIds: [], assetIds: [],
+      matrix: [{ messageId: 1, size: "1080x1080" }],
+      creativeIds: [square],
+    });
+    await db.update(shareGalleries).set({ archivedAt: "2026-11-02 00:00:00" }).where(eq(shareGalleries.id, "s1"));
+    const [row] = await list("?includeArchived=1");
+    expect(row!.previews).toEqual([
+      { label: "MC400a", size: "1080x1080", kind: "matrix", url: null },
+      { label: "MC12a", size: "1080x1080", kind: "file", url: null },
+    ]);
   });
 });
 

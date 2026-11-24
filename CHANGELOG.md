@@ -5,6 +5,21 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.133.0] — 2026-11-24
+
+### Added
+- Shares: a preview column before the title shows the share's MCs and MC variants, one picture each
+  (1080x1080, else 300x250, else the most square size), three at a time with ‹ › paging. Archived
+  shares and SVG files show the MC label only, so no picture request is counted as a download.
+- Shares: a View box in the right toolbar sets the preview height (32 / 64 / 128 / 256 px) and
+  remembers the choice.
+- Shares: a filter bar, as in the Creative Library, searches the share name, the MCs (`mc:`) and the
+  text on the creatives, with a product dropdown.
+
+### Changed
+- The add-to-share picker shows one thumbnail per MC, so a matrix share no longer shows one card in
+  four sizes.
+
 ## [6.132.3] — 2026-11-24
 
 ### Changed

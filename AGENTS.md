@@ -15,7 +15,8 @@ Project-level guidance for every agent working in this repo: Claude Code, Codex 
 
 ## Where plans live
 - **`tasks/todo.md`** — lean active roadmap + recent checkpoints. **Read first, read fully** (kept small on purpose). New session checkpoints append to the bottom; open work is the "Nyitott roadmap" section.
-- **`tasks/todo-archive.md`** — full verbatim history (Phase 0–10 logs, every deploy/session checkpoint 2026-04 → 2026-11-11, ~9100 lines). The long-term memory — nothing gets deleted, only appended. Read it (tail/offset/grep) when you need the detail behind a roadmap pointer. When `todo.md`'s checkpoints pile up, roll the old ones into here and leave a one-line pointer.
+- **`tasks/todo-done.md`** — finished, live work and closed or superseded plans, moved verbatim from `todo.md` (split 2026-11-23). When a section is finished, it moves here whole, to the top of the file. Read it when a `todo.md` pointer says „Törzs: `todo-done.md`”.
+- **`tasks/todo-archive.md`** — full verbatim history (Phase 0–10 logs, every deploy/session checkpoint 2026-04 → 2026-11-11, ~9100 lines). The long-term memory — nothing gets deleted, only appended. Read it (tail/offset/grep) when you need the detail behind a roadmap pointer. Since 2026-11-23, finished sections go to `todo-done.md` instead.
 - **`REBUILD_SPEC.md`** (Drive folder, `mm6-docs/`) — v6 design spec; multi-tenancy delta D1–D11 layered on top.
 - **`tasks/component-inventory.md`** — semantic class names already in use. Check before inventing a new block name.
 
@@ -50,7 +51,7 @@ If the finished work is ambiguous (e.g. touches multiple categories), propose th
 
 ## Workflow notes specific to mm6
 
-- `tasks/todo.md` is the lean active file — read it fully. Each session's checkpoint appends to the bottom. History lives in `tasks/todo-archive.md` (large, append-only — read with `tail`/offset/grep); roll old checkpoints there when `todo.md` grows.
+- `tasks/todo.md` is the lean active file — read it fully. Each session's checkpoint appends to the bottom. When a section is finished, move it whole and verbatim to the top of `tasks/todo-done.md`; a section with an open box or an unclear status stays. Older history lives in `tasks/todo-archive.md` (large, append-only — read with `tail`/offset/grep).
 - Running multiple deploys in parallel: `npm run dev:erste` (port 6001), `dev:telekom` (6002), `dev:proficio` (6003), `dev:demo` (6000). All share one Postgres on the Hetzner box, reached locally through the Mac's SSH tunnel to it (see `~/.agents/infra-map.md`, "Mac"); `ACTIVE_CLIENT_KEY` picks the client.
 - Tests: `npm test` (vitest). The integration suite needs the throwaway docker Postgres `mm6-test-pg` (`docker start mm6-test-pg`; its port is in the infra-map, "Mac"). New schema migrations should land with at least one integration test exercising the migration path.
 

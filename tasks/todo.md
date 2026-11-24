@@ -844,3 +844,51 @@ A ma használt két scratchpad-szkript (`patch_sheet.py`, `verify_patch.py`, mos
 
 **Használat legközelebb** (Robi go-ja és a böngészőben zárt fájl után):
 `npx tsx --env-file=.env.local scripts/patch-mc-export.ts "<mount>/mc-export NN.xlsx" --ids <id-lista.txt> --in-place --remote "gdrive:Data/ERSTE HU/_messagingmatrix.ai/mc-export NN.xlsx"`, előtte ugyanez `--in-place` nélkül (csak jelentés).
+
+## 2026-11-24 — Shares oldal: előnézet-oszlop, méretválasztó, szűrősáv (JÓVÁHAGYVA, build folyik)
+
+Robi kérése (szó szerint): „erre az oldalra kéne a cím elé egy 3 mini thumbnailes, preview a shareből, legyen létethető a preview, 1080x1080 vagy 300x250 vagy ha az sincs négyzetes szerű méretekből legyen a preview, ne a mréeteket sorolja fel a preview, hanem a shareben lévő mc és mc vrainatokat, a toolbárba beerülhetnegy egy 32 64 128 256 pixeles thumbnail size selector egy view boxba, ez a magasságát adja meg a preview thumnailnek, és kéne egy filter az oldal ttetejére mint a creative libraryba, share névre, mc-re, kreatívon lévő szövegre lehessen szürni és product lehullóra is”.
+0. lépés (2026-11-24): Robi „Igen, építsd”; a „létethető” = **léptethető** (nyilakkal tovább lehet lapozni a share további MC-ire).
+Ág: `claude/shares-preview-filter-5b03b5` (worktree `exciting-leakey-7043bd`).
+Robi jóváhagyása (2026-11-24): „Mehet”; a léptetés hármasával; a picker is az MC-nkénti választást kapja (3. döntés).
+
+**Touches:**
+- A `/shares` admin lista: REBUILD_SPEC §6.10b (Drive `mm6-docs/REBUILD_SPEC.md`, 2026-09-06). **A dokumentum ezen a ponton elavult:** a Refresh (6.122.0, 6.131.0, 6.132.0) nincs benne. Kód: `src/app/(app)/shares/SharesView.tsx`.
+- `GET /api/share-galleries` válasza (§3.10, §4.7: a lista-válasz hordozza a soronkénti számlálókat): `src/app/api/share-galleries/route.ts`.
+- A share-snapshot (`share_galleries.metadata`, §3.10) olvasói: `shareThumbs` (`src/lib/share-snapshot.ts`, az „Add to shared” picker 4 képe) és `shareProducts` (`src/lib/share-metadata.ts`, a dashboard product-szűrője).
+- Szomszédok: a szűrő-nyelv (§7.7, `parseSearchQuery`, `src/lib/search-query.ts`), a `MultiPill` Product legördülő és a `toggle-group` / `ToggleBtn` (matrix View/Density), a nyilvános galéria kép-URL-jei (`/share/[id]/file/…?thumb=`, `/publicshortcut/…`; §6.10: a `?thumb=` kérés nem számít letöltésnek).
+- Szemantikai modell nincs; ezt a változást egyik modell sem fedi. A fogalmak (share, snapshot, matrix cell vs creative, MC/variáns) a specből.
+
+**Mért tények (élő DB, csak olvasás, 2026-11-24):**
+- Erste: 44 share; 206 matrix cell, 1121 creative, 3 asset. Minden snapshot-creative-nek van MC-száma; 275 share×MC csoport. A leggyakoribb méretek: 1080x1080 (248), 300x250 (200), 640x360, 1200x628, 300x600, 970x250.
+- **A kreatívon lévő szöveg nincs a snapshotban:** a snapshot-creative-ek közül 40/1121-ben van `imageText` (a legtöbb share régebbi a képolvasásnál). A `creatives` táblában a 943 még meglévő sorból 895-nek van. Ezért a szöveget a `creatives` táblából olvasom id szerint (kliensre szűrve, 500-as IN-darabokban, mint a `shareThumbs`), a törölt soroknál a snapshot értékével. Share-enként deduplikálva ez ~21 KB képszöveg és ~10 KB matrix-copy az egész listára.
+- `db-reads.md`: a node-postgres/Drizzle nem vág csendben 1000 sornál; a share-lista maga ~45 sor. Az IN-listák darabolva mennek.
+
+**Door:** kétirányú. Csak olvasás és UI: nincs séma, migráció vagy adatírás, a `git revert` visszaviszi. Blast radius: a `/shares` oldal, a `GET /api/share-galleries` válasza (új mezők; a meglévők változatlanok), és ha a 3. döntést elfogadod, a picker thumbjai. Deploy nem része: külön go, a Node-csere után.
+
+**Prediction:**
+- Változik: a lista-válasz soronként `previews` (MC/variánsonként egy kép, a nézői sorrendben), `products` és `searchText` mezőt kap. A táblában a Title elé kerül egy Preview oszlop (3 thumb, ‹ › léptetés), a fejlécbe szűrőmező, Product legördülő és Clear, a jobb toolbarba egy „View” doboz a 32/64/128/256-os választóval. A sormagasság a választott thumb-magasságot követi.
+- Változatlan: a többi oszlop, a rendezés, a kijelölés (shift is), a Refresh / Archive / Restore / Copy link, a nézettség- és letöltés-számlálók, a nyilvános galéria.
+- Tesztek mutatják: unit (méret-preferencia, MC-csoportosítás, szöveg, szűrő-mezők), integráció valós PG-n (a route új mezői; a `creatives.image_text`-re akkor is talál, ha a snapshotban nincs).
+- Ismeretlen: a matrix-cellák előnézete a teljes PNG, kisebb változata nincs (a nyilvános galéria is ezt tölti, `loading="lazy"`). Ha a lista ettől lassú, külön szelet lesz: `?thumb=` a `/publicshortcut` matrix-ágára.
+
+**Seam:**
+- Új tiszta modul `src/lib/share-list.ts`: `pickPreviewSize(sizes)`, `sharePreviewGroups(meta)`, `shareSearchText(meta, textById)`, `shareSearchFields(row)`. Unit-teszt: `tests/unit/share-list.test.ts`.
+- `GET /api/share-galleries`: integrációs teszt a válaszra (`tests/integration/api/share-galleries-list.test.ts`).
+
+**Döntések (ajánlott default, Robi felülírhatja):**
+1. Méret: 1080x1080, ha nincs, 300x250, ha az sincs, a négyzethez legközelebbi (a `|ln(w/h)|` minimuma; döntetlennél a nagyobb terület, aztán a sorrendben első).
+2. Csoport = MC-szám + variáns (MC12a és MC12b két kép); egy MC-ből egy kép, akárhány mérete vagy közönség-másolata van. MC nélküli tétel (asset) fájlonként egy csoport.
+3. **Mechanizmus-fix a pickerben is.** A `shareThumbs` ma „az első 4 tételt” adja, ami egy matrix-share-nél ugyanaz az MC négy méretben, pont az, amit itt nem kérsz. A picker első 4 képét ugyanaz a csoportosító adja. Testvér-teszt: egy MC három méretével a mai `shareThumbs` 3 egyforma képet ad (piros), utána MC-nként egyet.
+4. Léptetés: a ‹ › hármasával lapoz (1–3, 4–6 …), tooltipben „4–6 / 12”. Legfeljebb 3 MC-nél nincs nyíl.
+5. Szöveg-szűrő: a szabad szöveg = share-név + MC-címkék + a kreatívon lévő szöveg (`image_text`; matrix cellánál headline, copy1, copy2, disclaimer, cta). Az `mc:` prefix az MC-re szűr. A képleírás (`image_description`) nem kerül bele, mert az nem a kreatívon lévő szöveg. A többi prefix (a: t: s: p: date:) itt nem él, a placeholder ezt mutatja.
+6. Product: a meglévő `shareProducts` (a dashboard is ezt használja): a creative `product`-ja, matrix cellánál a topic-előtag. `MultiPill`, „(none)” opcióval.
+7. Perzisztencia: `mm6_shares_filter_search`, `mm6_shares_filter_products`, `mm6_shares_preview_height` (alap: 64 px).
+8. Fájl-thumbnál a választott magasság kétszereséhez legközelebbi meglévő szélesség-tier (80/200/400/800).
+
+**Szeletek:**
+- [ ] **S1** `share-list.ts` + unit-tesztek (előbb piros). Független.
+- [ ] **S2** Route: `previews` / `products` / `searchText` a lista-válaszban; a `shareThumbs` a csoportokra épül; integrációs teszt (előbb piros). S1 után.
+- [ ] **S3** UI: Preview oszlop, léptetés, „View” doboz a méretválasztóval. S2 után.
+- [ ] **S4** UI: szűrősáv (szöveg, Product, Clear) a fejlécben; a `toolbar__count` a szűrt számot mutatja. S2 után, S3-tól független.
+- [ ] **S5** Ellenőrzés: `npx tsc --noEmit`, eslint, `npm test` (unit + integráció). Helyi `dev:erste` böngészős próba; ez az élő DB-t olvassa, ezért csak nézelődés: nincs Refresh, Archive, és nem nyitok meg `/share/[id]` oldalt (az view-t számol). `component-inventory.md` frissítése, review-szakasz, minor bump-javaslat.

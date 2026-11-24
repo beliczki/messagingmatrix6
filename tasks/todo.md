@@ -694,7 +694,7 @@ Végrehajtó: a „B box Node 24” side-session (az MM6 státusz-session indít
 - **Planning review v2:** `~/agent-bus/requests/20261123-2345-mm6-boxb-node24-v2.md`: CA **OK with changes**, Codex **OK with changes**, Stop nincs. A módosítások a fenti v2.1-ben.
 
 ### Mellékes tételek (külön, nem ebbe a cserébe)
-- [ ] **postgres:16 konténer (16.14):** a többi boxon 16.15–16.16 fut. A minor-frissítés image-csere, adatmigráció nélkül, de a közös DB mindkét tenantot és a többi appot érinti. Előtte `pg_dump`; az infra-map szerint az image-ek `:latest`-en vannak, és véletlenül nem pullolunk. Hogy van-e újabb `postgres:16` image, azt nem néztem meg.
+- [x] **postgres:16 konténer (16.14):** a többi boxon 16.15–16.16 fut. A minor-frissítés image-csere, adatmigráció nélkül, de a közös DB mindkét tenantot és a többi appot érinti. Előtte `pg_dump`; az infra-map szerint az image-ek `:latest`-en vannak, és véletlenül nem pullolunk. Hogy van-e újabb `postgres:16` image, azt nem néztem meg. → **Kész: 2026-11-24 08:10 UTC óta 16.16** (lent, „B box: Postgres 16.14 → 16.16”).
 - [ ] **supabase studio (Next 16.2.6):** csak a 127.0.0.1-en érhető el, ezért alacsony prioritás. Frissítése image-pull a studióra.
 
 ## 2026-11-23 — AGENTS.md méretkapu pre-commit hookban (TERV, Robi go-jára vár)
@@ -875,3 +875,133 @@ A ma használt két scratchpad-szkript (`patch_sheet.py`, `verify_patch.py`, mos
 
 **Használat legközelebb** (Robi go-ja és a böngészőben zárt fájl után):
 `npx tsx --env-file=.env.local scripts/patch-mc-export.ts "<mount>/mc-export NN.xlsx" --ids <id-lista.txt> --in-place --remote "gdrive:Data/ERSTE HU/_messagingmatrix.ai/mc-export NN.xlsx"`, előtte ugyanez `--in-place` nélkül (csak jelentés).
+
+## 2026-11-23 — B box: Postgres 16.14 → 16.16 (KÉSZ 2026-11-24, a DB 16.16-on; a mentések törlése Robi go-jára vár)
+
+Kérés: Robi, 2026-11-23: „kéne majd egy docker update is — vagyis postgres 16.16 kéne”. Végrehajtó: a „B box Node 24” session által indított side-session. Box-tények, parancsok, digestek: az infra-map „Box B” és a review-kérés (`~/agent-bus/requests/20261123-2358-mm6-boxb-pg1616.md`); ide nem kerülnek.
+
+**Touches:** a közös Postgres-konténer image-e a box compose-fájljában (csak a `db` szolgáltatás). Közvetlenül érintett: mindkét tenant, a Supabase `meta` és `studio`, a Mac DB-tunnelje (helyi dev, más sessionök szkriptjei), a régi Nexus maradvány-DB-je. Nem érintett: MinIO, customBrain, nginx, pm2. Szemantikai modell nincs; a `REBUILD_SPEC.md` (2026-09-06) a DB-futtatókörnyezetről nem szól, a §8.3 éjszakai mentést ír (lásd mellék-lelet 1).
+
+**Megfigyelve (csak olvasva, 2026-11-23 22:52–22:58 UTC):**
+- A konténer 16.14 (Debian 13, glibc 2.41), a compose tagre hivatkozik, digest nélkül. Az adat egy nevesített docker-kötetben van (164 MB), nem bind mountban.
+- DB-k: az `mm6` 99 MB, a régi `nexus` 9 MB, és a `postgres`. Mind libc-collation `en_US.utf8`, collation-verzió 2.41. Kiterjesztés csak `plpgsql`; minden index btree; nincs `bpchar` oszlop, nincs view.
+- Kliensek: a két tenant postgres.js-poolja (6 idle kapcsolat); a Mac tunnelje figyel, de most nincs rajta kliens. A customBrain nem használja ezt a DB-t.
+- Docker Hub: a `postgres:16` = `16.16` = `16.16-trixie` (ugyanaz a digest, 2026-11-18). A bookworm-változatot nem használjuk: a glibc-váltás a text-indexek rendezését érintené. A régi 16.14-es digest a Hubon és helyben is megvan.
+- Kiadási jegyzetek (16.15: 2026-08-13, 16.16: 2026-11-12): dump/restore nem kell. A REINDEX-esetekből a btree_gist, az ltree, a btree `bpchar`, a GIN és a pg_trgm GiST nálunk nem áll fenn. **A TOAST-index-eset (REINDEX CONCURRENTLY után) ismeretlen:** a B2 amcheckje mutatja meg. Kb. 70 CVE; ezeket egyenként nem értékeltem. A lokális elérés és a szuperuser-appok csak a jogosultság-emelős osztályt szűkítik; a várakozás oka a szétválaszthatóság, nem a bizonyított alacsony kockázat. A postgresql.org/support/security szerint a CVE-2026-120139…120154 sáv a 16.16-ban javítva van. Kivétel: a -120142 (18.7, 17.12) és a -120144 (csak 18.7), ezekhez a lap nem sorol 16.x-javítást. Valószínűleg a 16 nem érintett; ezt nem néztem meg.
+
+**Door:** egyirányú (élő infrastruktúra gitten kívül; a visszaállítás éles adatot érinthet), visszaállítási eljárásokkal: a régi image digesttel, a leállított adatkönyvtár hideg másolata, és egy logikai dump. A hatókör mindkét tenant egyszerre, 5–7 perc maint mögött, éjjel. Kifelé semmi nem megy. A B2 után friss kontextusú reviewer nézi meg a box állapotát.
+
+**Prediction:**
+- `version()` = 16.16; a táblánkénti pontos sorszám előtte és utána egyezik; a collation-verzió 2.41, mismatch-figyelmeztetés nincs.
+- Mindkét tenanton `/login` 200, `/api/config-public` 200 (ez DB-olvasás munkamenet nélkül), és a hitelesített olvasás rendben; a pm2 restart-számláló nem nő.
+- Ismeretlen: ír-e a postgres.js a hibalogba a szerveroldalon lezárt idle kapcsolatokról. Ha egy app nem kapcsolódik vissza, az lelet: megállok, és Robi dönt a `pm2 restart`-ról (maint mögött).
+
+**Seam:** nincs kódváltozás. A próbák a DB SQL-felületén (verzió, sorszám, collation) és a tenantok HTTP-felületén futnak.
+
+**Időzítés:** a restart (B2) a Node 24-csere ablakain kívül: az N6 lezárása + legalább 24 óra után, és nem a body-limit-deploy napján. Az időpontot Robi választja. A B1 nem indít újra semmit; mehet korábban is, de nem egy N-lépés előtti vagy utáni órában.
+
+**Lépések (mindegyik Robi külön go-jával). Érvényes: terv v3 + v3.1** (`~/agent-bus/requests/20261124-0050-mm6-boxb-pg1616-v3.md`, benne a parancsok és a visszaállítás állapotonként):
+- [x] **B1 — kész, 2026-11-24 07:39–07:43 UTC** (Robi: „run it”). Élő szolgáltatáshoz nem nyúlt: a live DB 16.14-en fut tovább (indult 2026-11-23 11:21), a live compose sha256-ja változatlan, a pm2 restart-számlálók változatlanok (erste 1, telekom 0).
+  - **Dump:** globals + `mm6` 5,2 MB + `nexus` 80 KB + `postgres` (üres) custom formátumban, 0600, sha256. A TOC visszaolvasva (198, illetve 117 bejegyzés). A dump saját sorszámai: `mm6` 24 tábla / 63 252 sor, `nexus` 15 / 943; ez egyezett az élővel. **Ez az első PG-mentés 2026-06-28 óta.**
+  - **Konfig:** a négy konfigfájl a data dir-en kívül; a live `pg_hba` a konténeren belül a 127.0.0.1-re `replication`-t is trust-tal enged, ezért kell a CA kérte `replication`-reject a fence-be.
+  - **Image:** a 16.16 digesttel pullolva, a helyi `postgres:16` tag nem mozdult (= a 16.14-es digest, az R0 feltétele). Mindkét pontos hivatkozás helyben indul.
+  - **R3-próba** (háló nélküli mini compose, régi image): init 4 s, restore 11 s, a sorszám = a dump; konfig + fence-elt `pg_hba` bemásolva (`999:999 600`, sha256), indítás fence alatt: 4 reject elöl, 0 szabályhiba, a TCP-próba „rejects”, a sorszám egyezik.
+  - **Csere-próba** ugyanott: 16.16 1 s alatt indul; a konténer image-e = az új digest; a fence él; a sorszám egyezik; collation 2.41 mind a négy DB-ben, mismatch nincs; **amcheck: 502 btree index (`mm6` 275, `nexus` 227, a TOAST-indexekkel), heapallindexed, 0 hiba, 2 s.**
+  - **R1-próba:** egy közbeiktatott írás (próbatábla, insert + update) után vissza 16.14-re: 1 s, a sorszám = a friss referencia, az update látszik.
+  - **Logok:** FATAL csak a három szándékos fence-próba „pg_hba.conf rejects connection”-je.
+  - **Időmérés:** tar 1 s, kibontás < 1 s, indítások 1 s. A B2 6. lépése másodpercekben mérhető, a maint-plafon marad 15 perc.
+  - **Compose-jelöltek** (az új és a visszaállító) a live mellett, 0600, egyenként 1 sor eltéréssel; a `config --images` a pontos hivatkozást mutatja.
+  - **A terv szerint menet közben javítottam:** az üres `postgres` DB-nek 0 TOC-bejegyzése van (a `grep -c` 1-gyel lépett ki); a `pipefail` mellett a `| grep -q` SIGPIPE-ot adott. Az első félbeszakadt eldobható konténert név szerint töröltem. Mindkettő a szkript hibája volt, nem a DB-é; a szkriptek fail-fast leálltak, élő szolgáltatást nem érintettek.
+  - A box-tények (útvonalak, a digest, a jelöltek neve) az infra-map ideiglenes „Postgres 16.14 → 16.16” sorában vannak.
+- **B1 — az eredeti terv:**
+  - dump a futó 16.14-ből (globals + DB-nként custom formátum) a Hetzner-kötetre, root-only, sha256; a referencia-sorszámok magából a dumpból; a live konfigfájlok másolata a data dir-en kívül;
+  - a 16.16-os image szándékos pullja digesttel (a régi tag nem mozdul); mindkét pontos hivatkozás helyben indul;
+  - **az R3 próbája** egy háló nélküli mini compose-ban: restore a régi image-be (a `postgres` DB `-C` nélkül), a konfig és a fence-elt `pg_hba` bemásolva, indítás fence alatt, sorszám;
+  - **a csere és az R1 próbája** ugyanezen a könyvtáron: 16.16 (sorszám, collation, `amcheck` minden btree-n, időmérés), egy közbeiktatott írás, majd vissza 16.14-re (friss sorszám);
+  - két compose-jelölt (az új és a visszaállító), egyenként 1 sor eltéréssel; az élő fájl érintetlen;
+  - a mért idő adja a B2 maint-plafonját (legalább 15 perc).
+- [x] **B2 — kész, 2026-11-24 08:09:53–08:11:07 UTC, a DB 16.16-on.** Robi go-ja: „b2 to now!”. 07:55-kor még a tervezett ablakot választotta, utána felülírta. A futás így **az N3-figyelés alatt és munkaidőben** volt, ez Robi kifejezett kivétele az időzítési szabály alól. A B box-session előtte és utána is értesítve. Javaslat (Robi dönt): az N4 legkorábban a B2 + 24 óra, vagyis 11-25 08:11 UTC, hogy mindkét változásnak legyen saját figyelése.
+  - **Kiesés:** maint 74 s mindkét tenanton (becsült 5–7 perc). A Mac DB-tunnel agentje közben ki volt kapcsolva.
+  - **Előfeltételek (08:04):**
+    - a live compose = a B1-es; a `postgres:16` = a régi digest;
+    - kliens csak a tenantok 11 idle postgres.js-e; Mac-tunnel-kliens nincs;
+    - kiterjesztés csak `plpgsql`, a `shared_preload_libraries` üres;
+    - disk: / 16,9 G, a kötet 87 G szabad; available memória 2374 MB.
+  - **Fence:** a konfig = a B1-es (sha256, 4 fájl). Fence telepítve (`999:999 600`), 11 backend terminálva, 0 maradt. A TCP-próba a konténerben és a host oldalán (az appok útja) is „rejects”. W1 = W0.
+  - **Végső dump:** TOC 198/117. A dump-sorszám `mm6` 24/63 252, `nexus` 15/943; az élő sorszám ezzel egyezik.
+  - **Hideg másolat:** CHECKPOINT; a leállás tiszta (a log és a `pg_controldata` is „shut down”); tar 1936 tag = a fájlok száma, 164 MB, 2 s.
+  - **6a/6b/6c a kibontott valódi PGDATA-n:** mindhárom indítás rendben, a sorszám mindháromban = a dump.
+    - 6a (régi image): a fence él.
+    - 6b (16.16): collation 2.41 mind a négy DB-ben; a logban nincs WARNING; **amcheck 502 btree index (`mm6` 275, `nexus` 227), heapallindexed, 0 hiba, 2 s.** A TOAST-ismeretlen ezzel lezárva.
+    - 6c (újra 16.14): rendben.
+  - **Csere (08:10:33):**
+    - a compose = a jelölt (1 sor eltérés a mentéshez képest); csak a `db` jött újra létre, `--pull never`;
+    - healthy; az image ID = az új; `PostgreSQL 16.16 (Debian 16.16-1.pgdg13+1)`; a `data_directory` változatlan;
+    - a sorszám = a dump; collation ok; a fence él;
+    - a logban csak az 1 szándékos fence-elutasítás.
+  - **Unfence (08:10:56):** a `pg_hba` = az eredeti (sha256, `999:999 600`), 7 szabály, 0 hiba. A meta és a studio healthy; nem jöttek újra létre.
+  - **Loopback, maint mögött:** mindkét tenanton `/login` 200, `/api/config-public` 200, `/api/events` munkamenet nélkül 401. **A postgres.js app-restart nélkül újrakapcsolódott.** A pm2 restart-számlálók változatlanok (erste 1, telekom 0). A hibalogban nincs új sor (159/150).
+  - **Megnyitás után:**
+    - publikus `/login` 200 mindkettőn;
+    - erste: MM MCP `matrix_status` rendben (180 audience, 92 topic, 2945 üzenet);
+    - telekom: Robi Chrome-jában a dashboard és a Drafts (22) betölt, a konzolban nincs hiba;
+    - a tunnelen át `select version()` = 16.16;
+    - a hibalogban nincs új sor a 10. lépés óta; 11 postgres.js-kapcsolat;
+    - eldobható konténer, `coldtest` vagy maint-flag nem maradt.
+  - **Prediction vs. valóság:** minden egyezett; a kiesés rövidebb lett a becsültnél (74 s, nem 5–7 perc). Visszaállításra nem volt szükség.
+  - A box-tények (a mentések helye, a compose-mentés neve, a visszaállító fájl) az infra-map ideiglenes PG-sorában vannak.
+- **B2 — a terv:**
+  - előfeltételek: csak a két tenant és a meta kliense van a DB-n, a Mac-tunnelen nincs kliens, szerveren belüli író nincs; disk számmal; log-alapvonal a maint előtt;
+  - maint on mindkét tenanton, a Mac DB-tunnel agentje ki (a 12. lépésig), drain;
+  - konfig-mentés a data dir-en kívülre; **fence a DB szintjén**: TCP-kapcsolat nem jöhet be (pg_hba reject, `replication` is; reload; tulajdonos/jog ellenőrizve), a többi kliens terminálva, a TCP-próba bukik;
+  - végső dump; leállítás, „shut down” ellenőrizve, hideg másolat;
+  - **a hideg másolat kibontásán három indítás:** régi image (R2-út), 16.16 + `amcheck` (a csere útja a valódi PGDATA-n), újra régi (R1-út);
+  - compose-csere, csak a `db` újraindítása `--pull never`-rel; az image ID = az új; próbák fence mögött;
+  - **unfence = a „nincs automatikus visszaút” pont** (minden unfence az, a visszaállításokon belül is): utána csak a fence alatti R1 megy magától, az R2/R3 csak Robi döntésével, kimondott adatvesztéssel;
+  - loopback app-próbák maint mögött (`/login`, `/api/config-public`, 401); ha a postgres.js nem kapcsolódik vissza, az lelet, és Robi dönt;
+  - maint off, tunnel vissza; publikus `/login`; hitelesített olvasás (erste: MM MCP `matrix_status`, egy ismert írás a token `last_used_at`-jába; telekom: Robi Chrome-jában); a tunnelen át 16.16; restart-számláló; a hibalog mindkét alapvonalhoz mérve.
+  - Becsült kiesés: 5–7 perc.
+- [x] **B3. Lezárás — kész 2026-11-24** (Robi: „Yes, run B3”):
+  - **Box-review** friss kontextusú `box-mm` agenttel, csak olvasva: **OK with findings.** Minden állítást újra megmért, és mind igaz:
+    - a compose 1 sorral tér el a mentéstől; az image ID = a pinelt digest; healthy, 0 restart;
+    - a `pg_hba` = az eredeti (`999:999 600`, 7 szabály, nincs reject); a mentések 0700/0600, root, a `sha256sum -c` zöld;
+    - nincs maradék konténer, `coldtest`/`r3-data` vagy maint-flag; a visszaállító compose és a régi image megvan;
+    - a DB-logban 1 FATAL (a szándékos fence-próba), indulás crash recovery nélkül;
+    - a DB-port csak a 127.0.0.1-en; mindkét tenant 200; a hibalogban nincs új sor.
+  - **A review leletei:**
+    1. *Közepes:* a mentésekben ott a szuperuser SCRAM-hash és a teljes adat (`globals.sql`, a dumpok, a hideg tar). A 0600 root itt keveset véd, mert minden app rootként fut. → a megtartás lejártakor törölni; a B1-mappa a B2-esnél korábban is mehet. Törlés csak Robi go-jával.
+    2. *Közepes, régi:* mindkét tenant a `postgres` szuperuserrel csatlakozik (= a 2. mellék-lelet); külön terv.
+    3. *Alacsony:* a régi 16.14 image és a `.bak*` compose-ok a visszaállításért maradnak; a 7 nap után, külön go-val törölhetők.
+    4. *Info:* a konténeren belüli trust-szabályok az image alapértékei; kívülről nem érhetők el.
+  - **Nem ellenőrizte:** hogy a Hetzner-kötet titkosított-e, és hogy van-e mentés a boxon kívül; a tunnelt (azt én néztem a B2-ben); a hitelesített appfolyamokat; a CVE-listát.
+  - **Infra-map:** az ideiglenes sor helyére a végleges DB-sor került:
+    - a pinelt digest, a release notes linkjei;
+    - a trixie/glibc-szabály; a kötet és a 127.0.0.1-es port;
+    - mindkét mentés, és hogy a mentés csak kézi;
+    - a visszaállítás és a javasolt megtartás.
+    Kijavítottam a régi „images are `:latest`” sort is: csak a MinIO az, a meta és a studio verziótaggel fut.
+  - **Robi dönt** (minden törlés egyirányú, mindegyik külön go):
+    - **megtartás — Robi jóváhagyta (2026-11-24: „Yes, approve retention”):** a dumpok és a hideg tar 2026-12-08-ig, a régi 16.14 image (és vele a visszaállító compose) 2026-12-01-ig. A törlés maga a dátumon is külön go-t kér (egyirányú);
+    - a `nexus` maradvány-DB dumpolva eldobható-e.
+
+**Review (2026-11-24):**
+- *Mi ment jól:*
+  - Három review-kör (v1 és v2 Codex Stop, v3 OK) a fence-t, az unfence-határt és az R0–R3 visszautat hozta.
+  - A B1 próbái miatt a B2-ben nem volt meglepetés: minden lépés a próbázott parancs volt. A kiesés 74 s lett a becsült 5–7 perc helyett.
+  - A postgres.js app-restart nélkül kapcsolódott vissza.
+- *Ami eltért:* az időzítés. A terv az N6 + 24 órát írta; Robi kifejezetten felülírta („b2 to now!”), így a csere az N3-figyelésbe esett. Javasolt következmény: az N4 legkorábban 11-25 08:11 UTC. A B box-session tud róla.
+- *Szkripthibák a B1-ben* (fail-fast megállt, élő nem sérült):
+  - a `grep -c` 0 találatnál 1-gyel lép ki;
+  - `pipefail` mellett a `| grep -q` SIGPIPE-ot (141) ad.
+- *Javaslat a lecke helyére (Robi dönt):* egy sor egy standards-fájlba a box-szkriptekhez: „`set -euo pipefail` alatt kimenetet változóba, majd `case`; soha `| grep -q`; `grep -c … || true`”. Önellenőrző alternatíva a `shellcheck` volna, de ezt a két hibát nem jelzi megbízhatóan, ezért a standards-sort javaslom.
+- *Verzióbump:* nincs, appkód nem változott.
+
+**Mellék-leletek (nem ennek a cserének a részei, Robi dönt):**
+1. **A közös PG-ről nincs rendszeres mentés** — a CA szerint ez a legnagyobb valódi kockázat, nem a 16.14. A boxon és a Macen sincs rá cron vagy timer; az utolsó dump 2026-06-28-i. A spec §8.3 még éjszakai mentést ígér (az SQLite-korszakból). Hetzner-szintű mentés: nem tudom. **Külön, első prioritású tétel; új cron, ezért előbb push-back kérdés Robinak: van-e Hetzner-szintű mentés?** (A CA javaslata: napi `pg_dump -Fc` a Hetzner-kötetre, rotáció, havonta egy restore-próba, a B1 parancsaiból.)
+2. Mindkét tenant és a Mac-tunnel szuperuserként csatlakozik a DB-hez (külön terv: legkisebb jogosultságú app-szerep).
+3. A MinIO image nincs pinelve (`:latest`); ugyanaz a véletlen-pull kockázat, amit a B2 a DB-nél megszüntet (külön kis szelet, ugyanazzal a digest-pin mintával).
+
+**Planning review:**
+- **v1** (`…-2358-mm6-boxb-pg1616.md`): CA OK with changes, Codex **Stop**. Codex: a maint gate a DB-írást nem zárja ki; a visszaút-határ ellentmondásos; a mentés-ellenőrzés nem áll meg minden hibán; a door egyirányú; a kizárások túloznak.
+- **v2** (`…-0025-…-v2.md`, fence + hideg-másolat-próba + dump-sorszám): CA OK with changes, Codex **Stop**. Codex: a határ az unfence, nem a maint off; a konfig-helyreállítás ne függjön ideiglenes fájltól; a hitelesített próba indoklása hibás volt. A munkamenet a live `users`-sort is olvassa, a valódi korlát a hitelesítő adat.
+- **v3** (`…-0050-…-v3.md`): **CA OK with changes, Codex OK with changes, Stop nincs.** A módosítások v3.1-ként a kérés végén, és a fenti lépésekben.

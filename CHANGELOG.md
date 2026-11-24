@@ -5,6 +5,12 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.132.3] — 2026-11-24
+
+### Changed
+- `engines` now requires Node 24 or newer (was 20). The live deploys run on Node 24 since
+  2026-11-24; no behaviour change.
+
 ## [6.132.2] — 2026-11-23
 
 ### Removed

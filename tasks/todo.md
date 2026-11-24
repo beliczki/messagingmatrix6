@@ -594,13 +594,14 @@ Kérés: a Head of Dev 2026-11-23-i üzenete; a Head of Security szondája (2026
     - Hitelesített próba: MCP `matrix_status` 200 az új folyamaton (180 audience, 92 topic, 2945 MC). Előtte egy `/mcp` 400: a connector újrakapcsolódása, Node 20-on is így volt a P1 restartja után (22:30).
     - `pm2 save` 08:51:40; a dumpban mindkét tenant a pinnel, a két régi MM `stopped`.
   - N2c nincs, a terv szerint. Az N6 határideje így 2026-11-27 08:51 UTC.
-- [x] **N5. customBrain — N5.0–N5.2 kész 2026-11-24 09:12 UTC** (Robi: „Go N5.0–N5.2”; a customBrain-session és a B box-session előtte értesítve; 0.78.5-deploy nem futott, a box 0.78.4-en). **A `pm2 save` Robi külön jóváhagyására vár;** addig a mentett dumpban a custombrain még `"node"`-dal szerepel (egy újraindulás Node 20-on hozná vissza, ez a visszaállítási állapot).
+- [x] **N5. customBrain — N5.0–N5.2 kész 2026-11-24 09:12 UTC** (Robi: „Go N5.0–N5.2”; a customBrain-session és a B box-session előtte értesítve; 0.78.5-deploy nem futott, a box 0.78.4-en). **`pm2 save` 09:16:27 UTC** (Robi: „Yes, pm2 save”): a dumpban a telekom, az erste és a custombrain a Node 24-es pinnel `online`, a két régi MM `stopped`; a mentés előtti dump: a review-kérés szerinti backup-mappában, `n5-20261124-091114`.
   - **N5.0** (09:10:12): a régi unit letiltva és leállítva (`disabled`, `inactive`; addig 14 770 sikertelen újraindulás). A pm2-es custombrain pid-je és portja nem változott.
   - **N5.1** (09:10:26–52): az `agenda-sync` a cron-sor parancsával, Node 24-gyel: exit 0, 22 esemény, 4 dúsítva, 24,8 s, hibamentes napló. Csak a naptár-cache fájlt írja, a következő óránkénti futás felülírja.
   - **N5.2** (09:11:14–18, kb. 4 s kiesés): stop → a port 1 s alatt szabad (a `fuser`-nek nem maradt dolga) → delete → start Node 24-es interpreterrel, ugyanazzal a névvel, mappával, scripttel, `merge_logs`-szal.
     - A `:3000` pid-je = a pm2 pid; `exe` és `node_version` 24.22.3; restart 0; `/stats` kulcs nélkül 401, mint előtte; a hibalog 0 sor.
     - Smoke a brain MCP-n, mind 200: `brain_stats` (1171 thought), `search` (a dense ág kimenő embedding-`fetch`-csel), `spider` és `map` (gráf-újraépítés a worker szálon: 1166 csúcs, 7844 él). Az első kérés 09:11:31-kor 400, a négy hívásom előtt; valószínűleg a connector újrakapcsolódása, mint az erstén. Nem ellenőriztem.
     - **Figyelni:** a gráf-újraépítés 24,9 s (Node 20-on 17,5–21,3 s); RSS 465 MB, csúcs 710 MB (Node 20-on állandósult állapotban 182 MB, a Node 20-as csúcsot nem mértem). Egy minta, friss folyamaton, párhuzamos hívások alatt; `max_memory_restart` nincs. A box elérhető memóriája 2028 MB.
+    - 09:13:48 (2,5 perccel az indulás után, nyugalomban): RSS 296 MB, pm2 szerint 289 MB, csökken. Node 20-as nyugalmi érték (a customBrain-session átiratából, 8 napos futás után): 229,7 MB. Összevethető szám a beállt folyamatról jön: újramérés az N6 előtti ellenőrzésben.
   - A 7 cron-sor az N6-ig a system Node-on fut.
   - Az eredeti szöveg (a customBrain-sessionnek előtte és utána szólok):
   - **N5.0:** a régi, hibásan újrainduló customBrain systemd unit letiltása (Robi go-jával).

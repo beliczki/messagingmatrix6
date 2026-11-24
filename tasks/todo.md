@@ -835,13 +835,23 @@ Kérés (Robi): amikor a Codex a leadást gyártja, adjon mellé egy `manifest.j
 **Seam:** `applyCreativeManifest(db, clientId, manifest, { dry })`. A 2. lépcső (feltöltés) ugyanezt hívja majd. Integrációs teszt a teszt-Postgresen: üres mezőt tölt; kitöltött `visual_keyword`-öt nem ír felül; ismeretlen fájlt jelez; MC-eltérésnél nem ír; a `dry` semmit nem ír.
 
 **Szeletek:**
-- [ ] **M1** Zod-séma + `applyCreativeManifest` + integrációs teszt (előbb piros).
-- [ ] **M2** `scripts/import-creative-manifest.ts <manifest.json> [--client erste] [--dry]`, összesítő riporttal.
-- [ ] **M3** A formaleírás a Codexnek: a séma a repóban a szerződés; a rövid utasítás oda kerül, ahol a Codex leadás-promptja él (Robi mondja meg, hol).
+- [x] **M1** Zod-séma + `applyCreativeManifest` + integrációs teszt (előbb piros, a modul hiánya miatt). `src/lib/creative-manifest.ts`; `tests/integration/creative-manifest.test.ts` (11 eset: üreset tölt + audit; kitöltött `visual_keyword` és `image_text` marad; az üres string üres; ismeretlen fájl, archivált és más kliensé nem párosul; MC- és variáns-eltérésnél nem ír; variáns nélküli = `a`; többértelműnél nem ír; a `dry` nem ír; második futás nem ír és nem auditál; más kliens manifestje és hibás manifest írás előtt elutasítva), `tests/unit/creative-manifest-schema.test.ts` (7 eset: a kulcsszó-forma, fájl két csoportban, üres lista, rossz verzió, elírt kulcs, nagybetűs variáns).
+  - A séma szigorú (`strictObject`): az elírt kulcs (pl. `visual_keywords`) hiba, nem csendes adatvesztés. A kulcsszavak vessző körüli szóközét `a, b, c`-re hozza, mást nem javít.
+  - A provenancia (`image_read_at`, `image_read_model`) csak akkor íródik, ha a szöveg vagy a leírás töltődik, és csak ahol üres. Ha a szöveg már olvasott (`kepleltar-v1`) és csak a leírás jön a manifestből, a címke marad `kepleltar-v1`; hogy melyik mező jött a manifestből, azt az audit-sor mondja.
+  - Egy éles futás egy tranzakció, a párosított sorok `FOR UPDATE` zárral; a lekérdezés a manifest fájlneveire szűr, nem a teljes táblára.
+- [x] **M2** `scripts/import-creative-manifest.ts <manifest.json> [--client erste] [--dry]`, fájlonkénti sorral (tölt / marad / nincs találat / többértelmű / MC-eltérés) és összesítővel. Éles futásnál a manifest mellé írja a rollback-listát (`<manifest>.import-<kezdés UTC>.id-lista.txt`, vesszővel elválasztott id-k, ahogy a `patch-mc-export.ts --ids` olvassa); a kezdés a DB órája. **Megfigyelve a teszt-Postgresen** (`mm6_test`, nem az élő DB): a száraz futás 2 írandót, 1 MC-eltérést, 1 többértelműt, 1 nincs találatot listázott, és 0 audit-sort írt; az éles futás 2-t írt 2 audit-sorral, a kitöltött `visual_keyword` (`BeErste3Q2_personas`) maradt; az újrafuttatás 0-t írt; `--client telekom` és a hibás manifest írás előtt hibával kilépett (exit 1, a zod-hibák mezőnként).
+- [x] **M3** A formaleírás a Codexnek (Robi: a repóban, a séma mellett): `src/lib/creative-manifest.md`. A szerződés a zod-séma; a fájl a rövid utasítás és egy példa.
+- Ellenőrzés (2026-11-23): typecheck 0 hiba; `npm run lint` 0 hiba (146 figyelmeztetés, mind régi fájlokban; az öt új fájlon 0); unit + integrációs suite 123 fájl, 1148 teszt zöld (`mm6-test-pg`). Az élő DB-hez ez a munka nem nyúlt.
 - [ ] **M4** Az első valódi leadáson: száraz futás → Robi go → éles.
 - Bump: nincs, amíg csak szkript használja (tooling); a 2. lépcső (feltöltés) minor lesz.
 
-**Nyitott (Robi):** a kulcsszó-forma (az ajánlásom: 3–6, kisbetű, vessző); hol él a Codex leadás-folyamata; felülírhatja-e a manifest a meglévő `image_text`-et újrafeltöltéskor (az ajánlásom: nem, csak üreset tölt, a kulcsszavakkal egyezően). Lehetséges folytatás: a meglévő kreatívok kulcsszavai a már leolvasott `image_text` / `image_description`-ből, egy szöveges Codex-menettel, ugyanezzel a manifesttel.
+**Eldöntve (Robi, 2026-11-23, a kódolás előtt):** a kulcsszó-forma 3–6 kulcsszó, kisbetűvel, magyarul, vesszővel elválasztva, és a betöltő ellenőrzi (ami eltér, azt a séma elutasítja); a Codex-utasítás a repóban él, a séma mellett; a manifest a meglévő `image_text` / `image_description`-t sem írja felül, csak üreset tölt. Lehetséges folytatás: a meglévő kreatívok kulcsszavai a már leolvasott `image_text` / `image_description`-ből, egy szöveges Codex-menettel, ugyanezzel a manifesttel.
+
+**Review (M1–M3, 2026-11-23):**
+- *A jóslat bevált* a teszt-Postgresen: a száraz futás fájlonként listázta az írandó és a kihagyott mezőket, a nincs találatot, a többértelműt és az MC-eltérést, és nem írt semmit; az éles futás csak üres mezőt töltött, a kitöltött mezők és a manifestben nem szereplő kreatívok változatlanok.
+- *Az integrációs teszt elsőre zöld lett* a modul megírása után (előtte a modul hiánya miatt volt piros), ezért a viselkedés-esetek pirosát külön nem láttam. A tesztek várt értékei literálok a tervből, nem a kódból számolva.
+- *Diff-review:* önellenőrzés a terv ellen (kétirányú ajtó, csak új fájlok, az app nem importálja). Az `import-image-readings.ts`-hez nem nyúltam.
+- *Nyitva:* a rollback kézi lépés (az id-lista + az audit `before` értékei), szkript nincs rá. Az M4 (első valódi leadás: száraz → Robi go → éles) Robira vár. Bump nincs (csak szkript használja).
 
 ## 2026-11-23 — mc-export tábla-csere szkript a repóba (KÉSZ; Robi: „Igen, emeld be a repóba teszttel”)
 

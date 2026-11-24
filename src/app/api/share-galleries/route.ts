@@ -4,12 +4,14 @@ import { nanoid } from "nanoid";
 import { db } from "@/db";
 import { shareComments, shareGalleries, users } from "@/db/schema";
 import { withSession } from "@/lib/scoped";
-import { shareItemCount } from "@/lib/share-metadata";
+import { shareItemCount, shareProducts } from "@/lib/share-metadata";
 import { writeAudit } from "@/lib/audit";
 import {
   isEmptySelection,
   parseShareSelection,
   resolveShareSelection,
+  sharePreviews,
+  shareSearchTexts,
   shareThumbs,
   warmShareStills,
   type SnapshotMetadata,
@@ -18,8 +20,9 @@ import {
 export const GET = withSession(async ({ req, claims }) => {
   const params = new URL(req.url).searchParams;
   const includeArchived = params.get("includeArchived") === "1";
-  // Only the add-to-share picker shows thumbnails; the Shares table does not
-  // pay for the preview lookup.
+  // The add-to-share picker asks for its four 200px thumbnails; the Shares
+  // table reads `previews` (every MC, for stepping) and filters on `products`
+  // and `searchText`, which every caller gets.
   const withThumbs = params.get("thumbs") === "1";
   const where = includeArchived
     ? eq(shareGalleries.clientId, claims.cid)
@@ -69,6 +72,8 @@ export const GET = withSession(async ({ req, claims }) => {
     : new Map<string, number>();
 
   const thumbsById = withThumbs ? await shareThumbs(claims.cid, rows) : null;
+  const previewsById = await sharePreviews(claims.cid, rows);
+  const searchTextById = await shareSearchTexts(claims.cid, rows);
 
   return NextResponse.json({
     shares: rows.map((r) => ({
@@ -83,6 +88,9 @@ export const GET = withSession(async ({ req, claims }) => {
       commentCount: commentCountById.get(r.id) ?? 0,
       viewCount: r.viewCount,
       downloadCount: r.downloadCount,
+      previews: previewsById.get(r.id),
+      products: shareProducts(r.metadata),
+      searchText: searchTextById.get(r.id),
       ...(thumbsById ? { thumbs: thumbsById.get(r.id) } : {}),
     })),
   });

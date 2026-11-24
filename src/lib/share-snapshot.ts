@@ -22,6 +22,12 @@ import { getActiveClient } from "@/lib/active-client";
 import { warmStills } from "@/lib/video-stills";
 import { ensureSecret, signTokenWith } from "@/lib/public-shortcut";
 import { creativeMediaKind, type CreativeMediaKind } from "@/lib/creative-media-kind";
+import {
+  sharePreviewGroups,
+  shareSearchText,
+  type PreviewGroup,
+  type SnapshotLike,
+} from "@/lib/share-list";
 
 type SnapshotFile = {
   id: string;
@@ -676,49 +682,42 @@ export async function warmShareStills(
   }
 }
 
-const THUMBS_PER_SHARE = 4;
+/** One MC of a share on the Shares list, as the browser loads it. */
+export type SharePreview = {
+  /** `MC12a`; null for an item with no MC (a library asset). */
+  label: string | null;
+  size: string | null;
+  /**
+   * "file": a stored file — append `?thumb=<width>` for a sized still (the
+   * poster of a video or an HTML5 package). "matrix": a generated preview PNG,
+   * served whole. "none": the snapshot has no file for it.
+   */
+  kind: "matrix" | "file" | "none";
+  /** null = nothing to show (no generated preview yet, or not a picture). */
+  url: string | null;
+};
 
 /**
- * The first few items of each share as image URLs, in the order the viewer
- * shows them (matrix cells, then creatives, then assets) — so a picker can show which share
- * is which. They are the share's own public URLs, the ones its viewer loads:
- * a creative through /share/{id}/file (`?thumb=` is frame 0 on a video), a
- * matrix cell through a signed /publicshortcut preview. `null` = nothing to
- * show (no generated preview yet, or a file that is neither image nor video).
+ * Every MC and variant of each share, one picture each, at the size
+ * `sharePreviewGroups` chooses (share-list.ts) — the Shares list steps through
+ * them. The URLs are the share's own public ones, the ones its viewer loads: a
+ * file through /share/{id}/file, a matrix cell through a signed /publicshortcut
+ * preview. An archived share gets no URLs — its MCs are still listed — because
+ * its public link no longer serves it (§6.10b: archived = not viewable).
  */
-export async function shareThumbs(
+export async function sharePreviews(
   clientId: number,
-  shares: Array<{ id: string; metadata: string | null }>,
-): Promise<Map<string, Array<string | null>>> {
-  type Pick =
-    | { kind: "matrix"; messageId: number; size: string }
-    | { kind: "file"; fileId: string; mimeType: string | null }
-    | { kind: "none" };
-  const picks = new Map<string, Pick[]>();
+  shares: Array<{ id: string; metadata: string | null; archivedAt: string | null }>,
+): Promise<Map<string, SharePreview[]>> {
+  const archived = new Set(shares.filter((s) => s.archivedAt !== null).map((s) => s.id));
+  const groupsById = new Map<string, PreviewGroup[]>();
   const messageIds = new Set<number>();
   for (const share of shares) {
-    if (!share.metadata) {
-      picks.set(share.id, []);
-      continue;
-    }
-    const meta = JSON.parse(share.metadata) as Partial<SnapshotMetadata>;
-    const filesById = new Map((meta.files ?? []).map((f) => [f.id, f]));
-    const out: Pick[] = [];
-    for (const p of meta.matrixItems ?? []) {
-      if (out.length >= THUMBS_PER_SHARE) break;
-      out.push({ kind: "matrix", messageId: p.messageId, size: p.size });
-      messageIds.add(p.messageId);
-    }
-    for (const c of [...(meta.creatives ?? []), ...(meta.assets ?? [])]) {
-      if (out.length >= THUMBS_PER_SHARE) break;
-      const file = c.fileId ? filesById.get(c.fileId) : undefined;
-      out.push(
-        file
-          ? { kind: "file", fileId: file.id, mimeType: file.mimeType }
-          : { kind: "none" },
-      );
-    }
-    picks.set(share.id, out);
+    const groups = share.metadata
+      ? sharePreviewGroups(JSON.parse(share.metadata) as SnapshotLike)
+      : [];
+    for (const g of groups) if (g.ref.kind === "matrix") messageIds.add(g.ref.messageId);
+    groupsById.set(share.id, groups);
   }
 
   // Chunked IN list, as in /share/[id]/previews: one row per template size.
@@ -743,25 +742,108 @@ export async function shareThumbs(
   }
 
   const secret = ids.length ? await ensureSecret() : null;
-  const result = new Map<string, Array<string | null>>();
-  for (const [shareId, list] of picks) {
+  const result = new Map<string, SharePreview[]>();
+  for (const [shareId, groups] of groupsById) {
     result.set(
       shareId,
-      list.map((p) => {
-        if (p.kind === "matrix") {
-          const v = previewVersion.get(`${p.messageId}|${p.size}`);
-          if (!v || !secret) return null;
-          const token = signTokenWith(secret, "m", p.messageId);
-          return `/publicshortcut/${token}/${encodeURIComponent(p.size)}?v=${encodeURIComponent(v)}`;
+      groups.map(({ label, size, ref }): SharePreview => {
+        if (archived.has(shareId)) {
+          return { label, size, kind: ref.kind, url: null };
         }
-        if (p.kind === "file") {
-          // An HTML5 package's ?thumb= is its poster, so it pictures too.
-          const visual = creativeMediaKind(p.mimeType) !== "other";
-          return visual ? `/share/${shareId}/file/${p.fileId}?thumb=200` : null;
+        if (ref.kind === "matrix") {
+          const v = previewVersion.get(`${ref.messageId}|${ref.size}`);
+          if (!v || !secret) return { label, size, kind: "matrix", url: null };
+          const token = signTokenWith(secret, "m", ref.messageId);
+          return {
+            label,
+            size,
+            kind: "matrix",
+            url: `/publicshortcut/${token}/${encodeURIComponent(ref.size)}?v=${encodeURIComponent(v)}`,
+          };
         }
-        return null;
+        if (ref.kind === "file") {
+          // Only what the share file proxy answers from its `?thumb=` branch:
+          // a raster still, a video's or an HTML5 package's poster. Anything
+          // else (an SVG, a non-picture) falls through to the whole-file serve,
+          // which counts as a DOWNLOAD — every Shares page load would add one.
+          const kind = creativeMediaKind(ref.mimeType);
+          const thumbable =
+            kind === "video" ||
+            kind === "html5" ||
+            (kind === "image" && ref.mimeType !== "image/svg+xml");
+          return {
+            label,
+            size,
+            kind: "file",
+            url: thumbable ? `/share/${shareId}/file/${ref.fileId}` : null,
+          };
+        }
+        return { label, size, kind: "none", url: null };
       }),
     );
+  }
+  return result;
+}
+
+const THUMBS_PER_SHARE = 4;
+
+/**
+ * The first few MCs of each share as 200px image URLs, so the add-to-share
+ * picker can show which share is which. The same pictures the Shares list
+ * shows — one per MC, not one per size — so a matrix share is not four copies
+ * of its first card.
+ */
+export async function shareThumbs(
+  clientId: number,
+  shares: Array<{ id: string; metadata: string | null; archivedAt: string | null }>,
+): Promise<Map<string, Array<string | null>>> {
+  const previews = await sharePreviews(clientId, shares);
+  const result = new Map<string, Array<string | null>>();
+  for (const [shareId, list] of previews) {
+    result.set(
+      shareId,
+      list
+        .slice(0, THUMBS_PER_SHARE)
+        .map((p) => (p.url !== null && p.kind === "file" ? `${p.url}?thumb=200` : p.url)),
+    );
+  }
+  return result;
+}
+
+/**
+ * The text on each share's creatives, for the Shares list filter
+ * (`shareSearchText` in share-list.ts). An uploaded creative's `image_text` is
+ * read from its current row, scoped to this client: the snapshot's copy is
+ * usually older than the reading.
+ */
+export async function shareSearchTexts(
+  clientId: number,
+  shares: Array<{ id: string; metadata: string | null }>,
+): Promise<Map<string, string>> {
+  const metaById = new Map<string, SnapshotLike>();
+  const creativeIds = new Set<number>();
+  for (const share of shares) {
+    const meta = share.metadata ? (JSON.parse(share.metadata) as SnapshotLike) : {};
+    for (const c of meta.creatives ?? []) creativeIds.add(c.id);
+    metaById.set(share.id, meta);
+  }
+
+  const currentText = new Map<number, string | null>();
+  const ids = [...creativeIds];
+  const CHUNK = 500;
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const page = await db
+      .select({ id: creatives.id, imageText: creatives.imageText })
+      .from(creatives)
+      .where(
+        and(eq(creatives.clientId, clientId), inArray(creatives.id, ids.slice(i, i + CHUNK))),
+      );
+    for (const c of page) currentText.set(c.id, c.imageText);
+  }
+
+  const result = new Map<string, string>();
+  for (const [shareId, meta] of metaById) {
+    result.set(shareId, shareSearchText(meta, currentText));
   }
   return result;
 }

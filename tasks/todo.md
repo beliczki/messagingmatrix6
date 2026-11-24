@@ -614,6 +614,24 @@ Kérés: a Head of Dev 2026-11-23-i üzenete; a Head of Security szondája (2026
   - A démon, a logrotate és az appok `exe`-je ellenőrizve; a pinek ugyanabban az ablakban vissza `"node"`-ra (delete/start); customBrain start + port-ellenőrzés; maint off; `pm2 save`.
   - Visszaállítás állapotonként a review-kérésben. Az egymás melletti Node egy hétig tartalék.
   - Utána: a customBrain ellenőrzőlistája, a Security Signal újramérése.
+  - **v2.2, az N6-review után** (friss kontextusú `box-mm` agent, 2026-11-24 09:15–09:32 UTC, csak olvasva: **OK with changes**, Stop nincs; a fő állításait 09:34-kor újramértem). A részletek és a parancsok a review-kérés végén.
+    - **A fő veszély: a needrestart.** Az unattended-upgrades után magától, maint nélkül újraindítja a pm2-root-ot (ez már megtörtént a boxon). Ezért:
+      - a 2–4. lépés egy ablakban fut, más apt-hívás nélkül, a reggeli unattended-sávon (06:00–07:45 UTC) kívül;
+      - a (2)-es visszaállítási állapot is a vezérelt démon-ablakkal zárul;
+      - az ablakban minden `pm2 save` olyan állapot, amely egy váratlan újraindulás után is elfogadható; minden megszakítás a custombrain indításával és mentéssel zárul.
+    - **Új kapuk:**
+      - a mentett 20.20.2 .deb sha256-ja az apt-index szerinti;
+      - `apt update` figyelmeztetés nélkül, és szimulált telepítés (1 frissül, 0 új, 0 törlődik);
+      - a restart után a unit aktív, NRestarts 0, a MainPID a pm2 pid-fájlja; a boxon 0 folyamat fut törölt binárisról;
+      - visszaállításkor előbb `systemctl stop pm2-root`, utána `dpkg -i`;
+      - a pm2-t a saját mappájában ellenőrzöm, nem az `npm ls -g`-vel;
+      - a NodeSource-bináris sha256-ját a tarballéval vetem össze, és felírom;
+      - **(saját)** előtte egy pm2 6.0.13-démonpróba Node 24-en, eldobható `PM2_HOME`-mal, egy dummy appal (a review ezt nem tudta ellenőrizni).
+    - **Következmény:** a régi MM `better-sqlite3`-a ABI-kötött, ezért az N6 után a régi MM nem indul el; a visszaállítási pontja megszűnik. A pm2 leállítva tartja.
+    - **A `/opt/node` törlése** egy hét múlva csak akkor, ha sem a pm2-dump, sem a tenantok ecosystemje nem hivatkozik rá.
+    - **Robi döntése:** app-szintű Node 20-tartalék az N6 után. Vagy (a) a 20.20.2 .deb kibontva egymás mellé, egy hétre; vagy (b) kapu: a customBrain memóriája ≥24 óráig lapos. *(Mérve: 296 MB 09:13-kor, 350 MB 09:34-kor; Node 20-on nyugalomban 229,7 MB.)*
+    - **Utómunka, nem az N6 része, Robi döntése:** az N6 után egy kézi `apt upgrade` vagy egy libc-frissítés maint nélkül újraindítja a pm2-root-ot. Lehetőségek: needrestart-kivétel a pm2-unitokra, vagy `apt-mark hold nodejs`.
+    - A reviewer egy fájlt írt a boxra (egy üres GPG-kulcstartót a root home-ban); a törlése Robi go-jára vár.
 - [ ] **N7.** `engines: { node: ">=24" }` a `package.json`-ban, commit; bump: patch; a következő rendes deployjal megy ki.
 
 **Restartok:** tenantonként P1 1, N2/N4 3, N6 1, mind maint mögött; customBrain 2 (N5, N6), néhány másodperc, maint nélkül. **Adat:** a DB-ben nem változik semmi, kivéve a DEPLOY.md share-oldal-próbájának +1 nézettségét. **Staging:** az MM6-nak nincs; az N2a a helyettesítője, a telekom a kanári. Ez Robi kifejezett kivétele kell legyen (`dependencies.md`). **Body-limit:** az S2–S4 deployja N4 után jöhet, de nem az N6 napján.

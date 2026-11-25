@@ -1102,3 +1102,34 @@ Robi jóváhagyása (2026-11-24): „Mehet”; a léptetés hármasával; a pick
 
 **Verzió:** javaslat `6.132.2` → `6.133.0` (minor: új, felhasználónak látható funkció és új API-mezők). Robi dönt; a `package.json` és a `CHANGELOG.md` érintetlen. Deploy: nem történt; Robi külön go-ja kell, a B box Node-cseréje (N4–N8) után.
 
+
+## 2026-11-25 — MC verzió (`version_no`, PMMID `-n_`): mutatás, kézi állítás, MCP-léptetés (TERV, Robi döntésére vár)
+
+Fogalmak (Robi, 2026-11-25): a **variáns** (`a`/`b`/`c`) párhuzamos változat, sosem verzió; a **verzió** (`version_no`, `-n_`, kreatív `_nN`) egy MC időbeli útja; a `version` oszlop csak a mentésszámláló (optimistic lock). Rögzítve: REBUILD_SPEC §21 (Drive, 2026-11-25) és a `project_version_vs_variant` memória.
+
+**Megfigyelve (2026-11-25):** semmi nem lépteti a `version_no`-t. A create/promote/copy 1-et ír, a move megtartja, az XLSX-import a „Version” oszlopból veszi; nem írható (`WRITABLE_FIELDS`-ben nincs), a Naming fül nem mutatja. MC332a: mind a 11 példányon `version = 10`, `version_no = 1`. A spec §3.3 „Version bump” szabálya sosem készült el.
+
+**Touches:** `messages` entitás (`src/lib/entities/messages.ts`: `findSiblings`, `regeneratedIdentity`), MCP (`src/lib/mcp.ts` + `McpTab.tsx` próza), MessageEditor Naming fül, és D2-től függően a feed-export carry-forward (`src/lib/feed-export.ts`, invariánsok: `project_adform_export_invariants` memória, §6.10a). Forrás: REBUILD_SPEC §3.3 + §21. Szemantikai modell nincs, ami lefedné.
+**Door:** a kód kétirányú (`git revert`). Egy élő kártyán a léptetés első használata viszont kifelé hat: új PMMID kerül a `utm_cd26`-ba és a trafficked URL-be, ezt a DV360/AdForm oldalon újra kell traffickelni.
+**Riport:** nem érinti; a monitoring számra és variánsra (+ audience) joinol, a `parsePmmid` a `-n_`-t figyelmen kívül hagyja.
+
+### Robi döntései (ajánlással)
+- [ ] **D1 — helyben léptetés vagy új sor verziónként?** Ajánlás: **helyben** (egy kártya, nő az n). Ez illik a „valaminek az időbeli útja” jelentéshez és a kézi állításhoz. Az új sor verziónként (amit a §3.3 sejtetett) a `findSiblings`-et, a számozás ütközésvizsgálatát és a matrix-cellát is verzió-tudatossá tenné: sokkal nagyobb a hatósugara.
+- [ ] **D2 — feed:** helyben léptetéskor a régi PMMID-sor a következő exportban „eltávolítottnak” látszik, és ez **új feed-verziót kényszerít** (2. invariáns). Ajánlás: **mechanizmus-javítás** a carry-forwardban: ha egy feltöltött feed egyik sorának PMMID-jét a mostani build már nem állítja elő (mert az üzenetén megváltozott), a sort változatlanul, `IsActive=FALSE`-szal kell visszaadni, a 7. invariáns mintájára. Testvérei ugyanebből a mechanizmusból: a rekey (most blokkol, ha az id már kiment) és a move (most státusszal tiltva). Alternatíva: a léptetés tiltása, ha a kártya feltöltött feedben van (mint a rekeynél), de akkor élő kártyán nem lehetne verziót léptetni, pedig épp ez a cél.
+- [ ] **D3 — automatikus léptetés mentéskor: nem.** Autosave mellett minden mentés-köteg új PMMID-t adna. Csak kifejezett lépés léptet (Naming fül vagy MCP). Robi felülírhatja.
+- [ ] **D4 — kézi érték:** bármilyen egész ≥ 1 (lefelé is, javításhoz, vagy hogy egyezzen a leadott `_nN` fájlnévvel). Az MCP-léptetés +1-et ad, vagy egy megadott értéket.
+
+### Jóslat
+Léptetés után a kártya (Globalnál minden audience-példánya ugyanazon a tengelyen) `-n_2`-re végződő PMMID-t kap, és újraszámolódik a `utm_cd26` és a `final_trafficked_url` is. A `version` +1, és soronként van audit-bejegyzés. Ami nem változik: más variáns, a másik tengely névrokona, a monitoring összesítők, a képek. D2 ajánlásával a következő AdForm-export **hozzáfűz**: 1 új sor, a régi PMMID-sor `IsActive=FALSE`-szal, 0 eltávolított. Ismeretlen: hogyan kezeli az AdForm két sort ugyanazzal a lineitem-jellel, ha az egyik inaktív (carry-forwardnál ma is előfordul, de verzióváltásra még nem néztük).
+
+### Seam
+Entitás-függvény `setMessageVersionNo(clientId, id, expectedVersion, versionNo, scope: "local" | "global")` és a hozzá tartozó HTTP route (`POST /api/messages/[id]/version`, If-Match). Ide megy az integrációs teszt. **Nem** a PATCH-be: a PATCH szerződése, hogy a PMMID-et nem írja újra, és ha a `versionNo` írható mező lenne, a History-visszaállítás csendben visszaállítaná az n-t is.
+
+### Szeletek
+- [ ] **S1** Entitás + route: piros integrációs teszt előbb (Local: csak a kártya; Global: a testvérek, a másik tengely névrokona nem; PMMID/UTM újragenerálva; verzióütközésnél 409; tenant-izoláció). D1 után.
+- [ ] **S2** MCP `mc_version_bump` (mc_label, version, `to` opcionális, `scope` **kötelező**, nincs alapérték, hogy az agent ne találgasson), plusz a `McpTab.tsx` prózája. S1 után.
+- [ ] **S3** Naming fül: „Saved changes” (a `version`, csak olvasható) és „Version” (`version_no`, szerkeszthető, Alkalmaz gomb), a Global/Local kapcsoló szerint; előtte `~/.agents/standards/ui.md` és `component-inventory.md`. S1 után, S2-től független.
+- [ ] **S4** Feed carry-forward mechanizmus-javítás (D2 szerint): piros teszt előbb (léptetés feltöltött feedben lévő kártyán → az export hozzáfűz, a régi sor `IsActive=FALSE`). S1 után. Egyirányú hatású terület (élő feed), ezért külön review.
+- [ ] **S5** Ellenőrzés: `npx tsc --noEmit`, lint, `npm test`; a spec §21 frissítése „elkészült”-re; review-szakasz; minor bump-javaslat.
+
+**Planning review:** új MCP-tool és feed-invariáns változik, tehát nem triviális; Robi D1–D4 döntése után Codex + Chief Architect.

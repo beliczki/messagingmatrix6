@@ -1175,7 +1175,11 @@ Entitás-függvény `setMessageVersionNo(clientId, id, expectedVersion, versionN
 **Jóslat vs. eredmény:** bejött a Local/Global, a PMMID/UTM-újragenerálás, az append. Nem láttam előre: a D2 mechanizmusa már létezett; a PATCH CAS nélkül nem védett a versenytől.
 
 **Nyitott (átadó a következő sessionnek):**
-- [ ] **Független diff-review** (egyirányú adatművelet miatt kötelező): elindítva ebben a sessionben, az eredménye a megosztott jegyzetmappába kerül (`mc-version-bump-review-2026-11-25.md`), ha megérkezik; ha nincs ott, újra kell futtatni friss kontextusban a `git diff 5354350..HEAD`-re.
+- [x] **Független diff-review:** **OK with changes**, nincs Stop (teljes jelentés: megosztott jegyzetmappa, `mc-version-bump-review-2026-11-25.md`). A leleteket nem javítottam (token-plafon); a következő session dolga, **merge előtt**:
+  - [ ] **R1 (közepes)** rekey kaszkád: zár nélkül olvas, CAS nélkül ír → léptetés után `pmmid`/`utm_cd26` régi `-n_`-vel. `messagesOnKey` `.orderBy(id).for("update")`; ugyanez a `moveMessages`-ben (UPDATE-be `version = source.version`). Piros interleave-teszt előbb (`tests/helpers/row-lock.ts`).
+  - [ ] R2 felső korlát a verzióra (int4), R3 a hamis „number/variant nem változik” komment + 404 helyett 409, R4 UI: Globalnál az „unchanged” ne tiltson, R5 UI: `onApply` nézze a `saveInFlightRef`-et.
+  - [ ] R6 deploy előtt csak olvasva: `select count(*) from messages where version_no < 1` az élőn (a `generatePmmid` most dob rá).
+  - [ ] R7 deadlock: `mc_update_batch` id-sorrendben írjon, vagy 40P01 → 409.
 - [ ] **S4b** Robi döntése (lásd fent).
 - [ ] **Élő Erste-léptetés előtt** Robi lépése: AdForm teszt line item, két azonos `advert_id`-jű sor, az egyik inaktív.
 - [ ] Deadlock-kockázat, nem javítva: az `mc_update_batch` tranzakcióban címke-sorrendben ír, a léptetés id-sorrendben zárol; ütközéskor a Postgres az egyiket abortálja (hibaüzenet, nincs adatvesztés).

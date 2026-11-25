@@ -1294,7 +1294,7 @@ Döntés Robié: maradjon, vagy a frame-es layoutban a label beljebb kerüljön 
 - Nem jön fel az app: a maint fent marad. `rm -rf .next && mv .next-old .next`, `git reset --hard 4942f28`, `pm2 restart mm6-<t> --update-env`, a `/login` válasza 200, `mm6-maint off <t>`.
 - Sikeres deploy után: `git revert -m 1 4184b9b`, `git revert 954ed81`, `git revert -m 1 874d4d0`, push, `mm6-deploy`.
 
-## 2026-11-25 — Topic/audience írók: mentésszámláló-CAS (KÉSZ az ágon `claude/goofy-haslett-a669bc`, a main-re (6.135.0) rebase-elve; merge, bump és deploy Robi go-jára vár)
+## 2026-11-25 — Topic/audience írók: mentésszámláló-CAS (KÉSZ, 6.135.1, a main-be merge-ölve Robi go-jára; push és deploy Robi go-jára vár)
 
 Forrás: a `claude/mc-version-fixes-9f2cb2` független review-ja (2026-11-25), should-fix (2). A hiba régi: `4008914`, 6.30.0, 2026-08-30. A `rekey.ts`-t ez az ág is szerkeszti, ezért a fix-ágról vágtam; **a fix-ág után merge-ölendő**.
 
@@ -1337,4 +1337,4 @@ Forrás: a `claude/mc-version-fixes-9f2cb2` független review-ja (2026-11-25), s
 - [ ] **Táblák közötti verseny** (lásd fent): egy MC létrehozása nem zárolja a topic/audience sort, ezért a rekey kaszkádja vagy a 0-MC-s kulcs-újragenerálás alatt született MC árva lehet.
 - [ ] **A lecke helye (Robi dönt):** ez a második kör ugyanebből (messages: S1b/R1, most topic/audience). Javaslat, ebben a sorrendben: (1) egy teszt vagy lint-szabály, ami minden `expectedVersion`-t kapó entitás-függvény UPDATE-jében megköveteli a `version = expected` predikátumot; (2) ha az nem megy, egy sor a `db-reads.md` mellé egy írás-standardba: „If-Match-író: a WHERE-ben `version = expected`, ha nincs visszatérő sor, akkor 409 a friss sorral”.
 
-**Verzió:** javaslat `6.135.0` → `6.135.1` (patch: hibajavítás, nincs új route, séma vagy felhasználónak látható funkció). Robi dönt; a `package.json` és a `CHANGELOG.md` érintetlen.
+**Verzió:** `6.135.1` (patch), Robi go-jára (2026-11-25: „Igen, merge + 6.135.1”): `package.json` kézzel, `CHANGELOG.md` „Fixed”, a lockfile érintetlen. A main-be merge-ölve; push és deploy nincs, az Robi go-ja.

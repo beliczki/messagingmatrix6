@@ -5,6 +5,14 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.135.1] — 2026-11-25
+
+### Fixed
+- Saving, rekeying or archiving a topic or audience while someone else changed it now gives the
+  usual conflict instead of overwriting: a save that overlapped a rekey no longer writes the old key
+  back (which left every card pointing at a topic or audience that no longer existed), two rekeys of
+  one row no longer both apply, and an archive that overlapped a rekey no longer leaves its cards live.
+
 ## [6.135.0] — 2026-11-25
 
 ### Added

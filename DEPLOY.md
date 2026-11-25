@@ -10,6 +10,11 @@ Where it runs: `~/.agents/infra-map.md`, "Box B", the rows `mm6-erste` and `mm6-
 - Check free disk and memory (the box is the capacity risk, see the infra-map) and note the box's current HEAD, the rollback point.
 - Order: `telekom` first, then `erste`.
 - Daytime is fine: the build takes about 45–160 s, and the outage is about a second behind the maintenance page.
+- **A release that changes `templates/`:**
+  - A tenant whose `.env` sets `TEMPLATES_ROOT` reads its templates from outside the checkout. Since 2026-09-12 that is `telekom`; the infra-map, "Box B", has the folder. A deploy does not change that folder, so the release reaches only the tenants without `TEMPLATES_ROOT`.
+  - `render.ts` and `templates.ts` read templates from disk on every call, so `git pull` makes the new files live before the build has finished. If the build fails, `git reset --hard` back to the old HEAD.
+  - The template editor writes into the effective root. Before deploying, `git status --porcelain templates/` must be empty on every tenant that reads the checkout. If it is not, stop and ask Robi: someone has hand-edited a template. `git pull --ff-only` stops on a hand-edited file that it would change. An edit the pull does not reach stays live outside git, and a rollback `git reset --hard` deletes it.
+  - Learned from the 6.134.0 deploy, 2026-11-25.
 
 **During.** Sample free memory while it builds. If available memory falls under about 120 MB, kill the `next build`.
 

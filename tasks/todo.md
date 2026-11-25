@@ -1357,7 +1357,7 @@ Forrás: a `claude/mc-version-fixes-9f2cb2` független review-ja (2026-11-25), s
 
 **Rollback:** elbukó build → `git -C /var/www/mm6-<t> reset --hard a01bdf1`. Nem jön fel → maint marad, `.next-old` vissza, ugyanez a reset, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1 523bb2c`, `git revert -m 1 02958d3`, push, deploy.
 
-## 2026-11-25 — Többi If-Match-író: mentésszámláló-CAS, 3. kör (KÉSZ az ágon `claude/eager-cori-f0aeae`; merge, bump és deploy Robi go-jára vár)
+## 2026-11-25 — Többi If-Match-író: mentésszámláló-CAS, 3. kör (KÉSZ, 6.135.2, a main-be merge-ölve Robi go-jára; push és deploy Robi go-jára vár)
 
 Az ág a main-re (`27a935d`, benne a 6.135.1 `523bb2c` merge-e és deployja) van rebase-elve, így a 2. kör (`holdRowLock(id, table)`) már benne van. Előzmény: 1. kör `messages` (6.135.0), 2. kör topic/audience (6.135.1), mindkettő a main-en. Ez a 2. kör review-jának „Ugyanez a mechanizmus más entitásokban” tétele.
 
@@ -1429,5 +1429,5 @@ Ami nem változik: a sikeres utak, a route-ok, az MCP-szövegek, a meglévő tes
 - [ ] A CAS csak a `version`-t léptető írásokat látja. Ahol egy író a sort a mentésszámláló léptetése nélkül írja (a topic-reorder ilyen volt), ott a verseny továbbra is csendes.
 - [ ] **A lecke helye (Robi dönt, a 2. kör javaslata áll):** ez a harmadik kör ugyanebből. (1) egy teszt vagy lint-szabály, ami minden `expectedVersion`-t kapó entitás-függvény írásában megköveteli a `version` predikátumot; (2) ha az nem megy, egy sor egy írás-standardba a `db-reads.md` mellé.
 
-**Verzió:** javaslat `6.135.1` → `6.135.2` (patch: hibajavítás, nincs új route, séma vagy felhasználónak látható funkció). Robi dönt; a `package.json` és a `CHANGELOG.md` érintetlen.
+**Verzió:** `6.135.1` → `6.135.2` (patch: hibajavítás, nincs új route, séma vagy felhasználónak látható funkció). Robi: „Merge + bump” (2026-11-25); `package.json` és `CHANGELOG.md` frissítve, a main-be `--no-ff` merge-dzsel. Push és deploy nincs.
 

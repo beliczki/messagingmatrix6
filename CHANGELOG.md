@@ -5,6 +5,19 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.135.2] — 2026-11-25
+
+### Fixed
+- Saving an asset, a creative or a text formatting while someone else saved it now gives the usual
+  conflict instead of overwriting their save, and two promotions of one creative no longer leave a
+  second MC behind.
+- Promoting, deleting or archiving a draft while someone else changed or placed it is refused
+  instead of going through: a promote no longer sends out a landing URL that was just edited, a
+  second promote no longer moves the card the first one placed, and a draft delete or
+  `draft_archive` no longer removes a card that was just placed or edited.
+- A bulk purge deletes nothing when one of its cards changed in the meantime (for example went
+  ACTIVE), instead of deleting it anyway.
+
 ## [6.135.1] — 2026-11-25
 
 ### Fixed

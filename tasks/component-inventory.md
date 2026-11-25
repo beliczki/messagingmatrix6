@@ -354,9 +354,9 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | **NamingTab** | `message-editor-tab message-editor-tab--naming` | 628–702 |
 | Form (`form-grid` 2-col) | `form-grid` (globalis) | – |
 | Field wrapper | `form-field` (globalis) | – |
-| Read-only field | `form-field--readonly` | – |
-| Released version mező (kiadott verzió: a `version_no`, PMMID `-n_`: szám-input + Apply gomb a `Field`-en kívül; Global/Local a szerkesztő kapcsolója szerint) | `message-editor__version-field` / `__version-input` / `__version-apply` | `VersionField`, 2026-11-25 |
-| Saved version (mentett verzió: a `version` mentésszámláló, csak olvasható, nem megy ki) | `message-editor__saved-version` + `form-field` | 2026-11-25 |
+| Read-only field (Naming: `disabled` input, `text-slate-500 disabled:cursor-not-allowed`, nem fókuszálható: MC Number, Variant, Saved version, Audience key, Topic key; a Trafficking másolható mezői `readOnly` maradnak) | nincs saját osztály; a `form-field--readonly` név sehol nincs a kódban (2026-11-25) | 2026-11-25 |
+| Released version mező (kiadott verzió: a `version_no`, PMMID `-n_`: szám-input; kilépéskor vagy Enterre függő változás, a kártya mentésével megy, Autosave vagy Save; Esc visszaállít; nincs Apply gomb; Global/Local a szerkesztő kapcsolója szerint) | `message-editor__version-field` / `__version-input` | `VersionField`, 2026-11-25 |
+| Saved version (mentett verzió: a `version` mentésszámláló, `disabled` mező, nem megy ki) | `message-editor__saved-version` + `form-field` | 2026-11-25 |
 | Status `<select>` | `custom-dropdown` (globalis) | – |
 | **ContentTab** | `message-editor-tab--content` | 704–774 |
 | Headline / copy textarea-k | `input-box` + `form-field` | – |

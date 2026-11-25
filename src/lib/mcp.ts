@@ -1720,7 +1720,8 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
 
   // The MC's VERSION (version_no; REBUILD_SPEC §21) has its own tool rather
   // than an mc_update field: mc_update never rewrites the PMMID, and this does.
-  // Same entity function as the Naming tab's Apply, so the two cannot disagree.
+  // Same entity function as the Naming tab's save of a released version, so
+  // the two cannot disagree.
   server.registerTool(
     "mc_version_bump",
     {

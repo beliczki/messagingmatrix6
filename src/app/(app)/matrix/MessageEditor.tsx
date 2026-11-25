@@ -14,12 +14,7 @@ import {
 import PreviewPane, { type PreviewBg } from "../_components/PreviewPane";
 import { PackagePoster } from "../_components/Html5PackageFrame";
 import { creativeMediaKind } from "@/lib/creative-media-kind";
-import {
-  parseVersionNo,
-  VERSION_APPLY_BLOCK_TEXT,
-  versionApplyBlock,
-  versionApplyRequest,
-} from "@/lib/version-apply";
+import { saveEditorChanges, versionCommit } from "@/lib/version-apply";
 import { templateMetaFor } from "../_components/MatrixIframeTile";
 import ModalBackdrop from "../_components/ModalBackdrop";
 import EntityHistoryDrawer from "../_components/EntityHistoryDrawer";
@@ -239,6 +234,13 @@ export default function MessageEditor({
   const [committedSnapshot, setCommittedSnapshot] = useState<EditableMessage | null>(
     null,
   );
+  // A released version (version_no, PMMID -n_; REBUILD_SPEC §21) typed on the
+  // Naming tab and waiting for the card's save. Not part of `draft`: the
+  // PATCH never carries versionNo, it goes to its own endpoint after the PATCH.
+  const [pendingVersionNo, setPendingVersionNo] = useState<number | null>(null);
+  // Cancel and Reload put the released version field back to what is stored;
+  // the field keeps its own text while typing, so they remount it.
+  const [versionFieldReset, setVersionFieldReset] = useState(0);
   const [autoSave, setAutoSave] = useState<boolean>(true);
   // Global edit: when on, saving fans the shared (creative + status) fields out
   // to every other audience copy of this card. Persisted — it's a deliberate
@@ -291,6 +293,7 @@ export default function MessageEditor({
       openRowIdRef.current = message.id;
       setDraft(toEditable(message));
       setCommittedSnapshot(message);
+      setPendingVersionNo(null);
       setSaveState({ kind: "idle" });
     }
   }, [open, message?.id]);
@@ -396,8 +399,8 @@ export default function MessageEditor({
 
   const qc = useQueryClient();
 
-  // A write (save or version Apply) came back with the stored row and, under
-  // Global, the other audience copies it changed.
+  // A write (the content PATCH or the released version) came back with the
+  // stored row and, under Global, the other audience copies it changed.
   function adoptWrittenRows(row: Message, siblings: Message[]) {
     // Bump our snapshot so the next save uses the new version — but ONLY
     // while the editor is still on the row this save targeted. If the user
@@ -484,6 +487,10 @@ export default function MessageEditor({
   // onSuccess) and 409 against our own just-landed save — the editor then
   // "conflicts with itself" on slow typing. The ref is the in-flight truth
   // for timer callbacks, whose captured save.isPending is stale.
+  //
+  // One save is the content PATCH and then, when one is pending, the released
+  // version on the save counter that PATCH returned (saveEditorChanges). Both
+  // in the scope of the header's Global/Local toggle.
   const saveInFlightRef = useRef(false);
   const save = useMutation({
     onMutate: () => {
@@ -492,38 +499,24 @@ export default function MessageEditor({
     onSettled: () => {
       saveInFlightRef.current = false;
     },
-    mutationFn: async (payload: Partial<EditableFields>) => {
+    mutationFn: async (change: {
+      payload: Partial<EditableFields>;
+      versionNo: number | null;
+    }) => {
       if (!committedSnapshot) throw new Error("no snapshot");
-      if (Object.keys(payload).length === 0) return null;
-      const r = await fetch(
-        `/api/messages/${committedSnapshot.id}${
-          globalEdit ? "?propagate=siblings" : ""
-        }`,
-        {
-          method: "PATCH",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-            "If-Match": String(committedSnapshot.version),
-          },
-          body: JSON.stringify(payload),
-        },
-      );
-      if (r.status === 409) {
-        const body = (await r.json()) as { currentRow: Message };
-        throw new VersionMismatchError(body.currentRow);
-      }
-      if (!r.ok) {
-        throw new Error(await r.text());
-      }
-      const body = (await r.json()) as {
-        message: Message;
-        siblings?: Message[];
-      };
-      return { message: body.message, siblings: body.siblings ?? [] };
+      return saveEditorChanges<Message>({
+        id: committedSnapshot.id,
+        expectedVersion: committedSnapshot.version,
+        payload: change.payload,
+        versionNo: change.versionNo,
+        global: globalEdit,
+        fetch,
+      });
     },
-    onSuccess: (saved, payload) => {
-      if (saved) adoptWrittenRows(saved.message, saved.siblings);
+    onSuccess: (result, change) => {
+      // Whatever landed is stored, also when a later step then failed: a
+      // conflict on the released version keeps the content just saved.
+      for (const w of result.written) adoptWrittenRows(w.message, w.siblings);
       // The intake fields fan out SERVER-side to every other draft variant of
       // the number (a brief belongs to the MC, not to the variant), and those
       // rows are not in the response — patching only what came back left the
@@ -531,55 +524,37 @@ export default function MessageEditor({
       // is the same staleness that made a saved edit look unsaved. Refetching
       // the drafts list is cheap (a handful of rows) and cannot drift; it is
       // gated on the payload so ordinary typing does not trigger it.
+      //
+      // With a content change the PATCH goes first, so when it landed it is
+      // written[0]; the released version, when sent and landed, is the last.
+      const sentContent = Object.keys(change.payload).length > 0;
+      const patched =
+        sentContent && result.written.length > 0 ? result.written[0] : null;
       if (
-        saved &&
-        saved.message.audience === null &&
-        touchesDraftIntake(payload)
+        patched &&
+        patched.message.audience === null &&
+        touchesDraftIntake(change.payload)
       ) {
         void qc.invalidateQueries({ queryKey: ["drafts"] });
       }
-      markSaved();
-    },
-    onError: handleWriteError,
-  });
-
-  // Setting the card's RELEASED VERSION (version_no, PMMID -n_; REBUILD_SPEC §21) from
-  // the Naming tab. Its own endpoint, but the same discipline as a save: the
-  // committed snapshot's save counter as If-Match, the shared in-flight ref so
-  // autosave never fires alongside it on the same If-Match, and the response
-  // adopted only while the editor is still on that card. The Naming tab keeps
-  // Apply disabled while edits are unsaved, so those save first and survive.
-  // Scope follows the editor's Global/Local toggle, exactly as a save does.
-  const setVersion = useMutation({
-    onMutate: () => {
-      saveInFlightRef.current = true;
-      // Not idle, so the stale-tab check below cannot read the broadcast
-      // refetch of our own bump as a peer edit.
-      setSaveState({ kind: "saving" });
-    },
-    onSettled: () => {
-      saveInFlightRef.current = false;
-    },
-    mutationFn: async (versionNo: number) => {
-      if (!committedSnapshot) throw new Error("no snapshot");
-      const { url, init } = versionApplyRequest({
-        id: committedSnapshot.id,
-        expectedVersion: committedSnapshot.version,
-        versionNo,
-        global: globalEdit,
-      });
-      const r = await fetch(url, init);
-      if (r.status === 409) {
-        const body = (await r.json()) as { currentRow: Message };
-        throw new VersionMismatchError(body.currentRow);
+      if (!result.ok) {
+        handleWriteError(
+          "conflict" in result
+            ? new VersionMismatchError(result.conflict)
+            : new Error(result.error),
+        );
+        return;
       }
-      if (!r.ok) {
-        throw new Error(await r.text());
+      // Clear the pending value only if it is still the one this save sent
+      // and the editor is still on that card: a value typed while the save
+      // was in flight goes out with the next one.
+      const sentVersion = change.versionNo;
+      if (sentVersion !== null) {
+        const versionRow = result.written[result.written.length - 1];
+        if (openRowIdRef.current === versionRow.message.id) {
+          setPendingVersionNo((p) => (p === sentVersion ? null : p));
+        }
       }
-      return (await r.json()) as { message: Message; siblings: Message[] };
-    },
-    onSuccess: (saved) => {
-      adoptWrittenRows(saved.message, saved.siblings);
       markSaved();
     },
     onError: handleWriteError,
@@ -599,14 +574,14 @@ export default function MessageEditor({
     }
     if (!draft || !committedSnapshot) return;
     const payload = diffPayload(toEditable(committedSnapshot), draft);
-    if (Object.keys(payload).length === 0) return;
+    if (Object.keys(payload).length === 0 && pendingVersionNo === null) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setSaveState({ kind: "saving" });
     debounceRef.current = setTimeout(() => {
       // In-flight → skip; when that save settles, isPending flips and this
       // effect re-runs against the fresh snapshot, re-arming with the drift.
       if (saveInFlightRef.current) return;
-      save.mutate(payload);
+      save.mutate({ payload, versionNo: pendingVersionNo });
     }, 400);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -614,17 +589,18 @@ export default function MessageEditor({
   }, [
     draft,
     committedSnapshot,
+    pendingVersionNo,
     autoSave,
     saveState.kind,
     save.isPending,
-    setVersion.isPending,
   ]);
 
   const isDirty = useMemo(() => {
+    if (pendingVersionNo !== null) return true;
     if (!draft || !committedSnapshot) return false;
     const payload = diffPayload(toEditable(committedSnapshot), draft);
     return Object.keys(payload).length > 0;
-  }, [draft, committedSnapshot]);
+  }, [draft, committedSnapshot, pendingVersionNo]);
 
   // Phase B — stale-tab detection. A live SSE refresh (peer write) advances
   // the `message` prop's version. If it moved PAST our open snapshot, this tab
@@ -655,12 +631,14 @@ export default function MessageEditor({
     if (saveInFlightRef.current) return;
     const payload = diffPayload(toEditable(committedSnapshot), draft);
     setSaveState({ kind: "saving" });
-    save.mutate(payload);
+    save.mutate({ payload, versionNo: pendingVersionNo });
   }
 
   function manualCancel() {
     if (!committedSnapshot) return;
     setDraft(toEditable(committedSnapshot));
+    setPendingVersionNo(null);
+    setVersionFieldReset((n) => n + 1);
     setSaveState({ kind: "idle" });
   }
 
@@ -671,6 +649,8 @@ export default function MessageEditor({
     const server = saveState.serverRow;
     setDraft(toEditable(server));
     setCommittedSnapshot(server);
+    setPendingVersionNo(null);
+    setVersionFieldReset((n) => n + 1);
     setSaveState({ kind: "idle" });
     qc.invalidateQueries({ queryKey: ["messages"] });
   }
@@ -955,15 +935,14 @@ export default function MessageEditor({
                   version={{
                     globalEdit,
                     siblingCount,
-                    isDirty,
-                    busy: save.isPending || setVersion.isPending,
-                    conflict: saveState.kind === "conflict",
-                    // The ref, not busy: a second Enter can beat the
-                    // re-render that would have disabled Apply.
-                    onApply: (versionNo) => {
-                      if (saveInFlightRef.current) return;
-                      setVersion.mutate(versionNo);
-                    },
+                    pending: pendingVersionNo,
+                    // Without Autosave nothing is sent until Save, so the
+                    // field may follow the typing (and Save is live at once);
+                    // with Autosave it waits for blur/Enter, or every
+                    // keystroke would rebuild the PMMID.
+                    commitWhileTyping: !autoSave,
+                    setPending: setPendingVersionNo,
+                    reset: versionFieldReset,
                   }}
                 />
               ) : null}
@@ -1172,10 +1151,12 @@ function TabBtn({
 type VersionEdit = {
   globalEdit: boolean;
   siblingCount: number;
-  isDirty: boolean;
-  busy: boolean;
-  conflict: boolean;
-  onApply: (versionNo: number) => void;
+  // The released version waiting for the card's save, or null.
+  pending: number | null;
+  commitWhileTyping: boolean;
+  setPending: (versionNo: number | null) => void;
+  // Bumped by Cancel and Reload, so the field drops what was typed.
+  reset: number;
 };
 
 function NamingTab({
@@ -1195,27 +1176,32 @@ function NamingTab({
 }) {
   return (
     <div className="message-editor-tab message-editor-tab--naming form-grid grid grid-cols-2 gap-x-4">
+      {/* Read-only fields are `disabled`, like Audience key and Topic key: not
+          focusable, so they cannot look editable (in the dark theme a focused
+          readOnly box did). */}
       <Field label="MC Number">
         <input
-          readOnly
+          disabled
           value={message.number}
-          className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-sm text-slate-700"
+          className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-sm text-slate-500 disabled:cursor-not-allowed"
         />
       </Field>
       <Field label="Variant">
         <input
-          readOnly
+          disabled
           value={message.variant}
-          className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-sm text-slate-700"
+          className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-sm text-slate-500 disabled:cursor-not-allowed"
         />
       </Field>
 
-      {/* Keyed by card and stored version: a value typed but not applied must
-          not follow the user to the next card, and after an Apply or a peer's
-          change the field starts again from what is stored. */}
+      {/* Keyed by card, stored released version, and Cancel/Reload: a value
+          typed but not saved must not follow the user to the next card, and
+          after a save, a peer's change or a Cancel the field starts again from
+          what is stored (or still pending). */}
       <VersionField
-        key={`${message.id}:${message.versionNo}`}
+        key={`${message.id}:${message.versionNo}:${version.reset}`}
         current={message.versionNo}
+        archived={message.archivedAt !== null}
         edit={version}
       />
       <Field
@@ -1223,9 +1209,9 @@ function NamingTab({
         hint="+1 on every save of this copy. Stays in the database, never goes out; not editable."
       >
         <input
-          readOnly
+          disabled
           value={message.version}
-          className="message-editor__saved-version w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-sm text-slate-700"
+          className="message-editor__saved-version w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-sm text-slate-500 disabled:cursor-not-allowed"
         />
       </Field>
 
@@ -1290,66 +1276,93 @@ function NamingTab({
 }
 
 // The card's RELEASED VERSION (version_no, the PMMID's -n_; REBUILD_SPEC §21) —
-// not the saved version (the save counter) next to it, and not a variant. Applied with its own button,
-// never by autosave: it rewrites the PMMID and the trafficking columns, which a
-// live card then has to be re-trafficked with. Reach follows the editor's
-// Global/Local toggle.
+// not the saved version (the save counter) next to it, and not a variant. A
+// changed value is a pending change of the card: it goes out with the card's
+// own save (Autosave, or Save when Autosave is off), in the scope of the
+// editor's Global/Local toggle, and rebuilds the PMMID and the trafficking
+// columns, which a live card then has to be re-trafficked with.
+//
+// An archived card's released version is refused by the server, so the field
+// is disabled there: otherwise Autosave would send the refused value again
+// after every error.
 function VersionField({
   current,
+  archived,
   edit,
 }: {
   current: number;
+  archived: boolean;
   edit: VersionEdit;
 }) {
-  const [raw, setRaw] = useState(String(current));
-  const block = versionApplyBlock({
-    raw,
-    current,
-    global: edit.globalEdit,
-    isDirty: edit.isDirty,
-    busy: edit.busy,
-    conflict: edit.conflict,
-  });
-  const target = parseVersionNo(raw);
-  function apply() {
-    if (block === null && target !== null) edit.onApply(target);
+  const [raw, setRaw] = useState(String(edit.pending ?? current));
+  // false when the text is not a released version; nothing is made pending then.
+  function commit(text: string): boolean {
+    const c = versionCommit({ raw: text, current });
+    if (c.kind === "invalid") return false;
+    edit.setPending(c.kind === "pending" ? c.versionNo : null);
+    return true;
   }
+  // Leaving the field (blur, Enter): the typed value becomes pending, or, when
+  // it is not a version, the field goes back to what is pending or stored.
+  function leave() {
+    if (!commit(raw)) setRaw(String(edit.pending ?? current));
+  }
+  const invalid = versionCommit({ raw, current }).kind === "invalid";
   const others = edit.siblingCount;
   const reach =
     edit.globalEdit && others > 0
       ? `this copy and its ${others} other audience ${others === 1 ? "copy" : "copies"} (Global)`
       : "this audience copy only (Local)";
   return (
-    <div className="message-editor__version-field flex items-start gap-2">
-      <div className="min-w-0 flex-1">
-        <Field
-          label="Released version"
-          hint={`Goes out in the PMMID (-n_). Sets ${reach}; rebuilds the PMMID and the trafficking fields, and a live card must be re-trafficked.`}
-        >
-          <input
-            type="number"
-            min={1}
-            step={1}
-            inputMode="numeric"
-            value={raw}
-            onChange={(e) => setRaw(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") apply();
-            }}
-            className="message-editor__version-input w-full rounded-md border border-slate-300 px-2 py-1.5 font-mono text-sm focus:border-slate-500 focus:outline-none"
-          />
-        </Field>
-      </div>
-      {/* Outside the Field: its <label> must not wrap a button. */}
-      <button
-        type="button"
-        onClick={apply}
-        disabled={block !== null}
-        title={block ? VERSION_APPLY_BLOCK_TEXT[block] : `Set released version ${target} on ${reach}`}
-        className="message-editor__version-apply toolbar-btn--primary mt-5 shrink-0 rounded bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+    <div className="message-editor__version-field">
+      <Field
+        label="Released version"
+        hint={
+          archived
+            ? "This card is archived: restore it before changing its released version."
+            : invalid
+            ? "A released version is a whole number, 1 or more"
+            : `Goes out in the PMMID (-n_). Saved with the card (Autosave or Save) on ${reach}; rebuilds the PMMID and the trafficking fields, and a live card must be re-trafficked.`
+        }
       >
-        Apply
-      </button>
+        <input
+          type="number"
+          min={1}
+          step={1}
+          inputMode="numeric"
+          disabled={archived}
+          value={raw}
+          onChange={(e) => {
+            setRaw(e.target.value);
+            // Without Autosave: a value that is not a version has nothing to save.
+            if (edit.commitWhileTyping && !commit(e.target.value)) {
+              edit.setPending(null);
+            }
+          }}
+          onBlur={leave}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") leave();
+            if (
+              e.key === "Escape" &&
+              (raw !== String(current) || edit.pending !== null)
+            ) {
+              // Back to the stored value. The editor closes on Escape from a
+              // window listener; there is something to undo here, so not now.
+              e.stopPropagation();
+              setRaw(String(current));
+              edit.setPending(null);
+            }
+          }}
+          // Plain classes, not disabled: variants, which the dark theme's
+          // .bg-slate-50 remap would not reach.
+          className={clsx(
+            "message-editor__version-input w-full rounded-md border px-2 py-1.5 font-mono text-sm",
+            archived
+              ? "border-slate-200 bg-slate-50 text-slate-500 disabled:cursor-not-allowed"
+              : "border-slate-300 focus:border-slate-500 focus:outline-none",
+          )}
+        />
+      </Field>
     </div>
   );
 }

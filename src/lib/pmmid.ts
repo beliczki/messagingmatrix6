@@ -20,11 +20,12 @@ export type PmmidMessage = {
   topic: string | null;
   number: number | null;
   variant: string | null;
-  // v5 stored the message-revision counter in `version`. v6 calls the same
-  // counter `versionNo` (the `version` column is now the optimistic-lock).
-  // Accept either so v5 fixtures stay green.
-  version?: number | null;
-  versionNo?: number | null;
+  // The MC's version (`messages.version_no`, the -n_ token; REBUILD_SPEC §21).
+  // v5 called it `version`, but in v6 that name is the optimistic-lock save
+  // counter, so only `versionNo` is read: a row object carries both, and a
+  // fallback to `version` put the save counter into the measurement key
+  // whenever a caller left versionNo out.
+  versionNo: number;
 };
 
 export function generatePmmid(
@@ -33,7 +34,12 @@ export function generatePmmid(
   topics: ReadonlyArray<Record<string, unknown>> = [],
   pattern?: string | null,
 ): string {
-  const versionNumber = message.versionNo ?? message.version ?? 1;
+  const versionNumber = message.versionNo;
+  if (!Number.isInteger(versionNumber) || versionNumber < 1) {
+    throw new Error(
+      `generatePmmid: versionNo must be a whole number ≥ 1, got ${String(versionNumber)}`,
+    );
+  }
   const ctx: Record<string, unknown> = {
     audience: message.audience ?? "",
     topic: message.topic ?? "",

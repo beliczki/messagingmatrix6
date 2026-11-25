@@ -279,6 +279,46 @@ export function McpTab() {
         </p>
       </Section>
 
+      <Section title="MC versions">
+        <p className="text-sm text-slate-600">
+          Three things that are easy to mix up. The{" "}
+          <strong className="font-semibold">variant</strong> (
+          <code className="font-mono text-xs">a</code>/
+          <code className="font-mono text-xs">b</code>/
+          <code className="font-mono text-xs">c</code>, PMMID{" "}
+          <code className="font-mono text-xs">-v_</code>) is a parallel
+          alternative of a card. The{" "}
+          <strong className="font-semibold">released version</strong> (
+          <code className="font-mono text-xs">version_no</code>, PMMID{" "}
+          <code className="font-mono text-xs">-n_</code>, the{" "}
+          <code className="font-mono text-xs">_nN</code> of a delivered
+          creative) is the card&apos;s path through time, and it goes out in
+          the PMMID. The{" "}
+          <code className="font-mono text-xs">version</code> argument every
+          write tool takes is neither: it is the{" "}
+          <strong className="font-semibold">saved version</strong>, the save
+          counter used as the optimistic lock, which stays in the database. A
+          new variant is never a new released version.
+        </p>
+        <p className="mt-2 text-sm text-slate-600">
+          <code className="font-mono text-xs">mc_version_bump</code> sets the
+          released version — by default one up, or to{" "}
+          <code className="font-mono text-xs">to</code> — on one audience copy
+          (<code className="font-mono text-xs">scope: &quot;local&quot;</code>)
+          or on every copy of the number + variant on the same axis (
+          <code className="font-mono text-xs">&quot;global&quot;</code>); the
+          scope has no default. It works in place: the row keeps its id and
+          gets a new PMMID and rebuilt trafficking, so its{" "}
+          <code className="font-mono text-xs">mc_label</code> changes. On a
+          live card the new PMMID has to be re-trafficked on the platform; the
+          next AdForm feed append keeps the old PMMID row, switched off.
+          Nothing bumps the released version on save, and{" "}
+          <code className="font-mono text-xs">mc_update</code> cannot set it.
+          The matrix editor&apos;s Naming tab does the same with its Global /
+          Local toggle.
+        </p>
+      </Section>
+
       <Section title="Audit & broadcast">
         <p className="text-sm text-slate-600">
           Writes go through the same entity layer as the UI: every mutation is

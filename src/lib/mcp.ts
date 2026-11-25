@@ -54,6 +54,7 @@ import {
   pickWritable as pickMessageWritable,
   promoteDraft,
   restoreMessage,
+  setMessageVersionNo,
   updateMessage,
 } from "@/lib/entities/messages";
 import { isNotNull, isNull } from "drizzle-orm";
@@ -1717,6 +1718,63 @@ function registerMessageWriteTools(server: McpServer, ctx: McpContext): void {
     },
   );
 
+  // The MC's VERSION (version_no; REBUILD_SPEC §21) has its own tool rather
+  // than an mc_update field: mc_update never rewrites the PMMID, and this does.
+  // Same entity function as the Naming tab's Apply, so the two cannot disagree.
+  server.registerTool(
+    "mc_version_bump",
+    {
+      description:
+        "Set an MC's RELEASED VERSION: version_no, the PMMID's -n_ token (and the _nN in delivered creative filenames) — the card's path through time, n1 then n2 after a revision; it goes out in the PMMID. NOT a variant: a variant (a/b/c) is a parallel alternative of the card; never create a new variant to get a new released version. NOT the saved version either. Required: mc_label (the PMMID), version (the SAVED VERSION: the save counter used as the optimistic lock, exactly as in mc_update — not the released version being set), scope: 'local' = this audience copy only, 'global' = every audience copy of this number+variant on the same axis (DCO and Agentic are separate cards; other variants are untouched). scope has no default: say which. Optional: to (the released version to set, whole number ≥ 1; default = this copy's version_no + 1; lower values are allowed, to correct a released version or match a delivered _nN file). The bump is in place: the same row gets a new PMMID and rebuilt trafficking (utm_cd26, final_trafficked_url), so its mc_label CHANGES — use the returned message.pmmid from then on (previous_pmmid is the old one). On a live card this is an outward change: the new PMMID has to be re-trafficked in DV360/AdForm by a person. The next AdForm feed append keeps the old PMMID row, switched off (IsActive=FALSE). Reporting is unaffected (it joins on number+variant). Drafts (no PMMID yet) and archived cards are refused.",
+      inputSchema: {
+        mc_label: z.string(),
+        version: z.number().int(),
+        scope: z.enum(["local", "global"]),
+        to: z.number().int().min(1).optional(),
+      },
+    },
+    async ({ mc_label, version, scope, to }) => {
+      const limited = await requireRate(ctx);
+      if (limited) return limited;
+      const existing = await findMessageByPmmid(ctx.clientId, mc_label);
+      if (!existing) return errorResult(`message '${mc_label}' not found`);
+      // An omitted `to` means "the next version of THIS copy".
+      const target = to === undefined ? existing.versionNo + 1 : to;
+      try {
+        const result = await setMessageVersionNo(
+          ctx.clientId,
+          existing.id,
+          version,
+          target,
+          scope,
+          mcpUserId(ctx),
+        );
+        if (!result.ok) {
+          if (result.reason === "not_found") {
+            return errorResult(`message '${mc_label}' not found`);
+          }
+          return errorResult("version_conflict", { current: result.current });
+        }
+        return jsonResult({
+          ok: true,
+          previous_pmmid: existing.pmmid,
+          message: result.row,
+          changed: result.changedIds.length,
+          siblings: result.siblings.map((s) => ({
+            id: s.id,
+            audience: s.audience,
+            pmmid: s.pmmid,
+            versionNo: s.versionNo,
+            version: s.version,
+          })),
+        });
+      } catch (e) {
+        if (e instanceof MessageError) return errorResult(e.message);
+        throw e;
+      }
+    },
+  );
+
   server.registerTool(
     "mc_remove",
     {
@@ -2619,8 +2677,14 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
       if (limited) return limited;
       try {
         const updated = await db.transaction(async () => {
-          const out = [];
-          for (const u of updates) {
+          // Every item is resolved first and written in id order. Each write
+          // holds its row lock until the batch commits, and the version bump
+          // and a Global save lock several rows in id order; written in the
+          // order given, a batch could take them the other way round and
+          // deadlock with them (or with another batch). The answer keeps the
+          // order given.
+          const items: Array<{ index: number; id: number; u: (typeof updates)[number] }> = [];
+          for (const [index, u] of updates.entries()) {
             const existing = await findMessageByPmmid(ctx.clientId, u.mc_label);
             if (!existing) {
               throw new BatchError(
@@ -2628,9 +2692,13 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
                 u.mc_label,
               );
             }
+            items.push({ index, id: existing.id, u });
+          }
+          const out: Message[] = [];
+          for (const { index, id, u } of [...items].sort((a, b) => a.id - b.id)) {
             const r = await updateMessage(
               ctx.clientId,
-              existing.id,
+              id,
               u.version,
               pickMessageWritable(u.fields ?? {}),
             );
@@ -2641,7 +2709,7 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
                 r.current,
               );
             }
-            out.push(r.row);
+            out[index] = r.row;
           }
           return out;
         });

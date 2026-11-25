@@ -32,6 +32,9 @@ import {
 import { readDefaultTemplate } from "@/lib/templates";
 import { MC_LEVEL_DRAFT_FIELDS } from "@/lib/draft-intake";
 import { BIRTH_STATUS, PROMOTED_STATUS, isMeasurementLocked } from "@/lib/mc-status";
+import { writeAudit } from "@/lib/audit";
+import { broadcast } from "@/lib/events";
+import { MAX_VERSION_NO, type VersionScope } from "@/lib/version-apply";
 
 // A row that occupies a cell. DRAFT rows are the only audience-less ones (DB
 // check `messages_draft_has_no_audience`) and a placed row always carries a
@@ -901,6 +904,13 @@ export async function updateMessage(
         current.pmmid,
       )
     : {};
+  // The If-Match is checked again IN the write. Everything above was derived
+  // from `current` as read, trafficking from its PMMID included; if another
+  // write landed since (a second save with the same If-Match, a version bump
+  // that rewrote the PMMID), writing anyway would overwrite it, and after a
+  // bump would put the OLD PMMID back into utm_cd26. Postgres re-checks the
+  // condition against the row as committed, so exactly one of two racing
+  // writes wins and the other gets the conflict it should have had.
   const [updated] = await db
     .update(messages)
     .set({
@@ -909,8 +919,17 @@ export async function updateMessage(
       version: sql`${messages.version} + 1`,
       updatedAt: nowUtc,
     })
-    .where(and(eq(messages.clientId, clientId), eq(messages.id, id)))
+    .where(
+      and(
+        eq(messages.clientId, clientId),
+        eq(messages.id, id),
+        eq(messages.version, expectedVersion),
+      ),
+    )
     .returning();
+  if (!updated) {
+    return { ok: false, current: await getMessage(clientId, id) };
+  }
 
   await propagateBriefAcrossDraftVariants(clientId, updated, input);
   return { ok: true, row: updated };
@@ -1077,72 +1096,265 @@ export async function propagateToSiblings(
   const patterns = await readClientPatterns(clientId);
   const audienceList = await listAudiences(clientId);
   const onAxis = await sameAxisAs(clientId, primary);
-  const family = (
-    await db
+  // Each copy's trafficking is derived from ITS PMMID, so the copies are read
+  // under their row locks, in id order (the order setMessageVersionNo locks
+  // in, so the two cannot deadlock). Read unlocked, a copy whose version was
+  // bumped meanwhile got its trafficking rebuilt from the PMMID it no longer
+  // had, leaving utm_cd26 ≠ pmmid.
+  return db.transaction(async () => {
+    const family = (
+      await db
+        .select()
+        .from(messages)
+        .where(
+          and(
+            eq(messages.clientId, clientId),
+            eq(messages.number, primary.number),
+            isNull(messages.archivedAt),
+            PLACED_ONLY,
+          ),
+        )
+        .orderBy(messages.id)
+        .for("update")
+    )
+      .filter(isPlaced)
+      .filter((m) => m.id !== primary.id && onAxis(m));
+
+    const changes: Array<{ before: Message; after: Message }> = [];
+    for (const sib of family) {
+      const sameVariant = sib.variant === primary.variant;
+      const payload = sameVariant
+        ? { ...numberPayload, ...cardPayload }
+        : { ...numberPayload };
+      if (Object.keys(payload).length === 0) continue;
+
+      let trafficFields: Record<string, unknown> = {};
+      if (sameVariant) {
+        // audience/topic are restated from the sibling rather than cast: they
+        // cannot be in `payload` (CARD_FIELDS drops both, since placement is
+        // per-copy), and this way the placement's provenance is on the line.
+        const merged: PlacedMessage = {
+          ...sib,
+          ...payload,
+          audience: sib.audience,
+          topic: sib.topic,
+        };
+        trafficFields = traffickingColumns(
+          {
+            number: merged.number,
+            variant: merged.variant,
+            audience: merged.audience,
+            topic: merged.topic,
+            versionNo: merged.versionNo,
+            landingUrl: merged.landingUrl,
+          },
+          {
+            audienceRow: await findAudienceByKey(clientId, merged.audience),
+            topicRow: await findTopicByKey(clientId, merged.topic),
+            patterns,
+            audienceList,
+          },
+          sib.pmmid,
+        );
+      }
+      const [after] = await db
+        .update(messages)
+        .set({
+          ...payload,
+          ...trafficFields,
+          version: sql`${messages.version} + 1`,
+          updatedAt: nowUtc,
+        })
+        .where(and(eq(messages.clientId, clientId), eq(messages.id, sib.id)))
+        .returning();
+      changes.push({ before: sib, after });
+    }
+    return changes;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The MC's VERSION (REBUILD_SPEC §21): `version_no`, the PMMID's -n_ token, the
+// card's path through time. Not the save counter (`version`), and not a variant.
+//
+// Set only by this explicit step (the Naming tab, MCP mc_version_bump), never
+// by a save: it is not a writable field, so the PATCH path and a History
+// restore (which PATCHes a whole audit snapshot back) cannot move it.
+//
+// The bump happens in place: the same row keeps its id and gets a new PMMID
+// plus the trafficking columns built from it. A feed that already carried the
+// old PMMID keeps that row switched off on its next append (feed-export.ts,
+// rule 7: a baseline row whose PMMID the build no longer produces is re-emitted
+// verbatim with IsActive=FALSE).
+//
+// Global reaches the card's other audience copies exactly as a Global save does
+// (findSiblings: same number+variant, same axis, not archived). It is all or
+// nothing: every row involved is locked in id order before anything is read
+// for the decision, the If-Match is checked on the open copy under that lock,
+// and the audit entries are written in the same transaction. The broadcast goes
+// out after the commit.
+
+export type { VersionScope };
+
+export type SetVersionResult =
+  | {
+      ok: true;
+      row: PlacedMessage;
+      // The other copies that changed (Global), as stored after the change.
+      siblings: PlacedMessage[];
+      // Every row that changed. Copies already at the target are left alone.
+      changedIds: number[];
+    }
+  | { ok: false; reason: "not_found" }
+  | { ok: false; reason: "version_mismatch"; current: Message };
+
+export async function setMessageVersionNo(
+  clientId: number,
+  id: number,
+  expectedVersion: number,
+  versionNo: number,
+  scope: VersionScope,
+  userId: string | null,
+): Promise<SetVersionResult> {
+  if (
+    !Number.isInteger(versionNo) ||
+    versionNo < 1 ||
+    versionNo > MAX_VERSION_NO
+  ) {
+    throw new MessageError(
+      `the released version must be a whole number from 1 to ${MAX_VERSION_NO}`,
+    );
+  }
+  // This unlocked read only tells us which rows to lock; every decision below
+  // is made on the locked rows. A move can change the card's variant (and its
+  // audience) before the lock is taken, so the locked set may no longer hold it.
+  const located = await getMessage(clientId, id);
+  if (!located) return { ok: false, reason: "not_found" };
+
+  const patterns = await readClientPatterns(clientId);
+  const audienceList = await listAudiences(clientId);
+  const changes: Array<{ before: PlacedMessage; after: PlacedMessage }> = [];
+
+  const outcome = await db.transaction(async (): Promise<
+    | { ok: true; primary: PlacedMessage }
+    | { ok: false; reason: "not_found" }
+    | { ok: false; reason: "version_mismatch"; current: Message }
+  > => {
+    const locked = await db
       .select()
       .from(messages)
       .where(
-        and(
-          eq(messages.clientId, clientId),
-          eq(messages.number, primary.number),
-          isNull(messages.archivedAt),
-          PLACED_ONLY,
-        ),
+        scope === "global"
+          ? and(
+              eq(messages.clientId, clientId),
+              eq(messages.number, located.number),
+              eq(messages.variant, located.variant),
+            )
+          : and(eq(messages.clientId, clientId), eq(messages.id, id)),
       )
-  )
-    .filter(isPlaced)
-    .filter((m) => m.id !== primary.id && onAxis(m));
+      .orderBy(messages.id)
+      .for("update");
+    const current = locked.find((m) => m.id === id);
+    if (!current) {
+      // Not among the rows of the number+variant it had when located: it was
+      // moved off them (a move bumps the save counter, so the If-Match no
+      // longer holds) or it is gone.
+      const moved = await getMessage(clientId, id);
+      if (!moved) return { ok: false, reason: "not_found" };
+      return { ok: false, reason: "version_mismatch", current: moved };
+    }
+    if (current.version !== expectedVersion) {
+      return { ok: false, reason: "version_mismatch", current };
+    }
+    if (!isPlaced(current)) {
+      throw new MessageError(
+        "a draft has no cell and no PMMID yet — it starts at released version 1 when it is promoted",
+      );
+    }
+    if (current.archivedAt !== null) {
+      throw new MessageError(
+        "this card is archived — restore it before changing its released version",
+      );
+    }
+    const onAxis = await sameAxisAs(clientId, current);
+    const targets: PlacedMessage[] = [
+      current,
+      ...locked
+        .filter(isPlaced)
+        .filter(
+          (m) => m.id !== current.id && m.archivedAt === null && onAxis(m),
+        ),
+    ];
 
-  const changes: Array<{ before: Message; after: Message }> = [];
-  for (const sib of family) {
-    const sameVariant = sib.variant === primary.variant;
-    const payload = sameVariant
-      ? { ...numberPayload, ...cardPayload }
-      : { ...numberPayload };
-    if (Object.keys(payload).length === 0) continue;
-
-    let trafficFields: Record<string, unknown> = {};
-    if (sameVariant) {
-      // audience/topic are restated from the sibling rather than cast: they
-      // cannot be in `payload` (CARD_FIELDS drops both, since placement is
-      // per-copy), and this way the placement's provenance is on the line.
-      const merged: PlacedMessage = {
-        ...sib,
-        ...payload,
-        audience: sib.audience,
-        topic: sib.topic,
-      };
-      trafficFields = traffickingColumns(
+    let primary: PlacedMessage = current;
+    for (const before of targets) {
+      if (before.versionNo === versionNo) continue;
+      const identity = regeneratedIdentity(
         {
-          number: merged.number,
-          variant: merged.variant,
-          audience: merged.audience,
-          topic: merged.topic,
-          versionNo: merged.versionNo,
-          landingUrl: merged.landingUrl,
+          audience: before.audience,
+          topic: before.topic,
+          number: before.number,
+          variant: before.variant,
+          versionNo,
+          landingUrl: before.landingUrl,
         },
         {
-          audienceRow: await findAudienceByKey(clientId, merged.audience),
-          topicRow: await findTopicByKey(clientId, merged.topic),
+          audienceRow: await findAudienceByKey(clientId, before.audience),
+          topicRow: await findTopicByKey(clientId, before.topic),
           patterns,
           audienceList,
         },
-        sib.pmmid,
       );
+      const [updated] = await db
+        .update(messages)
+        .set({
+          versionNo,
+          ...identity,
+          version: sql`${messages.version} + 1`,
+          updatedAt: nowUtc,
+        })
+        .where(and(eq(messages.clientId, clientId), eq(messages.id, before.id)))
+        .returning();
+      // Placement is restated from the locked row rather than cast: this
+      // update touches only versionNo and the identity columns.
+      const after: PlacedMessage = {
+        ...updated,
+        audience: before.audience,
+        topic: before.topic,
+      };
+      await writeAudit({
+        clientId,
+        userId,
+        entityType: "messages",
+        entityId: before.id,
+        action: "update",
+        before,
+        after,
+        silent: true,
+      });
+      changes.push({ before, after });
+      if (before.id === current.id) primary = after;
     }
-    const [after] = await db
-      .update(messages)
-      .set({
-        ...payload,
-        ...trafficFields,
-        version: sql`${messages.version} + 1`,
-        updatedAt: nowUtc,
-      })
-      .where(and(eq(messages.clientId, clientId), eq(messages.id, sib.id)))
-      .returning();
-    changes.push({ before: sib, after });
+    return { ok: true, primary };
+  });
+
+  if (!outcome.ok) return outcome;
+  if (changes.length > 0) {
+    broadcast(clientId, {
+      entity: "messages",
+      ids: changes.map((c) => c.after.id),
+      action: "bulk_update",
+      byUser: userId,
+    });
   }
-  return changes;
+  return {
+    ok: true,
+    row: outcome.primary,
+    siblings: changes
+      .map((c) => c.after)
+      .filter((m) => m.id !== outcome.primary.id),
+    changedIds: changes.map((c) => c.after.id),
+  };
 }
 
 export async function archiveMessage(
@@ -1520,9 +1732,10 @@ export async function moveMessages(
     plan.push({ ...r, number, variant });
   }
 
-  // Apply updates.
-  const updated: Message[] = [];
-  for (const p of plan) {
+  // Each UPDATE re-checks the save counter the pre-pass read: the new PMMID is
+  // built from that read, so a bump (or any save) that landed since would
+  // otherwise be overwritten with the old -n_.
+  const applyMove = async (p: Plan): Promise<Message> => {
     const identity = regeneratedIdentity(
       {
         audience: targetAudienceKey,
@@ -1549,11 +1762,62 @@ export async function moveMessages(
         version: sql`${messages.version} + 1`,
         updatedAt: nowUtc,
       })
-      .where(and(eq(messages.clientId, clientId), eq(messages.id, p.source.id)))
+      .where(
+        and(
+          eq(messages.clientId, clientId),
+          eq(messages.id, p.source.id),
+          eq(messages.version, p.source.version),
+        ),
+      )
       .returning();
-    updated.push(row);
+    if (!row) throw new MoveConflict(p.item.mcLabel, p.source.id);
+    return row;
+  };
+
+  // A row that moved on fails the whole batch. The savepoint rolls back the
+  // items already written, because the callers' transaction commits whatever
+  // this function returns.
+  //
+  // The UPDATEs take the row locks, so they run in id order, like the Global
+  // bump, the Global save and mc_update_batch: a batch written in the order it
+  // was given could hold a higher id while waiting for a lower one such a
+  // writer held, and Postgres would abort one of them (40P01). The plan above
+  // stays in the given order (it decides who gets which variant), and so does
+  // the response.
+  const idOrder = plan
+    .map((_, index) => index)
+    .sort((a, b) => plan[a].source.id - plan[b].source.id);
+  let updated: Message[];
+  try {
+    updated = await db.transaction(async () => {
+      const rows: Message[] = new Array(plan.length);
+      for (const index of idOrder) rows[index] = await applyMove(plan[index]);
+      return rows;
+    });
+  } catch (e) {
+    if (!(e instanceof MoveConflict)) throw e;
+    const current = await getMessage(clientId, e.id);
+    if (!current) return { ok: false, reason: "not_found", mcLabel: e.mcLabel };
+    return {
+      ok: false,
+      reason: "version_conflict",
+      mcLabel: e.mcLabel,
+      current,
+    };
   }
   return { ok: true, updated };
+}
+
+// Thrown inside moveMessages' savepoint to roll back a batch whose row moved on
+// between the pre-pass read and its UPDATE; never leaves moveMessages.
+class MoveConflict extends Error {
+  constructor(
+    public mcLabel: string,
+    public id: number,
+  ) {
+    super(`version conflict on ${mcLabel}`);
+    this.name = "MoveConflict";
+  }
 }
 
 export type RemoveItem = { mcLabel: string; expectedVersion: number };

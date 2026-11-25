@@ -355,6 +355,8 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | Form (`form-grid` 2-col) | `form-grid` (globalis) | – |
 | Field wrapper | `form-field` (globalis) | – |
 | Read-only field | `form-field--readonly` | – |
+| Released version mező (kiadott verzió: a `version_no`, PMMID `-n_`: szám-input + Apply gomb a `Field`-en kívül; Global/Local a szerkesztő kapcsolója szerint) | `message-editor__version-field` / `__version-input` / `__version-apply` | `VersionField`, 2026-11-25 |
+| Saved version (mentett verzió: a `version` mentésszámláló, csak olvasható, nem megy ki) | `message-editor__saved-version` + `form-field` | 2026-11-25 |
 | Status `<select>` | `custom-dropdown` (globalis) | – |
 | **ContentTab** | `message-editor-tab--content` | 704–774 |
 | Headline / copy textarea-k | `input-box` + `form-field` | – |

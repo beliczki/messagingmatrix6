@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import {
   audiences as audiencesTable,
@@ -269,6 +269,15 @@ export const POST = withSession(async ({ req, claims }) => {
   // <name>" (matching MM6 export convention); if the message isn't in the
   // matrix yet, label = "MC<num><var>" alone — we still surface the MC so the
   // user can see what AdForm has, but the name slot stays blank.
+  //
+  // Number + variant find the candidates; everything else only ranks them. The
+  // released version (-n_) is bumped in place (REBUILD_SPEC §21), so after a
+  // bump no card carries the -n_ the reference still shows, and filtering on it
+  // lost the name. Ranked, in order: a copy on one of the reference's own
+  // audiences (the DCO card and its Agentic namesake share number + variant,
+  // and only the one on the feed's axis is meant), a live copy, the
+  // reference's released version (a number + variant can stand at several),
+  // then the oldest row, so the answer does not depend on the scan.
   const defaultMc = extractDefaultMc(parsed.rowSet);
   let defaultLabel: string | null = null;
   let defaultMessageId: number | null = null;
@@ -281,10 +290,16 @@ export const POST = withSession(async ({ req, claims }) => {
           eq(messagesTable.clientId, claims.cid),
           eq(messagesTable.number, defaultMc.number),
           eq(messagesTable.variant, defaultMc.variant),
-          ...(defaultMc.versionNo !== undefined
-            ? [eq(messagesTable.versionNo, defaultMc.versionNo)]
-            : []),
+          isNotNull(messagesTable.audience),
         ),
+      )
+      .orderBy(
+        desc(inArray(messagesTable.audience, audKeys)),
+        desc(isNull(messagesTable.archivedAt)),
+        ...(defaultMc.versionNo !== undefined
+          ? [desc(eq(messagesTable.versionNo, defaultMc.versionNo))]
+          : []),
+        asc(messagesTable.id),
       )
       .limit(1);
     const base = `MC${defaultMc.number}${defaultMc.variant}`;

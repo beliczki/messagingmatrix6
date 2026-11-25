@@ -1357,7 +1357,7 @@ Forrás: a `claude/mc-version-fixes-9f2cb2` független review-ja (2026-11-25), s
 
 **Rollback:** elbukó build → `git -C /var/www/mm6-<t> reset --hard a01bdf1`. Nem jön fel → maint marad, `.next-old` vissza, ugyanez a reset, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1 523bb2c`, `git revert -m 1 02958d3`, push, deploy.
 
-## 2026-11-25 — Naming fül: a kiadott verzió a mentéssel megy, nincs Apply (KÉSZ a branchen, Robi „Igen, mehet”-jére; merge, bump, push, deploy Robi go-jára; branch `claude/naming-version-save`, a main `27a935d`-ből)
+## 2026-11-25 — Naming fül: a kiadott verzió a mentéssel megy, nincs Apply (KÉSZ, 6.136.0, a main-be merge-ölve Robi go-jára; push és deploy Robi go-jára vár; branch `claude/naming-version-save`, a main `27a935d`-ből)
 
 Robi visszajelzése az élő 6.135.1-en (MC332a, Global bekapcsolva), az mm6-status session továbbította: „ez az apply button it faszság, hát van auto save-ünk vagy save buttonunk annak kéne felvenni ezt a változást is ugyanakkor a save version meg egy nem editálható input box kéne legyen!”
 
@@ -1459,6 +1459,8 @@ Robi visszajelzése az élő 6.135.1-en (MC332a, Global bekapcsolva), az mm6-sta
 **Régi testvér, nem javítva:** az autosave hiba után végtelenül újrapróbál (a `saveState.kind` váltása újra élesíti a debounce-t). Tartalom-PATCH-nél is így van, ha a szerver tartósan 400-at ad. Az archivált esetet a `disabled` mező zárja le; a mechanizmus külön feladat.
 
 **Bump-javaslat (K5):** minor `6.135.1` → `6.136.0` (felhasználónak látható viselkedés-változás a Naming fülön); a másik lehetőség a patch `6.135.2`. Robi dönt. Merge, push, deploy Robi go-jára.
+
+**Verzió:** Robi: „Minor 6.136.0”. Közben a main-re a 6.135.2 (If-Match CAS, 3. kör) került, ezért `6.135.2` → `6.136.0`. A main a branchbe merge-ölve (`6699422`, ütközés csak a todo két hozzáfűzött szakaszán, mindkettő megmaradt). A merge-elt fán a tsc tiszta, a lint 0 hiba / 145 warning. `package.json` és `CHANGELOG.md` frissítve, a main-be `--no-ff` merge-dzsel. Push és deploy nincs.
 
 ## 2026-11-25 — Többi If-Match-író: mentésszámláló-CAS, 3. kör (KÉSZ, 6.135.2, a main-be merge-ölve Robi go-jára; push és deploy Robi go-jára vár)
 

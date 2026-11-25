@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
   audiences,
@@ -1999,13 +1999,55 @@ export async function deleteMessages(
     }
   }
 
-  await db
-    .delete(messages)
-    .where(
-      and(
-        eq(messages.clientId, clientId),
-        inArray(messages.id, [...deletingIds]),
-      ),
-    );
+  // Each row is deleted only at the version resolveRemovals checked: the guards
+  // above read the status and the pair from that version, and a card that went
+  // ACTIVE (or moved) since must not be purged on their word. A miss fails the
+  // whole batch, and the savepoint rolls back the rows already deleted, because
+  // the caller's transaction commits whatever this function returns.
+  try {
+    await db.transaction(async () => {
+      const deleted = await db
+        .delete(messages)
+        .where(
+          and(
+            eq(messages.clientId, clientId),
+            or(
+              ...rows.map((r) =>
+                and(eq(messages.id, r.id), eq(messages.version, r.version)),
+              ),
+            ),
+          ),
+        )
+        .returning({ id: messages.id });
+      const deletedIds = new Set(deleted.map((d) => d.id));
+      // resolveRemovals returns one row per item, in item order.
+      const missed = rows.findIndex((r) => !deletedIds.has(r.id));
+      if (missed !== -1) {
+        throw new RemoveConflict(items[missed].mcLabel, rows[missed].id);
+      }
+    });
+  } catch (e) {
+    if (!(e instanceof RemoveConflict)) throw e;
+    const current = await getMessage(clientId, e.id);
+    if (!current) return { ok: false, reason: "not_found", mcLabel: e.mcLabel };
+    return {
+      ok: false,
+      reason: "version_conflict",
+      mcLabel: e.mcLabel,
+      current,
+    };
+  }
   return { ok: true, rows };
+}
+
+// Thrown inside deleteMessages' savepoint to roll back a purge whose row
+// changed between the pre-pass read and the DELETE; never leaves deleteMessages.
+class RemoveConflict extends Error {
+  constructor(
+    public mcLabel: string,
+    public id: number,
+  ) {
+    super(`version conflict on ${mcLabel}`);
+    this.name = "RemoveConflict";
+  }
 }

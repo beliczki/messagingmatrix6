@@ -16,6 +16,7 @@ import {
   createDraft,
   createMessage,
   deleteDraft,
+  deleteMessages,
   getMessage,
   moveMessages,
   promoteDraft,
@@ -468,5 +469,38 @@ describe("draft_archive (archiveMessage) — the archive holds on the version it
     const after = await reread(draft.id);
     expect(after.archivedAt).toBeNull();
     expect(after.audience).toBe("aud1");
+  });
+});
+
+describe("deleteMessages — the bulk purge holds on the versions it checked", () => {
+  it("a purge that waited while one card went ACTIVE deletes nothing", async () => {
+    // The measurement-lock guard read the status before the DELETE, which went
+    // by id alone: a card that became ACTIVE in between (its PMMID now anchors
+    // reporting joins) was deleted for good. The route runs the purge in one
+    // transaction, so a miss must also roll back the rows already deleted.
+    const { primary, copy2 } = await seedCard();
+    const lock = await holdRowLock(primary.id);
+    const purge = db.transaction(() =>
+      deleteMessages(erste.id, [
+        { mcLabel: primary.pmmid!, expectedVersion: primary.version },
+        { mcLabel: copy2.pmmid!, expectedVersion: copy2.version },
+      ]),
+    );
+    await waitForLockWaiter();
+    await lock.release(async () => {
+      await db
+        .update(messages)
+        .set({ status: "ACTIVE", version: primary.version + 1 })
+        .where(eq(messages.id, primary.id));
+    });
+    const res = await purge;
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.reason).toBe("version_conflict");
+      expect(res.mcLabel).toBe(primary.pmmid);
+      expect(res.current?.status).toBe("ACTIVE");
+    }
+    expect(await getMessage(erste.id, primary.id)).not.toBeNull();
+    expect(await getMessage(erste.id, copy2.id)).not.toBeNull();
   });
 });

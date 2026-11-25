@@ -1103,7 +1103,7 @@ Robi jóváhagyása (2026-11-24): „Mehet”; a léptetés hármasával; a pick
 **Verzió:** javaslat `6.132.2` → `6.133.0` (minor: új, felhasználónak látható funkció és új API-mezők). Robi dönt; a `package.json` és a `CHANGELOG.md` érintetlen. Deploy: nem történt; Robi külön go-ja kell, a B box Node-cseréje (N4–N8) után.
 
 
-## 2026-11-25 — MC verzió (`version_no`, PMMID `-n_`): mutatás, kézi állítás, MCP-léptetés (KÉSZ, merge-re vár: `claude/mc-version-fixes-9f2cb2`, ez tartalmazza a `claude/mc-version-bump-903097` egészét is)
+## 2026-11-25 — MC verzió (`version_no`, PMMID `-n_`): mutatás, kézi állítás, MCP-léptetés (KÉSZ, 6.135.0, main-be merge-ölve; deploy Robi go-jára vár)
 
 Fogalmak (Robi, 2026-11-25): a **variáns** (`a`/`b`/`c`) párhuzamos változat, sosem verzió; a **verzió** (`version_no`, `-n_`, kreatív `_nN`) egy MC időbeli útja; a `version` oszlop csak a mentésszámláló (optimistic lock). Rögzítve: REBUILD_SPEC §21 (Drive, 2026-11-25) és a `project_version_vs_variant` memória.
 
@@ -1183,9 +1183,10 @@ Entitás-függvény `setMessageVersionNo(clientId, id, expectedVersion, versionN
 - [x] **S4b** kész (lásd fent).
 - [ ] **Élő Erste-léptetés előtt** Robi lépése: AdForm teszt line item, két azonos `advert_id`-jű sor, az egyik inaktív.
 - [x] Deadlock-kockázat: az R7 megszüntette (a batch id-sorrendben ír).
-- [ ] Merge + deploy: Robi go-ja kell.
+- [x] Merge a main-be + bump 6.135.0 (Robi: „commit merge és bump minor”, 2026-11-25), `package.json` + `CHANGELOG.md`. Push nincs.
+- [ ] Push + deploy: Robi go-ja kell; előtte deploy-terv Codex + Chief Architect review-val.
 
-**Verzió:** javaslat `6.134.0` → `6.135.0` (minor: új HTTP route, új MCP-tool, felhasználónak látható Naming-fül változás; a 6.134.0-t közben az AI label vitte el). Robi dönt; a `package.json` és a `CHANGELOG.md` érintetlen.
+**Verzió:** javaslat `6.134.0` → `6.135.0` (minor: új HTTP route, új MCP-tool, felhasználónak látható Naming-fül változás; a 6.134.0-t közben az AI label vitte el). **Megemelve** (Robi: „bump minor”), `package.json` + `CHANGELOG.md`.
 
 ### Review — R1–R7, S4b, címkék (2026-11-25, `claude/mc-version-fixes-9f2cb2`)
 
@@ -1226,9 +1227,10 @@ Ez a branch a `claude/mc-version-bump-903097`-ből van vágva, és a teljes funk
 - [ ] Élő Erste-léptetés előtt Robi lépése: AdForm teszt line item, két azonos `advert_id`-jű sor, az egyik inaktív.
 - [ ] A review „régi, de elérhetőbb” lelete, nem javítva: `getMessageByPmmid` `LIMIT 1` rendezés nélkül, archiváltat is talál.
 - [ ] A review teszt-megjegyzése: a `waitForLockWaiter` bármely Lock-várakozót számol. Ma nem hamisít (a fájlok sorban futnak, és minden új interleave-teszt piros volt javítás előtt), de egy párhuzamos tesztfuttatás ugyanazon a DB-n üres zöldet adhatna; `pg_blocking_pids` szűkítené.
-- [ ] Merge + deploy: Robi go-ja kell.
+- [x] Merge a main-be + bump 6.135.0 (Robi: „commit merge és bump minor”, 2026-11-25), `package.json` + `CHANGELOG.md`. Push nincs.
+- [ ] Push + deploy: Robi go-ja kell; előtte deploy-terv Codex + Chief Architect review-val.
 
-**Verzió:** javaslat `6.134.0` → `6.135.0` (minor: új HTTP route, új MCP-tool, felhasználónak látható Naming-fül változás). A 6.134.0-t közben az AI label vitte el (élő mindkét tenanton). Robi dönt; a `package.json` és a `CHANGELOG.md` érintetlen.
+**Verzió:** javaslat `6.134.0` → `6.135.0` (minor: új HTTP route, új MCP-tool, felhasználónak látható Naming-fül változás). A 6.134.0-t közben az AI label vitte el (élő mindkét tenanton). **Megemelve** (Robi: „bump minor”), `package.json` + `CHANGELOG.md`.
 
 ## 2026-11-25 — AI label az Erste HTML template-ben (`aiLabelWhite` / `aiLabelBlack`) (ÉPÜL, Robi: „lets go”)
 

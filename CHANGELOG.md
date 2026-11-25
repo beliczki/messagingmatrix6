@@ -5,6 +5,30 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.135.0] — 2026-11-25
+
+### Added
+- Naming tab: a "Released version" field sets the version that goes out in the PMMID (`-n_`), with
+  Apply, on the open copy (Local) or on all its copies (Global). The PMMID and the trafficking
+  fields are rebuilt; a live card must be re-trafficked, and the next feed export adds the new row
+  and keeps the old one with `IsActive=FALSE`. The "Saved version" (the save counter) is shown
+  read-only next to it.
+- `POST /api/messages/[id]/version` (If-Match) and the MCP tool `mc_version_bump` (its `scope`,
+  local or global, is required) set the released version the same way.
+
+### Changed
+- The Naming tab, the MCP descriptions and the MCP settings page use the same three terms: variant
+  (a/b/c, a parallel alternative), released version (goes out) and saved version (stays in the
+  database).
+
+### Fixed
+- Two saves of one card with the same If-Match no longer both go through, and a Global save
+  rebuilds each copy from the row as it is at write time.
+- A rekey, a move or `mc_update_batch` running at the same time as a version bump no longer writes
+  the old `-n_` back and no longer fails with a database deadlock; a move batch is all or nothing.
+- AdForm reference upload: the default row's MC is found after its released version was bumped,
+  and is no longer confused with an Agentic card of the same number.
+
 ## [6.134.0] — 2026-11-25
 
 ### Added

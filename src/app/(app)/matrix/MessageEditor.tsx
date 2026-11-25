@@ -543,7 +543,7 @@ export default function MessageEditor({
     onError: handleWriteError,
   });
 
-  // Setting the card's VERSION (version_no, PMMID -n_; REBUILD_SPEC §21) from
+  // Setting the card's RELEASED VERSION (version_no, PMMID -n_; REBUILD_SPEC §21) from
   // the Naming tab. Its own endpoint, but the same discipline as a save: the
   // committed snapshot's save counter as If-Match, the shared in-flight ref so
   // autosave never fires alongside it on the same If-Match, and the response
@@ -1219,13 +1219,13 @@ function NamingTab({
         edit={version}
       />
       <Field
-        label="Saved changes"
-        hint="How many times this copy was saved. Not the version."
+        label="Saved version"
+        hint="+1 on every save of this copy. Stays in the database, never goes out; not editable."
       >
         <input
           readOnly
           value={message.version}
-          className="message-editor__saved-changes w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-sm text-slate-700"
+          className="message-editor__saved-version w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-sm text-slate-700"
         />
       </Field>
 
@@ -1289,8 +1289,8 @@ function NamingTab({
   );
 }
 
-// The card's VERSION (version_no, the PMMID's -n_; REBUILD_SPEC §21) — not the
-// save counter next to it, and not a variant. Applied with its own button,
+// The card's RELEASED VERSION (version_no, the PMMID's -n_; REBUILD_SPEC §21) —
+// not the saved version (the save counter) next to it, and not a variant. Applied with its own button,
 // never by autosave: it rewrites the PMMID and the trafficking columns, which a
 // live card then has to be re-trafficked with. Reach follows the editor's
 // Global/Local toggle.
@@ -1323,8 +1323,8 @@ function VersionField({
     <div className="message-editor__version-field flex items-start gap-2">
       <div className="min-w-0 flex-1">
         <Field
-          label="Version"
-          hint={`Sets ${reach}. Rebuilds the PMMID (-n_) and the trafficking fields; a live card must be re-trafficked.`}
+          label="Released version"
+          hint={`Goes out in the PMMID (-n_). Sets ${reach}; rebuilds the PMMID and the trafficking fields, and a live card must be re-trafficked.`}
         >
           <input
             type="number"
@@ -1345,7 +1345,7 @@ function VersionField({
         type="button"
         onClick={apply}
         disabled={block !== null}
-        title={block ? VERSION_APPLY_BLOCK_TEXT[block] : `Set version ${target} on ${reach}`}
+        title={block ? VERSION_APPLY_BLOCK_TEXT[block] : `Set released version ${target} on ${reach}`}
         className="message-editor__version-apply toolbar-btn--primary mt-5 shrink-0 rounded bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
       >
         Apply

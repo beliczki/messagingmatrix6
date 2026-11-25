@@ -1222,7 +1222,7 @@ export async function setMessageVersionNo(
     versionNo > MAX_VERSION_NO
   ) {
     throw new MessageError(
-      `the version must be a whole number from 1 to ${MAX_VERSION_NO}`,
+      `the released version must be a whole number from 1 to ${MAX_VERSION_NO}`,
     );
   }
   // This unlocked read only tells us which rows to lock; every decision below
@@ -1268,12 +1268,12 @@ export async function setMessageVersionNo(
     }
     if (!isPlaced(current)) {
       throw new MessageError(
-        "a draft has no cell and no PMMID yet — it starts at version 1 when it is promoted",
+        "a draft has no cell and no PMMID yet — it starts at released version 1 when it is promoted",
       );
     }
     if (current.archivedAt !== null) {
       throw new MessageError(
-        "this card is archived — restore it before changing its version",
+        "this card is archived — restore it before changing its released version",
       );
     }
     const onAxis = await sameAxisAs(clientId, current);

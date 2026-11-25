@@ -1,11 +1,12 @@
-// Set the MC's VERSION (`version_no`, the PMMID's -n_ token; REBUILD_SPEC §21)
+// Set the MC's RELEASED VERSION (`version_no`, the PMMID's -n_ token; REBUILD_SPEC §21)
 // by hand. Its own endpoint, not a PATCH field: the PATCH contract is that the
 // PMMID is never rewritten, and a writable versionNo would let a History
 // restore silently take the card back to an older version.
 //
 // Body: { versionNo: integer ≥ 1, scope: "local" | "global" }. No default
 // scope: Global reaches every audience copy of the card, and that has to be
-// said, not assumed. If-Match carries the save counter (`version`).
+// said, not assumed. If-Match carries the saved version (`version`, the save
+// counter).
 import { NextResponse } from "next/server";
 import {
   MessageError,
@@ -53,7 +54,7 @@ export const POST = withSession<Params>(async ({ req, claims, params }) => {
   const versionNo = body?.versionNo;
   if (typeof versionNo !== "number") {
     return NextResponse.json(
-      { error: "bad_version_no", reason: "versionNo must be a whole number, 1 or more" },
+      { error: "bad_version_no", reason: "versionNo (the released version) must be a whole number, 1 or more" },
       { status: 400 },
     );
   }

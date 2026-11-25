@@ -1,4 +1,4 @@
-// The Naming tab's "Version" Apply: when it may fire and what it sends.
+// The Naming tab's "Released version" Apply: when it may fire and what it sends.
 // The editor serializes every write on one If-Match (the committed snapshot's
 // save counter), so Apply must wait for pending edits and in-flight saves
 // instead of racing them.

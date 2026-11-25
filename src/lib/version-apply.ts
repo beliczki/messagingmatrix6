@@ -1,5 +1,6 @@
-// Setting an MC's VERSION from the editor (REBUILD_SPEC §21): version_no, the
-// PMMID's -n_ token. Pure, so the server entity and the client both use the
+// Setting an MC's RELEASED VERSION from the editor (REBUILD_SPEC §21):
+// version_no, the PMMID's -n_ token. Not the saved version (`version`, the save
+// counter) and not a variant. Pure, so the server entity and the client both use the
 // same scope type and the Naming tab's rules are testable without a DOM.
 
 // "local" = the open audience copy; "global" = every audience copy of the card
@@ -11,7 +12,7 @@ export type VersionScope = "local" | "global";
 // the write fails in the database instead of being refused as a bad value.
 export const MAX_VERSION_NO = 2_147_483_647;
 
-/** A version as typed: a whole number from 1 to MAX_VERSION_NO. Anything else is null. */
+/** A released version as typed: a whole number from 1 to MAX_VERSION_NO. Anything else is null. */
 export function parseVersionNo(raw: string): number | null {
   const t = raw.trim();
   if (!/^\d+$/.test(t)) return null;
@@ -55,8 +56,8 @@ export const VERSION_APPLY_BLOCK_TEXT: Record<VersionApplyBlock, string> = {
   conflict: "Reload the card first",
   busy: "Saving…",
   unsaved: "Save your edits first",
-  invalid: "A version is a whole number, 1 or more",
-  unchanged: "This is the current version",
+  invalid: "A released version is a whole number, 1 or more",
+  unchanged: "This copy already has this released version",
 };
 
 export function versionApplyRequest(o: {

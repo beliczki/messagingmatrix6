@@ -1218,7 +1218,8 @@ Ez a branch a `claude/mc-version-bump-903097`-ből van vágva, és a teljes funk
   3. nit: `MessageEditor.tsx` `global: edit.globalEdit` testvér nélkül is átengedi az Apply-t a saját értéken („(Local)” szöveg, globális kérés, nincs változás); `&& siblingCount > 0` illene a szöveghez.
   4. nit, régi: az `mc_move_batch` leírása szerint „PMMID is preserved”, de a move újragenerálja.
   5. nit: nincs teszt az R5-re és az S4b archivált/`id` tie-breakjére; a `waitForLockWaiter` csak a `fileParallelism: false` miatt biztos.
-- [ ] Robi dönt: az 1. (és a 3.) javítása élesítés előtt ezen a branchen, vagy élesítés így. A 2. külön javítás.
+- [x] **Az 1. lelet javítva** (Robi: „Igen, javítsd előbb”, 2026-11-25). A `moveMessages` UPDATE-jei id-sorrendben futnak (ezek veszik a sorzárat). A terv, ami a variánst osztja, és a válasz maradt a megadott sorrendben. Piros előbb: a `[copy2, primary]` köteg egy Global léptetés ellen `40P01 deadlock detected`-et dobott; most `version_conflict`, semmi nem mozdul, és a léptetés mindkét példányon ott van. Őrző, elsőre zöld: a variánsok (`a`, `b`) és a válasz sorrendje a megadott sorrend. A `rekey.ts` komment és az R7-teszt címe már név szerint sorolja az id-sorrendű írókat („every writer” helyett, mert az `archiveMessages` és a `deleteMessages` még a megadott sorrendben ír: régi testvér, nem javítva). Ellenőrzés: `tsc` 0 hiba; lint 0 hiba, 145 warning; `npm test` 132 fájl, 1252 teszt zöld.
+- [ ] A 2. külön sessionben fut („Topic/audience writes: add CAS on the save counter”, ebből a branchből vágva). A 3–5. nit nincs javítva.
 
 **Nyitott:**
 - [x] **R6** — lefutott Robi go-jára (2026-11-25): 0 sor `version_no < 1`-gyel az élő DB-n, csak olvasó tranzakcióban.

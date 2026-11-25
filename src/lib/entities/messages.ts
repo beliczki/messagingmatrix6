@@ -1777,11 +1777,21 @@ export async function moveMessages(
   // A row that moved on fails the whole batch. The savepoint rolls back the
   // items already written, because the callers' transaction commits whatever
   // this function returns.
+  //
+  // The UPDATEs take the row locks, so they run in id order, like the Global
+  // bump, the Global save and mc_update_batch: a batch written in the order it
+  // was given could hold a higher id while waiting for a lower one such a
+  // writer held, and Postgres would abort one of them (40P01). The plan above
+  // stays in the given order (it decides who gets which variant), and so does
+  // the response.
+  const idOrder = plan
+    .map((_, index) => index)
+    .sort((a, b) => plan[a].source.id - plan[b].source.id);
   let updated: Message[];
   try {
     updated = await db.transaction(async () => {
-      const rows: Message[] = [];
-      for (const p of plan) rows.push(await applyMove(p));
+      const rows: Message[] = new Array(plan.length);
+      for (const index of idOrder) rows[index] = await applyMove(plan[index]);
       return rows;
     });
   } catch (e) {

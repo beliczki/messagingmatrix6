@@ -225,9 +225,63 @@ describe("moveMessages — the If-Match holds until the write", () => {
     expect((await reread(primary.id)).version).toBe(primary.version);
     expect((await reread(second.id)).audience).toBe("aud1");
   });
+
+  it("a batch listing the higher id first meets a Global bump as a conflict, not a deadlock", async () => {
+    // The bump locks the card's copies in id order. A move that wrote in the
+    // order it was given took the higher id first, then waited for the lower
+    // one the bump held, while the bump waited for the higher one: Postgres
+    // aborted one of them with a deadlock (40P01), an error, not an answer.
+    const { primary, copy2 } = await seedCard();
+    expect(copy2.id).toBeGreaterThan(primary.id);
+    await db.insert(audiences).values({ clientId: erste.id, key: "aud3", name: "AUD3", orderIndex: 2, product: "SZK" });
+    const lock = await holdRowLock(primary.id);
+    const move = db.transaction(async () =>
+      moveMessages(
+        erste.id,
+        [
+          { mcLabel: copy2.pmmid!, expectedVersion: copy2.version },
+          { mcLabel: primary.pmmid!, expectedVersion: primary.version },
+        ],
+        "aud3",
+      ),
+    );
+    await waitForLockWaiter();
+    await lock.release(async () => {
+      const bumped = await setMessageVersionNo(erste.id, primary.id, primary.version, 2, "global", null);
+      expect(bumped.ok).toBe(true);
+    });
+    const res = await move;
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.reason).toBe("version_conflict");
+    // All or nothing, and the bump landed on both copies.
+    expect((await reread(primary.id)).audience).toBe("aud1");
+    expect((await reread(copy2.id)).audience).toBe("aud2");
+    for (const id of [primary.id, copy2.id]) {
+      expect((await reread(id)).versionNo).toBe(2);
+    }
+  });
+
+  it("plans the variants and returns the moved rows in the order they were given", async () => {
+    // Both copies of one number land in one cell, so the second one given
+    // gets the next variant. Writing in id order must not change who gets which.
+    const { primary, copy2 } = await seedCard();
+    await db.insert(audiences).values({ clientId: erste.id, key: "aud3", name: "AUD3", orderIndex: 2, product: "SZK" });
+    const res = await moveMessages(
+      erste.id,
+      [
+        { mcLabel: copy2.pmmid!, expectedVersion: copy2.version },
+        { mcLabel: primary.pmmid!, expectedVersion: primary.version },
+      ],
+      "aud3",
+    );
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.updated.map((r) => r.id)).toEqual([copy2.id, primary.id]);
+    expect(res.updated.map((r) => r.variant)).toEqual(["a", "b"]);
+  });
 });
 
-describe("mc_update_batch — writes in id order, like every writer that locks several rows", () => {
+describe("mc_update_batch — writes in id order, like the Global bump and the Global save", () => {
   type Tool = { handler: (args: Record<string, unknown>) => Promise<{ content: { text: string }[]; isError?: boolean }> };
   const batchTool = () =>
     (buildMcpServer({ clientId: erste.id, userId: "u-agent", scope: "full" }) as unknown as {

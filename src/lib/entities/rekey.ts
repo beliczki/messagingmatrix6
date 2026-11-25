@@ -146,10 +146,10 @@ const keyColumn = (dimension: Dimension) =>
 // the topic side too, where the collision is possible.
 //
 // "lock" is for the cascade, inside its transaction: the rows are read under
-// their row locks, in id order like every other writer that locks several
-// messages rows. The cascade rebuilds each PMMID from the row it read, so an
-// unlocked read could be the row before a concurrent version bump, and the
-// rekey would write the old -n_ back. "read" is for the preview, which writes
+// their row locks, in id order like the Global bump, the Global save,
+// mc_update_batch and the move. The cascade rebuilds each PMMID from the row
+// it read, so an unlocked read could be the row before a concurrent version
+// bump, and the rekey would write the old -n_ back. "read" is for the preview, which writes
 // nothing and keeps the matrix order for its sample.
 async function messagesOnKey(
   clientId: number,

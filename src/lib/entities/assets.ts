@@ -70,6 +70,8 @@ export async function updateAsset(
   const current = await getAsset(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
+  // The If-Match is re-checked at the write: a save that committed since the
+  // read above would otherwise be overwritten in silence.
   const [updated] = await db
     .update(assets)
     .set({
@@ -77,8 +79,15 @@ export async function updateAsset(
       version: sql`${assets.version} + 1`,
       updatedAt: nowUtc,
     })
-    .where(and(eq(assets.clientId, clientId), eq(assets.id, id)))
+    .where(
+      and(
+        eq(assets.clientId, clientId),
+        eq(assets.id, id),
+        eq(assets.version, expectedVersion),
+      ),
+    )
     .returning();
+  if (!updated) return { ok: false, current: await getAsset(clientId, id) };
   return { ok: true, row: updated };
 }
 

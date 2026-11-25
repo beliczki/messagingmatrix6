@@ -90,6 +90,8 @@ export async function updateTextFormatting(
   const current = await getTextFormatting(clientId, id);
   if (!current) return { ok: false, current: null };
   if (current.version !== expectedVersion) return { ok: false, current };
+  // The If-Match is re-checked at the write: a save that committed since the
+  // read above would otherwise be overwritten in silence.
   const [updated] = await db
     .update(textFormatting)
     .set({
@@ -98,9 +100,16 @@ export async function updateTextFormatting(
       updatedAt: nowUtc,
     })
     .where(
-      and(eq(textFormatting.clientId, clientId), eq(textFormatting.id, id)),
+      and(
+        eq(textFormatting.clientId, clientId),
+        eq(textFormatting.id, id),
+        eq(textFormatting.version, expectedVersion),
+      ),
     )
     .returning();
+  if (!updated) {
+    return { ok: false, current: await getTextFormatting(clientId, id) };
+  }
   return { ok: true, row: updated };
 }
 

@@ -262,6 +262,42 @@ main {
 #stickerContainer .stickerImageWrapper {display:none;}
 .stickerImage #stickerContainer .stickerImageWrapper {display:block;}
 
+
+/* ---------------------*/
+/* AI label             */
+/* ---------------------*/
+/* As ERSTE_AI_Label in the PSD master: 29px disc, 15px from the top, 14px from
+   the right, 50% opacity, the same on every size (px, not rem). The class
+   names the DISC colour. Neither class = no label. */
+#aiLabel {
+  display: none;
+  position: absolute;
+  top: 15px;
+  right: 14px;
+  width: 29px;
+  height: 29px;
+  border-radius: 50%;
+  opacity: 0.5;
+  pointer-events: none;
+  align-items: center;
+  justify-content: center;
+}
+#aiLabel svg {
+  width: 62%;
+  height: 62%;
+  fill: currentColor;
+}
+.aiLabelWhite #aiLabel {
+  display: flex;
+  background: #fff;
+  color: #000;
+}
+.aiLabelBlack #aiLabel {
+  display: flex;
+  background: #000;
+  color: #fff;
+}
+
 h1,
 h2,
 p {

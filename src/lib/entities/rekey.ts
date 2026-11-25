@@ -334,9 +334,14 @@ export async function rekeyDimension(
   const table = dimension === "topic" ? topics : audiences;
 
   const messageIds: number[] = [];
-  let updatedRow: DimensionRow = current;
 
-  await db.transaction(async () => {
+  // The If-Match holds until the write. Everything above (the new key, the
+  // blockers, `current.key` for the cascade) was worked out from an unlocked
+  // read; this UPDATE is the transaction's first write and lands only on that
+  // same version. When it finds no row, a writer committed in between (a
+  // PATCH, an archive, another rekey): nothing has been written, the MC
+  // cascade never starts, and the rekey answers version_mismatch.
+  const updatedRow = await db.transaction(async () => {
     const [dimRow] = await db
       .update(table)
       .set({
@@ -344,9 +349,15 @@ export async function rekeyDimension(
         version: sql`${table.version} + 1`,
         updatedAt: nowUtc,
       })
-      .where(and(eq(table.clientId, clientId), eq(table.id, id)))
+      .where(
+        and(
+          eq(table.clientId, clientId),
+          eq(table.id, id),
+          eq(table.version, expectedVersion),
+        ),
+      )
       .returning();
-    updatedRow = dimRow;
+    if (!dimRow) return null;
     await writeAudit({
       clientId,
       userId,
@@ -408,7 +419,14 @@ export async function rekeyDimension(
       });
       messageIds.push(before.id);
     }
+    return dimRow;
   });
+  if (!updatedRow) {
+    const now = await getRow(clientId, dimension, id);
+    return now
+      ? { ok: false, reason: "version_mismatch", current: now }
+      : { ok: false, reason: "not_found" };
+  }
 
   broadcast(clientId, {
     entity: dimension === "topic" ? "topics" : "audiences",

@@ -8,6 +8,7 @@ import {
   versionApplyRequest,
   versionCommit,
   saveEditorChanges,
+  autosaveDue,
 } from "@/lib/version-apply";
 
 describe("parseVersionNo", () => {
@@ -204,5 +205,82 @@ describe("saveEditorChanges", () => {
     const r = await saveEditorChanges<Row>({ ...base, payload: {}, versionNo: null, fetch: f.fn });
     expect(f.calls).toHaveLength(0);
     expect(r).toEqual({ ok: true, written: [] });
+  });
+});
+
+describe("autosaveDue", () => {
+  // The rule (Robi, 2026-11-25; REBUILD_SPEC §6.3, Save semantics): after a
+  // failed save, autosave waits until the user changes something, the draft or
+  // the pending released version, or presses Save. The same unchanged save is
+  // not sent again on its own. A conflict stays terminal (Reload only).
+  const draft = { headline: "Új", copy1: "Szöveg", startDate: null as string | null };
+  const base = {
+    autoSave: true,
+    state: "idle" as const,
+    failed: null,
+    draft,
+    payload: { headline: "Új" } as Record<string, unknown>,
+    versionNo: null as number | null,
+  };
+
+  it("fires for a content change", () => {
+    expect(autosaveDue(base)).toBe(true);
+  });
+
+  it("fires for a pending released version alone", () => {
+    expect(autosaveDue({ ...base, payload: {}, versionNo: 3 })).toBe(true);
+  });
+
+  it("does not fire when there is nothing to save", () => {
+    expect(autosaveDue({ ...base, payload: {} })).toBe(false);
+  });
+
+  it("does not fire with Autosave off", () => {
+    expect(autosaveDue({ ...base, autoSave: false })).toBe(false);
+  });
+
+  it("does not fire in a conflict, also after a change", () => {
+    expect(autosaveDue({ ...base, state: "conflict" })).toBe(false);
+  });
+
+  it.each(["saving", "saved"] as const)(
+    "fires for what was typed while the last save ran (%s)",
+    (state) => {
+      expect(autosaveDue({ ...base, state })).toBe(true);
+    },
+  );
+
+  it("does not send the failed save again while nothing changed", () => {
+    // A copy, not the same object: "changed" means a different value.
+    const failed = { draft: { ...draft }, versionNo: null };
+    expect(autosaveDue({ ...base, state: "error", failed })).toBe(false);
+  });
+
+  it("fires once the user changes a field after the failure", () => {
+    const failed = { draft: { ...draft, headline: "Régi" }, versionNo: null };
+    expect(autosaveDue({ ...base, state: "error", failed })).toBe(true);
+  });
+
+  it("fires once the user changes only the pending released version", () => {
+    const failed = { draft: { ...draft }, versionNo: 2 };
+    expect(autosaveDue({ ...base, state: "error", failed, versionNo: 3 })).toBe(true);
+  });
+
+  it("fires once the user drops the pending released version", () => {
+    // Content still unsaved, the version the save failed on no longer pending.
+    const failed = { draft: { ...draft }, versionNo: 2 };
+    expect(autosaveDue({ ...base, state: "error", failed, versionNo: null })).toBe(true);
+  });
+
+  it("does not send the released version again when the content landed and the version failed", () => {
+    // The PATCH stored the content (payload is empty now), the version POST was refused.
+    const failed = { draft: { ...draft }, versionNo: 3 };
+    expect(
+      autosaveDue({ ...base, state: "error", failed, payload: {}, versionNo: 3 }),
+    ).toBe(false);
+  });
+
+  it("waits after an error whose save is not known", () => {
+    expect(autosaveDue({ ...base, state: "error", failed: null })).toBe(false);
   });
 });

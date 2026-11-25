@@ -1612,7 +1612,7 @@ Planning review nem kell (kliens-javítás, nincs séma, auth, deploy vagy depen
 - [ ] `MediaEntityDialog` és `HeaderDetailDialog`: nincs mentés-sorosítás. Ha a felhasználó egy futó mentés közben gépel, a második PATCH ugyanazzal az If-Match-csel megy, és 409-et kaphat a saját mentésére.
 - [ ] `handleWriteError`: egy elhagyott kártya késve érkező hibája (nem 409) „Save failed”-et mutat az éppen nyitott kártyán.
 
-## 2026-11-25 — 6.137.0 deploy (6.135.2 + 6.136.0 + 6.137.0) (Robi: „mehet minor deploy”)
+## 2026-11-25 — 6.137.0 deploy (6.135.2 + 6.136.0 + 6.137.0) (ÉLŐ mindkét tenanton; Robi: „mehet minor deploy”)
 
 **Ami kimegy** (élő: `3480889` = 6.135.1 mindkét tenanton): a `e3e4585` (6.135.2, asset/creative/text-formatting/draft írók CAS), a `9b3524f` (6.136.0, Naming fül: a kiadott verzió a mentéssel megy) és ez az ág (6.137.0, autosave hiba után). Csak `src/`, tesztek, docs: nincs migráció, a lockfile, a `templates/`, a `next.config` és a `deploy/` változatlan a `3480889` óta.
 **Touches:** a három fenti szakasz Touches-a és review-ja.
@@ -1623,8 +1623,10 @@ Planning review nem kell (kliens-javítás, nincs séma, auth, deploy vagy depen
 ### Lépések
 - [x] D1 pre-flight (csak olvasva, Box B): mindkét HEAD `3480889` (6.135.1), 0 tracked módosítás, `templates/` tiszta, nincs `.next-old`/`.next-build`; `mm6-deploy`/`mm6-maint` azonos a repóéval; / 61%, 2261 MB elérhető; pm2 restarts 3/3; error.log 6/9 sor; telekom `TEMPLATES_ROOT` megadva (a deploy nem érinti).
 - [x] D2 helyben: `tsc` 0; lint 0 hiba / 145 warning; `npm test` 134 fájl / 1291 zöld.
-- [ ] D3 merge a main-be (`--no-ff`), push `main`.
-- [ ] D4 `mm6-deploy telekom` + kapu (HEAD, 6.137.0, pm2 online, restart +1, `/login` 200, `/_next/image` 404, error.log változatlan, nincs maradék).
-- [ ] D5 `mm6-deploy erste` (előtte `templates/` tiszta) + ugyanez a kapu.
+- [x] D3 merge a main-be (`--no-ff`, `51b5bae`; a fa azonos a tesztelt `298f6fd`-vel), push `27a935d..51b5bae`. A fő checkout két untracked fájlja (más session munkája) érintetlen és nincs a pushban.
+- [x] D4 `mm6-deploy telekom` (21:40–21:41 UTC): rc 0, `npm ci` nem futott, min. 840 MB elérhető, maint ~1 s. Kapu: HEAD `51b5bae`, 6.137.0, pm2 online, restarts 3→4, `/login` 200 (a publikus is), `/_next/image` 404, error.log 6 sor (változatlan), nincs `.next-old`/`.next-build`, 0 tracked módosítás, külső sablon-ujjlenyomat `74b3c043` (változatlan). Share oldalt nem kértem le (view countot írna).
+- [x] D5 `mm6-deploy erste` (21:42–21:43 UTC; előtte `templates/` tiszta, 0 tracked módosítás): rc 0, `npm ci` nem futott, min. 993 MB elérhető, maint ~1 s. Kapu: HEAD `51b5bae`, 6.137.0, pm2 online, restarts 3→4, `/login` 200 (a publikus is), `/_next/image` 404, error.log 9 sor (változatlan), nincs maradék, `templates/` = `3480889`. A telekom `/login` utána is 200.
+
+**Élő:** 6.137.0 (`51b5bae`) mindkét tenanton, 2026-11-25 21:41 UTC (telekom) / 21:43 UTC (erste). Deploy-logok: `/root/mm6-rollback/d1370-<tenant>-*.log` (+ `.mem`). Böngészős próba az élőn nem volt.
 
 **Rollback:** elbukó build → semmi nem változott, a régi build szolgál ki (`git -C /var/www/mm6-<t> reset --hard 3480889`). Nem jön fel → maint marad, `.next-old` vissza, reset `3480889`, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1` a három merge-re, push, deploy.

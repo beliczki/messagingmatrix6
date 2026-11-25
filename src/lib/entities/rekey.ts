@@ -144,22 +144,37 @@ const keyColumn = (dimension: Dimension) =>
 // draft along and try to regenerate an identity the draft does not have yet.
 // A draft can never match on the audience side (it has none), so this cuts off
 // the topic side too, where the collision is possible.
+//
+// "lock" is for the cascade, inside its transaction: the rows are read under
+// their row locks, in id order like every other writer that locks several
+// messages rows. The cascade rebuilds each PMMID from the row it read, so an
+// unlocked read could be the row before a concurrent version bump, and the
+// rekey would write the old -n_ back. "read" is for the preview, which writes
+// nothing and keeps the matrix order for its sample.
 async function messagesOnKey(
   clientId: number,
   dimension: Dimension,
   key: string,
+  mode: "read" | "lock",
 ): Promise<PlacedMessage[]> {
-  const rows = await db
-    .select()
-    .from(messages)
-    .where(
-      and(
-        eq(messages.clientId, clientId),
-        eq(keyColumn(dimension), key),
-        isNotNull(messages.audience),
-      ),
-    )
-    .orderBy(messages.number, messages.variant);
+  const where = and(
+    eq(messages.clientId, clientId),
+    eq(keyColumn(dimension), key),
+    isNotNull(messages.audience),
+  );
+  const rows =
+    mode === "lock"
+      ? await db
+          .select()
+          .from(messages)
+          .where(where)
+          .orderBy(messages.id)
+          .for("update")
+      : await db
+          .select()
+          .from(messages)
+          .where(where)
+          .orderBy(messages.number, messages.variant);
   return rows.filter(isPlaced);
 }
 
@@ -239,7 +254,7 @@ export async function previewRekey(
   if (!row) return null;
   const generatedKey = await generatedKeyFor(clientId, dimension, row);
   const stale = generatedKey !== row.key;
-  const affected = await messagesOnKey(clientId, dimension, row.key);
+  const affected = await messagesOnKey(clientId, dimension, row.key, "read");
 
   let samplePmmidAfter: string | null = null;
   const sample = affected[0] ?? null;
@@ -345,7 +360,7 @@ export async function rekeyDimension(
 
     // The dimension row is the audience/topic these messages resolve through,
     // so it is passed as the freshly-renamed row rather than re-read by key.
-    const affected = await messagesOnKey(clientId, dimension, current.key);
+    const affected = await messagesOnKey(clientId, dimension, current.key, "lock");
     for (const before of affected) {
       const identity = regeneratedIdentity(
         {

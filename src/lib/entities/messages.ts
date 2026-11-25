@@ -1718,9 +1718,10 @@ export async function moveMessages(
     plan.push({ ...r, number, variant });
   }
 
-  // Apply updates.
-  const updated: Message[] = [];
-  for (const p of plan) {
+  // Each UPDATE re-checks the save counter the pre-pass read: the new PMMID is
+  // built from that read, so a bump (or any save) that landed since would
+  // otherwise be overwritten with the old -n_.
+  const applyMove = async (p: Plan): Promise<Message> => {
     const identity = regeneratedIdentity(
       {
         audience: targetAudienceKey,
@@ -1747,11 +1748,52 @@ export async function moveMessages(
         version: sql`${messages.version} + 1`,
         updatedAt: nowUtc,
       })
-      .where(and(eq(messages.clientId, clientId), eq(messages.id, p.source.id)))
+      .where(
+        and(
+          eq(messages.clientId, clientId),
+          eq(messages.id, p.source.id),
+          eq(messages.version, p.source.version),
+        ),
+      )
       .returning();
-    updated.push(row);
+    if (!row) throw new MoveConflict(p.item.mcLabel, p.source.id);
+    return row;
+  };
+
+  // A row that moved on fails the whole batch. The savepoint rolls back the
+  // items already written, because the callers' transaction commits whatever
+  // this function returns.
+  let updated: Message[];
+  try {
+    updated = await db.transaction(async () => {
+      const rows: Message[] = [];
+      for (const p of plan) rows.push(await applyMove(p));
+      return rows;
+    });
+  } catch (e) {
+    if (!(e instanceof MoveConflict)) throw e;
+    const current = await getMessage(clientId, e.id);
+    if (!current) return { ok: false, reason: "not_found", mcLabel: e.mcLabel };
+    return {
+      ok: false,
+      reason: "version_conflict",
+      mcLabel: e.mcLabel,
+      current,
+    };
   }
   return { ok: true, updated };
+}
+
+// Thrown inside moveMessages' savepoint to roll back a batch whose row moved on
+// between the pre-pass read and its UPDATE; never leaves moveMessages.
+class MoveConflict extends Error {
+  constructor(
+    public mcLabel: string,
+    public id: number,
+  ) {
+    super(`version conflict on ${mcLabel}`);
+    this.name = "MoveConflict";
+  }
 }
 
 export type RemoveItem = { mcLabel: string; expectedVersion: number };

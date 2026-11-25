@@ -15,10 +15,12 @@ import {
   copyMessages,
   createMessage,
   getMessage,
+  moveMessages,
   propagateToSiblings,
   setMessageVersionNo,
   updateMessage,
 } from "@/lib/entities/messages";
+import { rekeyDimension } from "@/lib/entities/rekey";
 import { createTestDb, type TestDb } from "../../helpers/test-db";
 import { holdRowLock, waitForLockWaiter } from "../../helpers/row-lock";
 
@@ -26,6 +28,9 @@ let h: TestDb;
 let erste: { id: number };
 
 const PATTERNS = {
+  // The seeded topic's key ("top1") is not what this pattern produces, so a
+  // rekey of it always has something to do.
+  topicKey: "{{product}}_{{tag4}}",
   pmmid: "a_{{Audience_Key}}-t_{{Topic_Key}}-m_{{Number}}-v_{{Variant}}-n_{{Version}}",
   trafficking: {
     utm_cd26: "{{PMMID}}",
@@ -132,5 +137,91 @@ describe("propagateToSiblings — a Global save reads each copy under its lock",
     expect(after.finalTraffickedUrl).toBe(`${LP2}?utm_cd26=${after.pmmid}`);
     // The audit's `before` is the row as it was when the fan-out wrote it.
     expect(changes[0].before.versionNo).toBe(2);
+  });
+});
+
+describe("rekeyDimension — the cascade reads each MC under its lock", () => {
+  it("a rekey that waited through a version bump keeps the bumped -n_ in the PMMID and utm_cd26", async () => {
+    // The cascade rebuilds every MC's PMMID from the row it read. Read without
+    // the row lock, that row is the one before a concurrent bump, and the
+    // rekey writes the old -n_ back while version_no stays at the new value.
+    const { primary } = await seedCard();
+    const [topic] = await db
+      .update(topics)
+      .set({ tag4: "150e" })
+      .where(eq(topics.key, "top1"))
+      .returning();
+    const lock = await holdRowLock(primary.id);
+    const rekey = rekeyDimension(erste.id, "topic", topic.id, topic.version, null);
+    await waitForLockWaiter();
+    await lock.release(async () => {
+      const bumped = await setMessageVersionNo(erste.id, primary.id, primary.version, 2, "local", null);
+      expect(bumped.ok).toBe(true);
+    });
+    const res = await rekey;
+    expect(res.ok).toBe(true);
+    const after = await reread(primary.id);
+    expect(after.topic).toBe("SZK_150e");
+    expect(after.versionNo).toBe(2);
+    expect(after.pmmid).toBe(`a_aud1-t_SZK_150e-m_${primary.number}-v_a-n_2`);
+    expect(after.utmCd26).toBe(after.pmmid);
+    expect(after.finalTraffickedUrl).toBe(`${LP}?utm_cd26=${after.pmmid}`);
+  });
+});
+
+describe("moveMessages — the If-Match holds until the write", () => {
+  it("a move that waited through a version bump is refused and leaves the bumped card as it is", async () => {
+    // The move checks the If-Match on a read, then rebuilds the PMMID from that
+    // read. A bump landing in between must make the move a version conflict,
+    // not a write of the old -n_ onto the moved card.
+    const { primary } = await seedCard();
+    await db.insert(audiences).values({ clientId: erste.id, key: "aud3", name: "AUD3", orderIndex: 2, product: "SZK" });
+    const lock = await holdRowLock(primary.id);
+    const move = db.transaction(async () =>
+      moveMessages(erste.id, [{ mcLabel: primary.pmmid, expectedVersion: primary.version }], "aud3"),
+    );
+    await waitForLockWaiter();
+    await lock.release(async () => {
+      const bumped = await setMessageVersionNo(erste.id, primary.id, primary.version, 2, "local", null);
+      expect(bumped.ok).toBe(true);
+    });
+    const res = await move;
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.reason).toBe("version_conflict");
+      expect(res.current?.version).toBe(primary.version + 1);
+    }
+    const after = await reread(primary.id);
+    expect(after.audience).toBe("aud1");
+    expect(after.pmmid).toBe(`a_aud1-t_top1-m_${primary.number}-v_a-n_2`);
+    expect(after.utmCd26).toBe(after.pmmid);
+  });
+
+  it("a conflict on a later item rolls back the items already moved", async () => {
+    // All or nothing, as the bulk-move route and mc_move_batch promise.
+    const { primary } = await seedCard();
+    const second = await createMessage(erste.id, { audience: "aud1", topic: "top1", landingUrl: LP });
+    await db.insert(audiences).values({ clientId: erste.id, key: "aud3", name: "AUD3", orderIndex: 2, product: "SZK" });
+    const lock = await holdRowLock(second.id);
+    const move = db.transaction(async () =>
+      moveMessages(
+        erste.id,
+        [
+          { mcLabel: primary.pmmid, expectedVersion: primary.version },
+          { mcLabel: second.pmmid!, expectedVersion: second.version },
+        ],
+        "aud3",
+      ),
+    );
+    await waitForLockWaiter();
+    await lock.release(async () => {
+      const bumped = await setMessageVersionNo(erste.id, second.id, second.version, 2, "local", null);
+      expect(bumped.ok).toBe(true);
+    });
+    const res = await move;
+    expect(res.ok).toBe(false);
+    expect((await reread(primary.id)).audience).toBe("aud1");
+    expect((await reread(primary.id)).version).toBe(primary.version);
+    expect((await reread(second.id)).audience).toBe("aud1");
   });
 });

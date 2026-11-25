@@ -1171,3 +1171,5 @@ Döntés Robié: maradjon, vagy a frame-es layoutban a label beljebb kerüljön 
 
 **Nem része (Robi, 2026-11-25):** MC-k beállítása, deploy, az AdForm DCO-másolat (Drive „AdForm FINAL 2026”) és feltöltés. A box `templates/html` mindkét tenanton egyezett a repóval; egy deploy után a változás a rendereken, a preview-n és a bundle-ön él, a meglévő MC-ken látható változás nélkül.
 **Verzió:** javaslat minor (új választható template-token, látható viselkedés). A pontos szám attól függ, mi landol előbb (a `mc-version-fixes` ág 6.134.0-t javasol). `package.json` és `CHANGELOG.md` érintetlen.
+
+**Javítás (Robi, 2026-11-25: „a 300x250-en túl nagy … 24 px átmérőjű és közelebb a sarokhoz”):** `300x250.css` → `body #aiLabel` 24 px, felülről és jobbról 10 px (a 10 px az én választásom). Előbb piros teszt (+1, összesen 7). Böngészőben mérve: 300x250 = 24×24, 10/10; a többi méret változatlan, 29 px, 15/14. MC332a 300x250-en a label már nem ér a stickerhez.

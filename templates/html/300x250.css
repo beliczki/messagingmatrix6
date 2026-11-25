@@ -49,3 +49,6 @@ body #cardContainer {
 
 .sizebr.br300x250 { display: inline-block; }
 .size-300x250 .text-300x250 {display: inline;}
+
+/* AI label: smaller and closer to the corner on 300x250 (Robi, 2026-11-25) */
+body #aiLabel { top: 10px; right: 10px; width: 24px; height: 24px; }

@@ -5,6 +5,17 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.137.0] — 2026-11-25
+
+### Fixed
+- After a save the server refuses (a bad value, a deleted card), the editor no longer sends the same
+  save again every 400 ms for as long as it is open. It shows "Save failed" and waits until you
+  change something or press Save.
+
+### Changed
+- After a failed save the editor offers Save also with Autosave on, so the same save can be sent
+  again with one click.
+
 ## [6.136.0] — 2026-11-25
 
 ### Changed

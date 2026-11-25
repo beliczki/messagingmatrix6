@@ -135,3 +135,50 @@ export async function saveEditorChanges<Row extends { version: number }>(o: {
 
   return { ok: true, written };
 }
+
+// ── When the editor's autosave fires ─────────────────────────────────────
+// The debounced autosave asks this every time the draft, the pending released
+// version or the save state changes, also when a save has just settled.
+
+export type SaveKind = "idle" | "saving" | "saved" | "error" | "conflict";
+
+/** What one editor save was asked to write: the draft it was computed from and the pending released version. */
+export type SaveAttempt<Draft> = { draft: Draft; versionNo: number | null };
+
+export function autosaveDue<Draft extends Record<string, unknown>>(o: {
+  autoSave: boolean;
+  state: SaveKind;
+  /** The save the error is about; null unless `state` is "error". */
+  failed: SaveAttempt<Draft> | null;
+  draft: Draft;
+  /** The content change: the draft's diff against the stored row. */
+  payload: Record<string, unknown>;
+  /** The pending released version, or null. */
+  versionNo: number | null;
+}): boolean {
+  if (!o.autoSave) return false;
+  // A conflict is terminal: only Reload leaves it (REBUILD_SPEC §6.3).
+  if (o.state === "conflict") return false;
+  // After a failed save, wait for the user: a change to the draft or to the
+  // pending released version, or Save. Sending the same save again would be
+  // refused the same way, every 400 ms, for as long as the editor is open.
+  if (o.state === "error") {
+    if (o.failed === null) return false;
+    if (sameAttempt(o.failed, { draft: o.draft, versionNo: o.versionNo })) return false;
+  }
+  return Object.keys(o.payload).length > 0 || o.versionNo !== null;
+}
+
+// The same values, not the same objects: a field typed and then typed back is
+// the same save. Missing and null are one value, as in the editor's diff.
+function sameAttempt<Draft extends Record<string, unknown>>(
+  a: SaveAttempt<Draft>,
+  b: SaveAttempt<Draft>,
+): boolean {
+  if (a.versionNo !== b.versionNo) return false;
+  const keys = new Set([...Object.keys(a.draft), ...Object.keys(b.draft)]);
+  for (const k of keys) {
+    if ((a.draft[k] ?? null) !== (b.draft[k] ?? null)) return false;
+  }
+  return true;
+}

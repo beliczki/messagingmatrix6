@@ -1536,3 +1536,95 @@ Ami nem változik: a sikeres utak, a route-ok, az MCP-szövegek, a meglévő tes
 
 **Verzió:** `6.135.1` → `6.135.2` (patch: hibajavítás, nincs új route, séma vagy felhasználónak látható funkció). Robi: „Merge + bump” (2026-11-25); `package.json` és `CHANGELOG.md` frissítve, a main-be `--no-ff` merge-dzsel. Push és deploy nincs.
 
+
+## 2026-11-25 — MessageEditor: hiba után az autosave nem küldi újra ugyanazt a mentést (KÉSZ, 6.137.0; Robi: „Igen, mehet”, K1–K3 az ajánlás szerint; „mehet minor deploy”; branch `claude/confident-benz-f82398`, a main `9b3524f`-re rebase-elve)
+
+**A hiba, kódolvasásból (böngészőben nem láttam):** a 400 ms-os autosave effekt (`src/app/(app)/matrix/MessageEditor.tsx`) függőségei között ott a `saveState.kind` és a `save.isPending`. Egy sikertelen mentés `{ kind: "error" }`-t állít, és az `isPending` visszaesik. Az effekt újrafut, a draft még mindig eltér a snapshot-tól, ezért „saving”-et állít, és 400 ms múlva ugyanazt a mentést küldi el. Tartós elutasításnál (400 a content PATCH-en, 404 egy törölt kártyán, 400 a verzió-POST-on) ez kb. 400 ms + RTT-nként ismétlődik, amíg a szerkesztő nyitva van. A „Save failed” csak villan, utána újra „Saving…” látszik. Ma csak a `conflict` állítja meg. A hurok régebbi a `claude/naming-version-save` ágnál: a main-en is megvan a content PATCH-re.
+
+**Mechanizmus egy mondatban:** az effekt a mentés lezárultakor újraélesít, ha a payload piszkos, és nem különbözteti meg a „mentés közben gépelt” változást attól, hogy „ez a mentés már elbukott”.
+
+**Touches:**
+- Komponens: MessageEditor, mentési út (autosave effekt, `handleWriteError`, `SaveState`).
+- Forrás: REBUILD_SPEC §6.3 „Save semantics” (Drive, `mm6-docs/REBUILD_SPEC.md`, a fájl dátuma 2026-11-25). A spec szerint Autosave ON = 400 ms-os debounce PATCH, a `SaveIndicator` sorrendje saving… → Saved ✓ → Save failed ✕ (a szerver hibája a title-ben). A 409 terminális, csak Reload, mert „egy auto-retry” legyőzi az optimista zárat (§6.3, §8.2). §6.3 fejléc: Save és Cancel csak Autosave OFF mellett látszik.
+- **Nincs a dokumentumokban:** hogy hiba után mit tegyen az autosave. Ez új szabály, Robi dönt (K3).
+- Szomszédok, változatlanul: `saveEditorChanges` (`src/lib/version-apply.ts`: PATCH, utána a verzió-POST egy mentésben), a `saveInFlightRef` sorosítás, a stale-tab detektálás (csak idle-ben fut), a szerver.
+- Szemantikai modell nincs, ami lefedné.
+- Testvérek, amiket megnéztem, és **nem** ilyenek: `MediaEntityDialog`, `HeaderDetailDialog` (az effekt deps-e `[draft, snapshot, autoSave]`, hibára nem fut újra, vagyis ott már ma a kívánt viselkedés van), `useRowAutosave` (eseményre ment, nincs effekt), `TextFormattingRuleRow` (hibánál nem csinál semmit, más hiba, lásd lent).
+
+**A szabály (a feladatból; Robi jóváhagyja):** hiba után az autosave addig vár, amíg a felhasználó változtat valamit (a draftot vagy a függő kiadott verziót), vagy megnyomja a Save-et. Ugyanazt a változatlan mentést nem küldi újra. „Változtat” = a draft mezői vagy a függő verzió értékre eltérnek attól, amit az elbukott mentés küldött (nem objektum-azonosság).
+
+**Door:** kétirányú (`git revert`), csak kliens. Blast radius: a MessageEditor autosave-je minden kártyán, minden tenanton. Séma, route és adat nem változik.
+
+**Prediction:**
+- Változik: tartós hibánál egy kérés megy ki, utána „Save failed” marad, amíg a felhasználó nem változtat, vagy nem nyom Save-et. Egy új változtatás pontosan egy új próbát indít.
+- Részleges mentés (a PATCH átment, a verzió-POST elbukott): a tartalom mentve marad, a verzió-POST nem ismétlődik, amíg nincs új változtatás.
+- **Mellékhatás:** egy átmeneti hálózati hiba ma „magától gyógyul”, mert a hurok újraküldi. A javítás után nem: „Save failed” marad, és Autosave ON mellett nincs Save gomb, tehát gépelni kell, vagy Autosave ki → Save (K2).
+- Nem változik: 409 → conflict, csak Reload; a sikeres mentés; a mentés közben gépelt változás a mentés után kimegy; Autosave OFF; a navigáció, a Cancel és a Reload idle-be tesz.
+- Ellenőrzés: unit-teszt (`tests/unit/version-apply.test.ts`). Ismeretlen: a React-ütemezés (az `isPending` és a `saveState` egy renderbe kerül-e). Komponens-harness nincs: a vitest „components” projektje jsdom-mal be van állítva, de nincs `tests/components/` és nincs testing-library. A döntés ettől független, mert állapotmentes függvény.
+
+**Seam:** új tiszta függvény a `src/lib/version-apply.ts`-ben, a `saveEditorChanges` mellett: `autosaveDue({ autoSave, state, failed, draft, payload, versionNo }) → boolean`. A `failed` az elbukott mentés bemenete (`{ draft, versionNo }`, amit a mutáció kapott), a `SaveState` error-ágában tárolva. Az effekt csak ezt kérdezi.
+
+Tesztesetek, a szabályból:
+1. nincs változás (üres payload, nincs függő verzió) → nem
+2. van változás, idle, Autosave ON → igen
+3. Autosave OFF → nem
+4. conflict → nem, akkor sem, ha változott valami
+5. **error, a draft és a verzió ugyanaz, mint az elbukott mentésé → nem** (a hurok)
+6. error, a draft egy mezője eltér az elbukottétól → igen
+7. error, csak a függő verzió tér el → igen
+8. error részleges mentés után (a payload már üres, a függő verzió ugyanaz) → nem
+9. saved vagy saving, és van változás (mentés közben gépelt) → igen
+
+**Szeletek:**
+- [x] **S1 Kiemelés, viselkedés-változás nélkül:** a mai döntés (`conflict` → nem; Autosave OFF → nem; üres payload és nincs függő verzió → nem; különben igen) az `autosaveDue`-ba; az effekt ezt hívja. A fenti tesztek a szabályból: az 5. és a 8. itt **piros**. Ez a hiba parancsa: `npx vitest run tests/unit/version-apply.test.ts`.
+- [x] **S2 Javítás:** az `autosaveDue` a `failed`-del összevet; a `SaveState` error-ága megkapja az elbukott mentést; a `handleWriteError` a mutáció változóit is kapja (`onError(e, change)` és az `onSuccess` `!result.ok` ága). Az effekt deps-ébe az elbukott mentés objektuma kerül (stabil azonosság), nem a teljes `saveState`, különben az effekt saját „saving” állítása render-hurkot csinálna. Zöld.
+- [x] **S3 (K2 = igen):** a Save gomb hibaállapotban Autosave ON mellett is látszik (`~/.agents/standards/ui.md` előtte).
+- [ ] **S4:** tsc, lint, `npm test` (integráció: `docker start mm6-test-pg`); a §6.3 „Save semantics” egy sora a Drive-on (K3 után); review-szakasz; patch bump-javaslat.
+
+**Döntések Robinak (ajánlott válaszokkal):**
+- **K1 — alap.** A javítás a `claude/naming-version-save` ágon (`d00bd5a`, 6.136.0) átírt effektet érinti; a main-ről vágva ütközne. Ajánlott: erre építek, és ha az ág bekerül a main-be, rebase a main-re (triviális). A másik lehetőség: várok a merge-re.
+- **K2 — Save gomb hibánál.** Autosave ON mellett nincs Save gomb, így „Save-et nyom” csak Autosave OFF mellett lehetséges, és egy hálózati hibánál gépelni kell. Ajánlott: hibaállapotban a Save gomb Autosave ON mellett is látszik (egy feltétel a fejlécben, plusz a spec-sor). A másik lehetőség: csak a hurok megy ki, a gomb marad.
+- **K3 — spec.** Az új szabály egy sorban bekerül a §6.3 „Save semantics”-be a Drive-on. Ajánlott: igen.
+
+Planning review nem kell (kliens-javítás, nincs séma, auth, deploy vagy dependency).
+
+### Review (2026-11-25)
+
+**Ami elkészült** (`claude/confident-benz-f82398`; nincs bump, merge, push vagy deploy):
+- `autosaveDue` + `SaveAttempt` (`src/lib/version-apply.ts`): Autosave OFF → nem; conflict → nem; hiba után csak akkor, ha a draft vagy a függő kiadott verzió értékre eltér attól, amit az elbukott mentés küldött; különben akkor, ha van mit menteni.
+- `MessageEditor.tsx`: a `SaveState` error-ága `failed`-et visz (a mutáció bemenete: draft + versionNo); a `handleWriteError` a mutáció változóit is kapja; az effekt az `autosaveDue`-t kérdezi, a deps-ben a `failedSave` (stabil azonosság), nem a teljes `saveState`.
+- K2: a Save gomb hibaállapotban Autosave ON mellett is látszik (meglévő `toolbar-btn--primary`, új blokknév nincs). A Cancel marad csak Autosave OFF mellett.
+- K3: REBUILD_SPEC §6.3 a Drive-on: új „Failed save — no automatic resend” sor a Save semantics alatt, és a fejléc-leírásban a Save-feltétel (2026-11-25, `cmp`-pel ellenőrizve).
+
+**Ellenőrzés:** `npx tsc --noEmit` 0 hiba. `npm run lint` 0 hiba, 145 warning (mint a main-en); a `MessageEditor.tsx` 20 warningja szabályra és üzenetre azonos a HEAD-ével. `tests/unit/version-apply.test.ts` 46/46 zöld; az új 13 tesztből a javítás előtt 3 volt piros (hiba után ugyanaz a mentés; részleges mentés utáni verzió; ismeretlen elbukott mentés). A teljes `npm test` (a `b3397c6` fáján, `mm6-test-pg`-vel): 134 fájl, 1291 teszt zöld.
+**Böngészős próba: nem volt** (a `dev:erste` az élő DB-t írná). A komponenst csak a typecheck, a lint és a tiszta függvény unit-tesztje látta.
+
+**Jóslat vs. eredmény:** bejött: a döntés tisztán kiemelhető, a mai viselkedés a kiemelés után változatlan (a 10 nem-hibaági teszt elsőre zöld). Nem láttam előre: a teljes `saveState` deps-be tétele render-hurkot okozna, mert az effekt minden futáskor új „saving” objektumot állít; ezért kell a külön `failedSave`.
+
+**Maradék, nem javítva:**
+- [ ] Szűk ablak (előtte is megvolt): ha a mentés lezárulta és a React-render közé épp beesik egy korábban élesített 400 ms-os időzítő, egyszer még kimehet ugyanaz a mentés. Hurkot nem okoz: utána a hibaállapot megállítja.
+- [ ] Hibaállapotban a stale-tab detektálás nem fut (csak idle-ben). A következő változtatás a régi If-Match-csel megy, és 409 → conflict, tehát adatvesztés nincs.
+
+**Verzió:** `6.136.0` → `6.137.0` (minor; Robi: „mehet minor deploy”, 2026-11-25). `package.json` kézzel, `CHANGELOG.md` „Fixed” + „Changed”. A code review Robi szavára elmaradt („review skipp just commit”).
+
+**Nyitott, nem ennek a feladatnak a része (kódolvasásból, nem ellenőrizve):**
+- [ ] `TextFormattingRuleRow` (`MessageEditor.tsx`): hibás mentésnél nincs jelzés, a változás csendben elveszhet.
+- [ ] `MediaEntityDialog` és `HeaderDetailDialog`: nincs mentés-sorosítás. Ha a felhasználó egy futó mentés közben gépel, a második PATCH ugyanazzal az If-Match-csel megy, és 409-et kaphat a saját mentésére.
+- [ ] `handleWriteError`: egy elhagyott kártya késve érkező hibája (nem 409) „Save failed”-et mutat az éppen nyitott kártyán.
+
+## 2026-11-25 — 6.137.0 deploy (6.135.2 + 6.136.0 + 6.137.0) (Robi: „mehet minor deploy”)
+
+**Ami kimegy** (élő: `3480889` = 6.135.1 mindkét tenanton): a `e3e4585` (6.135.2, asset/creative/text-formatting/draft írók CAS), a `9b3524f` (6.136.0, Naming fül: a kiadott verzió a mentéssel megy) és ez az ág (6.137.0, autosave hiba után). Csak `src/`, tesztek, docs: nincs migráció, a lockfile, a `templates/`, a `next.config` és a `deploy/` változatlan a `3480889` óta.
+**Touches:** a három fenti szakasz Touches-a és review-ja.
+**Door:** kétirányú (`git revert`, push, deploy). Blast radius: mindkét tenant, minden mentés (szerver: CAS; kliens: MessageEditor).
+**Planning review:** kihagyva, Robi szavára („review skipp just commit”, „mehet minor deploy”), mint a 6.135.1-nél.
+**Jóslat:** a sikeres utak változatlanok; `npm ci` nem fut; maint ~1 s tenantonként; restart +1.
+
+### Lépések
+- [x] D1 pre-flight (csak olvasva, Box B): mindkét HEAD `3480889` (6.135.1), 0 tracked módosítás, `templates/` tiszta, nincs `.next-old`/`.next-build`; `mm6-deploy`/`mm6-maint` azonos a repóéval; / 61%, 2261 MB elérhető; pm2 restarts 3/3; error.log 6/9 sor; telekom `TEMPLATES_ROOT` megadva (a deploy nem érinti).
+- [x] D2 helyben: `tsc` 0; lint 0 hiba / 145 warning; `npm test` 134 fájl / 1291 zöld.
+- [ ] D3 merge a main-be (`--no-ff`), push `main`.
+- [ ] D4 `mm6-deploy telekom` + kapu (HEAD, 6.137.0, pm2 online, restart +1, `/login` 200, `/_next/image` 404, error.log változatlan, nincs maradék).
+- [ ] D5 `mm6-deploy erste` (előtte `templates/` tiszta) + ugyanez a kapu.
+
+**Rollback:** elbukó build → semmi nem változott, a régi build szolgál ki (`git -C /var/www/mm6-<t> reset --hard 3480889`). Nem jön fel → maint marad, `.next-old` vissza, reset `3480889`, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1` a három merge-re, push, deploy.

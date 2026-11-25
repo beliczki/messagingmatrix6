@@ -14,7 +14,12 @@ import {
 import PreviewPane, { type PreviewBg } from "../_components/PreviewPane";
 import { PackagePoster } from "../_components/Html5PackageFrame";
 import { creativeMediaKind } from "@/lib/creative-media-kind";
-import { saveEditorChanges, versionCommit } from "@/lib/version-apply";
+import {
+  autosaveDue,
+  saveEditorChanges,
+  versionCommit,
+  type SaveAttempt,
+} from "@/lib/version-apply";
 import { templateMetaFor } from "../_components/MatrixIframeTile";
 import ModalBackdrop from "../_components/ModalBackdrop";
 import EntityHistoryDrawer from "../_components/EntityHistoryDrawer";
@@ -208,12 +213,21 @@ type SaveState =
   | { kind: "idle" }
   | { kind: "saving" }
   | { kind: "saved" }
-  | { kind: "error"; message: string }
+  // `failed` is what the refused save sent. Autosave does not send it again:
+  // it waits for a change to the draft or the pending released version, or
+  // for Save (autosaveDue).
+  | { kind: "error"; message: string; failed: SaveAttempt<EditableFields> }
   // Conflict is terminal + blocking: autosave is paused and the only way out
   // is an explicit reload to `serverRow`. We never rebase silently — doing so
   // would let the stale draft re-save with the fresh version and clobber the
   // other editor's work.
   | { kind: "conflict"; serverRow: EditableMessage };
+
+// One save's input: the content diff it sends, and the draft and pending
+// released version it was made from (kept on a failure as `failed`).
+type SaveChange = SaveAttempt<EditableFields> & {
+  payload: Partial<EditableFields>;
+};
 
 export default function MessageEditor({
   open,
@@ -469,7 +483,7 @@ export default function MessageEditor({
     }, 1500);
   }
 
-  function handleWriteError(e: Error) {
+  function handleWriteError(e: Error, change: SaveChange) {
     if (e instanceof VersionMismatchError) {
       // A conflict on a row we already navigated away from is not this
       // editor's conflict — blocking the card now open on it would be wrong.
@@ -478,7 +492,11 @@ export default function MessageEditor({
       // must explicitly reload (reload-only conflict resolution).
       setSaveState({ kind: "conflict", serverRow: e.current });
     } else {
-      setSaveState({ kind: "error", message: e.message });
+      setSaveState({
+        kind: "error",
+        message: e.message,
+        failed: { draft: change.draft, versionNo: change.versionNo },
+      });
     }
   }
 
@@ -499,10 +517,7 @@ export default function MessageEditor({
     onSettled: () => {
       saveInFlightRef.current = false;
     },
-    mutationFn: async (change: {
-      payload: Partial<EditableFields>;
-      versionNo: number | null;
-    }) => {
+    mutationFn: async (change: SaveChange) => {
       if (!committedSnapshot) throw new Error("no snapshot");
       return saveEditorChanges<Message>({
         id: committedSnapshot.id,
@@ -542,6 +557,7 @@ export default function MessageEditor({
           "conflict" in result
             ? new VersionMismatchError(result.conflict)
             : new Error(result.error),
+          change,
         );
         return;
       }
@@ -557,31 +573,39 @@ export default function MessageEditor({
       }
       markSaved();
     },
-    onError: handleWriteError,
+    onError: (e, change) => handleWriteError(e, change),
   });
 
   // Auto-save on draft changes — 400ms debounce. Disabled when autoSave=false.
+  // Whether a save is due — Autosave off, a conflict, nothing to save, or a
+  // failed save with nothing changed since — is autosaveDue's rule.
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Its own dep, not the whole saveState: this effect sets a fresh
+  // { kind: "saving" } on every run, which would re-run it without end.
+  const failedSave = saveState.kind === "error" ? saveState.failed : null;
   useEffect(() => {
-    // Conflict is blocking — no save fires until the user reloads.
-    if (saveState.kind === "conflict") {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      return;
-    }
-    if (!autoSave) {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      return;
-    }
     if (!draft || !committedSnapshot) return;
     const payload = diffPayload(toEditable(committedSnapshot), draft);
-    if (Object.keys(payload).length === 0 && pendingVersionNo === null) return;
+    if (
+      !autosaveDue({
+        autoSave,
+        state: saveState.kind,
+        failed: failedSave,
+        draft,
+        payload,
+        versionNo: pendingVersionNo,
+      })
+    ) {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      return;
+    }
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setSaveState({ kind: "saving" });
     debounceRef.current = setTimeout(() => {
       // In-flight → skip; when that save settles, isPending flips and this
       // effect re-runs against the fresh snapshot, re-arming with the drift.
       if (saveInFlightRef.current) return;
-      save.mutate({ payload, versionNo: pendingVersionNo });
+      save.mutate({ payload, versionNo: pendingVersionNo, draft });
     }, 400);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -592,6 +616,7 @@ export default function MessageEditor({
     pendingVersionNo,
     autoSave,
     saveState.kind,
+    failedSave,
     save.isPending,
   ]);
 
@@ -631,7 +656,7 @@ export default function MessageEditor({
     if (saveInFlightRef.current) return;
     const payload = diffPayload(toEditable(committedSnapshot), draft);
     setSaveState({ kind: "saving" });
-    save.mutate({ payload, versionNo: pendingVersionNo });
+    save.mutate({ payload, versionNo: pendingVersionNo, draft });
   }
 
   function manualCancel() {
@@ -817,27 +842,29 @@ export default function MessageEditor({
             {!autoSave && isDirty ? (
               <span className="message-editor__modified-tag text-xs text-amber-600">modified</span>
             ) : null}
+            {/* After a failed save Autosave waits for a change, so Save is
+                also offered with Autosave on: it sends the same save again. */}
+            {!autoSave || saveState.kind === "error" ? (
+              <button
+                onClick={manualSave}
+                disabled={
+                  !isDirty ||
+                  saveState.kind === "saving" ||
+                  saveState.kind === "conflict"
+                }
+                className="toolbar-btn--primary rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Save
+              </button>
+            ) : null}
             {!autoSave ? (
-              <>
-                <button
-                  onClick={manualSave}
-                  disabled={
-                    !isDirty ||
-                    saveState.kind === "saving" ||
-                    saveState.kind === "conflict"
-                  }
-                  className="toolbar-btn--primary rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Save
-                </button>
-                <button
-                  onClick={manualCancel}
-                  disabled={!isDirty || saveState.kind === "saving"}
-                  className="toolbar-btn rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Cancel
-                </button>
-              </>
+              <button
+                onClick={manualCancel}
+                disabled={!isDirty || saveState.kind === "saving"}
+                className="toolbar-btn rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Cancel
+              </button>
             ) : null}
             <button
               onClick={onClose}

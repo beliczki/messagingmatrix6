@@ -1339,7 +1339,7 @@ Forrás: a `claude/mc-version-fixes-9f2cb2` független review-ja (2026-11-25), s
 
 **Verzió:** `6.135.1` (patch), Robi go-jára (2026-11-25: „Igen, merge + 6.135.1”): `package.json` kézzel, `CHANGELOG.md` „Fixed”, a lockfile érintetlen. A main-be merge-ölve; push és deploy nincs, az Robi go-ja.
 
-## 2026-11-25 — 6.135.1 deploy (MC released version + topic/audience CAS) (Robi: „mehet most egy deploy”, „mehet egyből a deploy”)
+## 2026-11-25 — 6.135.1 deploy (MC released version + topic/audience CAS) (ÉLŐ mindkét tenanton; Robi: „mehet most egy deploy”, „mehet egyből a deploy”)
 
 **Ami kimegy** (élő: `a01bdf1` = 6.134.0 mindkét tenanton): a `02958d3` (6.135.0, MC released version, R1–R7, S4b, move id-sorrend) és az `523bb2c` (6.135.1, topic/audience CAS) merge. Csak `src/`, tesztek, docs: nincs migráció, a lockfile változatlan (`npm ci` nem fut), a `templates/`, a `next.config` és a `deploy/` változatlan.
 **Touches:** a két fenti szakasz („MC verzió …”, „Topic/audience írók …”); onnan a Touches, a spec-hivatkozások és a review-k.
@@ -1349,8 +1349,10 @@ Forrás: a `claude/mc-version-fixes-9f2cb2` független review-ja (2026-11-25), s
 
 ### Lépések
 - [x] D1 pre-flight (csak olvasva, Box B): mindkét HEAD `a01bdf1`, 0 tracked módosítás, `templates/` tiszta; stamp = lockfile sha (`7138f573…`); a telepített `mm6-deploy`/`mm6-maint` azonos a repóéval; / 61%, 2347 MB elérhető; pm2 restarts 2/2; error.log 6/9 sor; telekom külső sablon-fingerprint `74b3c043`.
-- [ ] D2 push `main`.
-- [ ] D3 `mm6-deploy telekom` + kapu: DEPLOY.md „After”, az új route 401, a külső sablon-fingerprint változatlan.
-- [ ] D4 `mm6-deploy erste` + ugyanez a kapu.
+- [x] D2 push `main` (`3480889`). Helyben a main HEAD-en: `tsc` 0 hiba; lint 0 hiba, 145 warning; `npm test` 133 fájl, 1257 teszt zöld (a nem a miénk, untracked `request-body-limit.test.ts` kizárva).
+- [x] D3 `mm6-deploy telekom` (20:04–20:06 UTC): rc 0, `npm ci` nem futott, min. 1022 MB elérhető, maint ~1 s. Kapu: HEAD `3480889`, 6.135.1, pm2 online, restarts 2→3, `/login` 200, `POST /api/messages/1/version` session nélkül 401, `/_next/image` 404, error.log 6 sor (változatlan), nincs `.next-old`/`.next-build`, 0 tracked módosítás, külső sablon-fingerprint `74b3c043` (változatlan). Share oldalt nem kértem le (view countot írna; ez a kiadás nem érinti).
+- [x] D4 `mm6-deploy erste` (20:06–20:08 UTC; előtte `templates/` tiszta, 0 tracked módosítás): rc 0, `npm ci` nem futott, min. 879 MB elérhető, maint ~1 s. Kapu: HEAD `3480889`, 6.135.1, pm2 online, restarts 2→3, `/login` 200, az új route 401, `/_next/image` 404, error.log 9 sor (változatlan), nincs `.next-old`/`.next-build`, `templates/` = `a01bdf1`. A telekom `/login` utána is 200.
+
+**Élő:** 6.135.1 (`3480889`) mindkét tenanton, 2026-11-25 20:06 UTC (telekom) / 20:08 UTC (erste). Deploy-logok: `/root/mm6-rollback/d1351-<tenant>-*.log`. Nyitott marad: élő Erste-léptetés előtt az AdForm teszt line item (Robi).
 
 **Rollback:** elbukó build → `git -C /var/www/mm6-<t> reset --hard a01bdf1`. Nem jön fel → maint marad, `.next-old` vissza, ugyanez a reset, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1 523bb2c`, `git revert -m 1 02958d3`, push, deploy.

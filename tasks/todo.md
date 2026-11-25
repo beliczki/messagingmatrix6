@@ -1390,7 +1390,7 @@ Robi visszajelzése az élő 6.135.1-en (MC332a, Global bekapcsolva), az mm6-sta
 - **K4 — csak olvasható mezők.** A Saved version `disabled` mező lesz, ugyanazzal a mintával, mint az Audience key és a Topic key: `text-slate-500`, `disabled:cursor-not-allowed`, nem fókuszálható.
   - Testvér ugyanazzal a hibával: az **MC Number** és a **Variant** is `readOnly` + világos osztályok, így sötét témában fókusszal ugyanúgy szerkeszthetőnek látszik.
   - Ajánlott: mindhárom kapja meg.
-- **K5 — verzió.** Felhasználónak látható viselkedés-változás, ezért a heurisztika szerint minor (`6.135.1` → `6.136.0`). A státusz-session patch-et javasolt (`6.135.2`). Robi dönt.
+- **K5 — verzió.** Felhasználónak látható viselkedés-változás, ezért a heurisztika szerint minor (`6.135.1` → `6.136.0`). Javaslat: minor `6.136.0`; a másik lehetőség a patch `6.135.2`. Robi dönt.
 
 **Prediction:**
 - Nincs Apply gomb.

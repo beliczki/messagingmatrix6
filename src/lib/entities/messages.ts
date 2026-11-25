@@ -34,6 +34,7 @@ import { MC_LEVEL_DRAFT_FIELDS } from "@/lib/draft-intake";
 import { BIRTH_STATUS, PROMOTED_STATUS, isMeasurementLocked } from "@/lib/mc-status";
 import { writeAudit } from "@/lib/audit";
 import { broadcast } from "@/lib/events";
+import type { VersionScope } from "@/lib/version-apply";
 
 // A row that occupies a cell. DRAFT rows are the only audience-less ones (DB
 // check `messages_draft_has_no_audience`) and a placed row always carries a
@@ -1193,7 +1194,7 @@ export async function propagateToSiblings(
 // and the audit entries are written in the same transaction. The broadcast goes
 // out after the commit.
 
-export type VersionScope = "local" | "global";
+export type { VersionScope };
 
 export type SetVersionResult =
   | {

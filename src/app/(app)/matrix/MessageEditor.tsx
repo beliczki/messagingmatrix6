@@ -14,6 +14,12 @@ import {
 import PreviewPane, { type PreviewBg } from "../_components/PreviewPane";
 import { PackagePoster } from "../_components/Html5PackageFrame";
 import { creativeMediaKind } from "@/lib/creative-media-kind";
+import {
+  parseVersionNo,
+  VERSION_APPLY_BLOCK_TEXT,
+  versionApplyBlock,
+  versionApplyRequest,
+} from "@/lib/version-apply";
 import { templateMetaFor } from "../_components/MatrixIframeTile";
 import ModalBackdrop from "../_components/ModalBackdrop";
 import EntityHistoryDrawer from "../_components/EntityHistoryDrawer";
@@ -389,6 +395,90 @@ export default function MessageEditor({
   );
 
   const qc = useQueryClient();
+
+  // A write (save or version Apply) came back with the stored row and, under
+  // Global, the other audience copies it changed.
+  function adoptWrittenRows(row: Message, siblings: Message[]) {
+    // Bump our snapshot so the next save uses the new version — but ONLY
+    // while the editor is still on the row this save targeted. If the user
+    // stepped to another card while it was in flight, rebasing here would
+    // pull the snapshot back to the PREVIOUS card while `draft` already
+    // holds the new one; the next autosave would diff those two and write
+    // the new card's entire content onto the previous card's row (and,
+    // under global edit, onto all of its audience copies).
+    if (openRowIdRef.current === row.id) {
+      setCommittedSnapshot(row);
+    }
+    // Patch the saved row — and, under global edit, the fanned-out sibling
+    // rows the server returns — straight into the grid cache so reopening
+    // this card (and every other audience copy's status dot) reflects the
+    // persisted values immediately. We patch the known-changed rows instead
+    // of invalidating: a full /api/messages refetch is heavy (every row)
+    // and its latency left the sibling dots stale for seconds. The response
+    // carries recomputed UTM/Final-URL fields too, so those propagate as
+    // well. setQueriesData (prefix match) because the matrix key is
+    // parameterized by its showArchived toggle — an exact ["messages"] key
+    // would silently no-op there.
+    const byId = new Map<number, Message>();
+    byId.set(row.id, row);
+    for (const s of siblings) byId.set(s.id, s);
+    qc.setQueriesData<{ messages: Message[] }>(
+      { queryKey: ["messages"] },
+      (prev) =>
+        prev
+          ? {
+              messages: prev.messages.map((m) => byId.get(m.id) ?? m),
+            }
+          : prev,
+    );
+    // The drafts page keeps its rows under a DIFFERENT key — ["drafts"],
+    // in an envelope that also carries the creative matches — so patching
+    // only ["messages"] left that copy holding the pre-save row.
+    //
+    // That was invisible until the row being edited changed, and then it
+    // undid the save on screen: this editor re-seeds `draft` from
+    // `message` whenever the open row changes, and `message` is resolved
+    // out of that cached list. Stepping to another variant and back (or
+    // using the ‹ › stepper) therefore reloaded the PRE-save values over
+    // the ones just written, on any field — a reload was the only way to
+    // see the truth. The row is in hand here, so patch it; the rest of the
+    // envelope (`matches`, keyed by MC and unaffected by a content save)
+    // is carried through untouched.
+    qc.setQueriesData<{ drafts: EditableMessage[] }>(
+      { queryKey: ["drafts"] },
+      (prev) =>
+        prev
+          ? {
+              ...prev,
+              drafts: prev.drafts.map(
+                (m) => (byId.get(m.id) as EditableMessage | undefined) ?? m,
+              ),
+            }
+          : prev,
+    );
+  }
+
+  function markSaved() {
+    setSaveState({ kind: "saved" });
+    // Clear "saved" indicator after 1.5s.
+    setTimeout(() => {
+      setSaveState((s) => (s.kind === "saved" ? { kind: "idle" } : s));
+    }, 1500);
+  }
+
+  function handleWriteError(e: Error) {
+    if (e instanceof VersionMismatchError) {
+      // A conflict on a row we already navigated away from is not this
+      // editor's conflict — blocking the card now open on it would be wrong.
+      if (openRowIdRef.current !== e.current.id) return;
+      // Hold the server row but do NOT rebase `committedSnapshot` — the user
+      // must explicitly reload (reload-only conflict resolution).
+      setSaveState({ kind: "conflict", serverRow: e.current });
+    } else {
+      setSaveState({ kind: "error", message: e.message });
+    }
+  }
+
   // Saves are strictly serialized: a second PATCH while one is in flight
   // would carry the same If-Match (committedSnapshot only advances in
   // onSuccess) and 409 against our own just-landed save — the editor then
@@ -433,66 +523,7 @@ export default function MessageEditor({
       return { message: body.message, siblings: body.siblings ?? [] };
     },
     onSuccess: (saved, payload) => {
-      if (saved) {
-        // Bump our snapshot so the next save uses the new version — but ONLY
-        // while the editor is still on the row this save targeted. If the user
-        // stepped to another card while it was in flight, rebasing here would
-        // pull the snapshot back to the PREVIOUS card while `draft` already
-        // holds the new one; the next autosave would diff those two and write
-        // the new card's entire content onto the previous card's row (and,
-        // under global edit, onto all of its audience copies).
-        if (openRowIdRef.current === saved.message.id) {
-          setCommittedSnapshot(saved.message);
-        }
-        // Patch the saved row — and, under global edit, the fanned-out sibling
-        // rows the server returns — straight into the grid cache so reopening
-        // this card (and every other audience copy's status dot) reflects the
-        // persisted values immediately. We patch the known-changed rows instead
-        // of invalidating: a full /api/messages refetch is heavy (every row)
-        // and its latency left the sibling dots stale for seconds. The response
-        // carries recomputed UTM/Final-URL fields too, so those propagate as
-        // well. setQueriesData (prefix match) because the matrix key is
-        // parameterized by its showArchived toggle — an exact ["messages"] key
-        // would silently no-op there.
-        const byId = new Map<number, Message>();
-        byId.set(saved.message.id, saved.message);
-        for (const s of saved.siblings) byId.set(s.id, s);
-        qc.setQueriesData<{ messages: Message[] }>(
-          { queryKey: ["messages"] },
-          (prev) =>
-            prev
-              ? {
-                  messages: prev.messages.map((m) => byId.get(m.id) ?? m),
-                }
-              : prev,
-        );
-        // The drafts page keeps its rows under a DIFFERENT key — ["drafts"],
-        // in an envelope that also carries the creative matches — so patching
-        // only ["messages"] left that copy holding the pre-save row.
-        //
-        // That was invisible until the row being edited changed, and then it
-        // undid the save on screen: this editor re-seeds `draft` from
-        // `message` whenever the open row changes, and `message` is resolved
-        // out of that cached list. Stepping to another variant and back (or
-        // using the ‹ › stepper) therefore reloaded the PRE-save values over
-        // the ones just written, on any field — a reload was the only way to
-        // see the truth. The row is in hand here, so patch it; the rest of the
-        // envelope (`matches`, keyed by MC and unaffected by a content save)
-        // is carried through untouched.
-        qc.setQueriesData<{ drafts: EditableMessage[] }>(
-          { queryKey: ["drafts"] },
-          (prev) =>
-            prev
-              ? {
-                  ...prev,
-                  drafts: prev.drafts.map(
-                    (m) =>
-                      (byId.get(m.id) as EditableMessage | undefined) ?? m,
-                  ),
-                }
-              : prev,
-        );
-      }
+      if (saved) adoptWrittenRows(saved.message, saved.siblings);
       // The intake fields fan out SERVER-side to every other draft variant of
       // the number (a brief belongs to the MC, not to the variant), and those
       // rows are not in the response — patching only what came back left the
@@ -507,24 +538,51 @@ export default function MessageEditor({
       ) {
         void qc.invalidateQueries({ queryKey: ["drafts"] });
       }
-      setSaveState({ kind: "saved" });
-      // Clear "saved" indicator after 1.5s.
-      setTimeout(() => {
-        setSaveState((s) => (s.kind === "saved" ? { kind: "idle" } : s));
-      }, 1500);
+      markSaved();
     },
-    onError: (e) => {
-      if (e instanceof VersionMismatchError) {
-        // A conflict on a row we already navigated away from is not this
-        // editor's conflict — blocking the card now open on it would be wrong.
-        if (openRowIdRef.current !== e.current.id) return;
-        // Hold the server row but do NOT rebase `committedSnapshot` — the user
-        // must explicitly reload (reload-only conflict resolution).
-        setSaveState({ kind: "conflict", serverRow: e.current });
-      } else {
-        setSaveState({ kind: "error", message: (e as Error).message });
+    onError: handleWriteError,
+  });
+
+  // Setting the card's VERSION (version_no, PMMID -n_; REBUILD_SPEC §21) from
+  // the Naming tab. Its own endpoint, but the same discipline as a save: the
+  // committed snapshot's save counter as If-Match, the shared in-flight ref so
+  // autosave never fires alongside it on the same If-Match, and the response
+  // adopted only while the editor is still on that card. The Naming tab keeps
+  // Apply disabled while edits are unsaved, so those save first and survive.
+  // Scope follows the editor's Global/Local toggle, exactly as a save does.
+  const setVersion = useMutation({
+    onMutate: () => {
+      saveInFlightRef.current = true;
+      // Not idle, so the stale-tab check below cannot read the broadcast
+      // refetch of our own bump as a peer edit.
+      setSaveState({ kind: "saving" });
+    },
+    onSettled: () => {
+      saveInFlightRef.current = false;
+    },
+    mutationFn: async (versionNo: number) => {
+      if (!committedSnapshot) throw new Error("no snapshot");
+      const { url, init } = versionApplyRequest({
+        id: committedSnapshot.id,
+        expectedVersion: committedSnapshot.version,
+        versionNo,
+        global: globalEdit,
+      });
+      const r = await fetch(url, init);
+      if (r.status === 409) {
+        const body = (await r.json()) as { currentRow: Message };
+        throw new VersionMismatchError(body.currentRow);
       }
+      if (!r.ok) {
+        throw new Error(await r.text());
+      }
+      return (await r.json()) as { message: Message; siblings: Message[] };
     },
+    onSuccess: (saved) => {
+      adoptWrittenRows(saved.message, saved.siblings);
+      markSaved();
+    },
+    onError: handleWriteError,
   });
 
   // Auto-save on draft changes — 400ms debounce. Disabled when autoSave=false.
@@ -553,7 +611,14 @@ export default function MessageEditor({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [draft, committedSnapshot, autoSave, saveState.kind, save.isPending]);
+  }, [
+    draft,
+    committedSnapshot,
+    autoSave,
+    saveState.kind,
+    save.isPending,
+    setVersion.isPending,
+  ]);
 
   const isDirty = useMemo(() => {
     if (!draft || !committedSnapshot) return false;
@@ -881,7 +946,21 @@ export default function MessageEditor({
 
             <div className="message-editor__tab-content flex-1 overflow-y-auto px-5 pb-80 pt-4">
               {tab === "naming" && message.audience !== null ? (
-                <NamingTab message={message} aud={aud} top={top} draft={draft} setDraft={setDraft} />
+                <NamingTab
+                  message={message}
+                  aud={aud}
+                  top={top}
+                  draft={draft}
+                  setDraft={setDraft}
+                  version={{
+                    globalEdit,
+                    siblingCount,
+                    isDirty,
+                    busy: save.isPending || setVersion.isPending,
+                    conflict: saveState.kind === "conflict",
+                    onApply: (versionNo) => setVersion.mutate(versionNo),
+                  }}
+                />
               ) : null}
               {tab === "content" ? (
                 <ContentTab
@@ -1085,18 +1164,29 @@ function TabBtn({
   );
 }
 
+type VersionEdit = {
+  globalEdit: boolean;
+  siblingCount: number;
+  isDirty: boolean;
+  busy: boolean;
+  conflict: boolean;
+  onApply: (versionNo: number) => void;
+};
+
 function NamingTab({
   message,
   aud,
   top,
   draft,
   setDraft,
+  version,
 }: {
   message: Message;
   aud: Audience | undefined;
   top: Topic | undefined;
   draft: EditableFields;
   setDraft: SetDraft;
+  version: VersionEdit;
 }) {
   return (
     <div className="message-editor-tab message-editor-tab--naming form-grid grid grid-cols-2 gap-x-4">
@@ -1112,6 +1202,25 @@ function NamingTab({
           readOnly
           value={message.variant}
           className="w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-sm text-slate-700"
+        />
+      </Field>
+
+      {/* Keyed by card and stored version: a value typed but not applied must
+          not follow the user to the next card, and after an Apply or a peer's
+          change the field starts again from what is stored. */}
+      <VersionField
+        key={`${message.id}:${message.versionNo}`}
+        current={message.versionNo}
+        edit={version}
+      />
+      <Field
+        label="Saved changes"
+        hint="How many times this copy was saved. Not the version."
+      >
+        <input
+          readOnly
+          value={message.version}
+          className="message-editor__saved-changes w-full rounded-md border border-slate-200 bg-slate-50 px-2 py-1.5 font-mono text-sm text-slate-700"
         />
       </Field>
 
@@ -1171,6 +1280,70 @@ function NamingTab({
 
       <EntityBlock title="Audience properties" rows={audienceRows(aud)} />
       <EntityBlock title="Topic properties" rows={topicRows(top)} />
+    </div>
+  );
+}
+
+// The card's VERSION (version_no, the PMMID's -n_; REBUILD_SPEC §21) — not the
+// save counter next to it, and not a variant. Applied with its own button,
+// never by autosave: it rewrites the PMMID and the trafficking columns, which a
+// live card then has to be re-trafficked with. Reach follows the editor's
+// Global/Local toggle.
+function VersionField({
+  current,
+  edit,
+}: {
+  current: number;
+  edit: VersionEdit;
+}) {
+  const [raw, setRaw] = useState(String(current));
+  const block = versionApplyBlock({
+    raw,
+    current,
+    isDirty: edit.isDirty,
+    busy: edit.busy,
+    conflict: edit.conflict,
+  });
+  const target = parseVersionNo(raw);
+  function apply() {
+    if (block === null && target !== null) edit.onApply(target);
+  }
+  const others = edit.siblingCount;
+  const reach =
+    edit.globalEdit && others > 0
+      ? `this copy and its ${others} other audience ${others === 1 ? "copy" : "copies"} (Global)`
+      : "this audience copy only (Local)";
+  return (
+    <div className="message-editor__version-field flex items-start gap-2">
+      <div className="min-w-0 flex-1">
+        <Field
+          label="Version"
+          hint={`Sets ${reach}. Rebuilds the PMMID (-n_) and the trafficking fields; a live card must be re-trafficked.`}
+        >
+          <input
+            type="number"
+            min={1}
+            step={1}
+            inputMode="numeric"
+            value={raw}
+            onChange={(e) => setRaw(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") apply();
+            }}
+            className="message-editor__version-input w-full rounded-md border border-slate-300 px-2 py-1.5 font-mono text-sm focus:border-slate-500 focus:outline-none"
+          />
+        </Field>
+      </div>
+      {/* Outside the Field: its <label> must not wrap a button. */}
+      <button
+        type="button"
+        onClick={apply}
+        disabled={block !== null}
+        title={block ? VERSION_APPLY_BLOCK_TEXT[block] : `Set version ${target} on ${reach}`}
+        className="message-editor__version-apply toolbar-btn--primary mt-5 shrink-0 rounded bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        Apply
+      </button>
     </div>
   );
 }

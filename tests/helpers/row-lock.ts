@@ -1,8 +1,9 @@
 // Deterministic interleaving for write-race tests.
 //
-// `holdRowLock` takes a row lock on one `messages` row in its own transaction
-// and keeps it until `release(mutate)` runs; `mutate` executes inside that
-// transaction, so the competing writer sees its effect only after the commit.
+// `holdRowLock` takes a row lock on one row (a `messages` row unless another
+// table is named) in its own transaction and keeps it until `release(mutate)`
+// runs; `mutate` executes inside that transaction, so the competing writer
+// sees its effect only after the commit.
 // `waitForLockWaiter` returns once another backend is blocked on a lock - the
 // signal that the writer under test has reached the row. Together they replace
 // "sleep and hope" with a fixed order: lock → writer blocks → mutate+commit →
@@ -14,7 +15,12 @@ export type HeldLock = {
   release: (mutate?: () => Promise<void>) => Promise<void>;
 };
 
-export async function holdRowLock(messageId: number): Promise<HeldLock> {
+export type LockedTable = "messages" | "topics" | "audiences";
+
+export async function holdRowLock(
+  id: number,
+  table: LockedTable = "messages",
+): Promise<HeldLock> {
   let locked!: () => void;
   const isLocked = new Promise<void>((r) => (locked = r));
   let go!: (mutate?: () => Promise<void>) => void;
@@ -23,7 +29,7 @@ export async function holdRowLock(messageId: number): Promise<HeldLock> {
   );
   const done = db.transaction(async () => {
     await db.execute(
-      sql`select id from messages where id = ${messageId} for update`,
+      sql`select id from ${sql.identifier(table)} where id = ${id} for update`,
     );
     locked();
     const mutate = await released;

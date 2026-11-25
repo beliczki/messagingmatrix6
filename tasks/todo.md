@@ -1293,3 +1293,48 @@ Döntés Robié: maradjon, vagy a frame-es layoutban a label beljebb kerüljön 
 - Elbukik a build: a `git pull` már lefutott, ezért az új template-ek a lemezen vannak, miközben a régi build szolgál ki. Visszaállítás: `git -C /var/www/mm6-<t> reset --hard 4942f28`, majd ellenőrzés: `git rev-parse --short HEAD` = `4942f28` és `git diff --quiet 4942f28 -- templates/html`.
 - Nem jön fel az app: a maint fent marad. `rm -rf .next && mv .next-old .next`, `git reset --hard 4942f28`, `pm2 restart mm6-<t> --update-env`, a `/login` válasza 200, `mm6-maint off <t>`.
 - Sikeres deploy után: `git revert -m 1 4184b9b`, `git revert 954ed81`, `git revert -m 1 874d4d0`, push, `mm6-deploy`.
+
+## 2026-11-25 — Topic/audience írók: mentésszámláló-CAS (KÉSZ, 6.135.1, a main-be merge-ölve Robi go-jára; push és deploy Robi go-jára vár)
+
+Forrás: a `claude/mc-version-fixes-9f2cb2` független review-ja (2026-11-25), should-fix (2). A hiba régi: `4008914`, 6.30.0, 2026-08-30. A `rekey.ts`-t ez az ág is szerkeszti, ezért a fix-ágról vágtam; **a fix-ág után merge-ölendő**.
+
+**Megfigyelve (kódolvasás, 2026-11-25):** a `rekeyDimension` (`src/lib/entities/rekey.ts:319-348`), az `updateTopic` (`topics.ts:257-298`) és az `updateAudience` (`audiences.ts:281-325`) zár nélküli olvasáson nézi az If-Match-et, az UPDATE-ben pedig csak `client_id` + `id` van, `version = expected` nincs. Kibuggyanó eset: a PATCH beolvassa a K1 kulcsot v5-ön, a rekey közben K1→K2-t commitol és minden MC-t K2-re visz, a PATCH UPDATE-je `key = K1`-et ír vissza. Minden MC K2-re mutat, amilyen topic nincs, hiba nem jön. Két egyidejű rekey ugyanarra a sorra mindkettő átmegy, dupla audit-sorral és régi `before`-ral.
+
+**Touches:** a topic és audience entitás írói (`src/lib/entities/topics.ts`, `audiences.ts`) és a rekey (`src/lib/entities/rekey.ts`). Szomszédok: a route-ok (`src/lib/entity-route.ts`: a `{ok:false, current}` és a `version_mismatch` már ma 409, nem változik), az MCP `topic_update` / `audience_update` / `topic_remove` / `audience_remove` (`mcp.ts:1405, 1442, 1544, 1581`), a UI 409-ága (DimensionGrid, HeaderDetailDialog). Szerződés: REBUILD_SPEC §4 (a 419. sor körül): „Write endpoints require `If-Match` … mismatch → 409 with current version + row”, §8.2 (1340. sor körül), és a 1735. sor körüli tesztszerződés: két írás ugyanazzal az If-Match-csel, „one returns 200, one returns 409”. A spec fájl a Drive-on 2026-11-25-ös; a rekey-t nem írja le (nincs rá találat), azt csak a kód (`rekey.ts` fejkommentje) dokumentálja. Szemantikai modell nincs, ami lefedné.
+**Door:** kétirányú (`git revert`), csak kód: nincs migráció, nincs adatírás. Hatósugár: topic/audience PATCH, rekey, archive (S3 esetén). Ami eddig csendben felülírt, az most 409-et kap; ezt a UI és az MCP már kezeli.
+
+**Mechanizmus (egy mondat):** a topic/audience sor If-Match-írója zár nélkül olvasott soron nézi a mentésszámlálót, aztán csak `id`-re írva UPDATE-el, így ami közben commitolt, azt felülírja, vagy az író a régen olvasott kulcson cselekszik tovább.
+**Testvér, ugyanebből a mechanizmusból (Robi dönt, S3):** az `archiveTopic` / `archiveAudience` is CAS nélkül ír, és a kaszkádja a régen olvasott kulcsra megy (`messages.topic = current.key`). Archive és rekey átfedésekor a topic archiválódik, az MC-i viszont K2-n élve maradnak, hiba nélkül. A `deleteTopic` / `restoreTopic` (és az audience-párjuk) ugyanígy ír, de kárt nem tudok megnevezni (a delete K1-en hivatkozást keres, a restore csak `archived_at`-et ír), ezért azokat nem érintem.
+**Nem fedi le, külön lelet:** egy MC létrehozása nem zárolja és nem lépteti a topic/audience sort. Ha a rekey kaszkádja vagy az `updateTopic` kulcs-újragenerálása (0 MC-nél) alatt születik egy MC a régi kulcson, az árva lesz. Ez táblák közötti verseny, a CAS nem fogja; nem építem.
+
+**Jóslat:** a három UPDATE-be (S3-mal öt) `version = expectedVersion` kerül. Ha nem jön vissza sor: újraolvasás, és `version_mismatch` / `{ok:false, current}` a friss sorral → a route-on 409 (ha közben törölték: 404). A rekey-ben a dimenzió-UPDATE a tranzakció első írása; ha nem jön vissza sor, a tranzakció semmit nem írt, a kaszkád el sem indul, és a függvény 409-et ad. Ami nem változik: a sikeres utak, a route-ok, az MCP-szöveg, a meglévő tesztek. Ismeretlen: semmi, amit előre látnék.
+**Seam:** az entitás-függvények (`rekeyDimension`, `updateTopic`, `updateAudience`, S3-nál `archiveTopic`/`archiveAudience`). A route-réteg nem változik, a 409-leképezést a meglévő route-tesztek fedik.
+
+### Szeletek
+- [x] **S1 Piros interleave-tesztek** (`tests/integration/api/dimension-write-races.test.ts`). A `holdRowLock` ma csak `messages` sort zárol: kap egy opcionális táblanév-paramétert (`messages` | `topics` | `audiences`), a meglévő hívások változatlanok. Tesztek: (a) topic PATCH vs rekey: a PATCH 409-et kap a rekey utáni sorral, a topic kulcsa K2 marad, minden MC K2-re mutat; (b) ugyanez audience-re; (c) két rekey egyszerre: a második `version_mismatch`, egy topic-audit-sor, MC-nként egy audit-sor és egy `version`-lépés. Az elvárt kulcs a minta kézi kiértékelése (`{{product}}_{{tag1}}_{{tag4}}` → `SZA_beerste_120e`), nem a kód számolja.
+- [x] **S2 Javítás:** CAS a három UPDATE-ben, a fenti visszatérési szerződéssel.
+- [x] **S3 (Robi: „mehet az S3-al”, a szülő-session továbbította) Testvér:** CAS az `archiveTopic` / `archiveAudience` UPDATE-jében; piros teszt előbb: archive vs rekey → ma a topic archivált, az MC-k élnek.
+- [x] **S4 Ellenőrzés:** `npx tsc --noEmit`, `npm run lint`, `npm test` (`docker start mm6-test-pg`); review-szakasz; patch bump-javaslat; commit.
+
+**Planning review:** nem kell (nincs új réteg, séma, auth vagy deploy); kétirányú, kis hatósugár → a diffet magam nézem át a terv ellen.
+
+### Review (2026-11-25)
+
+**Ami elkészült** (commit `6a94bd9`, a main-re rebase-elve; nincs push, merge, bump vagy deploy):
+- `updateTopic`, `updateAudience`, `archiveTopic`, `archiveAudience` és a `rekeyDimension` dimenzió-UPDATE-je: a WHERE-ben `version = expectedVersion`. Ha nem jön vissza sor, a friss sorral válaszol (`{ok:false, current}`, illetve `version_mismatch`), ami a route-on 409, törölt sornál 404. A route-ok nem változtak.
+- A rekey-ben a dimenzió-UPDATE a tranzakció első írása: ha nem talál sort, semmi nem íródott, és a kaszkád el sem indul.
+- `tests/helpers/row-lock.ts`: a `holdRowLock` `topics` és `audiences` sort is zárolhat (opcionális második paraméter, alapérték `messages`).
+- Új tesztfájl: `tests/integration/api/dimension-write-races.test.ts`, 5 teszt: topic PATCH vs rekey, audience PATCH vs rekey, két rekey, topic archive vs rekey, audience archive vs rekey.
+
+**Ellenőrzés (a rebase-elt fán):** `npx tsc --noEmit` 0 hiba. `npm run lint` 0 hiba, 145 warning (ugyanennyi, mint a fix-ágon; a módosított fájlokban 0). `npm test` 133 fájl, 1257 teszt zöld. Az 5 új teszt a javítás előtt piros volt, mind az `expect(res.ok).toBe(false)` soron: a késve érkező író átment.
+
+**Jóslat vs. eredmény:** bejött. A PATCH 409-et kap, a kulcs K2 marad, minden MC-nek van topicja/audience-e. A második rekey `version_mismatch`, egy topic-audit-sor marad, MC-nként egy audit-sor és egy `version`-lépés. Az archive 409, és az újrapróbálás a K2-n lévő 2 MC-t is archiválja. Előre nem láttam, de kódváltozást nem igényelt: a kulcsot író utak közül csak a reorder nem lépteti a `version`-t. Az `orderIndex` bemenete a kulcsmintának, ezért a CAS a reorder-versenyt nem fogja. Ennek legrosszabb eredménye egy „stale” kulcs, amit a rekey jelez, adatvesztés nincs.
+
+**Önellenőrzés a terv ellen (kétirányú ajtó, kis hatósugár):** a diff a tervezett öt UPDATE, a helper és a tesztfájl, semmi más. A delete és a restore szándékosan érintetlen (kár nem nevezhető meg).
+
+**Nyitott (nem ebben a szeletben):**
+- [ ] **Ugyanez a mechanizmus más entitásokban** (számolva, nem javítva): az `assets.ts` (3 If-Match-ellenőrzés, 0 CAS), a `creatives.ts` (3/0), a `prodlist.ts` (1/0), a `text-formatting.ts` (3/0), és a `messages.ts` maradék írói (8 ellenőrzés, ebből a fix-ág az `updateMessage`-et, a léptetést és a move-ot védi). A testvér-hiba mindegyiknél ugyanaz, mint a messages S1b-nél: két mentés ugyanazzal az If-Match-csel mindkettő átmegy, a későbbi csendben felülír. Saját szelet, Robi dönt.
+- [ ] **Táblák közötti verseny** (lásd fent): egy MC létrehozása nem zárolja a topic/audience sort, ezért a rekey kaszkádja vagy a 0-MC-s kulcs-újragenerálás alatt született MC árva lehet.
+- [ ] **A lecke helye (Robi dönt):** ez a második kör ugyanebből (messages: S1b/R1, most topic/audience). Javaslat, ebben a sorrendben: (1) egy teszt vagy lint-szabály, ami minden `expectedVersion`-t kapó entitás-függvény UPDATE-jében megköveteli a `version = expected` predikátumot; (2) ha az nem megy, egy sor a `db-reads.md` mellé egy írás-standardba: „If-Match-író: a WHERE-ben `version = expected`, ha nincs visszatérő sor, akkor 409 a friss sorral”.
+
+**Verzió:** `6.135.1` (patch), Robi go-jára (2026-11-25: „Igen, merge + 6.135.1”): `package.json` kézzel, `CHANGELOG.md` „Fixed”, a lockfile érintetlen. A main-be merge-ölve; push és deploy nincs, az Robi go-ja.

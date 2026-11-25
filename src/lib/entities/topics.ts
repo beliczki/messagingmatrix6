@@ -286,6 +286,9 @@ export async function updateTopic(
     );
   }
 
+  // The If-Match holds until the write: `key` above comes from the row as it
+  // was read, and a rekey committing in between would otherwise have it
+  // written back over the key every MC now references.
   const [updated] = await db
     .update(topics)
     .set({
@@ -294,8 +297,15 @@ export async function updateTopic(
       version: sql`${topics.version} + 1`,
       updatedAt: nowUtc,
     })
-    .where(and(eq(topics.clientId, clientId), eq(topics.id, id)))
+    .where(
+      and(
+        eq(topics.clientId, clientId),
+        eq(topics.id, id),
+        eq(topics.version, expectedVersion),
+      ),
+    )
     .returning();
+  if (!updated) return { ok: false, current: await getTopic(clientId, id) };
   return { ok: true, row: updated };
 }
 
@@ -314,6 +324,9 @@ export async function archiveTopic(
   if (current.version !== expectedVersion) return { ok: false, current };
 
   return db.transaction(async (tx) => {
+    // The cascade below archives the MCs on the key read above; a rekey that
+    // committed in between has moved them to another key, and without this
+    // check the topic would be archived with its MCs left live.
     const [updated] = await tx
       .update(topics)
       .set({
@@ -321,8 +334,17 @@ export async function archiveTopic(
         version: sql`${topics.version} + 1`,
         updatedAt: nowUtc,
       })
-      .where(and(eq(topics.clientId, clientId), eq(topics.id, id)))
+      .where(
+        and(
+          eq(topics.clientId, clientId),
+          eq(topics.id, id),
+          eq(topics.version, expectedVersion),
+        ),
+      )
       .returning();
+    if (!updated) {
+      return { ok: false as const, current: await getTopic(clientId, id) };
+    }
 
     const cascadedMessages = await tx
       .select({ id: messages.id })

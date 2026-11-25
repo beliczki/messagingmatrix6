@@ -5,6 +5,18 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.136.0] — 2026-11-25
+
+### Changed
+- The editor's Naming tab no longer has an Apply button for the released version. A typed released
+  version is saved with the card, by Autosave or by Save when Autosave is off, on this copy or on
+  every audience copy as the Global/Local toggle says. It is taken when you leave the field or press
+  Enter, so typing a number does not rebuild the PMMID on every keystroke. Esc puts the field back,
+  and Cancel drops it. Content changes in the same save go first.
+- Saved version, MC Number and Variant are shown as non-editable fields, like Audience key and Topic
+  key. On an archived card the released version cannot be changed; the field says to restore the
+  card first.
+
 ## [6.135.2] — 2026-11-25
 
 ### Fixed

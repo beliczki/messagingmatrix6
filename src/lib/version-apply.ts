@@ -1,7 +1,8 @@
 // Setting an MC's RELEASED VERSION from the editor (REBUILD_SPEC §21):
 // version_no, the PMMID's -n_ token. Not the saved version (`version`, the save
-// counter) and not a variant. Pure, so the server entity and the client both use the
-// same scope type and the Naming tab's rules are testable without a DOM.
+// counter) and not a variant. No DOM and no React (the save takes fetch as an
+// argument), so the server entity and the client share the scope type and the
+// Naming tab's rules are testable without a browser.
 
 // "local" = the open audience copy; "global" = every audience copy of the card
 // on its axis (findSiblings). There is no default anywhere: Global reaches
@@ -20,46 +21,8 @@ export function parseVersionNo(raw: string): number | null {
   return Number.isSafeInteger(n) && n >= 1 && n <= MAX_VERSION_NO ? n : null;
 }
 
-export type VersionApplyBlock =
-  | "conflict"
-  | "busy"
-  | "unsaved"
-  | "invalid"
-  | "unchanged";
-
-// Why Apply cannot fire right now, or null when it can. Every editor write
-// carries the committed snapshot's save counter as If-Match, so Apply waits
-// for pending edits (they save first and are not lost) and for any write in
-// flight, rather than racing them on the same If-Match.
-//
-// "unchanged" is a Local answer only: `current` is the open copy's value, and
-// on Global the other copies may stand on another one, which Apply then
-// brings in line (the server leaves the copies already there alone).
-export function versionApplyBlock(s: {
-  raw: string;
-  current: number;
-  global: boolean;
-  isDirty: boolean;
-  busy: boolean;
-  conflict: boolean;
-}): VersionApplyBlock | null {
-  if (s.conflict) return "conflict";
-  if (s.busy) return "busy";
-  if (s.isDirty) return "unsaved";
-  const n = parseVersionNo(s.raw);
-  if (n === null) return "invalid";
-  if (!s.global && n === s.current) return "unchanged";
-  return null;
-}
-
-export const VERSION_APPLY_BLOCK_TEXT: Record<VersionApplyBlock, string> = {
-  conflict: "Reload the card first",
-  busy: "Saving…",
-  unsaved: "Save your edits first",
-  invalid: "A released version is a whole number, 1 or more",
-  unchanged: "This copy already has this released version",
-};
-
+// The request that sets the released version: its own endpoint, never a PATCH
+// field. If-Match is the saved version (the save counter) it was read on.
 export function versionApplyRequest(o: {
   id: number;
   expectedVersion: number;
@@ -79,4 +42,96 @@ export function versionApplyRequest(o: {
       body: JSON.stringify({ versionNo: o.versionNo, scope }),
     },
   };
+}
+
+// ── The released version saves with the card ─────────────────────────────
+// No separate Apply: the Naming tab holds a typed released version as a
+// pending change, and the card's own save (Autosave, or Save when Autosave is
+// off) sends it, in that save's scope (the header's Global/Local toggle).
+
+export type VersionCommit =
+  | { kind: "pending"; versionNo: number }
+  | { kind: "none" }
+  | { kind: "invalid" };
+
+// What a typed released version means once the field is left (blur/Enter).
+// The same value as this copy's is nothing to save, on Global too: Global sets
+// the copies to the value typed, and a value that was not typed is not sent.
+// A lower value is allowed (going back is a choice), and there is no
+// automatic bump anywhere.
+export function versionCommit(o: { raw: string; current: number }): VersionCommit {
+  const n = parseVersionNo(o.raw);
+  if (n === null) return { kind: "invalid" };
+  if (n === o.current) return { kind: "none" };
+  return { kind: "pending", versionNo: n };
+}
+
+type Written<Row> = { message: Row; siblings: Row[] };
+
+export type SaveEditorResult<Row> =
+  | { ok: true; written: Written<Row>[] }
+  | { ok: false; written: Written<Row>[]; conflict: Row }
+  | { ok: false; written: Written<Row>[]; error: string };
+
+// One editor save: the content changes first (PATCH, versionNo never in it),
+// then the pending released version (its own endpoint) on the save counter the
+// PATCH returned. Each step is its own transaction, so a conflict on the
+// second leaves the first saved: `written` carries every row that did land, in
+// order, and the caller adopts them before entering the conflict state.
+export async function saveEditorChanges<Row extends { version: number }>(o: {
+  id: number;
+  expectedVersion: number;
+  payload: Record<string, unknown>;
+  versionNo: number | null;
+  global: boolean;
+  fetch: typeof fetch;
+}): Promise<SaveEditorResult<Row>> {
+  // Called detached: `o.fetch(...)` would run the browser's fetch with `this`
+  // set to `o`, which it refuses ("Illegal invocation").
+  const send = o.fetch;
+  const written: Written<Row>[] = [];
+  let expected = o.expectedVersion;
+
+  if (Object.keys(o.payload).length > 0) {
+    const r = await send(
+      `/api/messages/${o.id}${o.global ? "?propagate=siblings" : ""}`,
+      {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+          "If-Match": String(expected),
+        },
+        body: JSON.stringify(o.payload),
+      },
+    );
+    if (r.status === 409) {
+      const body = (await r.json()) as { currentRow: Row };
+      return { ok: false, written, conflict: body.currentRow };
+    }
+    if (!r.ok) return { ok: false, written, error: await r.text() };
+    const body = (await r.json()) as { message: Row; siblings?: Row[] };
+    // A Local PATCH answers without `siblings`; that is "none", not missing data.
+    written.push({ message: body.message, siblings: body.siblings ?? [] });
+    expected = body.message.version;
+  }
+
+  if (o.versionNo !== null) {
+    const { url, init } = versionApplyRequest({
+      id: o.id,
+      expectedVersion: expected,
+      versionNo: o.versionNo,
+      global: o.global,
+    });
+    const r = await send(url, init);
+    if (r.status === 409) {
+      const body = (await r.json()) as { currentRow: Row };
+      return { ok: false, written, conflict: body.currentRow };
+    }
+    if (!r.ok) return { ok: false, written, error: await r.text() };
+    const body = (await r.json()) as { message: Row; siblings: Row[] };
+    written.push({ message: body.message, siblings: body.siblings });
+  }
+
+  return { ok: true, written };
 }

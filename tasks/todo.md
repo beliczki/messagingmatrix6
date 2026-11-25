@@ -1357,6 +1357,111 @@ Forrás: a `claude/mc-version-fixes-9f2cb2` független review-ja (2026-11-25), s
 
 **Rollback:** elbukó build → `git -C /var/www/mm6-<t> reset --hard a01bdf1`. Nem jön fel → maint marad, `.next-old` vissza, ugyanez a reset, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1 523bb2c`, `git revert -m 1 02958d3`, push, deploy.
 
+## 2026-11-25 — Naming fül: a kiadott verzió a mentéssel megy, nincs Apply (KÉSZ, 6.136.0, a main-be merge-ölve Robi go-jára; push és deploy Robi go-jára vár; branch `claude/naming-version-save`, a main `27a935d`-ből)
+
+Robi visszajelzése az élő 6.135.1-en (MC332a, Global bekapcsolva), az mm6-status session továbbította: „ez az apply button it faszság, hát van auto save-ünk vagy save buttonunk annak kéne felvenni ezt a változást is ugyanakkor a save version meg egy nem editálható input box kéne legyen!”
+
+**Touches:**
+- A `MessageEditor.tsx` mentési útja: autosave 400 ms-os debounce-szal, Save, Cancel, ütközés és Reload.
+- A `NamingTab` és a `VersionField`.
+- A `src/lib/version-apply.ts` döntési modul.
+- Szomszédok, változatlanul: `PATCH /api/messages/[id]` (`?propagate=siblings`) és `POST /api/messages/[id]/version` (If-Match = mentett verzió). A szerver nem változik.
+- Forrás: REBUILD_SPEC §21 (Drive, 2026-11-25 15:28). Az 1–2. pont szerint saját Apply gomb van, és „Apply waits while edits are unsaved”. Ez a szerződés most változik (Robi döntése); a spec a végén frissül.
+- Szemantikai modell nincs, ami lefedné.
+
+**Ami marad:**
+- A `versionNo` nincs a PATCH-ben és a `WRITABLE_FIELDS`-ben, így a History-visszaállítás nem mozdítja.
+- D3: nincs automatikus léptetés; csak a mező szerkesztése változtat rajta.
+- A hatókört a fejléc Global/Local kapcsolója adja.
+
+**Door:** kétirányú (`git revert`), csak kliens. Blast radius: a MessageEditor minden mentése (autosave és Save, minden kártyán), mert a mentés útja közös. Ezért a tesztnek azt is bizonyítania kell, hogy verzió nélkül a mentés pontosan ugyanaz a PATCH, mint ma.
+
+**Döntések Robinak (ajánlott válaszokkal):**
+- **K1 — mikor lesz függő a beírt érték.** A beírt kiadott verzió a mezőből kilépéskor (blur) vagy Enterre lesz függő változás, gépelés közben nem; így az „1”, „12” nem két PMMID-újraépítés.
+  - Utána az autosave viszi (400 ms), kikapcsolt autosave mellett a Save gomb.
+  - A Cancel eldobja, az Esc visszaállítja a mezőt.
+  - Ajánlott: igen.
+- **K2 — sorrend.** Egy szerializált mentésen belül előbb a PATCH (a tartalom) megy, aztán a verzió-POST. A POST If-Match-e a PATCH válaszának mentett verziója.
+  - Ha a PATCH átment, de a POST 409-et kap: a tartalom mentve marad, a szerkesztő a mai ütközés-állapotba lép (Reload).
+  - Ajánlott: igen, mert a PMMID-et újraépítő lépés így csak a már bent lévő tartalomra fut.
+- **K3 — Global a saját értéken.** Globalnál a nyitott példány saját értéke nem lesz függő változás: ami a mezőben nem változott, az nem küld semmit (D3).
+  - Ezzel megszűnik az R4 Apply-kivétele, vagyis az, hogy egy kattintással a többi példányt a nyitottéra igazítsuk. Az eltérő példányt a saját értékéről lehet átállítani.
+  - Ajánlott: igen.
+- **K4 — csak olvasható mezők.** A Saved version `disabled` mező lesz, ugyanazzal a mintával, mint az Audience key és a Topic key: `text-slate-500`, `disabled:cursor-not-allowed`, nem fókuszálható.
+  - Testvér ugyanazzal a hibával: az **MC Number** és a **Variant** is `readOnly` + világos osztályok, így sötét témában fókusszal ugyanúgy szerkeszthetőnek látszik.
+  - Ajánlott: mindhárom kapja meg.
+- **K5 — verzió.** Felhasználónak látható viselkedés-változás, ezért a heurisztika szerint minor (`6.135.1` → `6.136.0`). Javaslat: minor `6.136.0`; a másik lehetőség a patch `6.135.2`. Robi dönt.
+
+**Prediction:**
+- Nincs Apply gomb.
+- 12-t beírva és kilépve, autosave mellett ~400 ms múlva egy `POST …/version` megy, Global/Local szerint; ha a tartalom is változott, előtte egy PATCH.
+- Autosave nélkül „Unsaved” látszik, és a Save küldi.
+- Gépelés közben nincs kérés.
+- Ami nem változik: verzió nélkül ugyanaz a PATCH (URL, If-Match, body); a szerver, a route-ok és az MCP; a History-visszaállítás.
+- Mi mutatja: a seam unit-tesztjei (lent). Böngészőben csak nézni lehet, mert a `dev:erste` az élő DB, és mentés ott nincs; ehhez is Robi go-ja kell.
+- Ismeretlen: hogyan néz ki a `disabled` mező sötét témában (`html.dark .bg-slate-50` → `--surface-alt`); ez csak böngészőben látszik.
+
+**Seam:** `src/lib/version-apply.ts`, tisztán, DOM nélkül, mert komponens-harness nincs.
+- `versionCommit({ raw, current })`: mit tesz a blur/Enter (függő érték, semmi, vagy érvénytelen).
+- `saveEditorChanges({ snapshot, payload, versionNo, global, fetch })`: a mentés kérései sorrendben, befecskendezett `fetch`-csel.
+- Teszt: `tests/unit/version-apply.test.ts`. Elvárt értékek a szerződésből:
+  - verzió nélkül pontosan egy PATCH, a mai alakban;
+  - PATCH előbb, és a POST If-Match-e a PATCH válaszának `version`-je;
+  - tartalom nélkül csak a POST, a pillanatkép If-Match-ével;
+  - Global → `?propagate=siblings` és `scope: "global"`;
+  - 409 a második lépésben → a PATCH sora + ütközés.
+
+**Szeletek:**
+- [x] **N1** Piros unit-tesztek előbb, aztán a két függvény (`version-apply.ts`). A már nem használt `busy`/`unsaved` blokk-okok kikerülnek.
+- [x] **N2** `MessageEditor.tsx` (N1 után):
+  - a függő kiadott verzió a szerkesztő állapotában él: része az `isDirty`-nek, és a kártyaváltás, a Cancel és a Reload törli;
+  - a `VersionField` blur/Enter-re függővé teszi az értéket, Esc-re visszaáll;
+  - az autosave és a Save a `saveEditorChanges`-en át megy;
+  - az Apply gomb és a külön `setVersion` mutáció kikerül;
+  - a hint: „Saved with the card (Autosave or Save)”.
+- [x] **N3** K4: a Saved version (és ha Robi igent mond, az MC Number és a Variant) `disabled` mintára vált. `component-inventory.md` frissítése: a `__version-apply` kikerül; a `form-field--readonly` sorát jelzem, mert sehol nincs a kódban. N1-től független.
+- [x] **N4** Lezárás:
+  - `tsc`, lint, `npm test`;
+  - spec §21 1–2. pont a Drive-on (`cat >` + `cmp`);
+  - a `mcp.ts:1723` komment („the Naming tab's Apply”);
+  - review-szakasz és bump-javaslat.
+  - Deploy csak Robi go-jára.
+
+### Review — Naming fül, kiadott verzió a mentéssel (2026-11-25, branch `claude/naming-version-save`)
+
+**Ami elkészült:**
+- `src/lib/version-apply.ts`:
+  - `versionCommit({ raw, current })`: függő érték, semmi (a példány saját értéke, Globalon is: K3), vagy érvénytelen;
+  - `saveEditorChanges(...)`: előbb a PATCH (`versionNo` sosem benne), aztán a verzió-POST a PATCH válaszának mentett verziójával (K2). Ami átment, az a `written`-ben van; 409 a második lépésen → a tartalom mentve, plusz ütközés.
+  - Kikerült: `versionApplyBlock` és a szövegei (csak az Apply használta).
+  - Eltérés a tervtől: a `saveEditorChanges` `snapshot` helyett `id` + `expectedVersion`-t kap. Ugyanaz a tartalom, a teszt így a szerződés két számát nézi.
+- `MessageEditor.tsx`:
+  - `pendingVersionNo` a szerkesztő állapotában; része az `isDirty`-nek. A kártyaváltás, a Cancel és a Reload törli; a Cancel és a Reload a mezőt is újraindítja.
+  - Az autosave és a Save ugyanazon a `save` mutáción megy, a `saveEditorChanges`-en át; a külön `setVersion` mutáció és az Apply gomb kikerült.
+  - `VersionField`: kilépéskor (blur) vagy Enterre lesz függő az érték; az Esc visszaállítja a tárolt értékre, és csak akkor nem zárja be a szerkesztőt, ha volt mit visszaállítani. A hint: „Saved with the card (Autosave or Save) on …”.
+- N3: a Saved version, az MC Number és a Variant `disabled`, az Audience key mintájára (`text-slate-500`, `disabled:cursor-not-allowed`). A Trafficking tab `readOnly` mezői maradnak, mert azokat másolják.
+- Spec §21 1–2. pont a Drive-on frissítve (`cat >` + `cmp` OK, a fejléc „not deployed yet” → „live since 6.135.0”). `mcp.ts` komment, `McpTab.tsx` mondata, `component-inventory.md` három sora.
+
+**Két dolog a terven felül, a hibák ellen:**
+- **Kikapcsolt autosave mellett a mező gépelés közben is függővé teszi az értéket.** Különben, ha csak a verzió változott, a Save gomb a blurig tiltva marad, és a tiltott gombra kattintás nem biztos, hogy blurt ad. Itt gépelés közben nem megy kérés, így a K1 oka (PMMID-újraépítés minden billentyűre) nem áll fenn.
+- **Archivált kártyán a mező `disabled`, szöveggel.** A szerver archivált kártyán elutasítja a verziót (400). Az autosave hiba után újra küld, így a mező ~400 ms-onként küldte volna ugyanazt a POST-ot. Teszt nincs rá (nincs komponens-harness), csak böngészőben látszik.
+
+**Ellenőrzés:**
+- `tsc` 0 hiba.
+- lint 0 hiba; a `MessageEditor.tsx` 20 warningja ugyanaz, mint a main-en (szabályonként egyezik).
+- `npm test`: 133 fájl / 1268 zöld. Ez a futás az archivált-mező, a McpTab és az `mcp.ts`-komment előtt indult; azok render- és szövegváltozások, utánuk a tsc és a lint újra tiszta.
+- Az új unit-tesztek pirosak voltak, mielőtt a kód megvolt. A fetch-hívás tesztje a régi hívásformán „Illegal invocation”-nel piros: `o.fetch(...)` a böngészőben `this = o`-val hívta volna a fetch-et.
+
+**Összevetés a jóslattal:**
+- Egyezik: nincs Apply; verzió nélkül pontosan ugyanaz a PATCH (URL, If-Match, body; teszt); tartalom + verzió → PATCH, majd POST a PATCH `version`-jével; Global → `?propagate=siblings` és `scope: "global"`.
+- Nem láttam: böngészőben semmit, mert a `dev:erste` az élő DB, és Robi go-ja kell hozzá. Nyitott, csak böngészőben dönthető el: a `disabled` mezők sötét témában (a sima `bg-slate-50` osztályt a dark remap eléri); a fókuszvesztés, amikor egy verzió-mentés landol, és a mező újraindul (a régi Apply után is így volt).
+
+**Régi testvér, nem javítva:** az autosave hiba után végtelenül újrapróbál (a `saveState.kind` váltása újra élesíti a debounce-t). Tartalom-PATCH-nél is így van, ha a szerver tartósan 400-at ad. Az archivált esetet a `disabled` mező zárja le; a mechanizmus külön feladat.
+
+**Bump-javaslat (K5):** minor `6.135.1` → `6.136.0` (felhasználónak látható viselkedés-változás a Naming fülön); a másik lehetőség a patch `6.135.2`. Robi dönt. Merge, push, deploy Robi go-jára.
+
+**Verzió:** Robi: „Minor 6.136.0”. Közben a main-re a 6.135.2 (If-Match CAS, 3. kör) került, ezért `6.135.2` → `6.136.0`. A main a branchbe merge-ölve (`6699422`, ütközés csak a todo két hozzáfűzött szakaszán, mindkettő megmaradt). A merge-elt fán a tsc tiszta, a lint 0 hiba / 145 warning. `package.json` és `CHANGELOG.md` frissítve, a main-be `--no-ff` merge-dzsel. Push és deploy nincs.
+
 ## 2026-11-25 — Többi If-Match-író: mentésszámláló-CAS, 3. kör (KÉSZ, 6.135.2, a main-be merge-ölve Robi go-jára; push és deploy Robi go-jára vár)
 
 Az ág a main-re (`27a935d`, benne a 6.135.1 `523bb2c` merge-e és deployja) van rebase-elve, így a 2. kör (`holdRowLock(id, table)`) már benne van. Előzmény: 1. kör `messages` (6.135.0), 2. kör topic/audience (6.135.1), mindkettő a main-en. Ez a 2. kör review-jának „Ugyanez a mechanizmus más entitásokban” tétele.

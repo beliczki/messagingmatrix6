@@ -312,10 +312,10 @@ export function McpTab() {
           <code className="font-mono text-xs">mc_label</code> changes. On a
           live card the new PMMID has to be re-trafficked on the platform; the
           next AdForm feed append keeps the old PMMID row, switched off.
-          Nothing bumps the released version on save, and{" "}
+          Nothing raises the released version by itself, and{" "}
           <code className="font-mono text-xs">mc_update</code> cannot set it.
-          The matrix editor&apos;s Naming tab does the same with its Global /
-          Local toggle.
+          The matrix editor&apos;s Naming tab sets the value typed with the
+          card&apos;s save, in the scope of its Global / Local toggle.
         </p>
       </Section>
 

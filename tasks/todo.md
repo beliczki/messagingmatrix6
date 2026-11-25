@@ -1357,9 +1357,9 @@ Forrás: a `claude/mc-version-fixes-9f2cb2` független review-ja (2026-11-25), s
 
 **Rollback:** elbukó build → `git -C /var/www/mm6-<t> reset --hard a01bdf1`. Nem jön fel → maint marad, `.next-old` vissza, ugyanez a reset, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1 523bb2c`, `git revert -m 1 02958d3`, push, deploy.
 
-## 2026-11-25 — Többi If-Match-író: mentésszámláló-CAS, 3. kör (TERV, Robi go-jára vár)
+## 2026-11-25 — Többi If-Match-író: mentésszámláló-CAS, 3. kör (KÉSZ az ágon `claude/eager-cori-f0aeae`; merge, bump és deploy Robi go-jára vár)
 
-Az ág a main-re (`523bb2c` merge + `3480889`, 6.135.1) van rebase-elve, így a 2. kör (`holdRowLock(id, table)`) már benne van. Előzmény: 1. kör `messages` (6.135.0), 2. kör topic/audience (6.135.1), mindkettő a main-en. Ez a 2. kör review-jának „Ugyanez a mechanizmus más entitásokban” tétele.
+Az ág a main-re (`27a935d`, benne a 6.135.1 `523bb2c` merge-e és deployja) van rebase-elve, így a 2. kör (`holdRowLock(id, table)`) már benne van. Előzmény: 1. kör `messages` (6.135.0), 2. kör topic/audience (6.135.1), mindkettő a main-en. Ez a 2. kör review-jának „Ugyanez a mechanizmus más entitásokban” tétele.
 
 **Mechanizmus (egy mondat):** az író zár nélkül olvasott soron nézi az If-Match-et (és a saját őrfeltételeit), aztán csak `id`-re ír, így ami közben commitolt, azt felülírja, vagy olyan döntés alapján ír, ami már nem igaz.
 
@@ -1393,10 +1393,41 @@ Ami nem változik: a sikeres utak, a route-ok, az MCP-szövegek, a meglévő tes
 **Seam:** az entitás-függvények (`updateAsset`, `updateCreative`, `updateTextFormatting`, `promoteDraft`, `deleteDraft`, `deleteMessages`, `archiveMessage`), a W2b-nél a `promoteCreative`. Tesztek: új `tests/integration/api/entity-write-races.test.ts` (W1–W3), a `messages`-írók a meglévő `message-write-races.test.ts`-be. A `LockedTable` kap `"assets" | "creatives" | "text_formatting"`-et. Az elvárt értékek a szerződésből és a teszt saját, literális közbeírásából jönnek (pl. a mutate `comment = 'B', version = 2`-t ír), nem a kód számolja.
 
 ### Szeletek
-- [ ] **S1 Assets, creatives, text-formatting.** Piros tesztek előbb: (W1) asset PATCH vs közbeírt mentés → ma 200 és `A` marad, az elvárt `ok:false`, a friss sor `B`-vel; (W3) ugyanez text-formattingra; (W2a) ugyanez creative-ra; (W2b) két promote: a vesztes `PromoteError`, nem marad utána MC, a kreatív a nyertes MC-jére mutat. Javítás: CAS a három UPDATE-ben.
-- [ ] **S2 `promoteDraft`, `deleteDraft`, `archiveMessage`.** Piros tesztek: (W4) promote vs közbeírt `landing_url`-szerkesztés → ma átmegy régi LP-s trafficking-URL-lel; (W5) draft-törlés vs közben futó promote → ma a kártya végleg törlődik, elvárt `not_a_draft` és a sor megvan; (W7) archive vs közben futó promote → ma az élő kártya archiválódik, elvárt `ok:false`, a kártya él. Javítás a fenti szerződéssel.
-- [ ] **S3 `deleteMessages`.** Piros teszt: kétsoros bulk delete (a route-hoz hasonlóan tranzakcióban), az egyik sor közben ACTIVE lesz → ma mindkettő törlődik, elvárt `version_conflict`, és mindkét sor megvan. Javítás: verzió-predikátum + savepoint.
-- [ ] **S4 Ellenőrzés:** `npx tsc --noEmit`, `npm run lint`, `npm test` (`docker start mm6-test-pg`); review-szakasz; patch bump-javaslat (nem emelem); commit.
+- [x] **S1 Assets, creatives, text-formatting.** Piros tesztek előbb: (W1) asset PATCH vs közbeírt mentés → ma 200 és `A` marad, az elvárt `ok:false`, a friss sor `B`-vel; (W3) ugyanez text-formattingra; (W2a) ugyanez creative-ra; (W2b) két promote: a vesztes `PromoteError`, nem marad utána MC, a kreatív a nyertes MC-jére mutat. Javítás: CAS a három UPDATE-ben.
+- [x] **S2 `promoteDraft`, `deleteDraft`, `archiveMessage`.** Piros tesztek: (W4) promote vs közbeírt `landing_url`-szerkesztés → ma átmegy régi LP-s trafficking-URL-lel; (W5) draft-törlés vs közben futó promote → ma a kártya végleg törlődik, elvárt `not_a_draft` és a sor megvan; (W7) archive vs közben futó promote → ma az élő kártya archiválódik, elvárt `ok:false`, a kártya él. Javítás a fenti szerződéssel.
+- [x] **S3 `deleteMessages`.** Piros teszt: kétsoros bulk delete (a route-hoz hasonlóan tranzakcióban), az egyik sor közben ACTIVE lesz → ma mindkettő törlődik, elvárt `version_conflict`, és mindkét sor megvan. Javítás: verzió-predikátum + savepoint.
+- [x] **S4 Ellenőrzés:** `npx tsc --noEmit`, `npm run lint`, `npm test` (`docker start mm6-test-pg`); review-szakasz; patch bump-javaslat (nem emelem); commit.
 
 **Planning review:** nem kell (nincs új réteg, séma, auth vagy deploy); kétirányú, kis hatósugár, a diffet magam nézem át a terv ellen.
 **Robi dönt:** (1) a fenti W1–W7 lista így jó-e; (2) bekerüljön-e az `archiveMessages` (bulk archive) a paritás miatt (javaslatom: nem, mert kárt nem tudok megnevezni); (3) a halott `updateProdlistRow`: maradjon (javaslatom), vagy külön szeletben törlés.
+**Robi döntése (2026-11-25): „Mehet így”** — W1–W7 a terv szerint, az `archiveMessages` kimarad, az `updateProdlistRow` marad.
+
+### Review (2026-11-25)
+
+**Ami elkészült** (commitok `81eaa39` S1, `4c9ac5b` S2, `0c9e27a` S3; nincs push, merge, bump vagy deploy):
+- `updateAsset`, `updateCreative`, `updateTextFormatting`: a WHERE-ben `version = expectedVersion`; ha nem jön vissza sor, a friss sor (`{ok:false, current}`), a route-on 409, törölt sornál 404.
+- `promoteCreative`: kódváltozás nélkül javult. A vesztes promote a meglévő „changed concurrently during promotion” ágon áll meg, és a tranzakciója a létrehozott MC-t és auto-topicot visszagörgeti.
+- `promoteDraft`: a WHERE-ben `version = draft.version` (az olvasott verzió, If-Match-csel vagy anélkül); ütközésre a meglévő „changed since you loaded it” `MessageError` (a route-on 400, mint eddig); törölt sornál „not found”.
+- `deleteDraft`: `DELETE … WHERE version = expected RETURNING`; a visszaadott sor a ténylegesen törölt (az audit `before`-ja). Ha nem törölt: friss olvasásból `not_found` / `not_a_draft` / `version_conflict`.
+- `archiveMessage`: a WHERE-ben `version = expectedVersion`; ha nincs sor, a friss sor.
+- `deleteMessages`: soronként `id = … and version = …`; ha egy sor kimarad, `version_conflict` a friss sorral, és egy savepoint a már törölt sorokat is visszagörgeti (`RemoveConflict`, a move `MoveConflict`-jának mintájára).
+- `tests/helpers/row-lock.ts`: a `LockedTable` kapott `assets`, `creatives`, `text_formatting` értéket.
+- Tesztek: új `tests/integration/api/entity-write-races.test.ts` (4), a `message-write-races.test.ts` +6 (promote landing-URL-szerkesztés ellen, dupla promote If-Match nélkül, draft-törlés promote ellen, draft-törlés szerkesztés ellen, draft-scope-os `draft_archive` promote ellen, bulk purge ACTIVE-ra váltás ellen).
+
+**Piros előbb:** mind a 10 új teszt a jósolt tünettel bukott a javítás előtt: a késve érkező mentés átment (`expected true to be false`) asset/creative/text-formattingnál; a vesztes `promoteCreative` MC-vel és linkkel lefutott; a két `promoteDraft` lefutott (régi LP-vel, illetve a cellát átírva); a `deleteDraft` törölte az elhelyezett kártyát, illetve a szerkesztett draftot; a `draft_archive` archiválta az elhelyezett kártyát; a purge mindkét kártyát törölte. Mutációval ellenőrizve: a `deleteMessages` savepointja nélkül a purge-teszt piros (a második kártya törlődik).
+
+**Ellenőrzés:** `npx tsc --noEmit`: 0 hiba. `npm run lint`: 0 error, 145 warning (ugyanannyi, mint a 2. kör után); a változott fájlokon az eslint üres. `npm test` (`mm6-test-pg`): 134 fájl / 1267 teszt, mind zöld, rc 0 (előtte 133 / 1257, vagyis +1 fájl, +10 teszt).
+
+**Jóslat vs. eredmény:** bejött. Előre nem láttam, de a tervben már benne volt: a `deleteMessages`-nél a CAS önmagában nem elég, a savepoint kell, mert a bulk-delete route tranzakciója a részleges törlést commitolná. A `promoteDraft` hibaüzenete egy friss olvasás után dől el (törölt sor = „not found”).
+
+**Önellenőrzés a terv ellen (kétirányú ajtó, kis hatósugár):** a diff a tervezett hét író, a helper és a két tesztfájl, semmi más. A route-ok, az MCP-szövegek és a UI nem változtak. A kihagyott írók (archive/restore az assets, creatives, text-formatting entitáson, `restoreMessage`, `archiveMessages`, a halott `updateProdlistRow`) érintetlenek.
+
+**Nyitott (nem ebben a szeletben):**
+- [ ] `restoreMessage`: a parent-first őr és egy `archiveTopic`/`archiveAudience` között táblák közötti verseny (a kaszkád csak élő MC-t léptet), így egy élő MC kerülhet archivált topic alá. A CAS nem fogja.
+- [ ] `deleteMessages`: a creative-link őr (`listCreativesByMc`) szintén táblák közötti olvasás; egy közben linkelt kreatív árva hivatkozást kaphat.
+- [ ] `promoteDraft` ütközésre 400-at ad, nem 409-et (régi viselkedés, nem változott). Ha a UI-nak a 409 kell a „reload” ághoz, az külön route-szelet.
+- [ ] A CAS csak a `version`-t léptető írásokat látja. Ahol egy író a sort a mentésszámláló léptetése nélkül írja (a topic-reorder ilyen volt), ott a verseny továbbra is csendes.
+- [ ] **A lecke helye (Robi dönt, a 2. kör javaslata áll):** ez a harmadik kör ugyanebből. (1) egy teszt vagy lint-szabály, ami minden `expectedVersion`-t kapó entitás-függvény írásában megköveteli a `version` predikátumot; (2) ha az nem megy, egy sor egy írás-standardba a `db-reads.md` mellé.
+
+**Verzió:** javaslat `6.135.1` → `6.135.2` (patch: hibajavítás, nincs új route, séma vagy felhasználónak látható funkció). Robi dönt; a `package.json` és a `CHANGELOG.md` érintetlen.
+

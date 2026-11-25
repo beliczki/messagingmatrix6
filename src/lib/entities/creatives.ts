@@ -250,6 +250,9 @@ export async function updateCreative(
   const folderMoved =
     input.driveFolderId !== undefined &&
     input.driveFolderId !== current.driveFolderId;
+  // The If-Match is re-checked at the write: a save that committed since the
+  // read above would otherwise be overwritten in silence, and promoteCreative
+  // relies on this to refuse a second link to another MC.
   const [updated] = await db
     .update(creatives)
     .set({
@@ -260,8 +263,17 @@ export async function updateCreative(
       version: sql`${creatives.version} + 1`,
       updatedAt: nowUtc,
     })
-    .where(and(eq(creatives.clientId, clientId), eq(creatives.id, id)))
+    .where(
+      and(
+        eq(creatives.clientId, clientId),
+        eq(creatives.id, id),
+        eq(creatives.version, expectedVersion),
+      ),
+    )
     .returning();
+  if (!updated) {
+    return { ok: false, current: await getCreative(clientId, id) };
+  }
   return { ok: true, row: updated };
 }
 

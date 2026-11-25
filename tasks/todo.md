@@ -1178,14 +1178,14 @@ Entitás-függvény `setMessageVersionNo(clientId, id, expectedVersion, versionN
 - [x] **Független diff-review:** **OK with changes**, nincs Stop (teljes jelentés: megosztott jegyzetmappa, `mc-version-bump-review-2026-11-25.md`). A leleteket nem javítottam (token-plafon); a következő session dolga, **merge előtt**:
   - [x] **R1 (közepes)** rekey kaszkád (kész, `852a018`): zár nélkül olvas, CAS nélkül ír → léptetés után `pmmid`/`utm_cd26` régi `-n_`-vel. `messagesOnKey` `.orderBy(id).for("update")`; ugyanez a `moveMessages`-ben (UPDATE-be `version = source.version`). Piros interleave-teszt előbb (`tests/helpers/row-lock.ts`).
   - [x] R2 felső korlát a verzióra (int4), R3 a hamis „number/variant nem változik” komment + 404 helyett 409, R4 UI: Globalnál az „unchanged” ne tiltson, R5 UI: `onApply` nézze a `saveInFlightRef`-et (kész, `4db65a9`).
-  - [ ] R6 deploy előtt csak olvasva: `select count(*) from messages where version_no < 1` az élőn (a `generatePmmid` most dob rá). **Robi go-jára vár** (élő DB, még olvasásra is).
+  - [x] R6 deploy előtt csak olvasva: `select count(*) from messages where version_no < 1` az élőn (a `generatePmmid` most dob rá). **Lefutott Robi go-jára, 2026-11-25: 0 sor** (read-only tranzakcióban, `transaction_read_only = on`; minden tenant, archiváltak is).
   - [x] R7 deadlock: `mc_update_batch` id-sorrendben ír (kész, `4db65a9`).
 - [x] **S4b** kész (lásd fent).
 - [ ] **Élő Erste-léptetés előtt** Robi lépése: AdForm teszt line item, két azonos `advert_id`-jű sor, az egyik inaktív.
 - [x] Deadlock-kockázat: az R7 megszüntette (a batch id-sorrendben ír).
 - [ ] Merge + deploy: Robi go-ja kell.
 
-**Verzió:** javaslat `6.133.0` → `6.134.0` (minor: új HTTP route, új MCP-tool, felhasználónak látható Naming-fül változás). Robi dönt; a `package.json` és a `CHANGELOG.md` érintetlen.
+**Verzió:** javaslat `6.134.0` → `6.135.0` (minor: új HTTP route, új MCP-tool, felhasználónak látható Naming-fül változás; a 6.134.0-t közben az AI label vitte el). Robi dönt; a `package.json` és a `CHANGELOG.md` érintetlen.
 
 ### Review — R1–R7, S4b, címkék (2026-11-25, `claude/mc-version-fixes-9f2cb2`)
 
@@ -1209,14 +1209,25 @@ Ez a branch a `claude/mc-version-bump-903097`-ből van vágva, és a teljes funk
 
 **Jóslat vs. eredmény:** mind a hét lelet és az S4b a megjósolt tünettel lett piros. Nem láttam előre: a move-nál a CAS önmagában nem elég, mert a hívó tranzakciója a részleges köteget commitolná (ezért a savepoint); az S4b mellett a tengely-hiba is élt.
 
+**Élesítés előkészítése (Robi: „R6-tal együtt”, 2026-11-25):**
+- [x] R6 az élőn: 0 sor (lásd lent).
+- [x] A main (6.134.0, AI label) bemergelve: `84da147`. Ütközés csak a `tasks/todo.md`-ben volt, mindkét szakasz megmaradt. A merge-elt fán: `tsc` 0 hiba; lint 0 hiba, 145 warning; `npm test` 132 fájl, 1250 teszt zöld (1243 + a main 7 AI-label tesztje).
+- [x] Független review friss kontextussal (csak olvasott; a diff `claude/mc-version-bump-903097..8f7de56`, a `db-reads.md`, `security.md`, `ui.md` szerint). **Verdikt: OK with changes, blocker nincs.** R1–R5, R7, S4b és a címkék rendben; minden új teszt piros lenne a javítás visszavonásával (R5-re nincs teszt). Az 1. és 2. leletet a kódban magam is megnéztem: mindkettő áll.
+  1. **should-fix**, `messages.ts` `moveMessages`: a köteg a kérés sorrendjében ír, nem id-sorrendben, ezért egy [9, 3] sorrendű move-köteg 40P01-gyel (500) deadlockolhat egy rekey-jel, egy Global léptetéssel, egy Global mentéssel vagy egy `mc_update_batch`-csel. Adat nem sérül (a Postgres az egyiket visszagörgeti), de a `rekey.ts` kommentje és az R7-teszt címe az ellenkezőjét állítja. Javítás: id-sorrendű `FOR UPDATE` a savepoint elején (vagy a `plan` id szerint), a válasz sorrendje marad. Testvér: `archiveMessages` (bemeneti sorrend, nincs CAS), régi.
+  2. **should-fix, régi (`4008914`, 6.30.0)**: a rekey dimenzió-UPDATE-je (`rekey.ts`), az `updateTopic` és az `updateAudience` `version = expected` nélkül ír. Egy rekey (K1→K2) közben futó topic-PATCH visszaírhatja a `K1` kulcsot, és minden MC egy nem létező `K2`-re mutat, hibaüzenet nélkül. Nem ez a branch hozta, és nem is rontja.
+  3. nit: `MessageEditor.tsx` `global: edit.globalEdit` testvér nélkül is átengedi az Apply-t a saját értéken („(Local)” szöveg, globális kérés, nincs változás); `&& siblingCount > 0` illene a szöveghez.
+  4. nit, régi: az `mc_move_batch` leírása szerint „PMMID is preserved”, de a move újragenerálja.
+  5. nit: nincs teszt az R5-re és az S4b archivált/`id` tie-breakjére; a `waitForLockWaiter` csak a `fileParallelism: false` miatt biztos.
+- [ ] Robi dönt: az 1. (és a 3.) javítása élesítés előtt ezen a branchen, vagy élesítés így. A 2. külön javítás.
+
 **Nyitott:**
-- [ ] **R6** — Robi go-jára vár: csak olvasó `select count(*) from messages where version_no < 1` az élő DB-n, deploy előtt.
+- [x] **R6** — lefutott Robi go-jára (2026-11-25): 0 sor `version_no < 1`-gyel az élő DB-n, csak olvasó tranzakcióban.
 - [ ] Élő Erste-léptetés előtt Robi lépése: AdForm teszt line item, két azonos `advert_id`-jű sor, az egyik inaktív.
 - [ ] A review „régi, de elérhetőbb” lelete, nem javítva: `getMessageByPmmid` `LIMIT 1` rendezés nélkül, archiváltat is talál.
 - [ ] A review teszt-megjegyzése: a `waitForLockWaiter` bármely Lock-várakozót számol. Ma nem hamisít (a fájlok sorban futnak, és minden új interleave-teszt piros volt javítás előtt), de egy párhuzamos tesztfuttatás ugyanazon a DB-n üres zöldet adhatna; `pg_blocking_pids` szűkítené.
 - [ ] Merge + deploy: Robi go-ja kell.
 
-**Verzió:** javaslat `6.133.0` → `6.134.0` (minor: új HTTP route, új MCP-tool, felhasználónak látható Naming-fül változás). Robi dönt; a `package.json` és a `CHANGELOG.md` érintetlen.
+**Verzió:** javaslat `6.134.0` → `6.135.0` (minor: új HTTP route, új MCP-tool, felhasználónak látható Naming-fül változás). A 6.134.0-t közben az AI label vitte el (élő mindkét tenanton). Robi dönt; a `package.json` és a `CHANGELOG.md` érintetlen.
 
 ## 2026-11-25 — AI label az Erste HTML template-ben (`aiLabelWhite` / `aiLabelBlack`) (ÉPÜL, Robi: „lets go”)
 

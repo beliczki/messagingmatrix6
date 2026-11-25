@@ -5,6 +5,14 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.134.0] — 2026-11-25
+
+### Added
+- Erste HTML template: an AI label (a disc with the "AI" icon, top right, 50% opacity), switched on
+  per MC with the new template variant classes `aiLabelWhite` (white disc, black icon) and
+  `aiLabelBlack` (black disc, white icon). Without either class nothing shows, so existing MCs look
+  the same.
+
 ## [6.133.0] — 2026-11-24
 
 ### Added

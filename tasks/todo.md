@@ -1173,3 +1173,22 @@ Döntés Robié: maradjon, vagy a frame-es layoutban a label beljebb kerüljön 
 **Verzió:** javaslat minor (új választható template-token, látható viselkedés). A pontos szám attól függ, mi landol előbb (a `mc-version-fixes` ág 6.134.0-t javasol). `package.json` és `CHANGELOG.md` érintetlen.
 
 **Javítás (Robi, 2026-11-25: „a 300x250-en túl nagy … 24 px átmérőjű és közelebb a sarokhoz”):** `300x250.css` → `body #aiLabel` 24 px, felülről és jobbról 10 px (a 10 px az én választásom). Előbb piros teszt (+1, összesen 7). Böngészőben mérve: 300x250 = 24×24, 10/10; a többi méret változatlan, 29 px, 15/14. MC332a 300x250-en a label már nem ér a stickerhez.
+
+## 2026-11-25 — 6.134.0 deploy (AI label az Erste `html` template-ben) (Robi: „merge push and deploy”)
+
+**Touches:** csak a `templates/html` (`index.html`, `main.css`, `300x250.css`, `template.json`), amit a `render.ts` és a `templates.ts` hívásonként a lemezről olvas. A `src/` nem változott a `4942f28` óta (`git diff --quiet 4942f28 main -- src/`). Szomszédok és tesztvarratok: lásd a fenti „AI label” szakaszt (`renderTemplate()`, `cleanBundle()`, `readTemplate().tagOptions`). Forrás: REBUILD_SPEC §3.12 és §17.12 (Drive, 2026-09-06); a template-kód azóta változott, a spec elavult lehet, és az AI labelről nem szól. Szemantikai modell nincs.
+**Door:** kétirányú. Blast radius: minden `html`-template render mindkét tenanton; egyik MC-n sincs `aiLabel*` osztály (Robi: most nem tesszük be). Kifelé semmi nem megy (nincs feed, nincs AdForm-feltöltés).
+**Prediction:** a meglévő MC-k renderje pixelre ugyanaz. A Template fül chipjei között megjelenik az `aiLabelWhite` és az `aiLabelBlack`. `npm ci` nem fut, mert a lockfile nem változott, és a stamp mindkét tenanton egyezik vele.
+**Ismert korlát:** a `topRoundedFrame` layoutban a keret sarka átlátszik a labelen. Ma ennek nincs hatása, mert egyik MC sem kapta meg az osztályt. A 300x250-es méret kisebb lett (`165d12b`). Az SZK MC-kből a rounded frame osztályt egy külön session veszi ki (`local_cc05f372-…`).
+
+- [x] **D0** Planning review. v1 (`20261125-1825-mm6-6.134.0-deploy.md`): CA OK with changes, Codex Stop. Javítva v2-ben: a template-ek visszaállítása mindkét hibaágon, stamp-ellenőrzés, tenantonkénti kapu render-ellenőrzéssel, ez a szakasz.
+- [x] **D1** Helyi ellenőrzés a commitolt fán. `tsc` 0 hiba. Lint: a main-en 0 hiba; mind a 264 hiba egy másik worktree-ben van (`.claude/worktrees/exciting-leakey-7043bd`). Tesztek: 1174/1174 zöld. A nem commitolt `tests/integration/api/request-body-limit.test.ts` 14 tesztje bukik; ez nem része a 6.134.0-nak.
+- [x] **D2** Pixel-összevetés helyben. MC332a (id 34725, `animated fullSurfaceImage teal`), a valódi `renderTemplate`, a `4942f28` és a `4184b9b` template-jeivel, Chromiumban, 4 méretben: **0 eltérő pixel**, `#aiLabel` `display:none`. `aiLabelWhite`: korong `rgb(255,255,255)`, ikon `rgb(0,0,0)`. `aiLabelBlack`: fordítva. Mindkettő 0.5 opacity; 29×29 a 15/14 px-es saroktávolsággal, a 300x250-en 24×24 a 10/10-zel, az `#adContainer` sarkához mérve.
+- [x] **D3** Pre-flight a B boxon (csak olvasás): lemez 61%, 2070 MB szabad memória, Node v24.22.3, mindkét HEAD `4942f28`, nincs követett módosítás, nincs `.next-old` vagy `.next-build`, a `mm6-deploy` egyezik a repóval, a `.mm6-lock-sha` egyezik a lockfile-lal (`7138f573…`).
+- [ ] **D4** Push, `mm6-deploy telekom`, majd a teljes „After” lista és render-ellenőrzés a boxon. Csak ezután jöhet az erste.
+- [ ] **D5** `mm6-deploy erste`, majd ugyanez az ellenőrzés.
+
+**Rollback:**
+- Elbukik a build: a `git pull` már lefutott, ezért az új template-ek a lemezen vannak, miközben a régi build szolgál ki. Visszaállítás: `git -C /var/www/mm6-<t> reset --hard 4942f28`, majd ellenőrzés: `git rev-parse --short HEAD` = `4942f28` és `git diff --quiet 4942f28 -- templates/html`.
+- Nem jön fel az app: a maint fent marad. `rm -rf .next && mv .next-old .next`, `git reset --hard 4942f28`, `pm2 restart mm6-<t> --update-env`, a `/login` válasza 200, `mm6-maint off <t>`.
+- Sikeres deploy után: `git revert -m 1 4184b9b`, `git revert 954ed81`, `git revert -m 1 874d4d0`, push, `mm6-deploy`.

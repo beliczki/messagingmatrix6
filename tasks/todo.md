@@ -1338,3 +1338,19 @@ Forrás: a `claude/mc-version-fixes-9f2cb2` független review-ja (2026-11-25), s
 - [ ] **A lecke helye (Robi dönt):** ez a második kör ugyanebből (messages: S1b/R1, most topic/audience). Javaslat, ebben a sorrendben: (1) egy teszt vagy lint-szabály, ami minden `expectedVersion`-t kapó entitás-függvény UPDATE-jében megköveteli a `version = expected` predikátumot; (2) ha az nem megy, egy sor a `db-reads.md` mellé egy írás-standardba: „If-Match-író: a WHERE-ben `version = expected`, ha nincs visszatérő sor, akkor 409 a friss sorral”.
 
 **Verzió:** `6.135.1` (patch), Robi go-jára (2026-11-25: „Igen, merge + 6.135.1”): `package.json` kézzel, `CHANGELOG.md` „Fixed”, a lockfile érintetlen. A main-be merge-ölve; push és deploy nincs, az Robi go-ja.
+
+## 2026-11-25 — 6.135.1 deploy (MC released version + topic/audience CAS) (Robi: „mehet most egy deploy”, „mehet egyből a deploy”)
+
+**Ami kimegy** (élő: `a01bdf1` = 6.134.0 mindkét tenanton): a `02958d3` (6.135.0, MC released version, R1–R7, S4b, move id-sorrend) és az `523bb2c` (6.135.1, topic/audience CAS) merge. Csak `src/`, tesztek, docs: nincs migráció, a lockfile változatlan (`npm ci` nem fut), a `templates/`, a `next.config` és a `deploy/` változatlan.
+**Touches:** a két fenti szakasz („MC verzió …”, „Topic/audience írók …”); onnan a Touches, a spec-hivatkozások és a review-k.
+**Door:** a deploy kétirányú (`git revert`). Egy élő kártya léptetése egyirányú adatművelet: élő Erste-léptetés előtt Robi lépése az AdForm teszt line item (nyitott, lásd fent).
+**Planning review:** kihagyva, Robi döntése („skippeljük a review-t most!!”, 2026-11-25). A kódot két független diff-review látta (OK with changes, a leletek javítva).
+**Jóslat:** a sikeres utak változatlanok; a Naming fülön megjelenik a „Released version” és a „Saved version”; az új `POST /api/messages/[id]/version` session nélkül 401. Az R6 0 sort adott, ezért a `generatePmmid` nem dob régi sorokra.
+
+### Lépések
+- [x] D1 pre-flight (csak olvasva, Box B): mindkét HEAD `a01bdf1`, 0 tracked módosítás, `templates/` tiszta; stamp = lockfile sha (`7138f573…`); a telepített `mm6-deploy`/`mm6-maint` azonos a repóéval; / 61%, 2347 MB elérhető; pm2 restarts 2/2; error.log 6/9 sor; telekom külső sablon-fingerprint `74b3c043`.
+- [ ] D2 push `main`.
+- [ ] D3 `mm6-deploy telekom` + kapu: DEPLOY.md „After”, az új route 401, a külső sablon-fingerprint változatlan.
+- [ ] D4 `mm6-deploy erste` + ugyanez a kapu.
+
+**Rollback:** elbukó build → `git -C /var/www/mm6-<t> reset --hard a01bdf1`. Nem jön fel → maint marad, `.next-old` vissza, ugyanez a reset, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1 523bb2c`, `git revert -m 1 02958d3`, push, deploy.

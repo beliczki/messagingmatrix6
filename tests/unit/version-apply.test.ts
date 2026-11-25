@@ -14,11 +14,13 @@ describe("parseVersionNo", () => {
     ["1", 1],
     ["2", 2],
     [" 12 ", 12],
+    // The top of Postgres `integer`, the version_no column's type.
+    ["2147483647", 2147483647],
   ])("reads %j as %d", (raw, n) => {
     expect(parseVersionNo(raw)).toBe(n);
   });
 
-  it.each(["", "0", "-1", "1.5", "2e1", "abc", "1a", "99999999999999999999"])(
+  it.each(["", "0", "-1", "1.5", "2e1", "abc", "1a", "2147483648", "99999999999999999999"])(
     "refuses %j",
     (raw) => {
       expect(parseVersionNo(raw)).toBeNull();
@@ -27,7 +29,7 @@ describe("parseVersionNo", () => {
 });
 
 describe("versionApplyBlock", () => {
-  const ready = { raw: "2", current: 1, isDirty: false, busy: false, conflict: false };
+  const ready = { raw: "2", current: 1, global: false, isDirty: false, busy: false, conflict: false };
 
   it("lets a new, valid version through", () => {
     expect(versionApplyBlock(ready)).toBeNull();
@@ -45,8 +47,12 @@ describe("versionApplyBlock", () => {
     expect(versionApplyBlock({ ...ready, conflict: true, isDirty: true })).toBe("conflict");
   });
 
-  it("has nothing to do when the value is the current version", () => {
+  it("has nothing to do on Local when the value is this copy's released version", () => {
     expect(versionApplyBlock({ ...ready, raw: "1" })).toBe("unchanged");
+  });
+
+  it("lets Global through at this copy's value: the other copies may be on another one", () => {
+    expect(versionApplyBlock({ ...ready, raw: "1", global: true })).toBeNull();
   });
 
   it("refuses a value that is not a version", () => {

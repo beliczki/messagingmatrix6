@@ -20,6 +20,7 @@ import {
   createMessage,
   getMessage,
   MessageError,
+  moveMessages,
   setMessageVersionNo,
 } from "@/lib/entities/messages";
 import {
@@ -269,7 +270,44 @@ describe("setMessageVersionNo — refusals", () => {
     expect((await reread(primary.id)).versionNo).toBe(1);
   });
 
-  it.each([0, -1, 1.5, Number.NaN])("refuses %s as a version", async (bad) => {
+  // 2147483647 is the top of Postgres `integer`, the version_no column's type.
+  it("accepts the largest version the column holds", async () => {
+    const { primary } = await seedCard();
+    const res = await setMessageVersionNo(erste.id, primary.id, primary.version, 2147483647, "local", "u-admin");
+    expect(res.ok).toBe(true);
+    expect((await reread(primary.id)).pmmid).toBe(pmmidFor("aud1", "top1", primary.number, "a", 2147483647));
+  });
+
+  it("a Global bump that waited through a move off its variant answers a conflict, not not-found", async () => {
+    // A move into a cell where number+variant is taken gives the mover the
+    // next free variant. The bump located the card before the move and locks
+    // by number+variant, so the moved card is no longer among the locked rows.
+    // The card still exists and its save counter moved: that is a conflict.
+    // (A move refuses ACTIVE/INACTIVE cards, so this one is APPROVED.)
+    const seeded = await seedCard();
+    await db.update(messages).set({ status: "APPROVED" }).where(eq(messages.id, seeded.primary.id));
+    const primary = await reread(seeded.primary.id);
+    const lock = await holdRowLock(primary.id);
+    const bump = setMessageVersionNo(erste.id, primary.id, primary.version, 2, "global", "u-admin");
+    await waitForLockWaiter();
+    await lock.release(async () => {
+      const moved = await moveMessages(erste.id, [{ mcLabel: primary.pmmid!, expectedVersion: primary.version }], "aud2");
+      expect(moved.ok).toBe(true);
+    });
+    const res = await bump;
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.reason).toBe("version_mismatch");
+      if (res.reason === "version_mismatch") {
+        expect(res.current.id).toBe(primary.id);
+        expect(res.current.version).toBe(primary.version + 1);
+        expect(res.current.variant).toBe("b");
+      }
+    }
+    expect((await reread(primary.id)).versionNo).toBe(1);
+  });
+
+  it.each([0, -1, 1.5, Number.NaN, 2147483648])("refuses %s as a version", async (bad) => {
     const { primary } = await seedCard();
     await expect(
       setMessageVersionNo(erste.id, primary.id, primary.version, bad, "local", "u-admin"),
@@ -372,6 +410,7 @@ describe("POST /api/messages/[id]/version", () => {
     [{ versionNo: 2, scope: "everywhere" }, "unknown scope"],
     [{ versionNo: 0, scope: "local" }, "version below 1"],
     [{ versionNo: "2", scope: "local" }, "version as a string"],
+    [{ versionNo: 2147483648, scope: "local" }, "version above the integer column"],
   ] as Array<[unknown, string]>)("answers 400 for %j (%s)", async (body) => {
     const { primary } = await seedCard();
     const res = await call(primary.id, {

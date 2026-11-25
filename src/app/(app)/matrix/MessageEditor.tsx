@@ -958,7 +958,12 @@ export default function MessageEditor({
                     isDirty,
                     busy: save.isPending || setVersion.isPending,
                     conflict: saveState.kind === "conflict",
-                    onApply: (versionNo) => setVersion.mutate(versionNo),
+                    // The ref, not busy: a second Enter can beat the
+                    // re-render that would have disabled Apply.
+                    onApply: (versionNo) => {
+                      if (saveInFlightRef.current) return;
+                      setVersion.mutate(versionNo);
+                    },
                   }}
                 />
               ) : null}
@@ -1300,6 +1305,7 @@ function VersionField({
   const block = versionApplyBlock({
     raw,
     current,
+    global: edit.globalEdit,
     isDirty: edit.isDirty,
     busy: edit.busy,
     conflict: edit.conflict,

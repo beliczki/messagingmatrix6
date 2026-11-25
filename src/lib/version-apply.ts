@@ -7,12 +7,16 @@
 // other rows, so it is always said, never assumed.
 export type VersionScope = "local" | "global";
 
-/** A version as typed: a whole number, 1 or more. Anything else is null. */
+// The top of Postgres `integer`, the type of the version_no column. Above it
+// the write fails in the database instead of being refused as a bad value.
+export const MAX_VERSION_NO = 2_147_483_647;
+
+/** A version as typed: a whole number from 1 to MAX_VERSION_NO. Anything else is null. */
 export function parseVersionNo(raw: string): number | null {
   const t = raw.trim();
   if (!/^\d+$/.test(t)) return null;
   const n = Number(t);
-  return Number.isSafeInteger(n) && n >= 1 ? n : null;
+  return Number.isSafeInteger(n) && n >= 1 && n <= MAX_VERSION_NO ? n : null;
 }
 
 export type VersionApplyBlock =
@@ -26,9 +30,14 @@ export type VersionApplyBlock =
 // carries the committed snapshot's save counter as If-Match, so Apply waits
 // for pending edits (they save first and are not lost) and for any write in
 // flight, rather than racing them on the same If-Match.
+//
+// "unchanged" is a Local answer only: `current` is the open copy's value, and
+// on Global the other copies may stand on another one, which Apply then
+// brings in line (the server leaves the copies already there alone).
 export function versionApplyBlock(s: {
   raw: string;
   current: number;
+  global: boolean;
   isDirty: boolean;
   busy: boolean;
   conflict: boolean;
@@ -38,7 +47,7 @@ export function versionApplyBlock(s: {
   if (s.isDirty) return "unsaved";
   const n = parseVersionNo(s.raw);
   if (n === null) return "invalid";
-  if (n === s.current) return "unchanged";
+  if (!s.global && n === s.current) return "unchanged";
   return null;
 }
 

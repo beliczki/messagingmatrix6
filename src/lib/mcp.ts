@@ -2677,8 +2677,14 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
       if (limited) return limited;
       try {
         const updated = await db.transaction(async () => {
-          const out = [];
-          for (const u of updates) {
+          // Every item is resolved first and written in id order. Each write
+          // holds its row lock until the batch commits, and the version bump
+          // and a Global save lock several rows in id order; written in the
+          // order given, a batch could take them the other way round and
+          // deadlock with them (or with another batch). The answer keeps the
+          // order given.
+          const items: Array<{ index: number; id: number; u: (typeof updates)[number] }> = [];
+          for (const [index, u] of updates.entries()) {
             const existing = await findMessageByPmmid(ctx.clientId, u.mc_label);
             if (!existing) {
               throw new BatchError(
@@ -2686,9 +2692,13 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
                 u.mc_label,
               );
             }
+            items.push({ index, id: existing.id, u });
+          }
+          const out: Message[] = [];
+          for (const { index, id, u } of [...items].sort((a, b) => a.id - b.id)) {
             const r = await updateMessage(
               ctx.clientId,
-              existing.id,
+              id,
               u.version,
               pickMessageWritable(u.fields ?? {}),
             );
@@ -2699,7 +2709,7 @@ function registerBatchTools(server: McpServer, ctx: McpContext): void {
                 r.current,
               );
             }
-            out.push(r.row);
+            out[index] = r.row;
           }
           return out;
         });

@@ -34,7 +34,7 @@ import { MC_LEVEL_DRAFT_FIELDS } from "@/lib/draft-intake";
 import { BIRTH_STATUS, PROMOTED_STATUS, isMeasurementLocked } from "@/lib/mc-status";
 import { writeAudit } from "@/lib/audit";
 import { broadcast } from "@/lib/events";
-import type { VersionScope } from "@/lib/version-apply";
+import { MAX_VERSION_NO, type VersionScope } from "@/lib/version-apply";
 
 // A row that occupies a cell. DRAFT rows are the only audience-less ones (DB
 // check `messages_draft_has_no_audience`) and a placed row always carries a
@@ -1216,11 +1216,18 @@ export async function setMessageVersionNo(
   scope: VersionScope,
   userId: string | null,
 ): Promise<SetVersionResult> {
-  if (!Number.isInteger(versionNo) || versionNo < 1) {
-    throw new MessageError("the version must be a whole number, 1 or more");
+  if (
+    !Number.isInteger(versionNo) ||
+    versionNo < 1 ||
+    versionNo > MAX_VERSION_NO
+  ) {
+    throw new MessageError(
+      `the version must be a whole number from 1 to ${MAX_VERSION_NO}`,
+    );
   }
-  // Number and variant never change on a row, so this unlocked read only tells
-  // us which rows to lock; every decision below is made on the locked rows.
+  // This unlocked read only tells us which rows to lock; every decision below
+  // is made on the locked rows. A move can change the card's variant (and its
+  // audience) before the lock is taken, so the locked set may no longer hold it.
   const located = await getMessage(clientId, id);
   if (!located) return { ok: false, reason: "not_found" };
 
@@ -1248,7 +1255,14 @@ export async function setMessageVersionNo(
       .orderBy(messages.id)
       .for("update");
     const current = locked.find((m) => m.id === id);
-    if (!current) return { ok: false, reason: "not_found" };
+    if (!current) {
+      // Not among the rows of the number+variant it had when located: it was
+      // moved off them (a move bumps the save counter, so the If-Match no
+      // longer holds) or it is gone.
+      const moved = await getMessage(clientId, id);
+      if (!moved) return { ok: false, reason: "not_found" };
+      return { ok: false, reason: "version_mismatch", current: moved };
+    }
     if (current.version !== expectedVersion) {
       return { ok: false, reason: "version_mismatch", current };
     }

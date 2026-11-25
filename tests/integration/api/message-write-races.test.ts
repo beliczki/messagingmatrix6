@@ -21,6 +21,7 @@ import {
   updateMessage,
 } from "@/lib/entities/messages";
 import { rekeyDimension } from "@/lib/entities/rekey";
+import { buildMcpServer } from "@/lib/mcp";
 import { createTestDb, type TestDb } from "../../helpers/test-db";
 import { holdRowLock, waitForLockWaiter } from "../../helpers/row-lock";
 
@@ -178,7 +179,7 @@ describe("moveMessages — the If-Match holds until the write", () => {
     await db.insert(audiences).values({ clientId: erste.id, key: "aud3", name: "AUD3", orderIndex: 2, product: "SZK" });
     const lock = await holdRowLock(primary.id);
     const move = db.transaction(async () =>
-      moveMessages(erste.id, [{ mcLabel: primary.pmmid, expectedVersion: primary.version }], "aud3"),
+      moveMessages(erste.id, [{ mcLabel: primary.pmmid!, expectedVersion: primary.version }], "aud3"),
     );
     await waitForLockWaiter();
     await lock.release(async () => {
@@ -207,7 +208,7 @@ describe("moveMessages — the If-Match holds until the write", () => {
       moveMessages(
         erste.id,
         [
-          { mcLabel: primary.pmmid, expectedVersion: primary.version },
+          { mcLabel: primary.pmmid!, expectedVersion: primary.version },
           { mcLabel: second.pmmid!, expectedVersion: second.version },
         ],
         "aud3",
@@ -223,5 +224,56 @@ describe("moveMessages — the If-Match holds until the write", () => {
     expect((await reread(primary.id)).audience).toBe("aud1");
     expect((await reread(primary.id)).version).toBe(primary.version);
     expect((await reread(second.id)).audience).toBe("aud1");
+  });
+});
+
+describe("mc_update_batch — writes in id order, like every writer that locks several rows", () => {
+  type Tool = { handler: (args: Record<string, unknown>) => Promise<{ content: { text: string }[]; isError?: boolean }> };
+  const batchTool = () =>
+    (buildMcpServer({ clientId: erste.id, userId: "u-agent", scope: "full" }) as unknown as {
+      _registeredTools: Record<string, Tool>;
+    })._registeredTools.mc_update_batch;
+
+  it("a batch listing the higher id first meets a Global bump as a conflict, not a deadlock", async () => {
+    // The bump locks the card's copies in id order. A batch that wrote in the
+    // order it was given took the higher id first, then waited for the lower
+    // one the bump held, while the bump waited for the higher one: Postgres
+    // aborted one of them with a deadlock (40P01), an error, not an answer.
+    const { primary, copy2 } = await seedCard();
+    expect(copy2.id).toBeGreaterThan(primary.id);
+    const lock = await holdRowLock(primary.id);
+    const batch = batchTool().handler({
+      updates: [
+        { mc_label: copy2.pmmid, version: copy2.version, fields: { headline: "batch" } },
+        { mc_label: primary.pmmid, version: primary.version, fields: { headline: "batch" } },
+      ],
+    });
+    await waitForLockWaiter();
+    await lock.release(async () => {
+      const bumped = await setMessageVersionNo(erste.id, primary.id, primary.version, 2, "global", null);
+      expect(bumped.ok).toBe(true);
+    });
+    const res = await batch;
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/version_conflict/);
+    // All or nothing, and the bump landed on both copies.
+    for (const id of [primary.id, copy2.id]) {
+      const after = await reread(id);
+      expect(after.headline).toBe("original");
+      expect(after.versionNo).toBe(2);
+    }
+  });
+
+  it("returns the updated rows in the order they were given", async () => {
+    const { primary, copy2 } = await seedCard();
+    const res = await batchTool().handler({
+      updates: [
+        { mc_label: copy2.pmmid, version: copy2.version, fields: { headline: "second copy" } },
+        { mc_label: primary.pmmid, version: primary.version, fields: { headline: "first copy" } },
+      ],
+    });
+    expect(res.isError).toBeFalsy();
+    const body = JSON.parse(res.content[0].text) as { updated: { id: number }[] };
+    expect(body.updated.map((r) => r.id)).toEqual([copy2.id, primary.id]);
   });
 });

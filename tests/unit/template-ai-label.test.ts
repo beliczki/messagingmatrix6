@@ -19,8 +19,8 @@ function render(classes: string | null, size = "640x360"): string {
 }
 
 // One flat rule's declarations from the template's own main.css.
-function rule(selector: string): Record<string, string> {
-  const css = readTemplateFile("html", "main.css")!.toString("utf8");
+function rule(selector: string, file = "main.css"): Record<string, string> {
+  const css = readTemplateFile("html", file)!.toString("utf8");
   const esc = selector.replace(/[.*+?^${}()|[\]\\#]/g, "\\$&").replace(/ /g, "\\s+");
   const m = css.match(new RegExp(`(?:^|[}\\n])\\s*${esc}\\s*\\{([^}]*)\\}`));
   if (!m) throw new Error(`no rule for ${selector}`);
@@ -70,6 +70,15 @@ describe("html template: AI label", () => {
       opacity: "0.5",
     });
     expect(rule("#aiLabel svg")).toMatchObject({ fill: "currentColor" });
+  });
+
+  it("is smaller and closer to the corner on 300x250 (Robi, 2026-11-25: 24 px)", () => {
+    expect(rule("body #aiLabel", "300x250.css")).toMatchObject({
+      top: "10px",
+      right: "10px",
+      width: "24px",
+      height: "24px",
+    });
   });
 
   it("names the disc colour: white disc + black icon, black disc + white icon", () => {

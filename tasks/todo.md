@@ -1181,7 +1181,7 @@ Entitás-függvény `setMessageVersionNo(clientId, id, expectedVersion, versionN
   - [x] R6 deploy előtt csak olvasva: `select count(*) from messages where version_no < 1` az élőn (a `generatePmmid` most dob rá). **Lefutott Robi go-jára, 2026-11-25: 0 sor** (read-only tranzakcióban, `transaction_read_only = on`; minden tenant, archiváltak is).
   - [x] R7 deadlock: `mc_update_batch` id-sorrendben ír (kész, `4db65a9`).
 - [x] **S4b** kész (lásd fent).
-- [ ] **Élő Erste-léptetés előtt** Robi lépése: AdForm teszt line item, két azonos `advert_id`-jű sor, az egyik inaktív.
+- [x] ~~**Élő Erste-léptetés előtt** Robi lépése: AdForm teszt line item, két azonos `advert_id`-jű sor, az egyik inaktív.~~ nem kell (Robi, 2026-11-25): az AI label miatt új, 2027-es kreatív-sablon és új feedek jönnek, az Erste már most új, csökkentett 2027-es feedre áll át, így a régi feedben nem lesz élő verzióléptetés. 2027-ben az új kampánynevek miatt a feedet valószínűleg újra frissíteni kell, az januári feladat.
 - [x] Deadlock-kockázat: az R7 megszüntette (a batch id-sorrendben ír).
 - [x] Merge a main-be + bump 6.135.0 (Robi: „commit merge és bump minor”, 2026-11-25), `package.json` + `CHANGELOG.md`. Push nincs.
 - [ ] Push + deploy: Robi go-ja kell; előtte deploy-terv Codex + Chief Architect review-val.
@@ -1224,7 +1224,7 @@ Ez a branch a `claude/mc-version-bump-903097`-ből van vágva, és a teljes funk
 
 **Nyitott:**
 - [x] **R6** — lefutott Robi go-jára (2026-11-25): 0 sor `version_no < 1`-gyel az élő DB-n, csak olvasó tranzakcióban.
-- [ ] Élő Erste-léptetés előtt Robi lépése: AdForm teszt line item, két azonos `advert_id`-jű sor, az egyik inaktív.
+- [x] ~~Élő Erste-léptetés előtt Robi lépése: AdForm teszt line item, két azonos `advert_id`-jű sor, az egyik inaktív.~~ nem kell (Robi, 2026-11-25): az AI label miatt új, 2027-es kreatív-sablon és új feedek jönnek, az Erste már most új, csökkentett 2027-es feedre áll át, így a régi feedben nem lesz élő verzióléptetés. 2027-ben az új kampánynevek miatt a feedet valószínűleg újra frissíteni kell, az januári feladat.
 - [ ] A review „régi, de elérhetőbb” lelete, nem javítva: `getMessageByPmmid` `LIMIT 1` rendezés nélkül, archiváltat is talál.
 - [ ] A review teszt-megjegyzése: a `waitForLockWaiter` bármely Lock-várakozót számol. Ma nem hamisít (a fájlok sorban futnak, és minden új interleave-teszt piros volt javítás előtt), de egy párhuzamos tesztfuttatás ugyanazon a DB-n üres zöldet adhatna; `pg_blocking_pids` szűkítené.
 - [x] Merge a main-be + bump 6.135.0 (Robi: „commit merge és bump minor”, 2026-11-25), `package.json` + `CHANGELOG.md`. Push nincs.
@@ -1343,7 +1343,7 @@ Forrás: a `claude/mc-version-fixes-9f2cb2` független review-ja (2026-11-25), s
 
 **Ami kimegy** (élő: `a01bdf1` = 6.134.0 mindkét tenanton): a `02958d3` (6.135.0, MC released version, R1–R7, S4b, move id-sorrend) és az `523bb2c` (6.135.1, topic/audience CAS) merge. Csak `src/`, tesztek, docs: nincs migráció, a lockfile változatlan (`npm ci` nem fut), a `templates/`, a `next.config` és a `deploy/` változatlan.
 **Touches:** a két fenti szakasz („MC verzió …”, „Topic/audience írók …”); onnan a Touches, a spec-hivatkozások és a review-k.
-**Door:** a deploy kétirányú (`git revert`). Egy élő kártya léptetése egyirányú adatművelet: élő Erste-léptetés előtt Robi lépése az AdForm teszt line item (nyitott, lásd fent).
+**Door:** a deploy kétirányú (`git revert`). Egy élő kártya léptetése egyirányú adatművelet: élő Erste-léptetés előtt Robi lépése lett volna az AdForm teszt line item; Robi szerint nem kell (új, csökkentett 2027-es feed, lásd fent).
 **Planning review:** kihagyva, Robi döntése („skippeljük a review-t most!!”, 2026-11-25). A kódot két független diff-review látta (OK with changes, a leletek javítva).
 **Jóslat:** a sikeres utak változatlanok; a Naming fülön megjelenik a „Released version” és a „Saved version”; az új `POST /api/messages/[id]/version` session nélkül 401. Az R6 0 sort adott, ezért a `generatePmmid` nem dob régi sorokra.
 
@@ -1353,6 +1353,6 @@ Forrás: a `claude/mc-version-fixes-9f2cb2` független review-ja (2026-11-25), s
 - [x] D3 `mm6-deploy telekom` (20:04–20:06 UTC): rc 0, `npm ci` nem futott, min. 1022 MB elérhető, maint ~1 s. Kapu: HEAD `3480889`, 6.135.1, pm2 online, restarts 2→3, `/login` 200, `POST /api/messages/1/version` session nélkül 401, `/_next/image` 404, error.log 6 sor (változatlan), nincs `.next-old`/`.next-build`, 0 tracked módosítás, külső sablon-fingerprint `74b3c043` (változatlan). Share oldalt nem kértem le (view countot írna; ez a kiadás nem érinti).
 - [x] D4 `mm6-deploy erste` (20:06–20:08 UTC; előtte `templates/` tiszta, 0 tracked módosítás): rc 0, `npm ci` nem futott, min. 879 MB elérhető, maint ~1 s. Kapu: HEAD `3480889`, 6.135.1, pm2 online, restarts 2→3, `/login` 200, az új route 401, `/_next/image` 404, error.log 9 sor (változatlan), nincs `.next-old`/`.next-build`, `templates/` = `a01bdf1`. A telekom `/login` utána is 200.
 
-**Élő:** 6.135.1 (`3480889`) mindkét tenanton, 2026-11-25 20:06 UTC (telekom) / 20:08 UTC (erste). Deploy-logok: `/root/mm6-rollback/d1351-<tenant>-*.log`. Nyitott marad: élő Erste-léptetés előtt az AdForm teszt line item (Robi).
+**Élő:** 6.135.1 (`3480889`) mindkét tenanton, 2026-11-25 20:06 UTC (telekom) / 20:08 UTC (erste). Deploy-logok: `/root/mm6-rollback/d1351-<tenant>-*.log`. Az AdForm teszt line item nem kell (Robi, 2026-11-25: az Erste új, csökkentett 2027-es feedre áll át). Nincs nyitott pont.
 
 **Rollback:** elbukó build → `git -C /var/www/mm6-<t> reset --hard a01bdf1`. Nem jön fel → maint marad, `.next-old` vissza, ugyanez a reset, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1 523bb2c`, `git revert -m 1 02958d3`, push, deploy.

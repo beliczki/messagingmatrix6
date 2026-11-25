@@ -804,8 +804,26 @@ export async function promoteDraft(
       version: sql`${messages.version} + 1`,
       updatedAt: nowUtc,
     })
-    .where(and(eq(messages.clientId, clientId), eq(messages.id, id)))
+    // Every decision above (still a draft, the If-Match, the trafficking built
+    // from the landing URL) was made on the row as read. The write holds on
+    // that read's version, with or without an If-Match: a promote or an edit
+    // that landed since makes those decisions stale.
+    .where(
+      and(
+        eq(messages.clientId, clientId),
+        eq(messages.id, id),
+        eq(messages.version, draft.version),
+      ),
+    )
     .returning();
+  if (!row) {
+    if (!(await getMessage(clientId, id))) {
+      throw new MessageError(`message ${id} not found`);
+    }
+    throw new MessageError(
+      `draft ${id} changed since you loaded it — reload and promote again`,
+    );
+  }
   return row;
 }
 
@@ -839,10 +857,28 @@ export async function deleteDraft(
   }
   // message_previews cascade with the row (ON DELETE CASCADE), so the shot
   // PNGs' rows go too; the bytes in the object store are left, as everywhere.
-  await db
+  //
+  // The delete holds on the version checked above: a promote that landed
+  // since has given the row a cell and a PMMID, and an edit would be lost
+  // with it. What it deleted is returned, so the audit keeps the real
+  // before-state.
+  const [deleted] = await db
     .delete(messages)
-    .where(and(eq(messages.clientId, clientId), eq(messages.id, id)));
-  return { ok: true, row };
+    .where(
+      and(
+        eq(messages.clientId, clientId),
+        eq(messages.id, id),
+        eq(messages.version, expectedVersion),
+      ),
+    )
+    .returning();
+  if (deleted) return { ok: true, row: deleted };
+  const now = await getMessage(clientId, id);
+  if (!now) return { ok: false, reason: "not_found", current: null };
+  if (now.status !== "DRAFT" || now.audience !== null) {
+    return { ok: false, reason: "not_a_draft", current: now };
+  }
+  return { ok: false, reason: "version_conflict", current: now };
 }
 
 export async function updateMessage(
@@ -1367,6 +1403,9 @@ export async function archiveMessage(
   if (current.version !== expectedVersion) {
     return { ok: false, current };
   }
+  // The archive holds on the If-Match: callers decide on the row they read
+  // (draft_archive and the promote dialog's "archive the rest" only mean to
+  // shelve drafts), and a promote that landed since has placed the card.
   const [updated] = await db
     .update(messages)
     .set({
@@ -1374,8 +1413,15 @@ export async function archiveMessage(
       version: sql`${messages.version} + 1`,
       updatedAt: nowUtc,
     })
-    .where(and(eq(messages.clientId, clientId), eq(messages.id, id)))
+    .where(
+      and(
+        eq(messages.clientId, clientId),
+        eq(messages.id, id),
+        eq(messages.version, expectedVersion),
+      ),
+    )
     .returning();
+  if (!updated) return { ok: false, current: await getMessage(clientId, id) };
   return { ok: true, row: updated };
 }
 

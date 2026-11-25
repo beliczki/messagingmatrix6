@@ -13,15 +13,18 @@ import { db } from "@/db";
 import { audiences, clients, config, messages, topics } from "@/db/schema";
 import {
   copyMessages,
+  createDraft,
   createMessage,
+  deleteDraft,
   getMessage,
   moveMessages,
+  promoteDraft,
   propagateToSiblings,
   setMessageVersionNo,
   updateMessage,
 } from "@/lib/entities/messages";
 import { rekeyDimension } from "@/lib/entities/rekey";
-import { buildMcpServer } from "@/lib/mcp";
+import { buildMcpServer, _resetMcpRateLimitForTests } from "@/lib/mcp";
 import { createTestDb, type TestDb } from "../../helpers/test-db";
 import { holdRowLock, waitForLockWaiter } from "../../helpers/row-lock";
 
@@ -329,5 +332,141 @@ describe("mc_update_batch — writes in id order, like the Global bump and the G
     expect(res.isError).toBeFalsy();
     const body = JSON.parse(res.content[0].text) as { updated: { id: number }[] };
     expect(body.updated.map((r) => r.id)).toEqual([copy2.id, primary.id]);
+  });
+});
+
+// A draft is decided on before it is written: promote checks it is still a
+// draft and builds its trafficking from the landing URL it read; delete and
+// draft_archive check it is still a draft. A promote (or an edit) that lands in
+// between makes that decision false, so the write must hold on the version the
+// decision was made on.
+type McpTool = {
+  handler: (args: Record<string, unknown>) => Promise<{ content: { text: string }[]; isError?: boolean }>;
+};
+const seedDraft = () => createDraft(erste.id, { headline: "draft", landingUrl: LP });
+// The PMMID a draft gets when promoted into aud1/top1, worked out by hand from
+// the pattern a_{{Audience_Key}}-t_{{Topic_Key}}-m_{{Number}}-v_{{Variant}}-n_{{Version}}.
+const pmmidInAud1 = (d: { number: number; variant: string }) =>
+  `a_aud1-t_top1-m_${d.number}-v_${d.variant}-n_1`;
+
+describe("promoteDraft — the decision holds until the write", () => {
+  it("a promote that waited through a landing-URL edit is refused, not written with the old URL", async () => {
+    // The promote builds final_trafficked_url from the landing URL it read. An
+    // edit that landed in between left a card whose trafficked URL sends
+    // traffic to the old page while landing_url names the new one.
+    const draft = await seedDraft();
+    const lock = await holdRowLock(draft.id);
+    const late = promoteDraft(erste.id, draft.id, {
+      audienceKey: "aud1",
+      topicKey: "top1",
+      expectedVersion: draft.version,
+    });
+    late.catch(() => {});
+    await waitForLockWaiter();
+    await lock.release(async () => {
+      await db
+        .update(messages)
+        .set({ landingUrl: LP2, version: draft.version + 1 })
+        .where(eq(messages.id, draft.id));
+    });
+    await expect(late).rejects.toThrow(/changed since you loaded it/);
+    const after = await reread(draft.id);
+    expect(after.status).toBe("DRAFT");
+    expect(after.audience).toBeNull();
+    expect(after.landingUrl).toBe(LP2);
+    expect(after.finalTraffickedUrl).toBeNull();
+  });
+
+  it("of two promotes of one draft without If-Match, the one that waited is refused", async () => {
+    // The If-Match is optional (MCP draft_promote may omit it). Both promotes
+    // passed the DRAFT check on their read, both returned 200, and the later
+    // one moved the card out of the cell the first had just reported.
+    const draft = await seedDraft();
+    const lock = await holdRowLock(draft.id);
+    const late = promoteDraft(erste.id, draft.id, { audienceKey: "aud1", topicKey: "top1" });
+    late.catch(() => {});
+    await waitForLockWaiter();
+    await lock.release(async () => {
+      await promoteDraft(erste.id, draft.id, { audienceKey: "aud2", topicKey: "top1" });
+    });
+    await expect(late).rejects.toThrow(/changed since you loaded it/);
+    const after = await reread(draft.id);
+    expect(after.audience).toBe("aud2");
+    expect(after.pmmid).toBe(`a_aud2-t_top1-m_${draft.number}-v_${draft.variant}-n_1`);
+  });
+});
+
+describe("deleteDraft — the delete holds on the version it checked", () => {
+  it("a delete that waited through a promote leaves the placed card alone", async () => {
+    // The not-a-draft guard ran on the read; the DELETE went by id alone. A
+    // promote in between made it a card with a PMMID, and the delete removed
+    // it for good.
+    const draft = await seedDraft();
+    const lock = await holdRowLock(draft.id);
+    const late = deleteDraft(erste.id, draft.id, draft.version);
+    await waitForLockWaiter();
+    await lock.release(async () => {
+      await promoteDraft(erste.id, draft.id, {
+        audienceKey: "aud1",
+        topicKey: "top1",
+        expectedVersion: draft.version,
+      });
+    });
+    const res = await late;
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.reason).toBe("not_a_draft");
+    const after = await getMessage(erste.id, draft.id);
+    expect(after).not.toBeNull();
+    expect(after!.audience).toBe("aud1");
+    expect(after!.pmmid).toBe(pmmidInAud1(draft));
+  });
+
+  it("a delete that waited through an edit is a version conflict, and the edit survives", async () => {
+    const draft = await seedDraft();
+    const lock = await holdRowLock(draft.id);
+    const late = deleteDraft(erste.id, draft.id, draft.version);
+    await waitForLockWaiter();
+    await lock.release(async () => {
+      await db
+        .update(messages)
+        .set({ headline: "edited", version: draft.version + 1 })
+        .where(eq(messages.id, draft.id));
+    });
+    const res = await late;
+    expect(res.ok).toBe(false);
+    if (!res.ok) {
+      expect(res.reason).toBe("version_conflict");
+      expect(res.current?.headline).toBe("edited");
+    }
+    expect((await reread(draft.id)).headline).toBe("edited");
+  });
+});
+
+describe("draft_archive (archiveMessage) — the archive holds on the version it checked", () => {
+  it("a draft-scope draft_archive that waited through a promote does not archive the placed card", async () => {
+    // draft_archive checks status DRAFT on its read; a draft-scope token is
+    // not meant to reach a card in a cell (only `full` may promote). A promote
+    // in between let it archive a card that had just been placed.
+    _resetMcpRateLimitForTests();
+    const draft = await seedDraft();
+    const tool = (buildMcpServer({ clientId: erste.id, userId: "u-agent", scope: "draft" }) as unknown as {
+      _registeredTools: Record<string, McpTool>;
+    })._registeredTools.draft_archive;
+    const lock = await holdRowLock(draft.id);
+    const late = tool.handler({ draft_id: draft.id });
+    await waitForLockWaiter();
+    await lock.release(async () => {
+      await promoteDraft(erste.id, draft.id, {
+        audienceKey: "aud1",
+        topicKey: "top1",
+        expectedVersion: draft.version,
+      });
+    });
+    const res = await late;
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toMatch(/version_conflict/);
+    const after = await reread(draft.id);
+    expect(after.archivedAt).toBeNull();
+    expect(after.audience).toBe("aud1");
   });
 });

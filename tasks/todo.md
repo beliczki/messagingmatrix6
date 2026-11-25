@@ -1217,3 +1217,65 @@ Ez a branch a `claude/mc-version-bump-903097`-ből van vágva, és a teljes funk
 - [ ] Merge + deploy: Robi go-ja kell.
 
 **Verzió:** javaslat `6.133.0` → `6.134.0` (minor: új HTTP route, új MCP-tool, felhasználónak látható Naming-fül változás). Robi dönt; a `package.json` és a `CHANGELOG.md` érintetlen.
+
+## 2026-11-25 — AI label az Erste HTML template-ben (`aiLabelWhite` / `aiLabelBlack`) (ÉPÜL, Robi: „lets go”)
+
+Robi kérése: a Photoshop-mester `ERSTE_AI_Label` rétegének megfelelője a HTML bannerekben: jobb felül egy kör, benne „AI” ikon, 50% opacity. A láthatóságot és a színt a `template_variant_classes` kapcsolja. Felmérés: shared notes `ai-label-survey-2026-11-25.md`.
+Döntések (Robi, 2026-11-25): **(b) inline SVG**; az osztálynév a **korong** színe: `aiLabelWhite` = fehér korong + fekete ikon (mint a PSD-ben), `aiLabelBlack` = fekete korong + fehér ikon; egyik sincs = nincs label. „lets go” = a felmérés ajánlásai: MC-szint (a meglévő mező), a nevek maradnak, az ütközést (frame, sticker) a preview dönti el, az AdForm DCO-másolat (Drive „AdForm FINAL 2026”) külön go.
+
+**Megfigyelve (2026-11-25):** ma semmi nem rajzol AI labelt: sem a HTML/CSS (kerek csak a sticker és a frame), sem az `ERSTE_AI_badge.svg`/`.png` (csak az ikon, korong nélkül). A box `templates/html` mindkét tenanton byte-ra egyezik a repóval (md5), helyi módosítás nincs.
+
+**Touches:** `templates/html` (index.html, main.css, template.json): template-tartalom, nem alkalmazáskód. Szomszédok: `render.ts` (a `{{template_variant_class}}` csere), `html5-bundle.ts` (`cleanBundle` horgonyai, a fájllista), `preview-shooter.ts` (a preloader leválását várja), `drafts.ts:168` (tagOptions-validáció), MessageEditor `TemplateTab` (chipek). Forrás: REBUILD_SPEC §3.12, §17.12 (Drive, 2026-09-06): a template fájlrendszeren él; AI labelről és a variant-class szókészletről nem szól. Szemantikai modell nincs, ami lefedné.
+**Door:** kétirányú (`git revert`). Blast radius: minden Erste (és Telekom-oldali `html`) HTML render, de alapból `display:none`. Deploy, az AdForm DCO-template frissítése és feltöltése: nem része, külön go.
+**Prediction:** osztály nélkül a 4 méret ugyanúgy néz ki, mint eddig. `aiLabelWhite`-tal fehér korong + fekete ikon jobb felül (29 px, felülről 15, jobbról 14 px), az egész 50%-on; `aiLabelBlack`-kel fordítva. A bundle fájllistája nem változik, a `cleanBundle` nem dob. A draft elfogadja az új tokeneket. Ismeretlen: ütközés a `topRoundedFrame` keret sarkával és a felső stickerrel.
+**Seam:** `renderTemplate()` és `cleanBundle()` a valódi `templates/html`-en (`tests/unit/html5-bundle.test.ts` mellé), és `readTemplate().tagOptions`. Szemre: render 4 méret × {nincs, white, black}.
+
+**Szeletek:**
+- [x] **S0** Box-diff (egyezik), spec-olvasás, döntések.
+- [x] **S1** Piros teszt előbb (6/6 piros), aztán: `template.json` +2 opció, `index.html` `#aiLabel` (megtisztított inline SVG: nincs `<style>`, `.st0`, `id`, `xmlns`), `main.css` szabályok.
+- [x] **S2** Ellenőrzés: `npx tsc --noEmit`, lint, `npm test`; render 4 méret × 3 állapot + frame/sticker layoutok, képek Robinak.
+- [ ] **S3** ~~(külön go) Deploy; a cél-MC-ken Global szerkesztéssel hozzáfűzés; `preview_generate`.~~ **Most nem (Robi, 2026-11-25): „most ne tegyük be az MC-kbe, csak a template legyen meg … és az update a választható template variantoknál”.** Ha később kell: hozzáfűzés, nem felülírás.
+- [ ] **S4** (külön go, kifelé) Ugyanez a Drive „AdForm FINAL 2026” 4 mappájába + AdForm-feltöltés; DV360-bundle validátoron.
+
+### Review (2026-11-25)
+
+**Ami elkészült** (`claude/ai-label-survey-d6fe3a`, csak a `templates/html` + egy teszt):
+- `template.json`: az `options` végén `aiLabelWhite, aiLabelBlack`. Így chipként választható a MessageEditor Template fülén, és a `list_templates` is kiadja; a draft-validáció elfogadja.
+- `index.html`: `#aiLabel` a `#logoContainer` után, az `ERSTE_AI_badge.svg` 4 `path` + 1 `rect` eleme szkripttel, szó szerint átvéve (csak a `class="st0"` nélkül); nincs `<style>`, `id`, `xmlns`, URL.
+- `main.css`: `#aiLabel` alapból `display:none`; 29 px korong, felülről 15, jobbról 14 px, `opacity:0.5`; az ikon `fill: currentColor`. `.aiLabelWhite` = fehér korong + fekete ikon, `.aiLabelBlack` = fekete korong + fehér ikon.
+- `tests/unit/template-ai-label.test.ts`: 6 teszt (opciók, markup a `#adContainer`-ben, tiszta SVG, alap-elrejtés és PSD-méretek, színek, `cleanBundle` + változatlan bundle-fájllista). Előbb mind a 6 piros volt.
+
+**Ellenőrzés:** `npx tsc --noEmit` 0 hiba. `npm run lint` 0 hiba, 145 warning (ugyanannyi, mint előtte). `npm test`: 126 fájl, 1173 teszt zöld (unit + integráció).
+**Megfigyelve a böngészőben** (MC332a valódi tartalma, a valódi `renderTemplate`, 5 állapot × 4 méret, computed style): osztály nélkül `display:none`; `aiLabelWhite` = `rgb(255,255,255)` korong + `rgb(0,0,0)` ikon; `aiLabelBlack` fordítva; mind a 4 méretben 29×29, top 15, right 14, opacity 0.5; a preloader eltűnik, az osztályok visszakerülnek. Képek: shared notes `ai-label-renders-2026-11-25.png`, `ai-label-zoom-2026-11-25.png`.
+
+**Jóslat vs. eredmény:** bejött minden mért pont. A jósolt ütközés megvan:
+- `topRoundedFrame`: a keret sarokvonala a label alatt fut, és az 50% miatt átlátszik rajta (300x250, 640x360, 300x600; 970x250-en nem).
+- MC332a 300x250: a sticker felső széle a label alá csúszik (az MC saját `customCss`-e: `#stickerContainer {right:20px}`).
+Döntés Robié: maradjon, vagy a frame-es layoutban a label beljebb kerüljön (`.topRoundedFrame #aiLabel`).
+
+**Nem része (Robi, 2026-11-25):** MC-k beállítása, deploy, az AdForm DCO-másolat (Drive „AdForm FINAL 2026”) és feltöltés. A box `templates/html` mindkét tenanton egyezett a repóval; egy deploy után a változás a rendereken, a preview-n és a bundle-ön él, a meglévő MC-ken látható változás nélkül.
+**Verzió:** javaslat minor (új választható template-token, látható viselkedés). A pontos szám attól függ, mi landol előbb (a `mc-version-fixes` ág 6.134.0-t javasol). `package.json` és `CHANGELOG.md` érintetlen.
+
+**Javítás (Robi, 2026-11-25: „a 300x250-en túl nagy … 24 px átmérőjű és közelebb a sarokhoz”):** `300x250.css` → `body #aiLabel` 24 px, felülről és jobbról 10 px (a 10 px az én választásom). Előbb piros teszt (+1, összesen 7). Böngészőben mérve: 300x250 = 24×24, 10/10; a többi méret változatlan, 29 px, 15/14. MC332a 300x250-en a label már nem ér a stickerhez.
+
+## 2026-11-25 — 6.134.0 deploy (AI label az Erste `html` template-ben) (Robi: „merge push and deploy”)
+
+**Touches:** csak a `templates/html` (`index.html`, `main.css`, `300x250.css`, `template.json`), amit a `render.ts` és a `templates.ts` hívásonként a lemezről olvas. A `src/` nem változott a `4942f28` óta (`git diff --quiet 4942f28 main -- src/`). Szomszédok és tesztvarratok: lásd a fenti „AI label” szakaszt (`renderTemplate()`, `cleanBundle()`, `readTemplate().tagOptions`). Forrás: REBUILD_SPEC §3.12 és §17.12 (Drive, 2026-09-06); a template-kód azóta változott, a spec elavult lehet, és az AI labelről nem szól. Szemantikai modell nincs.
+**Door:** kétirányú. Blast radius: csak az **erste** `html`-renderjei (a checkout `templates/` mappája). A telekom a `TEMPLATES_ROOT=/var/www/mm6-telekom-templates` mappából olvas, és az a deploytól nem változik (lásd D0b). Egyik MC-n sincs `aiLabel*` osztály (Robi: most nem tesszük be). Kifelé semmi nem megy (nincs feed, nincs AdForm-feltöltés).
+**Prediction:** a meglévő MC-k renderje pixelre ugyanaz. A Template fül chipjei között **csak az erste-n** jelenik meg az `aiLabelWhite` és az `aiLabelBlack`. `npm ci` nem fut, mert a lockfile nem változott, és a stamp mindkét tenanton egyezik vele.
+**Ismert korlát:** a `topRoundedFrame` layoutban a keret sarka átlátszik a labelen. Ma ennek nincs hatása, mert egyik MC sem kapta meg az osztályt. A 300x250-es méret kisebb lett (`165d12b`). Az SZK MC-kből a rounded frame osztályt egy külön session veszi ki (`local_cc05f372-…`).
+
+- [x] **D0** Planning review. v1 (`20261125-1825-mm6-6.134.0-deploy.md`): CA OK with changes, Codex Stop. Javítva v2-ben: a template-ek visszaállítása mindkét hibaágon, stamp-ellenőrzés, tenantonkénti kapu render-ellenőrzéssel, ez a szakasz.
+- [x] **D1** Helyi ellenőrzés a commitolt fán. `tsc` 0 hiba. Lint: a main-en 0 hiba; mind a 264 hiba egy másik worktree-ben van (`.claude/worktrees/exciting-leakey-7043bd`). Tesztek: 1174/1174 zöld. A nem commitolt `tests/integration/api/request-body-limit.test.ts` 14 tesztje bukik; ez nem része a 6.134.0-nak.
+- [x] **D2** Pixel-összevetés helyben. MC332a (id 34725, `animated fullSurfaceImage teal`), a valódi `renderTemplate`, a `4942f28` és a `4184b9b` template-jeivel, Chromiumban, 4 méretben: **0 eltérő pixel**, `#aiLabel` `display:none`. `aiLabelWhite`: korong `rgb(255,255,255)`, ikon `rgb(0,0,0)`. `aiLabelBlack`: fordítva. Mindkettő 0.5 opacity; 29×29 a 15/14 px-es saroktávolsággal, a 300x250-en 24×24 a 10/10-zel, az `#adContainer` sarkához mérve.
+- [x] **D3** Pre-flight a B boxon (csak olvasás): lemez 61%, 2070 MB szabad memória, Node v24.22.3, mindkét HEAD `4942f28`, nincs követett módosítás, nincs `.next-old` vagy `.next-build`, a `mm6-deploy` egyezik a repóval, a `.mm6-lock-sha` egyezik a lockfile-lal (`7138f573…`).
+- [x] **D0b** v2 review: CA OK with changes (`npx --no-install tsx`; a push ne vigye a két untracked fájlt), Codex Stop. A Stop oka: a telekom `.env`-je szerint `TEMPLATES_ROOT=/var/www/mm6-telekom-templates`, ami a checkouton kívül van (T4, 2026-09-12). **Megfigyelve a boxon:** a telekom template-jei ebben a külső mappában vannak, `aiLabel` nincs bennük, az ujjlenyomatuk `74b3c043…` (a `html/` fájljainak rendezett md5-je). Az erste-nél a `TEMPLATES_ROOT` nincs megadva, ezért a checkoutból olvas (`cwd /var/www/mm6-erste`). **Döntés:** a telekom template-jei érintetlenek maradnak, mert az AI label Erste-kérés. A telekom-deploy csak a verziót és a doksit viszi; a kapu ott annyi, hogy az ujjlenyomat ugyanaz marad. A pixel-összevetés egyetlen fixture-t bizonyít (MC332a, 4 méret, külső assetek blokkolva), nem minden MC-t.
+- [x] **D0c** v3 review: Codex OK with changes (ez a checklist igazítva), CA OK with changes (az erste `templates/` dirty-checkje deploy előtt; a telekom ujjlenyomata közvetlenül a deploy előtt is; kimondva, hogy az erste render-checkje `.env` nélkül fut, mert ott nincs `TEMPLATES_ROOT`).
+- [x] **D4** Push `6bb031b..a01bdf1` (kint maradt a két untracked fájl). A telekom ujjlenyomata a deploy előtt `74b3c043`. `mm6-deploy telekom` rc 0, 2026-11-25 17:32 UTC: nem futott `npm ci`, a szabad memória minimuma 1027 MB, a maint kb. 1 s. Kapu: HEAD `a01bdf1`, 6.134.0, a restart 1→2, `/login` 200 (a publikus is), `/_next/image` 404, nincs `.next-old`/`.next-build`, az error log nem változott (utolsó sora 02:11-es). Az ujjlenyomat utána is `74b3c043`, 0 `aiLabel`. Napló: `/root/mm6-rollback/d134-telekom-20261125-173222.log`.
+- [x] **D5** Az erste `templates/` tiszta volt, a `TEMPLATES_ROOT` nincs megadva. `mm6-deploy erste` rc 0, 17:33 UTC: nem futott `npm ci`, a minimum 1317 MB, a maint kb. 1 s. Kapu: HEAD `a01bdf1`, 6.134.0, a restart 1→2, `/login` 200 (a publikus is), `/_next/image` 404, nincs maradék, az error log nem változott. A `templates/html` porcelain üres, és egyezik az `a01bdf1`-gyel. Render-check a boxon (`npx --no-install tsx`, `TEMPLATES_ROOT` nélkül): a `template.json`-ban mindkét opció ott van; 4 méret × {nincs, white, black} = 12/12, az `#aiLabel` megvan, az osztályok az `#adContainer`-en, a CSS-szabályok bent, a kis 300x250-ös szabály csak a 300x250-en. Napló: `/root/mm6-rollback/d134-erste-20261125-173313.log`.
+**Élő:** 6.134.0 mindkét tenanton. Az AI label csak az erste-n választható; egyik MC sem kapta meg. Nyitott: az MC-k beállítása (hozzáfűzés), az AdForm DCO-másolat és a feltöltés (külön go), a rounded frame session Q1–Q4 (Robi).
+
+**Rollback:**
+- Elbukik a build: a `git pull` már lefutott, ezért az új template-ek a lemezen vannak, miközben a régi build szolgál ki. Visszaállítás: `git -C /var/www/mm6-<t> reset --hard 4942f28`, majd ellenőrzés: `git rev-parse --short HEAD` = `4942f28` és `git diff --quiet 4942f28 -- templates/html`.
+- Nem jön fel az app: a maint fent marad. `rm -rf .next && mv .next-old .next`, `git reset --hard 4942f28`, `pm2 restart mm6-<t> --update-env`, a `/login` válasza 200, `mm6-maint off <t>`.
+- Sikeres deploy után: `git revert -m 1 4184b9b`, `git revert 954ed81`, `git revert -m 1 874d4d0`, push, `mm6-deploy`.

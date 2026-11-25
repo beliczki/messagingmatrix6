@@ -1133,3 +1133,41 @@ Entitás-függvény `setMessageVersionNo(clientId, id, expectedVersion, versionN
 - [ ] **S5** Ellenőrzés: `npx tsc --noEmit`, lint, `npm test`; a spec §21 frissítése „elkészült”-re; review-szakasz; minor bump-javaslat.
 
 **Planning review:** új MCP-tool és feed-invariáns változik, tehát nem triviális; Robi D1–D4 döntése után Codex + Chief Architect.
+
+## 2026-11-25 — AI label az Erste HTML template-ben (`aiLabelWhite` / `aiLabelBlack`) (ÉPÜL, Robi: „lets go”)
+
+Robi kérése: a Photoshop-mester `ERSTE_AI_Label` rétegének megfelelője a HTML bannerekben: jobb felül egy kör, benne „AI” ikon, 50% opacity. A láthatóságot és a színt a `template_variant_classes` kapcsolja. Felmérés: shared notes `ai-label-survey-2026-11-25.md`.
+Döntések (Robi, 2026-11-25): **(b) inline SVG**; az osztálynév a **korong** színe: `aiLabelWhite` = fehér korong + fekete ikon (mint a PSD-ben), `aiLabelBlack` = fekete korong + fehér ikon; egyik sincs = nincs label. „lets go” = a felmérés ajánlásai: MC-szint (a meglévő mező), a nevek maradnak, az ütközést (frame, sticker) a preview dönti el, az AdForm DCO-másolat (Drive „AdForm FINAL 2026”) külön go.
+
+**Megfigyelve (2026-11-25):** ma semmi nem rajzol AI labelt: sem a HTML/CSS (kerek csak a sticker és a frame), sem az `ERSTE_AI_badge.svg`/`.png` (csak az ikon, korong nélkül). A box `templates/html` mindkét tenanton byte-ra egyezik a repóval (md5), helyi módosítás nincs.
+
+**Touches:** `templates/html` (index.html, main.css, template.json): template-tartalom, nem alkalmazáskód. Szomszédok: `render.ts` (a `{{template_variant_class}}` csere), `html5-bundle.ts` (`cleanBundle` horgonyai, a fájllista), `preview-shooter.ts` (a preloader leválását várja), `drafts.ts:168` (tagOptions-validáció), MessageEditor `TemplateTab` (chipek). Forrás: REBUILD_SPEC §3.12, §17.12 (Drive, 2026-09-06): a template fájlrendszeren él; AI labelről és a variant-class szókészletről nem szól. Szemantikai modell nincs, ami lefedné.
+**Door:** kétirányú (`git revert`). Blast radius: minden Erste (és Telekom-oldali `html`) HTML render, de alapból `display:none`. Deploy, az AdForm DCO-template frissítése és feltöltése: nem része, külön go.
+**Prediction:** osztály nélkül a 4 méret ugyanúgy néz ki, mint eddig. `aiLabelWhite`-tal fehér korong + fekete ikon jobb felül (29 px, felülről 15, jobbról 14 px), az egész 50%-on; `aiLabelBlack`-kel fordítva. A bundle fájllistája nem változik, a `cleanBundle` nem dob. A draft elfogadja az új tokeneket. Ismeretlen: ütközés a `topRoundedFrame` keret sarkával és a felső stickerrel.
+**Seam:** `renderTemplate()` és `cleanBundle()` a valódi `templates/html`-en (`tests/unit/html5-bundle.test.ts` mellé), és `readTemplate().tagOptions`. Szemre: render 4 méret × {nincs, white, black}.
+
+**Szeletek:**
+- [x] **S0** Box-diff (egyezik), spec-olvasás, döntések.
+- [x] **S1** Piros teszt előbb (6/6 piros), aztán: `template.json` +2 opció, `index.html` `#aiLabel` (megtisztított inline SVG: nincs `<style>`, `.st0`, `id`, `xmlns`), `main.css` szabályok.
+- [x] **S2** Ellenőrzés: `npx tsc --noEmit`, lint, `npm test`; render 4 méret × 3 állapot + frame/sticker layoutok, képek Robinak.
+- [ ] **S3** ~~(külön go) Deploy; a cél-MC-ken Global szerkesztéssel hozzáfűzés; `preview_generate`.~~ **Most nem (Robi, 2026-11-25): „most ne tegyük be az MC-kbe, csak a template legyen meg … és az update a választható template variantoknál”.** Ha később kell: hozzáfűzés, nem felülírás.
+- [ ] **S4** (külön go, kifelé) Ugyanez a Drive „AdForm FINAL 2026” 4 mappájába + AdForm-feltöltés; DV360-bundle validátoron.
+
+### Review (2026-11-25)
+
+**Ami elkészült** (`claude/ai-label-survey-d6fe3a`, csak a `templates/html` + egy teszt):
+- `template.json`: az `options` végén `aiLabelWhite, aiLabelBlack`. Így chipként választható a MessageEditor Template fülén, és a `list_templates` is kiadja; a draft-validáció elfogadja.
+- `index.html`: `#aiLabel` a `#logoContainer` után, az `ERSTE_AI_badge.svg` 4 `path` + 1 `rect` eleme szkripttel, szó szerint átvéve (csak a `class="st0"` nélkül); nincs `<style>`, `id`, `xmlns`, URL.
+- `main.css`: `#aiLabel` alapból `display:none`; 29 px korong, felülről 15, jobbról 14 px, `opacity:0.5`; az ikon `fill: currentColor`. `.aiLabelWhite` = fehér korong + fekete ikon, `.aiLabelBlack` = fekete korong + fehér ikon.
+- `tests/unit/template-ai-label.test.ts`: 6 teszt (opciók, markup a `#adContainer`-ben, tiszta SVG, alap-elrejtés és PSD-méretek, színek, `cleanBundle` + változatlan bundle-fájllista). Előbb mind a 6 piros volt.
+
+**Ellenőrzés:** `npx tsc --noEmit` 0 hiba. `npm run lint` 0 hiba, 145 warning (ugyanannyi, mint előtte). `npm test`: 126 fájl, 1173 teszt zöld (unit + integráció).
+**Megfigyelve a böngészőben** (MC332a valódi tartalma, a valódi `renderTemplate`, 5 állapot × 4 méret, computed style): osztály nélkül `display:none`; `aiLabelWhite` = `rgb(255,255,255)` korong + `rgb(0,0,0)` ikon; `aiLabelBlack` fordítva; mind a 4 méretben 29×29, top 15, right 14, opacity 0.5; a preloader eltűnik, az osztályok visszakerülnek. Képek: shared notes `ai-label-renders-2026-11-25.png`, `ai-label-zoom-2026-11-25.png`.
+
+**Jóslat vs. eredmény:** bejött minden mért pont. A jósolt ütközés megvan:
+- `topRoundedFrame`: a keret sarokvonala a label alatt fut, és az 50% miatt átlátszik rajta (300x250, 640x360, 300x600; 970x250-en nem).
+- MC332a 300x250: a sticker felső széle a label alá csúszik (az MC saját `customCss`-e: `#stickerContainer {right:20px}`).
+Döntés Robié: maradjon, vagy a frame-es layoutban a label beljebb kerüljön (`.topRoundedFrame #aiLabel`).
+
+**Nem része (Robi, 2026-11-25):** MC-k beállítása, deploy, az AdForm DCO-másolat (Drive „AdForm FINAL 2026”) és feltöltés. A box `templates/html` mindkét tenanton egyezett a repóval; egy deploy után a változás a rendereken, a preview-n és a bundle-ön él, a meglévő MC-ken látható változás nélkül.
+**Verzió:** javaslat minor (új választható template-token, látható viselkedés). A pontos szám attól függ, mi landol előbb (a `mc-version-fixes` ág 6.134.0-t javasol). `package.json` és `CHANGELOG.md` érintetlen.

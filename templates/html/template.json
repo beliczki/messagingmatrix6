@@ -33,7 +33,7 @@
     },
     "template_variant_class": {
       "type": "tag",
-      "options": "fullSurfaceColor, fullSurfaceImage, imageAndColor, imageAndColor2, preCompBg, imageGfx, objectGfx, videoGfx, noFrame, topRoundedFrame, bottomRoundedFrame, animated, teal, purple, peach, stone, apple, orange, colorCta, outlineCta, topSticker, bottomSticker, campaignImage, stickerImage",
+      "options": "fullSurfaceColor, fullSurfaceImage, imageAndColor, imageAndColor2, preCompBg, imageGfx, objectGfx, videoGfx, noFrame, topRoundedFrame, bottomRoundedFrame, animated, teal, purple, peach, stone, apple, orange, colorCta, outlineCta, topSticker, bottomSticker, campaignImage, stickerImage, aiLabelWhite, aiLabelBlack",
       "default": "",
       "binding-messagingmatrix": "Template_variant_classes"
     },

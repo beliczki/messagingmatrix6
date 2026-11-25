@@ -15,7 +15,13 @@ export type HeldLock = {
   release: (mutate?: () => Promise<void>) => Promise<void>;
 };
 
-export type LockedTable = "messages" | "topics" | "audiences";
+export type LockedTable =
+  | "messages"
+  | "topics"
+  | "audiences"
+  | "assets"
+  | "creatives"
+  | "text_formatting";
 
 export async function holdRowLock(
   id: number,

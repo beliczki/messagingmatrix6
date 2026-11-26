@@ -13,13 +13,8 @@ import clsx from "clsx";
 import ScaledMediaPreview, { parseDimensions } from "./ScaledMediaPreview";
 import { usePersistent, type Codec } from "./usePersistent";
 import ModalBackdrop from "./ModalBackdrop";
-
-type SaveState =
-  | { kind: "idle" }
-  | { kind: "saving" }
-  | { kind: "saved" }
-  | { kind: "error"; message: string }
-  | { kind: "conflict" };
+import { requireRow, useVersionedAutosave } from "./useVersionedAutosave";
+import { ConflictBar, SaveIndicator } from "./SaveStatus";
 
 type PreviewBg = "light" | "dark" | "checker";
 
@@ -48,7 +43,7 @@ export type UploadedFile = {
   dimensions: string | null;
 };
 
-export type MediaEntityDialogProps<E extends MediaEntity, D> = {
+export type MediaEntityDialogProps<E extends MediaEntity, D extends Record<string, unknown>> = {
   /** The currently-open entity. */
   entity: E;
   /** The list the stepper navigates over (e.g. filtered visible rows). */
@@ -88,7 +83,7 @@ export type MediaEntityDialogProps<E extends MediaEntity, D> = {
   };
 };
 
-export default function MediaEntityDialog<E extends MediaEntity, D>({
+export default function MediaEntityDialog<E extends MediaEntity, D extends Record<string, unknown>>({
   entity,
   entities,
   onJump,
@@ -105,9 +100,6 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
   navId,
   versionNav,
 }: MediaEntityDialogProps<E, D>) {
-  const [draft, setDraft] = useState<D>(() => toDraft(entity));
-  const [snapshot, setSnapshot] = useState<E>(entity);
-  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
   const [autoSave, setAutoSave] = useState<boolean>(true);
   const [splitPercent, setSplitPercent] = useState<number>(50);
   const [bg, setBg] = usePersistent<PreviewBg>(
@@ -118,17 +110,9 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
 
   const containerRef = useRef<HTMLDivElement>(null);
   const draggingRef = useRef<boolean>(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const dims = parseDimensions(entity.fileDimensions ?? file?.dimensions ?? null);
   const wide = dims.landscape;
-
-  // Re-seed draft + snapshot when the user steps to a different entity.
-  useEffect(() => {
-    setDraft(toDraft(entity));
-    setSnapshot(entity);
-    setSaveState({ kind: "idle" });
-  }, [entity.id]);
 
   const navIndex = useMemo(
     () => entities.findIndex((e) => e.id === (navId ?? entity.id)),
@@ -159,85 +143,27 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
     return () => window.removeEventListener("keydown", onKey);
   });
 
+  // The edit buffer and its save. The rules (one save in flight, a 409 is
+  // terminal, a response only for the row that sent it, re-seed only on
+  // another row) are in useVersionedAutosave. The PATCH answers with the row
+  // under the item key, e.g. { asset } for "assets".
   const qc = useQueryClient();
-  const save = useMutation({
-    mutationFn: async (payload: Record<string, unknown>) => {
-      if (Object.keys(payload).length === 0) return null;
-      const r = await fetch(`${endpoint}/${snapshot.id}`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "If-Match": String(snapshot.version),
-        },
-        body: JSON.stringify(payload),
-      });
-      if (r.status === 409) {
-        const body = await r.json().catch(() => ({}));
-        const current = (body as { current?: E; row?: E }).current
-          ?? (body as { row?: E }).row;
-        throw new VersionMismatchError<E>(current ?? null);
-      }
-      if (!r.ok) throw new Error(await r.text());
-      const body = await r.json();
-      // Server payload key is endpoint-specific (e.g. { creative: ... } or
-      // { asset: ... }); be permissive.
-      return (
-        (body as Record<string, E>)[queryKey.slice(0, -1)] ??
-        (body as { row?: E }).row ??
-        null
-      );
+  const itemKey = queryKey.slice(0, -1);
+  const editor = useVersionedAutosave<E, D>({
+    rowKey: String(entity.id),
+    row: entity,
+    rules: { toDraft, diff: diffPayload },
+    url: (r) => `${endpoint}/${requireRow(r).id}`,
+    readSaved: (b) => {
+      const saved = (b as Record<string, E | undefined>)[itemKey];
+      if (saved === undefined) throw new Error(`${endpoint}: the response has no "${itemKey}"`);
+      return saved;
     },
-    onSuccess: (saved) => {
-      if (saved) {
-        setSnapshot(saved);
-        qc.invalidateQueries({ queryKey: [queryKey] });
-      }
-      setSaveState({ kind: "saved" });
-      setTimeout(() => {
-        setSaveState((s) => (s.kind === "saved" ? { kind: "idle" } : s));
-      }, 1500);
-    },
-    onError: (e) => {
-      if (e instanceof VersionMismatchError && e.current) {
-        setSaveState({ kind: "conflict" });
-        setSnapshot(e.current);
-        qc.invalidateQueries({ queryKey: [queryKey] });
-      } else {
-        setSaveState({ kind: "error", message: (e as Error).message });
-      }
-    },
+    onSaved: () => qc.invalidateQueries({ queryKey: [queryKey] }),
+    autoSave,
   });
-
-  // Auto-save with 400ms debounce.
-  useEffect(() => {
-    if (!autoSave) {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      return;
-    }
-    const payload = diffPayload(snapshot, draft);
-    if (Object.keys(payload).length === 0) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    setSaveState({ kind: "saving" });
-    debounceRef.current = setTimeout(() => save.mutate(payload), 400);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [draft, snapshot, autoSave]);
-
-  const isDirty = useMemo(() => {
-    return Object.keys(diffPayload(snapshot, draft)).length > 0;
-  }, [draft, snapshot, diffPayload]);
-
-  function manualSave() {
-    if (!isDirty) return;
-    setSaveState({ kind: "saving" });
-    save.mutate(diffPayload(snapshot, draft));
-  }
-  function manualCancel() {
-    setDraft(toDraft(snapshot));
-    setSaveState({ kind: "idle" });
-  }
+  const snapshot = requireRow(editor.committed);
+  const { draft, setDraft, status: saveState, dirty: isDirty } = editor;
 
   const archive = useMutation({
     mutationFn: async () => {
@@ -444,15 +370,16 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
             {!autoSave ? (
               <>
                 <button
-                  onClick={manualSave}
-                  disabled={!isDirty || saveState.kind === "saving"}
+                  onClick={editor.save}
+                  // In a conflict only Reload leaves it (REBUILD_SPEC §8.2).
+                  disabled={!isDirty || saveState.kind === "saving" || saveState.kind === "conflict"}
                   className="toolbar-btn--primary rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Save
                 </button>
                 <button
-                  onClick={manualCancel}
-                  disabled={!isDirty || saveState.kind === "saving"}
+                  onClick={editor.cancel}
+                  disabled={!isDirty || saveState.kind === "saving" || saveState.kind === "conflict"}
                   className="toolbar-btn rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Cancel
@@ -468,6 +395,16 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
             </button>
           </div>
         </header>
+
+        {saveState.kind === "conflict" ? (
+          <ConflictBar
+            subject="this item"
+            onReload={() => {
+              editor.reload();
+              qc.invalidateQueries({ queryKey: [queryKey] });
+            }}
+          />
+        ) : null}
 
         <div
           ref={containerRef}
@@ -548,51 +485,6 @@ export default function MediaEntityDialog<E extends MediaEntity, D>({
         </div>
       </div>
     </ModalBackdrop>
-  );
-}
-
-class VersionMismatchError<E> extends Error {
-  current: E | null;
-  constructor(current: E | null) {
-    super("version mismatch");
-    this.current = current;
-  }
-}
-
-function SaveIndicator({ state }: { state: SaveState }) {
-  if (state.kind === "idle") return null;
-  if (state.kind === "saving") {
-    return (
-      <span className="save-indicator save-indicator--saving inline-flex items-center gap-1 text-xs text-slate-500">
-        <Icon name="spinner" className="size-3 animate-spin" />
-        Saving…
-      </span>
-    );
-  }
-  if (state.kind === "saved") {
-    return (
-      <span className="save-indicator save-indicator--saved inline-flex items-center gap-1 text-xs text-emerald-700">
-        <Icon name="check" className="size-3" />
-        Saved
-      </span>
-    );
-  }
-  if (state.kind === "conflict") {
-    return (
-      <span className="save-indicator save-indicator--conflict inline-flex items-center gap-1 text-xs text-amber-700">
-        <Icon name="alert" className="size-3" />
-        Refreshed (someone else edited this)
-      </span>
-    );
-  }
-  return (
-    <span
-      className="save-indicator save-indicator--error inline-flex items-center gap-1 text-xs text-rose-700"
-      title={state.message}
-    >
-      <Icon name="alert" className="size-3" />
-      Save failed
-    </span>
   );
 }
 

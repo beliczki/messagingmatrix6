@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
 import {
@@ -22,6 +22,8 @@ import { useAlertDialog } from "../_components/AlertDialog";
 import { usePersistent, type Codec } from "../_components/usePersistent";
 import { AutocompleteField } from "../_components/AutocompleteField";
 import { templateMetaFor } from "../_components/MatrixIframeTile";
+import { requireRow, useVersionedAutosave } from "../_components/useVersionedAutosave";
+import { ConflictBar, SaveIndicator } from "../_components/SaveStatus";
 
 type TemplateInfo = {
   name: string;
@@ -196,21 +198,6 @@ function diffPayload(before: Draft, after: Draft): Partial<Draft> {
   return out as Partial<Draft>;
 }
 
-type SaveState =
-  | { kind: "idle" }
-  | { kind: "saving" }
-  | { kind: "saved" }
-  | { kind: "error"; message: string }
-  | { kind: "conflict" };
-
-class VersionMismatchError extends Error {
-  current: Audience | Topic;
-  constructor(current: Audience | Topic) {
-    super("version_mismatch");
-    this.current = current;
-  }
-}
-
 function isLandscape(size: string | null): boolean {
   if (!size) return false;
   const m = size.match(/^(\d+)x(\d+)$/);
@@ -253,22 +240,29 @@ export default function HeaderDetailDialog({
   );
 
   // ── Edit state (autosave w/ optimistic lock) ──
-  const [committed, setCommitted] = useState<Audience | Topic>(entity);
-  const [draft, setDraft] = useState<Draft>(() => toDraft(kind, entity));
+  // The rules (one save in flight, a 409 is terminal, a response only for the
+  // row that sent it, re-seed only on another row) are in useVersionedAutosave.
+  // The key is kind:id: an audience and a topic can share an id.
+  const qc = useQueryClient();
   const [autoSave, setAutoSave] = useState<boolean>(true);
-  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
-
-  // Reseed only when the dialog is showing a different entity (id/kind
-  // change). Do NOT reseed on entity.version — parent re-fetches after a save
-  // would otherwise wipe in-progress edits typed between save start and
-  // invalidation. Conflict resolution (409 → setCommitted(e.current)) handles
-  // external edits gracefully.
-  useEffect(() => {
-    setCommitted(entity);
-    setDraft(toDraft(kind, entity));
-    setSaveState({ kind: "idle" });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entity.id, kind]);
+  const listKey = kind === "audience" ? "audiences" : "topics";
+  const editor = useVersionedAutosave<Audience | Topic, Draft>({
+    rowKey: `${kind}:${entity.id}`,
+    row: entity,
+    rules: {
+      toDraft: (r) => toDraft(kind, r),
+      diff: (c, d) => diffPayload(toDraft(kind, c), d),
+    },
+    url: (r) => `/api/${listKey}/${requireRow(r).id}`,
+    readSaved: (b) => {
+      const body = b as { audience: Audience } | { topic: Topic };
+      return "audience" in body ? body.audience : body.topic;
+    },
+    onSaved: () => qc.invalidateQueries({ queryKey: [listKey] }),
+    autoSave,
+  });
+  const committed = requireRow(editor.committed);
+  const { draft, setDraft, status: saveState, dirty: isDirty } = editor;
 
   // ── Stepper across the (already filtered) messages ──
   // For topic kind, dedupe by (number, variant): the same MC can appear
@@ -371,95 +365,6 @@ export default function HeaderDetailDialog({
     effectiveSize,
     skipAnim,
   ]);
-
-  // ── PATCH mutation w/ optimistic locking ──
-  const qc = useQueryClient();
-  const save = useMutation({
-    mutationFn: async (payload: Partial<Draft>) => {
-      if (Object.keys(payload).length === 0) return null;
-      const url = kind === "audience"
-        ? `/api/audiences/${committed.id}`
-        : `/api/topics/${committed.id}`;
-      const r = await fetch(url, {
-        method: "PATCH",
-        credentials: "include",
-        headers: {
-          "Content-Type": "application/json",
-          "If-Match": String(committed.version),
-        },
-        body: JSON.stringify(payload),
-      });
-      if (r.status === 409) {
-        const body = (await r.json()) as
-          | { currentRow: Audience }
-          | { currentRow: Topic };
-        throw new VersionMismatchError(body.currentRow);
-      }
-      if (!r.ok) {
-        throw new Error(await r.text());
-      }
-      const body = (await r.json()) as
-        | { audience: Audience }
-        | { topic: Topic };
-      return "audience" in body ? body.audience : body.topic;
-    },
-    onSuccess: (saved) => {
-      if (saved) {
-        setCommitted(saved);
-        qc.invalidateQueries({
-          queryKey: [kind === "audience" ? "audiences" : "topics"],
-        });
-      }
-      setSaveState({ kind: "saved" });
-      setTimeout(() => {
-        setSaveState((s) => (s.kind === "saved" ? { kind: "idle" } : s));
-      }, 1500);
-    },
-    onError: (e) => {
-      if (e instanceof VersionMismatchError) {
-        setSaveState({ kind: "conflict" });
-        setCommitted(e.current);
-        qc.invalidateQueries({
-          queryKey: [kind === "audience" ? "audiences" : "topics"],
-        });
-      } else {
-        setSaveState({ kind: "error", message: (e as Error).message });
-      }
-    },
-  });
-
-  // Autosave debounce (400 ms), like MessageEditor.
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (!autoSave) {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      return;
-    }
-    const payload = diffPayload(toDraft(kind, committed), draft);
-    if (Object.keys(payload).length === 0) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    setSaveState({ kind: "saving" });
-    debounceRef.current = setTimeout(() => save.mutate(payload), 400);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [draft, committed, autoSave, kind]);
-
-  const isDirty = useMemo(() => {
-    const payload = diffPayload(toDraft(kind, committed), draft);
-    return Object.keys(payload).length > 0;
-  }, [draft, committed, kind]);
-
-  function manualSave() {
-    if (!isDirty) return;
-    const payload = diffPayload(toDraft(kind, committed), draft);
-    setSaveState({ kind: "saving" });
-    save.mutate(payload);
-  }
-  function manualCancel() {
-    setDraft(toDraft(kind, committed));
-    setSaveState({ kind: "idle" });
-  }
 
   // ── Hard delete (edit mode) ──
   // Channel rows are only presented as audiences; they live in their own table
@@ -665,7 +570,7 @@ export default function HeaderDetailDialog({
         const body = (await r.json()) as
           | { audience: Audience }
           | { topic: Topic };
-        setCommitted("audience" in body ? body.audience : body.topic);
+        editor.adopt("audience" in body ? body.audience : body.topic);
         qc.invalidateQueries({ queryKey: [entityPath] });
         qc.invalidateQueries({ queryKey: ["messages"] });
         return;
@@ -824,15 +729,16 @@ export default function HeaderDetailDialog({
             {!autoSave ? (
               <>
                 <button
-                  onClick={manualSave}
-                  disabled={!isDirty || saveState.kind === "saving"}
+                  onClick={editor.save}
+                  // In a conflict only Reload leaves it (REBUILD_SPEC §8.2).
+                  disabled={!isDirty || saveState.kind === "saving" || saveState.kind === "conflict"}
                   className="toolbar-btn--primary rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Save
                 </button>
                 <button
-                  onClick={manualCancel}
-                  disabled={!isDirty || saveState.kind === "saving"}
+                  onClick={editor.cancel}
+                  disabled={!isDirty || saveState.kind === "saving" || saveState.kind === "conflict"}
                   className="toolbar-btn rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Cancel
@@ -848,6 +754,16 @@ export default function HeaderDetailDialog({
             </button>
           </div>
         </header>
+
+        {saveState.kind === "conflict" ? (
+          <ConflictBar
+            subject={`this ${kind}`}
+            onReload={() => {
+              editor.reload();
+              qc.invalidateQueries({ queryKey: [listKey] });
+            }}
+          />
+        ) : null}
 
         <div
           ref={containerRef}
@@ -1386,43 +1302,6 @@ function KeyField({
         </>
       ) : null}
     </div>
-  );
-}
-
-function SaveIndicator({ state }: { state: SaveState }) {
-  if (state.kind === "idle") return null;
-  if (state.kind === "saving") {
-    return (
-      <span className="save-indicator save-indicator--saving inline-flex items-center gap-1 text-xs text-slate-500">
-        <Icon name="spinner" className="size-3 animate-spin" />
-        Saving…
-      </span>
-    );
-  }
-  if (state.kind === "saved") {
-    return (
-      <span className="save-indicator save-indicator--saved inline-flex items-center gap-1 text-xs text-emerald-700">
-        <Icon name="check" className="size-3" />
-        Saved
-      </span>
-    );
-  }
-  if (state.kind === "conflict") {
-    return (
-      <span className="save-indicator save-indicator--conflict inline-flex items-center gap-1 text-xs text-amber-700">
-        <Icon name="alert" className="size-3" />
-        Refreshed (someone else edited this)
-      </span>
-    );
-  }
-  return (
-    <span
-      className="save-indicator save-indicator--error inline-flex items-center gap-1 text-xs text-rose-700"
-      title={state.message}
-    >
-      <Icon name="alert" className="size-3" />
-      Save failed
-    </span>
   );
 }
 

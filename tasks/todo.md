@@ -1631,7 +1631,7 @@ Planning review nem kell (kliens-javítás, nincs séma, auth, deploy vagy depen
 
 **Rollback:** elbukó build → semmi nem változott, a régi build szolgál ki (`git -C /var/www/mm6-<t> reset --hard 3480889`). Nem jön fel → maint marad, `.next-old` vissza, reset `3480889`, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1` a három merge-re, push, deploy.
 
-## 2026-11-26 — Autosave-szerkesztők: a három nyitott pont + a szövegformázó sor kurzorugrása (TERV, Robira vár)
+## 2026-11-26 — Autosave-szerkesztők: a három nyitott pont + a szövegformázó sor kurzorugrása (KÉSZ az ágon, commitolva, NINCS deployolva és nincs bumpolva; Robi: „Igen, mehet B”)
 
 Robi: „csináljuk meg a nyitott pontokat”, közben pedig: „a texformatting is elugrál nekem gépelés közben a sor végére”. Ág: `claude/autosave-editors` (a main `26456ee`-ről).
 
@@ -1680,19 +1680,87 @@ Robi: „csináljuk meg a nyitott pontokat”, közben pedig: „a texformatting
 **Seam:** B-nél a hook nyilvános felülete, a `components` vitest projektben (jsdom), `react-dom/client` + `act` és hamis `fetch` mellett, új függőség nélkül. A-nál ugyanez a teszt-mód, csak a komponenseken.
 
 **Szeletek (B):**
-- [ ] S1 Piros tesztek a hookra (az öt szabály, köztük a saját visszhang esete), aztán maga a hook.
-- [ ] S2 A `TextFormattingRuleRow` átáll a hookra, és a soron megjelenik a hiba- és conflict-jelzés. Előbb piros teszt a soron: a futó mentés alatt gépelt szöveg megmarad.
-- [ ] S3 A `HeaderDetailDialog` átáll a hookra; 409 → conflict-sáv Reloaddal (K2).
-- [ ] S4 A `MediaEntityDialog` átáll a hookra; 409 → conflict + Reload; a léptetés közben érkező válasz nem írja át az új elemet.
-- [ ] S5 `MessageEditor.handleWriteError`: az elhagyott kártya hibája nem jelenik meg (a `SaveChange` viszi a sor id-ját).
-- [ ] S6 tsc, lint, `npm test` (az integrációs csomaggal együtt), a spec §6.3a, §6.4 és §8.2 frissítése a K2 szerint, bump-javaslat.
+- [x] S1 Piros tesztek a hookra (az öt szabály, köztük a saját visszhang esete), aztán maga a hook.
+- [x] S2 A `TextFormattingRuleRow` átáll a hookra, és a soron megjelenik a hiba- és conflict-jelzés. Előbb piros teszt a soron: a futó mentés alatt gépelt szöveg megmarad.
+  - Kész 2026-11-26: `src/lib/autosave.ts` (tiszta reducer, 28 teszt), `_components/useVersionedAutosave.ts`, `_components/SaveStatus.tsx` (közös `SaveIndicator` + `ConflictBar`; a MessageEditor is erre állt át). A 11 komponens-teszt a régi kódon mind piros volt, most zöld.
+  - Két új testvér, mindkettő piros volt a régi kódon: (a) egy másik MC lokális szabályát a sor megnyitása 400 ms után csendben erre az MC-re írta át (`formattingMcScope`); (b) a szóközzel tárolt méretlista („300x250, 728x90”) megnyitáskor magától PATCH-et küldött. Most a diff a tárolt sor saját draftjához mér.
+- [x] S3 A `HeaderDetailDialog` átáll a hookra; 409 → conflict-sáv Reloaddal (K2).
+  - Kész 2026-11-26: `tests/components/header-detail-dialog.test.tsx`, 4 teszt, a régi kódon mind piros volt. A 409 után nem megy ki semmi a peer verzióján, és a Reload a tárolt sort veszi át. Egyszerre egy mentés fut, a közben gépelt szöveg a visszakapott verzión (If-Match 2) megy ki. Tiszta formon a peer újabb sorát PATCH nélkül átveszi. Az 1. sor késő válasza nem kerül a 2. sorra. A rekey a hook `adopt`-jával lép tovább.
+- [x] S4 A `MediaEntityDialog` átáll a hookra; 409 → conflict + Reload; a léptetés közben érkező válasz nem írja át az új elemet.
+  - Kész 2026-11-26: `tests/components/media-entity-dialog.test.tsx`, 3 teszt az `AssetDetailDialog`-on át, a régi kódon mind piros volt. A 200-as választ most a `queryKey` egyes számú kulcsán olvassa (`asset`/`creative`), ahogy a `makeItemRoute` küldi. Az archive/restore a hook tárolt sorának verzióját küldi.
+- [x] S5 `MessageEditor.handleWriteError`: az elhagyott kártya hibája nem jelenik meg (a `SaveChange` viszi a sor id-ját).
+  - Kész 2026-11-26: `tests/components/message-editor-left-card.test.tsx`, 2 teszt, a régi kódon mind piros volt. Egy új testvért is bezár: az elhagyott kártya késő sikeres mentése „Saved”-et villantott az új kártyán (`onSuccess` → `markSaved`).
+- [x] S6 tsc, lint, `npm test` (az integrációs csomaggal együtt), a spec §6.3a, §6.4 és §8.2 frissítése a K2 szerint, bump-javaslat.
+  - 2026-11-26: tsc tiszta. `npm test`: 139 fájl, 1339 teszt zöld (az integrációs csomaggal, `mm6-test-pg`). `npm run lint`: 0 hiba, 136 figyelmeztetés; az érintett fájlokban kevesebb, mint előtte (MessageEditor 20 → 18, MediaEntityDialog 4 → 0, az új fájlok tiszták).
+  - A spec (Drive, `mm6-docs/REBUILD_SPEC.md`, a 2026-11-25-i fájl) öt helyen javult, mindegyik „(Robi, 2026-11-26; branch `claude/autosave-editors`, not deployed yet)” jelöléssel: §6.3a mentési szabály és reseed rule, §6.4 autosave, §6.3 Content sor (a szövegformázó sor mentése), §8.2 layer 2 (mind a négy szerkesztőre, a hookkal és a reducerrel). A Drive-másolat bájtra azonos a szerkesztettel (`cmp`).
 
 Az S2–S4 egymástól független, de mindegyik az S1-re épül. B-nél a terv kódolás előtt Codex + Chief Architect review-t kap, mert új közös réteg, hacsak Robi nem mondja, hogy hagyjuk ki.
 
 **Nem része, csak feljegyezve (kódból, nem ellenőrizve):** ha a MessageEditorban vagy a MediaEntityDialogban az utolsó gépelés után 400 ms-on belül lépsz másik elemre (vagy zárod be), az a változás nem megy ki, mert az időzítőt a sorváltás törli.
+
+**Robi döntései (2026-11-26, „Igen, mehet B”):** K1 = B; K2 igen (a 409 a dialógusokban is terminális, csak Reload, és a spec §6.3a/§6.4 erre javul); K3 igen; K4 igen.
+
+**Chief Architect (`~/agent-bus/answers/20261126-0945-mm6-versioned-autosave-hook.md`): OK with changes.** Beépítve:
+- Az R1–R5 tiszta reducerbe kerül a `src/lib/autosave.ts`-be (az `autosaveDue` mellé), node-tesztekkel; a hook csak az időzítőt, a fetch-et és a state-et köti rá.
+- R5: amíg mentés fut, vagy az állapot nem idle, a sor-propot figyelmen kívül hagyja (a saját mentés SSE-visszhangja megelőzheti a PATCH válaszát). „Tiszta” = a diff üres ÉS az állapot nem saving/error. Teszt: tiszta állapotban érkező peer-sor átvétel, PATCH nélkül.
+- R2: elhagyott sor válaszánál az állapothoz nem nyúl, de az `onSaved` (invalidálás) lefut.
+- R3: conflictban a draft látható marad; a Reload semmit nem küld. Teszt: Reload után nincs PATCH a következő szerkesztésig.
+- Közös `ConflictBar` (csak props), és a MessageEditor is erre áll át ugyanabban a szeletben. Ugyanezért a három, betűre azonos `SaveIndicator` is egy közös komponens lesz; K2 után a dialógusok conflict-szövege úgyis a MessageEditoré lesz („Conflict — reload needed”).
+- A hook legfeljebb 9 bemenetet kap; az `autosaveDue` `versionNo: null`-t kap.
+- Sorrend: az S5 független és kicsi, mehet előre. A jsdom már devDependency (`^25.0.1`), új függőség nem kell.
+- A <400 ms-os elvesztett szerkesztés lépéskor/bezáráskor ismert adatvesztési szél; Robi dönt (flush sorváltáskor/unmountkor), nem része ennek.
+
+**Codex (`~/agent-bus/answers/20261126-0945-mm6-versioned-autosave-hook.codex.md`): OK with changes.** Beépítve:
+- R2: a válaszhoz a sor kulcsa mellett egy szerkesztési generáció (`session`) is kell. Minden újratöltés (sorváltás) növeli, és csak az azonos generációjú válasz számít. Különben A → B → A után A régi válasza a régi listából újratöltött draft alá kerülne, és a következő autosave visszaírná a saját mentést. A fejléc-dialógus kulcsa `kind:id`. Elhagyott sor sikeres mentésénél az `onSaved` (invalidálás) fut.
+- Minden átmenet specifikálva: a Save, a Cancel és az `adopt` sem lép ki a conflictból. Az időzítő a küldés pillanatában a reducerben újraellenőriz: conflict, sorváltás és kikapcsolt Autosave után sem küld. Az Autosave ezért a reducer állapotában van.
+- Érték szerinti egyezés: a szövegformázó sor draftja a tárolt alakot tartja (`formattingScope` csv-szövegként, nem tömbként), így egy azonos értékű, újraépített draft nem számít változásnak. Erre regressziós teszt kerül.
+- A reprodukció a hook előtt jön: a szövegformázó soron megvan (5 piros). A dialógusoknál is a mostani kódon kell pirosnak lennie, mielőtt átállnak. A kurzorugrást `selectionStart`-tal is ellenőrizni kell, nem csak az értékkel.
+- A végén friss kontextusú diff/security review jön (a loop 6. lépése, nagy blast radius). A spec §6.3a „Reseed rule” bekezdése is frissül, nem csak a 409-es.
+- K4 (Robi: igen): új szabálynál a létrehozás POST, amit a PATCH-hook magától nem fed le. A hook ezért kap egy `create` ágat: amíg nincs sor, a mentés POST, és ugyanaz a komponens marad mountolva, így a fókusz és a közben gépelt szöveg megmarad. Előbb piros teszt a mostani kódon.
+
+**Piros előbb (S2 reprodukció, a mostani kódon):** `tests/components/text-formatting-rule-row.test.tsx`, 5/5 a jósolt tünettel bukik. A mentés alatt gépelt „c” eltűnik (`expected 'ab' to be 'abc'`, ez a kurzorugrás), soha nem megy ki, egy második PATCH is elindul a futó mentés mellett, és sem `save-indicator--error`, sem `--conflict` nincs. Ehhez a `TextFormattingRuleRow` és a `FormattingRule` exportot kapott.
 
 **Kérdések Robinak:**
 - K1: A vagy B? Ajánlom: B.
 - K2: A két dialógusban is terminális legyen a 409, csak Reloaddal (mint a §8.2-ben és a MessageEditorban), és a spec §6.3a/§6.4 „Refreshed” sorát erre javítsam? Ajánlom: igen, mert a mostani „Refreshed” viselkedés csendben visszaírja a másik felhasználó mezőit.
 - K3: A szövegformázó soron hibánál és conflictnál egy kis jelzés kerüljön a sor mellé a meglévő `save-indicator` osztállyal, conflictnál „Reload” linkkel? Ajánlom: igen.
 - K4: Új szabály-sor mentésekor a draft sor kicserélődik a tárolt szabályra. Ilyenkor elveszik a fókusz és a közben gépelt karakter (kódból, nem ellenőrizve). Ez is kerüljön bele az S2-be? Ajánlom: igen, ha gépelés közben ezt is látod.
+
+**Review (2026-11-26)**
+
+*Jóslat és eredmény:*
+- Bejött: a mentés futása alatt gépelt szöveg megmarad, és a kurzor nem ugrik (`selectionStart`-tal is tesztelve). A saját mentésre nem jön 409, a valódi ütközés mindhárom helyen conflict + Reload, és nem ír vissza semmit. A szövegformázó soron látszik a hiba és a conflict.
+- Nem változott: a szerver, a 400 ms-os debounce és a mentett mezők. A MessageEditor saját mentési útja is maradt; ott csak az S5-ös őr került be, plusz a közös `ConflictBar` és `SaveIndicator`.
+- Az ismeretlen: a jsdom-os keret (`tests/components/dom.ts`) új függőség nélkül megvan; csak egy `ResizeObserver`-csonk kellett hozzá.
+- Amit a terv nem látott előre, négy testvér, mind piros volt a régi kódon:
+  - egy másik MC lokális szabályát a megnyitás csendben átírta;
+  - a szóközös méretlista magától PATCH-et küldött;
+  - a MediaEntityDialog a 200-as választ is rossz kulcson olvasta volna;
+  - az elhagyott kártya késő „Saved”-je az új kártyán villant.
+
+*Friss kontextusú diff/security review: „OK with changes”.* Négy pontot javítottam, mindegyikre előbb piros teszt jött (egy reducer-teszt és négy komponens-teszt):
+1. **(közepes)** Ha a hook egy 200-as választ nem tud elolvasni (nem JSON a törzs, vagy hiányzik a mentett sor), a mentés örökre „Saving…” maradt, és utána semmilyen mentés nem indult, a kézi Save sem. Ennek az oka: a `.then(ok, err)` nem kapja el az `ok`-ban dobott hibát. Most a kérés minden kimenete egyetlen eseményként jön vissza, az olvashatatlan válasz is „Save failed”, és a következő változás újra küld.
+2. Conflictban a két dialógus Save és Cancel gombja tiltott (Autosave kikapcsolva). Eddig nem csináltak semmit, mert a conflictból csak a Reload vezet ki; a MessageEditor Save gombja már eddig is így viselkedett.
+3. A szövegformázó sor Reloadja frissíti a `["text-formatting"]` listát, mint a dialógusok, így az előnézet a tárolt szabállyal formáz.
+4. A reducer `adopt` ága is lefuttatja az `undue`-t: ha az átvett sor már a draftot tartja, az állapot nem marad „saving”. Ma nem elérhető, de a reducer így minden eseményre helyes.
+
+Security: nincs új végpont (a `POST /api/text-formatting` megvolt). Az If-Match a szerver verziószáma, a hibaszöveg React `title`-ként jelenik meg.
+
+*Ellenőrzés a javítások után:* tsc tiszta. Unit + components: 55 fájl, 563 teszt zöld. A módosított fájlok lintje: 0 hiba, 24 figyelmeztetés, mind változatlan sorokon. A teljes `npm test` az integrációs csomaggal a javítások után: 139 fájl, 1344 teszt zöld (előtte 1339, plusz az 5 új).
+
+*A spec:* REBUILD_SPEC (Drive, a 2026-11-25-i fájl) §6.3, §6.3a, §6.4 és §8.2 frissítve, „not deployed yet” jelöléssel. Deploy után ezt a jelölést le kell venni.
+
+*Nyitott, nem része ennek (Robi dönt; kódból követve, nem futtatva, ha nincs másképp írva):*
+- **Régi, talán komoly:** a csatornából képzett audience-sorok (`channelToAudience`, beégetett `version: 1`) a `HeaderDetailDialog`-ban nyílnak meg, és a `/api/audiences/<csatorna-id>`-ra autosave-elnek. A csatorna- és az audience-id ütközhet (`MatrixGrid.tsx:208-211`). Ha az azonos id-jú audience 1-es verzión van, a mezőit felülírja. Ha nem, conflict jön, és a Reload egy idegen audience-t tölt be. Az `isChannelRow` csak a Delete gombot rejti el. A régi kód rosszabb volt (rebase, majd újraküldés). Saját szeletet érdemel.
+- A → B → A egy mentés ideje alatt: visszatérve a draft a lista régi A-sorából töltődik újra. Ha azonnal gépelsz, a mentés a régi verzión megy ki, és a saját mentésre jön egy „Someone else saved…” conflict. Nem ír felül semmit, de félrevezető. A reviewer saját teszttel futtatta.
+- Új szabály törlése, amíg a létrehozó POST fut: a sor később visszajön (a régi kód is így viselkedett). A szövegformázó DELETE 409-e néma (régi).
+- Autosave kikapcsolva: amíg az elhagyott elem mentése fut, a Save némán nem csinál semmit (R1), és az állapot idle-t mutat.
+- A dialógusokban Autosave ON mellett hibánál nincs Save gomb (a MessageEditorban van).
+- A 400 ms-on belüli utolsó szerkesztés léptetéskor vagy bezáráskor elveszik (lásd fent; flush sorváltáskor/unmountkor).
+- A `DimensionGrid/useRowAutosave.ts` külön cellamentés, nem állt át.
+- Ha egy létrehozott slot szabályát máshol archiválják, újramountoláskor create módba eshet vissza (szélső eset).
+- Nincs teszt a rekey `adopt`-ra és az archive/restore verziójára.
+
+*Bump-javaslat:* `6.137.0` → `6.138.0` (minor): látható viselkedésváltozás. A 409 a dialógusokban terminális, conflict-sávval, a szövegformázó soron hiba- és conflict-jelzés van. Nincs bumpolva, nincs CHANGELOG-sor; Robi dönt.
+
+*Lecke, javaslat (Robi dönt):* minden új autosave-es szerkesztő egy verziózott sorra a `useVersionedAutosave`-et használja, ne saját ciklust. A szabályokat a `tests/unit/autosave.test.ts` önmagában is ellenőrzi. Egy sor a `ui.md`-be vagy az AGENTS.md „Workflow notes” részébe arról, hogy új szerkesztő ezt használja.

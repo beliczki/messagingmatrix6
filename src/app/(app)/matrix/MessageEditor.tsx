@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Icon } from "@/app/_icons/Icon";
 import clsx from "clsx";
@@ -24,6 +24,9 @@ import { templateMetaFor } from "../_components/MatrixIframeTile";
 import ModalBackdrop from "../_components/ModalBackdrop";
 import EntityHistoryDrawer from "../_components/EntityHistoryDrawer";
 import { useTextFormattingRules } from "./useTextFormattingRules";
+import { useVersionedAutosave } from "../_components/useVersionedAutosave";
+import { ConflictBar, SaveIndicator } from "../_components/SaveStatus";
+import type { AutosaveRules } from "@/lib/autosave";
 import Field from "./EditorField";
 import BriefTab from "./BriefTab";
 import DraftVariantSwitcher from "./DraftVariantSwitcher";
@@ -224,8 +227,10 @@ type SaveState =
   | { kind: "conflict"; serverRow: EditableMessage };
 
 // One save's input: the content diff it sends, and the draft and pending
-// released version it was made from (kept on a failure as `failed`).
+// released version it was made from (kept on a failure as `failed`). `id` is
+// the card it was made on: its outcome shows only while that card is open.
 type SaveChange = SaveAttempt<EditableFields> & {
+  id: number;
   payload: Partial<EditableFields>;
 };
 
@@ -492,6 +497,9 @@ export default function MessageEditor({
       // must explicitly reload (reload-only conflict resolution).
       setSaveState({ kind: "conflict", serverRow: e.current });
     } else {
+      // Nor is the failure of a card already left: the card now open did
+      // not send it.
+      if (openRowIdRef.current !== change.id) return;
       setSaveState({
         kind: "error",
         message: e.message,
@@ -571,7 +579,7 @@ export default function MessageEditor({
           setPendingVersionNo((p) => (p === sentVersion ? null : p));
         }
       }
-      markSaved();
+      if (openRowIdRef.current === change.id) markSaved();
     },
     onError: (e, change) => handleWriteError(e, change),
   });
@@ -605,7 +613,7 @@ export default function MessageEditor({
       // In-flight → skip; when that save settles, isPending flips and this
       // effect re-runs against the fresh snapshot, re-arming with the drift.
       if (saveInFlightRef.current) return;
-      save.mutate({ payload, versionNo: pendingVersionNo, draft });
+      save.mutate({ id: committedSnapshot.id, payload, versionNo: pendingVersionNo, draft });
     }, 400);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -656,7 +664,7 @@ export default function MessageEditor({
     if (saveInFlightRef.current) return;
     const payload = diffPayload(toEditable(committedSnapshot), draft);
     setSaveState({ kind: "saving" });
-    save.mutate({ payload, versionNo: pendingVersionNo, draft });
+    save.mutate({ id: committedSnapshot.id, payload, versionNo: pendingVersionNo, draft });
   }
 
   function manualCancel() {
@@ -877,20 +885,7 @@ export default function MessageEditor({
         </header>
 
         {saveState.kind === "conflict" ? (
-          <div className="conflict-bar flex shrink-0 items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
-            <Icon name="alert" className="conflict-bar__icon size-4 shrink-0" />
-            <span className="conflict-bar__msg flex-1">
-              Someone else saved changes to this MC while you had it open. Your
-              unsaved edits can&apos;t be applied on top — reload to get the
-              latest version. Your changes here will be discarded.
-            </span>
-            <button
-              onClick={reloadFromConflict}
-              className="conflict-bar__btn toolbar-btn--primary rounded bg-amber-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-amber-700"
-            >
-              Reload
-            </button>
-          </div>
+          <ConflictBar subject="this MC" onReload={reloadFromConflict} />
         ) : null}
 
         <div
@@ -1107,43 +1102,6 @@ class VersionMismatchError extends Error {
     super("version_mismatch");
     this.current = current;
   }
-}
-
-function SaveIndicator({ state }: { state: SaveState }) {
-  if (state.kind === "idle") return null;
-  if (state.kind === "saving") {
-    return (
-      <span className="save-indicator save-indicator--saving inline-flex items-center gap-1 text-xs text-slate-500">
-        <Icon name="spinner" className="size-3 animate-spin" />
-        Saving…
-      </span>
-    );
-  }
-  if (state.kind === "saved") {
-    return (
-      <span className="save-indicator save-indicator--saved inline-flex items-center gap-1 text-xs text-emerald-700">
-        <Icon name="check" className="size-3" />
-        Saved
-      </span>
-    );
-  }
-  if (state.kind === "conflict") {
-    return (
-      <span className="save-indicator save-indicator--conflict inline-flex items-center gap-1 text-xs text-amber-700">
-        <Icon name="alert" className="size-3" />
-        Conflict — reload needed
-      </span>
-    );
-  }
-  return (
-    <span
-      className="save-indicator save-indicator--error inline-flex items-center gap-1 text-xs text-rose-700"
-      title={state.message}
-    >
-      <Icon name="alert" className="size-3" />
-      Save failed
-    </span>
-  );
 }
 
 function TabBtn({
@@ -1449,7 +1407,7 @@ function EntityBlock({ title, rows }: { title: string; rows: EntityRow[] }) {
   );
 }
 
-type FormattingRule = {
+export type FormattingRule = {
   id: number;
   textOriginal: string;
   textFormatted: string;
@@ -1539,7 +1497,13 @@ function ContentTab({
   );
 }
 
-function TextFieldWithFormatting({
+// A rule being added under a field. Its first save creates it (POST), and it
+// stays the same row on screen after that: the same component, so the focus
+// and what was typed while the create was out are kept. `created` is the row
+// its last save returned.
+type RuleSlot = { key: string; created: FormattingRule | null };
+
+export function TextFieldWithFormatting({
   fieldKey,
   label,
   kind,
@@ -1560,59 +1524,45 @@ function TextFieldWithFormatting({
   mcLabel: string;
   templateSizes: string[];
 }) {
-  const qc = useQueryClient();
-  // Drafts (unsaved rules) live locally per field. Each draft has a stable
-  // local id so React keys are stable across renders.
-  const [drafts, setDrafts] = useState<
-    Array<{ key: string; textFormatted: string; scope: string[]; isGlobal: boolean }>
-  >([]);
-  const draftCounter = useRef(0);
+  const [slots, setSlots] = useState<RuleSlot[]>([]);
+  const slotCounter = useRef(0);
 
-  function addDraft() {
-    draftCounter.current += 1;
-    const k = `draft-${fieldKey}-${draftCounter.current}`;
-    setDrafts((prev) => [...prev, { key: k, textFormatted: "", scope: [], isGlobal: true }]);
+  function addSlot() {
+    slotCounter.current += 1;
+    const k = `draft-${fieldKey}-${slotCounter.current}`;
+    setSlots((prev) => [...prev, { key: k, created: null }]);
   }
 
-  function updateDraft(key: string, patch: Partial<{ textFormatted: string; scope: string[]; isGlobal: boolean }>) {
-    setDrafts((prev) =>
-      prev.map((d) => (d.key === key ? { ...d, ...patch } : d)),
-    );
+  function removeSlot(key: string) {
+    setSlots((prev) => prev.filter((s) => s.key !== key));
   }
 
-  function removeDraft(key: string) {
-    setDrafts((prev) => prev.filter((d) => d.key !== key));
-  }
-
-  async function saveDraft(key: string) {
-    const d = drafts.find((x) => x.key === key);
-    if (!d) return;
-    if (!value || !d.textFormatted) return;
-    const payload = {
-      textOriginal: value,
-      textFormatted: d.textFormatted,
-      formattingScope: d.scope.length === 0 ? null : d.scope.join(","),
-      formattingMcScope: d.isGlobal ? null : mcLabel,
-    };
-    const r = await fetch("/api/text-formatting", {
-      method: "POST",
-      credentials: "include",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!r.ok) return;
-    removeDraft(key);
-    qc.invalidateQueries({ queryKey: ["text-formatting"] });
+  function slotSaved(key: string, saved: FormattingRule) {
+    setSlots((prev) => prev.map((s) => (s.key === key ? { ...s, created: saved } : s)));
   }
 
   // Rules visible under this field: existing rules whose textOriginal matches
   // the field's current value (case-sensitive — render.ts also uses literal
   // regex match). Once the user changes the field, formerly-matching rules
-  // disappear from this list, exactly as in v5.
-  const matching = useMemo(
-    () => allRules.filter((r) => r.textOriginal === value && value.length > 0),
-    [allRules, value],
-  );
+  // disappear from this list, exactly as in v5. A rule created here is shown
+  // by its own slot, not a second time from the list.
+  const matching = useMemo(() => {
+    const createdHere = new Set(slots.flatMap((s) => (s.created === null ? [] : [s.created.id])));
+    return allRules.filter(
+      (r) => r.textOriginal === value && value.length > 0 && !createdHere.has(r.id),
+    );
+  }, [allRules, value, slots]);
+  // A created rule follows the same rule as the list: shown while the field
+  // has the text it formats.
+  const visibleSlots = slots.filter((s) => s.created === null || s.created.textOriginal === value);
+  // The rule a slot created, as the list has it now, or as its save returned
+  // it until the list has refetched.
+  function slotRule(s: RuleSlot): FormattingRule | null {
+    if (s.created === null) return null;
+    const id = s.created.id;
+    const listed = allRules.find((r) => r.id === id);
+    return listed === undefined ? s.created : listed;
+  }
 
   const InputEl = kind === "textarea" ? "textarea" : "input";
   const inputClass =
@@ -1626,7 +1576,7 @@ function TextFieldWithFormatting({
         </div>
         <button
           type="button"
-          onClick={addDraft}
+          onClick={addSlot}
           disabled={!value}
           title={value ? "Add a formatting rule for this text" : "Type something first"}
           className="link-button inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-40"
@@ -1650,141 +1600,153 @@ function TextFieldWithFormatting({
           templateSizes={templateSizes}
         />
       ))}
-      {drafts.map((d) => (
-        <TextFormattingDraftRow
-          key={d.key}
-          draft={d}
+      {visibleSlots.map((s) => (
+        <TextFormattingRuleRow
+          key={s.key}
+          rule={slotRule(s)}
+          slot={{
+            key: s.key,
+            textOriginal: value,
+            onSaved: (saved) => slotSaved(s.key, saved),
+            onRemove: () => removeSlot(s.key),
+          }}
+          mcLabel={mcLabel}
           templateSizes={templateSizes}
-          onChange={(patch) => updateDraft(d.key, patch)}
-          onRemove={() => removeDraft(d.key)}
-          onCommit={() => saveDraft(d.key)}
-          canSave={value.length > 0 && d.textFormatted.length > 0}
         />
       ))}
     </div>
   );
 }
 
-function TextFormattingRuleRow({
+// The edit buffer of one rule. The sizes are the csv the rule stores, written
+// one way ("a,b"), so that two equal lists are equal values.
+type RuleDraft = { textFormatted: string; scope: string; isGlobal: boolean };
+
+function ruleDraft(r: FormattingRule): RuleDraft {
+  return {
+    textFormatted: r.textFormatted,
+    scope: r.formattingScope === null ? "" : csvOf(parseCsv(r.formattingScope)),
+    isGlobal: r.formattingMcScope === null,
+  };
+}
+
+function ruleRowKey(rule: FormattingRule | null): string {
+  if (rule === null) throw new Error("TextFormattingRuleRow: a rule not created yet needs a slot");
+  return `r-${rule.id}`;
+}
+
+export function TextFormattingRuleRow({
   rule,
+  slot,
   mcLabel,
   templateSizes,
 }: {
-  rule: FormattingRule;
+  /** The stored rule; null for a slot whose rule is not created yet. */
+  rule: FormattingRule | null;
+  /** Set for a rule being added under a field: its first save creates it. */
+  slot?: {
+    key: string;
+    /** The field's text the new rule formats. */
+    textOriginal: string;
+    onSaved: (saved: FormattingRule) => void;
+    onRemove: () => void;
+  };
   mcLabel: string;
   templateSizes: string[];
 }) {
   const qc = useQueryClient();
-  // Local edit buffer mirrors persisted state but lets the user type freely;
-  // a 400ms debounce flushes PATCH calls.
-  const [textFormatted, setTextFormatted] = useState(rule.textFormatted);
-  const [scope, setScope] = useState<string[]>(parseCsv(rule.formattingScope));
-  const [isGlobal, setIsGlobal] = useState<boolean>(rule.formattingMcScope === null);
-  // Track the last-known persisted version to send in If-Match payloads.
-  const versionRef = useRef(rule.version);
-  // Keep buffers fresh if the rule rerenders with new server data.
-  useEffect(() => {
-    setTextFormatted(rule.textFormatted);
-    setScope(parseCsv(rule.formattingScope));
-    setIsGlobal(rule.formattingMcScope === null);
-    versionRef.current = rule.version;
-  }, [rule.id, rule.version]);
-
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dirty =
-    textFormatted !== rule.textFormatted ||
-    csvOf(scope) !== (rule.formattingScope ?? "") ||
-    (isGlobal ? null : mcLabel) !== rule.formattingMcScope;
-
-  useEffect(() => {
-    if (!dirty) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(async () => {
-      const payload = {
-        version: versionRef.current,
-        textFormatted,
-        formattingScope: scope.length === 0 ? null : scope.join(","),
-        formattingMcScope: isGlobal ? null : mcLabel,
-      };
-      const r = await fetch(`/api/text-formatting/${rule.id}`, {
-        method: "PATCH",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (r.ok) {
-        const body = (await r.json()) as { rule: FormattingRule };
-        versionRef.current = body.rule.version;
-        qc.invalidateQueries({ queryKey: ["text-formatting"] });
-      }
-    }, 400);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [textFormatted, scope, isGlobal, dirty, rule.id, mcLabel, qc]);
+  const rules: AutosaveRules<FormattingRule, RuleDraft> = {
+    toDraft: ruleDraft,
+    // Only what the user changed. Showing a rule is not an edit: a local rule
+    // of another MC stays that MC's until the user toggles it here.
+    diff: (committed, d) => {
+      const base = ruleDraft(committed);
+      const out: Record<string, unknown> = {};
+      if (d.textFormatted !== base.textFormatted) out.textFormatted = d.textFormatted;
+      if (d.scope !== base.scope) out.formattingScope = d.scope === "" ? null : d.scope;
+      if (d.isGlobal !== base.isGlobal) out.formattingMcScope = d.isGlobal ? null : mcLabel;
+      return out;
+    },
+  };
+  if (slot !== undefined) {
+    rules.create = (d) =>
+      slot.textOriginal.length === 0 || d.textFormatted.length === 0
+        ? null
+        : {
+            textOriginal: slot.textOriginal,
+            textFormatted: d.textFormatted,
+            formattingScope: d.scope === "" ? null : d.scope,
+            formattingMcScope: d.isGlobal ? null : mcLabel,
+          };
+  }
+  const editor = useVersionedAutosave<FormattingRule, RuleDraft>({
+    rowKey: slot === undefined ? ruleRowKey(rule) : slot.key,
+    row: rule,
+    newDraft: { textFormatted: "", scope: "", isGlobal: true },
+    rules,
+    url: (r) => (r === null ? "/api/text-formatting" : `/api/text-formatting/${r.id}`),
+    readSaved: (body) => (body as { rule: FormattingRule }).rule,
+    onSaved: (saved) => {
+      qc.invalidateQueries({ queryKey: ["text-formatting"] });
+      if (slot !== undefined) slot.onSaved(saved);
+    },
+    autoSave: true,
+  });
+  const { draft, status } = editor;
 
   async function onDelete() {
-    const r = await fetch(`/api/text-formatting/${rule.id}`, {
+    const committed = editor.committed;
+    if (committed === null) {
+      // Not created yet: nothing stored to delete.
+      if (slot !== undefined) slot.onRemove();
+      return;
+    }
+    const r = await fetch(`/api/text-formatting/${committed.id}`, {
       method: "DELETE",
       credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        "If-Match": String(versionRef.current),
+        "If-Match": String(committed.version),
       },
     });
-    if (r.ok) qc.invalidateQueries({ queryKey: ["text-formatting"] });
+    if (!r.ok) return;
+    qc.invalidateQueries({ queryKey: ["text-formatting"] });
+    if (slot !== undefined) slot.onRemove();
+  }
+
+  // The stored rule, and the list the preview formats with, like the dialogs.
+  function reload() {
+    editor.reload();
+    qc.invalidateQueries({ queryKey: ["text-formatting"] });
   }
 
   return (
     <FormattingRow
-      textFormatted={textFormatted}
-      onTextFormattedChange={setTextFormatted}
-      scope={scope}
-      onScopeChange={setScope}
-      isGlobal={isGlobal}
-      onIsGlobalChange={setIsGlobal}
+      textFormatted={draft.textFormatted}
+      onTextFormattedChange={(v) => editor.setDraft((d) => ({ ...d, textFormatted: v }))}
+      scope={parseCsv(draft.scope)}
+      onScopeChange={(v) => editor.setDraft((d) => ({ ...d, scope: csvOf(v) }))}
+      isGlobal={draft.isGlobal}
+      onIsGlobalChange={(v) => editor.setDraft((d) => ({ ...d, isGlobal: v }))}
       templateSizes={templateSizes}
       onDelete={onDelete}
-    />
-  );
-}
-
-function TextFormattingDraftRow({
-  draft,
-  templateSizes,
-  onChange,
-  onRemove,
-  onCommit,
-  canSave,
-}: {
-  draft: { textFormatted: string; scope: string[]; isGlobal: boolean };
-  templateSizes: string[];
-  onChange: (patch: Partial<{ textFormatted: string; scope: string[]; isGlobal: boolean }>) => void;
-  onRemove: () => void;
-  onCommit: () => void;
-  canSave: boolean;
-}) {
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => {
-    if (!canSave) return;
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => onCommit(), 600);
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [canSave, draft.textFormatted, draft.scope, draft.isGlobal, onCommit]);
-
-  return (
-    <FormattingRow
-      textFormatted={draft.textFormatted}
-      onTextFormattedChange={(v) => onChange({ textFormatted: v })}
-      scope={draft.scope}
-      onScopeChange={(v) => onChange({ scope: v })}
-      isGlobal={draft.isGlobal}
-      onIsGlobalChange={(v) => onChange({ isGlobal: v })}
-      templateSizes={templateSizes}
-      onDelete={onRemove}
-      placeholder="Enter formatted text…"
+      placeholder={editor.committed === null ? "Enter formatted text…" : undefined}
+      status={
+        status.kind === "error" || status.kind === "conflict" ? (
+          <span className="text-format-rule__status inline-flex shrink-0 items-center gap-1">
+            <SaveIndicator state={status} />
+            {status.kind === "conflict" ? (
+              <button
+                type="button"
+                onClick={reload}
+                className="link-button text-[11px] text-amber-700 underline hover:text-amber-900"
+              >
+                Reload
+              </button>
+            ) : null}
+          </span>
+        ) : null
+      }
     />
   );
 }
@@ -1799,6 +1761,7 @@ function FormattingRow({
   templateSizes,
   onDelete,
   placeholder,
+  status,
 }: {
   textFormatted: string;
   onTextFormattedChange: (v: string) => void;
@@ -1809,6 +1772,8 @@ function FormattingRow({
   templateSizes: string[];
   onDelete: () => void;
   placeholder?: string;
+  /** A failed or refused save of this rule. */
+  status: ReactNode;
 }) {
   return (
     <div className="text-format-rule mt-2 flex items-center gap-2">
@@ -1845,6 +1810,7 @@ function FormattingRow({
       >
         <Icon name="delete" className="size-4" />
       </button>
+      {status}
     </div>
   );
 }

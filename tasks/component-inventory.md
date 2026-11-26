@@ -117,7 +117,7 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `bg-toggle` | Segmented light/checker/dark group | MediaEntityDialog + PreviewPane | hasonló pattern, külön block-ok |
 | `bg-toggle__btn` / `bg-toggle__btn--active` | Egy bg gomb | – | – |
 | `scaled-preview` | Natural-size-vagy-scale-down media preview ResizeObserver-rel | `_components/ScaledMediaPreview.tsx` | shared (MediaEntityDialog body) |
-| `save-indicator` / `--saving` / `--saved` / `--conflict` / `--error` | Save status pill MessageEditor + MediaEntityDialog header-ben | MessageEditor SaveIndicator + MediaEntityDialog SaveIndicator | inline duplikátum, ugyanaz a Phase-7 design |
+| `save-indicator` / `--saving` / `--saved` / `--conflict` / `--error` | Save status pill a MessageEditor, MediaEntityDialog és HeaderDetailDialog headerében; a szövegformázó sor mellett csak `--error` / `--conflict` | `_components/SaveStatus.tsx` `SaveIndicator` (shared, 2026-11-26) | a három inline duplikátum helyett; conflict-szöveg mindenhol „Conflict — reload needed” |
 | `preview-pane` | Live preview konténer (toolbar + iframe) | `_components/PreviewPane.tsx` | shared (MC editor + Templates) |
 | `preview-pane__toolbar` | Header toolbar (size + skip-anim + bg + extras) | PreviewPane.tsx 61–121 | – |
 | `preview-pane__size-select` | Size `<select>` | PreviewPane.tsx 63–74 | + `custom-dropdown` globalis |
@@ -195,7 +195,8 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `tag-chip` | Kis színes pill (brand/product/template/size jelzők card-on) | CL `Card` meta footer | új globalis |
 | `loading-spinner` | Forgó betöltő ikon | SaveIndicator, UploadDialog, render hooks | – |
 | `error-alert` | Piros figyelmeztető doboz | login error, MessageEditor conflict, TemplateEditor save error | – |
-| `conflict-bar` | Borostyán sáv a header alatt, ha egy másik szerkesztő felülírta a sort — egyetlen "Reload" akció (reload-only conflict resolution) | MessageEditor (header alatt) | új blokk, `__icon` / `__msg` / `__btn` elemekkel |
+| `conflict-bar` | Borostyán sáv a header alatt, ha egy másik szerkesztő felülírta a sort — egyetlen "Reload" akció (reload-only conflict resolution) | `_components/SaveStatus.tsx` `ConflictBar` (shared, 2026-11-26) — MessageEditor, HeaderDetailDialog, MediaEntityDialog | `__icon` / `__msg` / `__btn` elemekkel |
+| `text-format-rule__status` | A szövegformázó sor mentési jelzése: `save-indicator` hibánál / conflictnál, conflictnál „Reload” `link-button` | MessageEditor `TextFormattingRuleRow` | 2026-11-26 |
 | `entity-history` | Jobb oldali revíziós drawer (`modal` overlay) az audit-log `before`/`after` snapshotokból; soronként diff + "Restore this version" | `_components/EntityHistoryDrawer.tsx` (shared) — topics/audiences grid + MessageEditor | `__header` / `__body` / `__list` / `__entry` / `__entry--current` / `__diff` / `__restore` / `__error` |
 
 ---

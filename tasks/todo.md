@@ -1630,3 +1630,233 @@ Planning review nem kell (kliens-javítás, nincs séma, auth, deploy vagy depen
 **Élő:** 6.137.0 (`51b5bae`) mindkét tenanton, 2026-11-25 21:41 UTC (telekom) / 21:43 UTC (erste). Deploy-logok: `/root/mm6-rollback/d1370-<tenant>-*.log` (+ `.mem`). Böngészős próba az élőn nem volt.
 
 **Rollback:** elbukó build → semmi nem változott, a régi build szolgál ki (`git -C /var/www/mm6-<t> reset --hard 3480889`). Nem jön fel → maint marad, `.next-old` vissza, reset `3480889`, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1` a három merge-re, push, deploy.
+
+## 2026-11-26 — Autosave-szerkesztők: a három nyitott pont + a szövegformázó sor kurzorugrása (KÉSZ az ágon, 6.138.0, NINCS deployolva; Robi: „Igen, mehet B”, „Yes, bump 6.138.0”)
+
+Robi: „csináljuk meg a nyitott pontokat”, közben pedig: „a texformatting is elugrál nekem gépelés közben a sor végére”. Ág: `claude/autosave-editors` (a main `26456ee`-ről).
+
+**A hibák (kódból követve, még nem reprodukálva; mindegyiket egy piros teszt dönti el):**
+1. **`TextFormattingRuleRow`** (`MessageEditor.tsx:1668`), Robi tünete. A sor minden `rule.version` változáskor felülírja a helyi szövegét a szerverről (`useEffect([rule.id, rule.version])`), és a verziót a saját mentése is emeli. A lánc: PATCH → `invalidateQueries(["text-formatting"])` → refetch → a sor visszaírja azt a szöveget, ami a PATCH-ben ment ki. A mentés futása alatt gépelt karakterek eltűnnek, és mivel a mező értéke kívülről változik, a kurzor a sor végére ugrik. Ugyanitt két további hiba: nincs mentés-sorosítás (a második PATCH a régi verzióval megy, és 409-et kap a saját mentésére), és minden hiba (`!r.ok`) csendes.
+2. **`MediaEntityDialog`** (asset és creative), három hiba:
+   - Nincs mentés-sorosítás.
+   - A 409 választ rossz kulcson olvassa: `current`/`row`-t keres, a szerver `currentRow`-t küld (`src/lib/optimistic.ts:22`). Ezért a konfliktus „error”-ként jelenik meg. Utána minden mentés megint 409-et kap, mert a snapshot nem lép előre, és csak a dialógus bezárása segít.
+   - Ha a felhasználó a ‹ › léptetővel már másik elemre lépett, a később érkező válasz a régi elemet teszi vissza snapshotnak. A következő autosave az új elem mezőit a régi elem sorára írja. Ez látens adatrontás; a MessageEditor `openRowIdRef`-fel már kivédi.
+3. **`HeaderDetailDialog`** (audience és topic): nincs mentés-sorosítás. 409-nél `setCommitted(current)` fut, erre az autosave effekt újra lefut, és a draftot az új verzióra küldi. Így a másik felhasználó mezőit csendben visszaírja: ez épp az a lost update, amit a spec §8.2 tilt.
+4. **`MessageEditor.handleWriteError`**: egy elhagyott kártya késve érkező hibája (nem 409) a most nyitott kártyán mutat „Save failed”-et.
+
+**A mechanizmus egy mondatban:** mind a négy szerkesztő kézzel írja a saját autosave-ciklusát (helyi buffer, snapshot, futó mentés, a válasz átvétele, 409, hiba), és mindegyikből más szabály hiányzik.
+
+**Dokumentum és kód eltérései** (REBUILD_SPEC a Drive-on, 2026-11-25):
+- A §8.2 és a §6.3 szerint a 409 terminális, csak Reload van, és a szerkesztő „must never auto-rebase-and-retry”. A §8.2 viszont ezt csak a Message Editorra mondja ki.
+- A §6.3a (HeaderDetailDialog) és a §6.4 (MediaEntityDialog) ezt írja: „409 → setCommitted(currentRow) + Refreshed badge; user's draft fields are preserved”. Ez épp az a rebase, amit a §8.2 lost update-nek nevez, vagyis a spec ellentmond önmagának.
+- A kódban a HeaderDetailDialog a §6.3a-t csinálja. A MediaEntityDialog egyiket sem: a rossz kulcs miatt error lesz belőle.
+- A §6.3 (788. sor) „formatting rules popover”-t ír, a kódban soron belüli sorok vannak. A szövegformázó sor mentési szabályairól a spec nem ír.
+- Szemantikai modell, ami ezt lefedné, nincs.
+
+**Két út:**
+- **A) Kis javítások komponensenként:** mindegyik komponens megkapja a hiányzó szabályt. Kisebb a diff, de a négy kézi ciklus marad, és a következő szerkesztő megint elfelejt egy szabályt.
+- **B) A mechanizmus javítása (ajánlott):** egy közös hook, a `useVersionedAutosave` (`src/app/(app)/_components/`), ami egy helyen tartja a szabályokat:
+  - egyszerre egy mentés fut;
+  - választ csak a még nyitott sorra vesz át;
+  - a 409 terminális, és csak Reload van;
+  - hiba után csak változásra küld újra (`autosaveDue`, már tesztelt);
+  - a buffert csak sorváltás tölti újra, a saját visszhangja nem.
+
+  Erre áll át egyenként a `TextFormattingRuleRow`, a `HeaderDetailDialog` és a `MediaEntityDialog`. A MessageEditor a saját ciklusán marad (kétlépéses mentés, Global, released version), és csak a 4. pont javítását kapja; az átállítása későbbi szelet lehet. Testvérhibák, amiket bezár: a fenti 1–3. mind, és mindegyikre a régi viselkedéssel pirosra menő teszt jön.
+
+**Touches:**
+- A fenti három komponens és a `MessageEditor.handleWriteError`.
+- Szomszédok: a `/api/text-formatting/[id]`, `/api/assets/[id]`, `/api/creatives/[id]`, `/api/audiences/[id]` és `/api/topics/[id]` útvonal. Mind `makeItemRoute`, a 409 `{currentRow}`-t ad, és ez nem változik.
+- Az `autosaveDue` (`src/lib/version-apply.ts`).
+- Szerződés: REBUILD_SPEC §6.3, §6.3a, §6.4 és §8.2.
+
+**Door:** kétirányú (`git revert`). Csak a klienst érinti, nincs séma- vagy szerverváltozás. Blast radius: napi használatú szerkesztők mindkét tenanton (asset/creative dialógus, audience/topic fejléc-dialógus, szövegformázó sorok). Deploy csak Robi szavára.
+
+**Jóslat:**
+- Ami változik: a mentés futása alatt gépelt szöveg megmarad, és a kurzor nem ugrik. A saját mentésre nem jön 409. Egy valódi ütközés mindhárom helyen conflict + Reload lesz, és nem ír vissza semmit. A szövegformázó soron is látszik a hiba.
+- Ami nem változik: a szerver, a 400 ms-os debounce, a mentett mezők és a MessageEditor mentési útja.
+- Ismeretlen: jsdom-os komponens-teszt még nincs a repóban. A `components` vitest projekt be van állítva, de nincs benne fájl, ezért az S1 a teszt-keretet is megadja.
+
+**Seam:** B-nél a hook nyilvános felülete, a `components` vitest projektben (jsdom), `react-dom/client` + `act` és hamis `fetch` mellett, új függőség nélkül. A-nál ugyanez a teszt-mód, csak a komponenseken.
+
+**Szeletek (B):**
+- [x] S1 Piros tesztek a hookra (az öt szabály, köztük a saját visszhang esete), aztán maga a hook.
+- [x] S2 A `TextFormattingRuleRow` átáll a hookra, és a soron megjelenik a hiba- és conflict-jelzés. Előbb piros teszt a soron: a futó mentés alatt gépelt szöveg megmarad.
+  - Kész 2026-11-26: `src/lib/autosave.ts` (tiszta reducer, 28 teszt), `_components/useVersionedAutosave.ts`, `_components/SaveStatus.tsx` (közös `SaveIndicator` + `ConflictBar`; a MessageEditor is erre állt át). A 11 komponens-teszt a régi kódon mind piros volt, most zöld.
+  - Két új testvér, mindkettő piros volt a régi kódon: (a) egy másik MC lokális szabályát a sor megnyitása 400 ms után csendben erre az MC-re írta át (`formattingMcScope`); (b) a szóközzel tárolt méretlista („300x250, 728x90”) megnyitáskor magától PATCH-et küldött. Most a diff a tárolt sor saját draftjához mér.
+- [x] S3 A `HeaderDetailDialog` átáll a hookra; 409 → conflict-sáv Reloaddal (K2).
+  - Kész 2026-11-26: `tests/components/header-detail-dialog.test.tsx`, 4 teszt, a régi kódon mind piros volt. A 409 után nem megy ki semmi a peer verzióján, és a Reload a tárolt sort veszi át. Egyszerre egy mentés fut, a közben gépelt szöveg a visszakapott verzión (If-Match 2) megy ki. Tiszta formon a peer újabb sorát PATCH nélkül átveszi. Az 1. sor késő válasza nem kerül a 2. sorra. A rekey a hook `adopt`-jával lép tovább.
+- [x] S4 A `MediaEntityDialog` átáll a hookra; 409 → conflict + Reload; a léptetés közben érkező válasz nem írja át az új elemet.
+  - Kész 2026-11-26: `tests/components/media-entity-dialog.test.tsx`, 3 teszt az `AssetDetailDialog`-on át, a régi kódon mind piros volt. A 200-as választ most a `queryKey` egyes számú kulcsán olvassa (`asset`/`creative`), ahogy a `makeItemRoute` küldi. Az archive/restore a hook tárolt sorának verzióját küldi.
+- [x] S5 `MessageEditor.handleWriteError`: az elhagyott kártya hibája nem jelenik meg (a `SaveChange` viszi a sor id-ját).
+  - Kész 2026-11-26: `tests/components/message-editor-left-card.test.tsx`, 2 teszt, a régi kódon mind piros volt. Egy új testvért is bezár: az elhagyott kártya késő sikeres mentése „Saved”-et villantott az új kártyán (`onSuccess` → `markSaved`).
+- [x] S6 tsc, lint, `npm test` (az integrációs csomaggal együtt), a spec §6.3a, §6.4 és §8.2 frissítése a K2 szerint, bump-javaslat.
+  - 2026-11-26: tsc tiszta. `npm test`: 139 fájl, 1339 teszt zöld (az integrációs csomaggal, `mm6-test-pg`). `npm run lint`: 0 hiba, 136 figyelmeztetés; az érintett fájlokban kevesebb, mint előtte (MessageEditor 20 → 18, MediaEntityDialog 4 → 0, az új fájlok tiszták).
+  - A spec (Drive, `mm6-docs/REBUILD_SPEC.md`, a 2026-11-25-i fájl) öt helyen javult, mindegyik „(Robi, 2026-11-26; branch `claude/autosave-editors`, not deployed yet)” jelöléssel: §6.3a mentési szabály és reseed rule, §6.4 autosave, §6.3 Content sor (a szövegformázó sor mentése), §8.2 layer 2 (mind a négy szerkesztőre, a hookkal és a reducerrel). A Drive-másolat bájtra azonos a szerkesztettel (`cmp`).
+
+Az S2–S4 egymástól független, de mindegyik az S1-re épül. B-nél a terv kódolás előtt Codex + Chief Architect review-t kap, mert új közös réteg, hacsak Robi nem mondja, hogy hagyjuk ki.
+
+**Nem része, csak feljegyezve (kódból, nem ellenőrizve):** ha a MessageEditorban vagy a MediaEntityDialogban az utolsó gépelés után 400 ms-on belül lépsz másik elemre (vagy zárod be), az a változás nem megy ki, mert az időzítőt a sorváltás törli.
+
+**Robi döntései (2026-11-26, „Igen, mehet B”):** K1 = B; K2 igen (a 409 a dialógusokban is terminális, csak Reload, és a spec §6.3a/§6.4 erre javul); K3 igen; K4 igen.
+
+**Chief Architect (`~/agent-bus/answers/20261126-0945-mm6-versioned-autosave-hook.md`): OK with changes.** Beépítve:
+- Az R1–R5 tiszta reducerbe kerül a `src/lib/autosave.ts`-be (az `autosaveDue` mellé), node-tesztekkel; a hook csak az időzítőt, a fetch-et és a state-et köti rá.
+- R5: amíg mentés fut, vagy az állapot nem idle, a sor-propot figyelmen kívül hagyja (a saját mentés SSE-visszhangja megelőzheti a PATCH válaszát). „Tiszta” = a diff üres ÉS az állapot nem saving/error. Teszt: tiszta állapotban érkező peer-sor átvétel, PATCH nélkül.
+- R2: elhagyott sor válaszánál az állapothoz nem nyúl, de az `onSaved` (invalidálás) lefut.
+- R3: conflictban a draft látható marad; a Reload semmit nem küld. Teszt: Reload után nincs PATCH a következő szerkesztésig.
+- Közös `ConflictBar` (csak props), és a MessageEditor is erre áll át ugyanabban a szeletben. Ugyanezért a három, betűre azonos `SaveIndicator` is egy közös komponens lesz; K2 után a dialógusok conflict-szövege úgyis a MessageEditoré lesz („Conflict — reload needed”).
+- A hook legfeljebb 9 bemenetet kap; az `autosaveDue` `versionNo: null`-t kap.
+- Sorrend: az S5 független és kicsi, mehet előre. A jsdom már devDependency (`^25.0.1`), új függőség nem kell.
+- A <400 ms-os elvesztett szerkesztés lépéskor/bezáráskor ismert adatvesztési szél; Robi dönt (flush sorváltáskor/unmountkor), nem része ennek.
+
+**Codex (`~/agent-bus/answers/20261126-0945-mm6-versioned-autosave-hook.codex.md`): OK with changes.** Beépítve:
+- R2: a válaszhoz a sor kulcsa mellett egy szerkesztési generáció (`session`) is kell. Minden újratöltés (sorváltás) növeli, és csak az azonos generációjú válasz számít. Különben A → B → A után A régi válasza a régi listából újratöltött draft alá kerülne, és a következő autosave visszaírná a saját mentést. A fejléc-dialógus kulcsa `kind:id`. Elhagyott sor sikeres mentésénél az `onSaved` (invalidálás) fut.
+- Minden átmenet specifikálva: a Save, a Cancel és az `adopt` sem lép ki a conflictból. Az időzítő a küldés pillanatában a reducerben újraellenőriz: conflict, sorváltás és kikapcsolt Autosave után sem küld. Az Autosave ezért a reducer állapotában van.
+- Érték szerinti egyezés: a szövegformázó sor draftja a tárolt alakot tartja (`formattingScope` csv-szövegként, nem tömbként), így egy azonos értékű, újraépített draft nem számít változásnak. Erre regressziós teszt kerül.
+- A reprodukció a hook előtt jön: a szövegformázó soron megvan (5 piros). A dialógusoknál is a mostani kódon kell pirosnak lennie, mielőtt átállnak. A kurzorugrást `selectionStart`-tal is ellenőrizni kell, nem csak az értékkel.
+- A végén friss kontextusú diff/security review jön (a loop 6. lépése, nagy blast radius). A spec §6.3a „Reseed rule” bekezdése is frissül, nem csak a 409-es.
+- K4 (Robi: igen): új szabálynál a létrehozás POST, amit a PATCH-hook magától nem fed le. A hook ezért kap egy `create` ágat: amíg nincs sor, a mentés POST, és ugyanaz a komponens marad mountolva, így a fókusz és a közben gépelt szöveg megmarad. Előbb piros teszt a mostani kódon.
+
+**Piros előbb (S2 reprodukció, a mostani kódon):** `tests/components/text-formatting-rule-row.test.tsx`, 5/5 a jósolt tünettel bukik. A mentés alatt gépelt „c” eltűnik (`expected 'ab' to be 'abc'`, ez a kurzorugrás), soha nem megy ki, egy második PATCH is elindul a futó mentés mellett, és sem `save-indicator--error`, sem `--conflict` nincs. Ehhez a `TextFormattingRuleRow` és a `FormattingRule` exportot kapott.
+
+**Kérdések Robinak:**
+- K1: A vagy B? Ajánlom: B.
+- K2: A két dialógusban is terminális legyen a 409, csak Reloaddal (mint a §8.2-ben és a MessageEditorban), és a spec §6.3a/§6.4 „Refreshed” sorát erre javítsam? Ajánlom: igen, mert a mostani „Refreshed” viselkedés csendben visszaírja a másik felhasználó mezőit.
+- K3: A szövegformázó soron hibánál és conflictnál egy kis jelzés kerüljön a sor mellé a meglévő `save-indicator` osztállyal, conflictnál „Reload” linkkel? Ajánlom: igen.
+- K4: Új szabály-sor mentésekor a draft sor kicserélődik a tárolt szabályra. Ilyenkor elveszik a fókusz és a közben gépelt karakter (kódból, nem ellenőrizve). Ez is kerüljön bele az S2-be? Ajánlom: igen, ha gépelés közben ezt is látod.
+
+**Review (2026-11-26)**
+
+*Jóslat és eredmény:*
+- Bejött: a mentés futása alatt gépelt szöveg megmarad, és a kurzor nem ugrik (`selectionStart`-tal is tesztelve). A saját mentésre nem jön 409, a valódi ütközés mindhárom helyen conflict + Reload, és nem ír vissza semmit. A szövegformázó soron látszik a hiba és a conflict.
+- Nem változott: a szerver, a 400 ms-os debounce és a mentett mezők. A MessageEditor saját mentési útja is maradt; ott csak az S5-ös őr került be, plusz a közös `ConflictBar` és `SaveIndicator`.
+- Az ismeretlen: a jsdom-os keret (`tests/components/dom.ts`) új függőség nélkül megvan; csak egy `ResizeObserver`-csonk kellett hozzá.
+- Amit a terv nem látott előre, négy testvér, mind piros volt a régi kódon:
+  - egy másik MC lokális szabályát a megnyitás csendben átírta;
+  - a szóközös méretlista magától PATCH-et küldött;
+  - a MediaEntityDialog a 200-as választ is rossz kulcson olvasta volna;
+  - az elhagyott kártya késő „Saved”-je az új kártyán villant.
+
+*Friss kontextusú diff/security review: „OK with changes”.* Négy pontot javítottam, mindegyikre előbb piros teszt jött (egy reducer-teszt és négy komponens-teszt):
+1. **(közepes)** Ha a hook egy 200-as választ nem tud elolvasni (nem JSON a törzs, vagy hiányzik a mentett sor), a mentés örökre „Saving…” maradt, és utána semmilyen mentés nem indult, a kézi Save sem. Ennek az oka: a `.then(ok, err)` nem kapja el az `ok`-ban dobott hibát. Most a kérés minden kimenete egyetlen eseményként jön vissza, az olvashatatlan válasz is „Save failed”, és a következő változás újra küld.
+2. Conflictban a két dialógus Save és Cancel gombja tiltott (Autosave kikapcsolva). Eddig nem csináltak semmit, mert a conflictból csak a Reload vezet ki; a MessageEditor Save gombja már eddig is így viselkedett.
+3. A szövegformázó sor Reloadja frissíti a `["text-formatting"]` listát, mint a dialógusok, így az előnézet a tárolt szabállyal formáz.
+4. A reducer `adopt` ága is lefuttatja az `undue`-t: ha az átvett sor már a draftot tartja, az állapot nem marad „saving”. Ma nem elérhető, de a reducer így minden eseményre helyes.
+
+Security: nincs új végpont (a `POST /api/text-formatting` megvolt). Az If-Match a szerver verziószáma, a hibaszöveg React `title`-ként jelenik meg.
+
+*Ellenőrzés a javítások után:* tsc tiszta. Unit + components: 55 fájl, 563 teszt zöld. A módosított fájlok lintje: 0 hiba, 24 figyelmeztetés, mind változatlan sorokon. A teljes `npm test` az integrációs csomaggal a javítások után: 139 fájl, 1344 teszt zöld (előtte 1339, plusz az 5 új).
+
+*A spec:* REBUILD_SPEC (Drive, a 2026-11-25-i fájl) §6.3, §6.3a, §6.4 és §8.2 frissítve, „not deployed yet” jelöléssel. Deploy után ezt a jelölést le kell venni.
+
+*Nyitott, nem része ennek (Robi dönt; kódból követve, nem futtatva, ha nincs másképp írva):*
+- **Régi, talán komoly:** a csatornából képzett audience-sorok (`channelToAudience`, beégetett `version: 1`) a `HeaderDetailDialog`-ban nyílnak meg, és a `/api/audiences/<csatorna-id>`-ra autosave-elnek. A csatorna- és az audience-id ütközhet (`MatrixGrid.tsx:208-211`). Ha az azonos id-jú audience 1-es verzión van, a mezőit felülírja. Ha nem, conflict jön, és a Reload egy idegen audience-t tölt be. Az `isChannelRow` csak a Delete gombot rejti el. A régi kód rosszabb volt (rebase, majd újraküldés). Saját szeletet érdemel. → Terv és piros tesztek: lent, „Fejléc-dialógus: a csatorna-sor egy idegen audience-re ír”.
+- A → B → A egy mentés ideje alatt: visszatérve a draft a lista régi A-sorából töltődik újra. Ha azonnal gépelsz, a mentés a régi verzión megy ki, és a saját mentésre jön egy „Someone else saved…” conflict. Nem ír felül semmit, de félrevezető. A reviewer saját teszttel futtatta.
+- Új szabály törlése, amíg a létrehozó POST fut: a sor később visszajön (a régi kód is így viselkedett). A szövegformázó DELETE 409-e néma (régi).
+- Autosave kikapcsolva: amíg az elhagyott elem mentése fut, a Save némán nem csinál semmit (R1), és az állapot idle-t mutat.
+- A dialógusokban Autosave ON mellett hibánál nincs Save gomb (a MessageEditorban van).
+- A 400 ms-on belüli utolsó szerkesztés léptetéskor vagy bezáráskor elveszik (lásd fent; flush sorváltáskor/unmountkor).
+- A `DimensionGrid/useRowAutosave.ts` külön cellamentés, nem állt át.
+- Ha egy létrehozott slot szabályát máshol archiválják, újramountoláskor create módba eshet vissza (szélső eset).
+- Nincs teszt a rekey `adopt`-ra és az archive/restore verziójára.
+
+*Bump:* `6.137.0` → `6.138.0` (minor), Robi: „Yes, bump 6.138.0”. A `package.json` kézzel van átírva, a lockfile érintetlen, és van CHANGELOG-sor. Ok: látható viselkedésváltozás. A 409 a dialógusokban terminális, conflict-sávval, a szövegformázó soron hiba- és conflict-jelzés van.
+
+*Lecke, javaslat (Robi dönt):* minden új autosave-es szerkesztő egy verziózott sorra a `useVersionedAutosave`-et használja, ne saját ciklust. A szabályokat a `tests/unit/autosave.test.ts` önmagában is ellenőrzi. Egy sor a `ui.md`-be vagy az AGENTS.md „Workflow notes” részébe arról, hogy új szerkesztő ezt használja.
+
+## 2026-11-26 — Fejléc-dialógus: a csatorna-sor egy idegen audience-re ír (KÉSZ az ágon, 6.139.0, NINCS deployolva; Robi: „A, és mehet K2”, „6.139.0 (minor)”)
+
+A 6.138.0 review „Régi, talán komoly” pontja (lásd fent). Ág: `claude/header-dialog-channel-row`, a `claude/autosave-editors` `59441fd`-jéről (Robi: „Igen, 59441fd-re”). A hiba a main-en (6.137.0, élő) is megvan: a régi dialógus ugyanígy `/api/audiences/${committed.id}`-ra PATCH-el.
+
+**A mechanizmus egy mondatban:** a közönség-tengely a csatornákat Audience-alakú helyettesítőként mutatja (`channelToAudience`, `matrix/types.ts:48`: a csatorna saját id-ja, beégetett `version: 1`), a `HeaderDetailDialog` pedig minden `kind="audience"` sort az audiences tábla sorának vesz: oda ír, a válaszát tárolt sornak veszi, és a szerkesztési munkamenetét `audience:<id>` kulccsal azonosítja.
+
+**Piros tesztek (a mostani kódon, futtatva):** `tests/components/header-detail-dialog.test.tsx`, „HeaderDetailDialog on a channel row”, 3/3 piros, a régi 5 zöld.
+1. A Name szerkesztése után 400 ms-mal: `expected [ 'PATCH /api/audiences/7 If-Match:1' ] to deeply equal []`. Ez maga a hiba. Ha a 7-es audience az 1-es verzión áll, a mezőit felülírja. Ha nem, 409 jön, a Reload az idegen audience-t tölti be, és a következő gépelés már annak a saját verzióján írja felül.
+2. Testvér: ha a téves mentésre a szerver a valódi 7-es audience-szel válaszol (`channel: null`), a `committed` az lesz, az `isChannelRow` (`HeaderDetailDialog.tsx:372`) hamis, és megjelenik a Delete gomb. Ha a csatorna oszlopán nincs kártya, a törlés a `/api/audiences/7/hard-delete`-re megy, az idegen audience verziójával.
+3. Testvér, látens: a 7-es csatorna és a 7-es audience munkamenet-kulcsa ugyanaz (`audience:7`, `HeaderDetailDialog.tsx:250`). Csatornáról az 1-es verziójú 7-es audience-re váltva a dialógus a csatornát mutatja tovább (`expected 'Display' to be 'Seven'`), mert a reducer azonos kulcsnál a nem újabb verziót figyelmen kívül hagyja. Ma a felületen nem érhető el: a dialógus modális, és két sor között lebomlik. A tesztben a dialógus újrarenderelése hozza elő.
+
+A rekey csatorna-soron nem érhető el: a `keyStale` a listából jövő `entity`-ből jön, és a `channelToAudience` nem állítja.
+
+**Szándék a kódban:** a csatorna-sor nem szerkeszthető itt. A `MatrixGrid.tsx:207-215` megjegyzése tudja, hogy az id-k ütközhetnek. Az `isChannelRow` megjegyzése szerint a csatornák „live in their own table and must not be deleted through /api/audiences”, mégis csak a Delete van elrejtve. A csatornák helye a Settings › Channels fül (`/api/channels/[id]` PATCH: code, label, orderIndex; `withAdmin`; nincs `version` oszlop, nincs If-Match). A régi csatorna-audience sorokat a 6.21.0 (`c71831c`, 2026-08-17) `migrateChannelsFromAudiences` törölte az audiences táblából.
+
+**Dokumentum és kód** (REBUILD_SPEC a Drive-on, a fájl 2026-11-26-i):
+- A §6.3a („Surfaces an audience or topic for direct edit”) nem említi a csatorna-sorokat.
+- A §8.2 szerint „Every row carries a `version` column”; a `channels` táblának nincs.
+- A Channels-entitás (6.21.0) a specben nincs leírva.
+- Szemantikai modell, ami ezt lefedné, nincs.
+
+**Utak:**
+- **A) Csatorna-soron csak olvasható dialógus (ajánlott).** A dialógus abból dönti el, hogy csatorna-sor-e, amit a mátrix megnyitott (`kind === "audience"` és `entity.channel !== null`), nem a tárolt sorból. Csatorna-soron: a bal oldalon csak olvasható mezők (Key, Code, Name, Order, a meglévő `Field` és `readOnlyCls`), egy sor: „Átnevezés: Settings › Channels”. Nincs Autosave-kapcsoló, Save, Cancel, mentésjelző, Delete és rekey. A munkamenet kulcsa `channel:<id>`. Az előnézet-léptető marad. Ez a mechanizmust zárja le: a csatorna-sorról nem indulhat írás az audiences útvonalra, és a három testvér együtt zöldre vált. A diff egy fájl plusz a teszt; a hook és a szerver nem változik.
+- **B) Csatorna-sor szerkesztése a `/api/channels/<id>`-n.** Csak a Name (label) lenne szerkeszthető. Ehhez a `channels` tábla `version` oszlopot és a route If-Match-et kapna (séma-migráció, egyirányú ajtó), a hook ugyanis verziózott sort vár, és a §8.2 is ezt írja. A route `withAdmin`, ezért nem admin felhasználónak 403-at adna. Kettőzné a Settings › Channels fület. Most nem ajánlom.
+- **C) Csatorna-soron ne nyíljon meg a dialógus** (`MatrixGrid` `onOpenHeader`). A legkisebb diff, de a csatorna-oszlop kártyáinak előnézet-léptetője elveszik, és a dialógus maga hibás marad (a 3 teszt piros marad).
+
+**Touches (A):** `HeaderDetailDialog.tsx` (a csatorna-sor felismerése, a munkamenet kulcsa, a bal panel és a fejléc gombjai). Szomszédok: a `MatrixGrid` `headerDialog`/`headerEntity` (nem változik), a `useVersionedAutosave` (nem változik), a `/api/audiences/[id]` és a `/api/channels/[id]` (nem változik). Szerződés: REBUILD_SPEC §6.3a, §8.2.
+
+**Door (A):** kétirányú (`git revert`), csak kliens. Blast radius: a fejléc-dialógus a csatorna-oszlopokon, mindkét tenanton; az audience- és topic-sorok viselkedése ugyanaz marad. A 6.138.0-val együtt menne ki, az sincs még deployolva. Deploy csak Robi szavára.
+
+**Jóslat (A):**
+- Ami változik: csatorna-soron semmi nem megy az `/api/audiences/*`-ra, nincs Delete, a mezők csak olvashatók. A 3 piros teszt zöld lesz.
+- Ami nem változik: az audience- és topic-sor mentése; a régi 5 teszt zöld marad. Az előnézet a csatorna-soron is ugyanaz.
+- Ismeretlen: ütközik-e ma élesben csatorna-id audience-id-val ugyanabban a kliensben, és írt-e már ilyen mentés idegen audience-re. Ezt csak egy olvasó lekérdezés dönti el (K2).
+
+**Seam:** a `HeaderDetailDialog` komponens, úgy, ahogy a `MatrixGrid` meghívja; a `components` vitest projekt, a `tests/components/dom.ts` keretével, új függőség nélkül.
+
+**Szeletek (A):**
+- [x] S0 Piros tesztek: a csatorna-sor PATCH-e, a felbukkanó Delete, az `audience:<id>` kulcs ütközése (3/3 piros, a régi 5 zöld).
+- [x] S1 Csatorna-sor csak olvasható, a kulcs `channel:<id>`. Plusz egy teszt: csatorna-soron nincs szerkeszthető mező és Autosave-kapcsoló. A 3 teszt zöld.
+  - Kész 2026-11-26: az új teszt előbb piros volt (`expected <input …>`, szerkeszthető mezők voltak). A `HeaderDetailDialog` a megnyitott `entity`-ből dönti el, hogy csatorna-sor-e (`channelCode`, `isChannelRow`); a munkamenet kulcsa `channel:<id>`; a bal panelen az új `ChannelForm` (Key, Name, Code, Order, mind `readOnly`, a meglévő `Field` + `readOnlyCls`; a Name alatt: „An Agentic channel: rename it in Settings › Channels.”); a fejlécben csatorna-soron nincs Autosave, modified, Save, Cancel, és a Delete is a megnyitott sorból dől el. Az új blokknév (`matrix-header-form--channel`) a `component-inventory.md`-ben. A hook és a szerver nem változott.
+- [x] S2 tsc, lint, `npm test` (az integrációs csomaggal), a spec §6.3a egy mondattal a csatorna-sorról, bump-javaslat.
+  - 2026-11-26: tsc tiszta. `npm test`: 139 fájl, 1348 teszt zöld (az integrációs csomaggal, `mm6-test-pg`; előtte 1344, plusz a 4 új). Lint a két érintett fájlon: 0 hiba, 6 figyelmeztetés, ugyanaz a 6, mint az alapon (`59441fd`), csak 11 sorral lejjebb.
+  - A spec (Drive, `mm6-docs/REBUILD_SPEC.md`) §6.3a-ja egy „Channel rows” bekezdést kapott a „Reseed rule” után, „(Robi, 2026-11-26; branch `claude/header-dialog-channel-row`, not deployed yet)” jelöléssel. A Drive-másolat bájtra azonos a szerkesztettel (`cmp`).
+- [x] S3 (K2) Olvasó lekérdezés élesben: van-e csatorna-id = audience-id ugyanabban a kliensben, és van-e olyan `audit_log` audience-update, ami ilyen id-ra ment a 6.21.0 óta. Írás nincs.
+  - Kész 2026-11-26, a tunnelen át (`localhost:5433/mm6`), `default_transaction_read_only=on` mellett. Megfigyelt adat:
+    - Csatornája csak az Erstének van: 6 db, id 1–6 (a `channels_id_seq` 6-on). Telekom, Proficio, demo: 0.
+    - Audience-id-k: Erste 282–461 (180 sor, archiváltakkal), Telekom 468–476 (`audiences_id_seq` 476-on). Ütközés ugyanabban a kliensben: 0 sor.
+    - `audit_log`, Erste, `audiences`, `entity_id` 1–6: négy sor, mind 2026-04-26-i (`aud1` kulcs: create/update/delete), hónapokkal a `channels` tábla (2026-08-17) előtt. Felülírás nyoma nincs.
+  - Ebből (kódból következtetve, nem megfigyelve): ma egy csatorna-sor szerkesztése 404-et kap (`not_found`, a route kliensre szűr), és a dialógus „Save failed”-et mutat; adat nem sérül. Ütközéshez a csatorna-sorozatnak az Erste legkisebb audience-id-jáig (282) kellene nőnie, vagy egy friss adatbázis kellene, ahol mindkét sorozat alulról indul (pl. a teszt-DB, egy új telepítés). A hiba ma látens, a sürgőssége kicsi.
+
+Planning review (Codex + Chief Architect) A-hoz nem kell: csak kliens, nincs új réteg, séma vagy deploy. B-hez kellene (séma).
+
+**Kérdések Robinak:**
+- K1: A, B vagy C? Ajánlom: A.
+- K2: Futtathatok egy csak olvasó ellenőrzést az éles DB-n (csatorna- és audience-id-k kliensenként, plusz az `audit_log`), hogy kiderüljön, felülírt-e már ez idegen audience-t? Ajánlom: igen, mert ettől függ, kell-e adatot visszaállítani.
+
+**Robi döntései (2026-11-26, „A, és mehet K2”):** K1 = A; K2 igen (eredménye az S3 alatt).
+
+**Review (2026-11-26)**
+
+*Jóslat és eredmény:*
+- Bejött: csatorna-soron semmi nem megy az `/api/audiences/*`-ra, nincs Delete, a mezők csak olvashatók; a 3 piros teszt és az S1 új tesztje zöld.
+- Nem változott: az audience- és topic-sor mentése (a régi 5 teszt zöld), a hook, a szerver, az előnézet-léptető.
+- Az ismeretlen (K2, megfigyelve): ma nincs ütközés, és felülírás nyoma sincs. A hiba élesben látens; ma egy csatorna-sor szerkesztése 404-et kapna (kódból következtetve).
+- Amit a terv nem látott előre: semmi új testvér.
+
+*Önellenőrzés a terv ellen* (kétirányú ajtó, kis blast radius, ezért nem kell külön reviewer): a diff a terv A útját valósítja meg, egy komponensfájl plusz teszt, inventory és todo. Nem kért dolog nincs benne.
+
+*Dokumentum és kód, nyitva maradt (Robi dönt):*
+- A §8.2 „Every row carries a `version` column” mondata a `channels` táblára nem igaz; a Channels-entitás (6.21.0) a specben nincs leírva.
+- Csatorna-soron a fejléc kis címkéje továbbra is „AUDIENCE”. Nem része a tervnek; „CHANNEL” lehetne.
+
+*Bump:* `6.138.0` → `6.139.0` (minor), Robi: „6.139.0 (minor)”. A `package.json` kézzel van átírva, a lockfile érintetlen, és van CHANGELOG-sor. Ok: látható viselkedésváltozás (a csatorna-sor csak olvasható).
+
+*Lecke, javaslat (Robi dönt):* egy helyettesítő sor (más tábla sora egy másik entitás alakjában) annak az entitásnak az írási útjait örökli, amelynek az alakjában megjelenik, hacsak a szerkesztő nem a megnyitott sorból dönti el, hova írhat. Ha még lesz ilyen helyettesítő sor, a `channelToAudience`-hez hasonlóan jelölje magát, és a szerkesztő ebből döntsön.
+
+## 2026-11-26 — 6.139.0 deploy (6.138.0 + 6.139.0) (FOLYAMATBAN; Robi: „merge-öld a main-be és mehet a deploy”)
+
+**Ami kimegy** (élő: `51b5bae` = 6.137.0 mindkét tenanton): a `claude/header-dialog-channel-row` ág, rajta a 6.138.0 (`dbdd4c1` + `59441fd`: a HeaderDetailDialog, a MediaEntityDialog és a szövegformázó sor egy közös hookon, `useVersionedAutosave`; a MessageEditor saját mentési útja marad, ott csak az S5-ös őr, a közös `ConflictBar` és `SaveIndicator` került be) és a 6.139.0 (`b0a0dba` + `c803410` + `e86ba2f`: a csatorna-sor fejléc-dialógusa csak olvasható). Csak `src/` (kliens), tesztek, docs: nincs migráció; a lockfile, a `templates/`, a `next.config.ts` és a `deploy/` változatlan a `51b5bae` óta.
+**Touches:** a két fenti szakasz Touches-a és review-ja (Autosave-szerkesztők, 2026-11-26; Fejléc-dialógus csatorna-sor, 2026-11-26); a spec §6.3 / §6.3a / §8.2 (Drive, `REBUILD_SPEC.md`, 2026-11-26).
+**Door:** kétirányú (`git revert -m 1`, push, deploy). Blast radius: mindkét tenant, a UI minden autosave-szerkesztője.
+**Planning review:** `~/agent-bus/requests/20261126-1209-mm6-6.139.0-deploy.md`. CA: OK with changes (együtt menjen ki; telekom kanári; D4 és D5 között Robi 2 perces kézi próbája a telekomon; merge `git add` nélkül, a merge fája = az ág fája; `node -v`). Codex: OK with changes (a `.mm6-lock-sha` bélyeg a D1-ben; memória-mintavétel, 120 MB alatt `next build` kilövése; `/_next/image` 404; a share-oldal kimarad, dokumentálva; a lépések itt, checkboxként; a spec „not deployed yet” jelölőinek levétele siker után). Eltérés: a CA a kézi próbát kéri, a Codex elfogadja a hiányát maradék kockázatként: Robi dönt a D4 után.
+**Jóslat:** a sikeres mentési utak változatlanok, a szerver érintetlen; `npm ci` nem fut (a bélyeg = a lockfile hash-e mindkét tenanton); maint ~1 s tenantonként; restart +1.
+
+### Lépések
+- [x] D1 pre-flight (csak olvasva, Box B, 11:1x UTC): mindkét HEAD `51b5bae` (6.137.0), 0 tracked módosítás, `templates/` tiszta, nincs `.next-old`/`.next-build`; `mm6-deploy`/`mm6-maint` azonos a repóéval; `.mm6-lock-sha` = a lockfile hash-e (`7138f573…`) mindkét tenanton, és = a helyi lockfile-é; / 61%, 2298 MB elérhető; pm2 restarts 4/4; Node v24.22.3, Next 16.4.5 (a floor-on); külső sablon-ujjlenyomat `74b3c043`. error.log: telekom 0 sor, erste 18 sor (napi rotálás 00:00-kor; a mai sorok `Server Reference ID … Received "x"` szkenner-próbák, nem a kódunk).
+- [x] D2 helyben (`e86ba2f`): `tsc` 0; lint 0 hiba, a warningok azonosak a bázissal; `npm test` 139 fájl / 1348 zöld (integrációval).
+- [ ] D3 merge a main-be (`--no-ff`, `git add` nélkül; a merge fája = az ág csúcsának fája), push. A fő checkout két untracked fájlja (más session munkája) érintetlen és nincs a pushban.
+- [ ] D4 `mm6-deploy telekom`, memória-mintavétellel (120 MB alatt `next build` kilövése). Kapu: HEAD, 6.139.0, pm2 online, restarts +1, `/login` 200 (helyi + publikus), `/_next/image` 404, error.log nem nőtt, nincs `.next-old`/`.next-build`, 0 tracked módosítás, külső sablon-ujjlenyomat változatlan. Share oldalt nem kérek le (view countot írna).
+- [ ] Robi döntése a D4 után: kézi próba a telekomon (HeaderDetailDialog, MediaEntityDialog, MessageEditor bal kártya: egy mező mindegyikben; a verzió +1, nincs hamis conflict, szerkesztésenként 1 PATCH), vagy tovább próba nélkül.
+- [ ] D5 `mm6-deploy erste`, ugyanaz a kapu, plusz `templates/` = `51b5bae`; utána a telekom `/login` is 200.
+- [ ] Rögzítés: ez a szakasz, az infra-map Box B sora, a spec §6.3a „not deployed yet” jelölőjének levétele (Drive).
+
+**Rollback:** elbukó build → semmi nem változott, a régi build szolgál ki (`git -C /var/www/mm6-<t> reset --hard 51b5bae`). Nem jön fel → maint marad, `.next-old` vissza, reset `51b5bae`, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1 <merge>`, push, deploy.

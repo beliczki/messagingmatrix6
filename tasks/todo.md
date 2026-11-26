@@ -1631,7 +1631,7 @@ Planning review nem kell (kliens-javítás, nincs séma, auth, deploy vagy depen
 
 **Rollback:** elbukó build → semmi nem változott, a régi build szolgál ki (`git -C /var/www/mm6-<t> reset --hard 3480889`). Nem jön fel → maint marad, `.next-old` vissza, reset `3480889`, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1` a három merge-re, push, deploy.
 
-## 2026-11-26 — Autosave-szerkesztők: a három nyitott pont + a szövegformázó sor kurzorugrása (KÉSZ az ágon, commitolva, NINCS deployolva és nincs bumpolva; Robi: „Igen, mehet B”)
+## 2026-11-26 — Autosave-szerkesztők: a három nyitott pont + a szövegformázó sor kurzorugrása (KÉSZ az ágon, 6.138.0, NINCS deployolva; Robi: „Igen, mehet B”, „Yes, bump 6.138.0”)
 
 Robi: „csináljuk meg a nyitott pontokat”, közben pedig: „a texformatting is elugrál nekem gépelés közben a sor végére”. Ág: `claude/autosave-editors` (a main `26456ee`-ről).
 
@@ -1761,6 +1761,6 @@ Security: nincs új végpont (a `POST /api/text-formatting` megvolt). Az If-Matc
 - Ha egy létrehozott slot szabályát máshol archiválják, újramountoláskor create módba eshet vissza (szélső eset).
 - Nincs teszt a rekey `adopt`-ra és az archive/restore verziójára.
 
-*Bump-javaslat:* `6.137.0` → `6.138.0` (minor): látható viselkedésváltozás. A 409 a dialógusokban terminális, conflict-sávval, a szövegformázó soron hiba- és conflict-jelzés van. Nincs bumpolva, nincs CHANGELOG-sor; Robi dönt.
+*Bump:* `6.137.0` → `6.138.0` (minor), Robi: „Yes, bump 6.138.0”. A `package.json` kézzel van átírva, a lockfile érintetlen, és van CHANGELOG-sor. Ok: látható viselkedésváltozás. A 409 a dialógusokban terminális, conflict-sávval, a szövegformázó soron hiba- és conflict-jelzés van.
 
 *Lecke, javaslat (Robi dönt):* minden új autosave-es szerkesztő egy verziózott sorra a `useVersionedAutosave`-et használja, ne saját ciklust. A szabályokat a `tests/unit/autosave.test.ts` önmagában is ellenőrzi. Egy sor a `ui.md`-be vagy az AGENTS.md „Workflow notes” részébe arról, hogy új szerkesztő ezt használja.

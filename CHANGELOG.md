@@ -5,6 +5,27 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.138.0] — 2026-11-26
+
+### Fixed
+- Typing in a text formatting rule while it saves no longer moves the caret to the end of the line
+  or drops what you typed. A failed save or a conflict now shows next to the rule, with Reload on a
+  conflict.
+- Opening a text formatting rule no longer changes it by itself: a local rule of another MC kept its
+  MC, and a size list stored with spaces was not saved again.
+- A new text formatting rule keeps the focus and what you type while it is being created.
+- The audience/topic and the asset/creative dialogs send one save at a time, and a save that lands
+  after you stepped to the next item no longer writes onto it.
+- A save the server answers with something unreadable shows "Save failed" instead of staying on
+  "Saving…" and blocking every later save.
+- In the Message Editor, a late "Save failed" or "Saved" of a card you already left no longer shows
+  on the card now open.
+
+### Changed
+- When someone else saved the same audience, topic, asset or creative, its dialog now shows the
+  conflict bar with Reload, like the Message Editor, and keeps your edits on screen. It no longer
+  saves your edits over theirs. Save and Cancel are off until you reload.
+
 ## [6.137.0] — 2026-11-25
 
 ### Fixed

@@ -5,6 +5,16 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.139.0] — 2026-11-26
+
+### Fixed
+- In the matrix, the header dialog of an Agentic channel column no longer saves to an unrelated
+  audience that happens to share the channel's id.
+
+### Changed
+- An Agentic channel's header dialog is read-only: it shows the key, name, code and order, and
+  points to Settings › Channels for renaming. It has no Autosave, Save, Cancel or Delete.
+
 ## [6.138.0] — 2026-11-26
 
 ### Fixed

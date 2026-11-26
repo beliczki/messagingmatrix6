@@ -1765,7 +1765,7 @@ Security: nincs új végpont (a `POST /api/text-formatting` megvolt). Az If-Matc
 
 *Lecke, javaslat (Robi dönt):* minden új autosave-es szerkesztő egy verziózott sorra a `useVersionedAutosave`-et használja, ne saját ciklust. A szabályokat a `tests/unit/autosave.test.ts` önmagában is ellenőrzi. Egy sor a `ui.md`-be vagy az AGENTS.md „Workflow notes” részébe arról, hogy új szerkesztő ezt használja.
 
-## 2026-11-26 — Fejléc-dialógus: a csatorna-sor egy idegen audience-re ír (KÉSZ az ágon, NINCS deployolva, bump Robi szavára vár; Robi: „A, és mehet K2”)
+## 2026-11-26 — Fejléc-dialógus: a csatorna-sor egy idegen audience-re ír (KÉSZ az ágon, 6.139.0, NINCS deployolva; Robi: „A, és mehet K2”, „6.139.0 (minor)”)
 
 A 6.138.0 review „Régi, talán komoly” pontja (lásd fent). Ág: `claude/header-dialog-channel-row`, a `claude/autosave-editors` `59441fd`-jéről (Robi: „Igen, 59441fd-re”). A hiba a main-en (6.137.0, élő) is megvan: a régi dialógus ugyanígy `/api/audiences/${committed.id}`-ra PATCH-el.
 
@@ -1838,7 +1838,7 @@ Planning review (Codex + Chief Architect) A-hoz nem kell: csak kliens, nincs új
 - A §8.2 „Every row carries a `version` column” mondata a `channels` táblára nem igaz; a Channels-entitás (6.21.0) a specben nincs leírva.
 - Csatorna-soron a fejléc kis címkéje továbbra is „AUDIENCE”. Nem része a tervnek; „CHANNEL” lehetne.
 
-*Bump:* nincs még bumpolva; javaslat a session-üzenetben, Robi dönt.
+*Bump:* `6.138.0` → `6.139.0` (minor), Robi: „6.139.0 (minor)”. A `package.json` kézzel van átírva, a lockfile érintetlen, és van CHANGELOG-sor. Ok: látható viselkedésváltozás (a csatorna-sor csak olvasható).
 
 *Lecke, javaslat (Robi dönt):* egy helyettesítő sor (más tábla sora egy másik entitás alakjában) annak az entitásnak az írási útjait örökli, amelynek az alakjában megjelenik, hacsak a szerkesztő nem a megnyitott sorból dönti el, hova írhat. Ha még lesz ilyen helyettesítő sor, a `channelToAudience`-hez hasonlóan jelölje magát, és a szerkesztő ebből döntsön.
 

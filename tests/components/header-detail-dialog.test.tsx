@@ -207,6 +207,18 @@ describe("HeaderDetailDialog on a channel row", () => {
     expect(deleteButton()).toBeNull();
   });
 
+  it("shows a channel row read-only: nothing to type into, no Autosave, no Save", () => {
+    mount(view(channelRow()));
+    expect(nameField().value).toBe("Display");
+    const editable = document.querySelectorAll(
+      ".matrix-header-form input:not([readonly]), .matrix-header-form textarea:not([readonly])",
+    );
+    expect(editable).toHaveLength(0);
+    expect(document.querySelector(".matrix-header-dialog__autosave-toggle")).toBeNull();
+    const labels = [...document.querySelectorAll("button")].map((b) => b.textContent?.trim());
+    expect(labels).not.toContain("Save");
+  });
+
   it("treats channel 7 and audience 7 as two rows: the audience is shown, not the channel", async () => {
     const ui = mount(view(channelRow()));
     ui.rerender(view(audienceSeven()));

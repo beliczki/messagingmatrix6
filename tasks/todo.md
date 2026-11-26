@@ -1765,7 +1765,7 @@ Security: nincs új végpont (a `POST /api/text-formatting` megvolt). Az If-Matc
 
 *Lecke, javaslat (Robi dönt):* minden új autosave-es szerkesztő egy verziózott sorra a `useVersionedAutosave`-et használja, ne saját ciklust. A szabályokat a `tests/unit/autosave.test.ts` önmagában is ellenőrzi. Egy sor a `ui.md`-be vagy az AGENTS.md „Workflow notes” részébe arról, hogy új szerkesztő ezt használja.
 
-## 2026-11-26 — Fejléc-dialógus: a csatorna-sor egy idegen audience-re ír (TERV, piros tesztek megvannak; Robi döntésére vár)
+## 2026-11-26 — Fejléc-dialógus: a csatorna-sor egy idegen audience-re ír (KÉSZ az ágon, NINCS deployolva, bump Robi szavára vár; Robi: „A, és mehet K2”)
 
 A 6.138.0 review „Régi, talán komoly” pontja (lásd fent). Ág: `claude/header-dialog-channel-row`, a `claude/autosave-editors` `59441fd`-jéről (Robi: „Igen, 59441fd-re”). A hiba a main-en (6.137.0, élő) is megvan: a régi dialógus ugyanígy `/api/audiences/${committed.id}`-ra PATCH-el.
 
@@ -1804,12 +1804,41 @@ A rekey csatorna-soron nem érhető el: a `keyStale` a listából jövő `entity
 
 **Szeletek (A):**
 - [x] S0 Piros tesztek: a csatorna-sor PATCH-e, a felbukkanó Delete, az `audience:<id>` kulcs ütközése (3/3 piros, a régi 5 zöld).
-- [ ] S1 Csatorna-sor csak olvasható, a kulcs `channel:<id>`. Plusz egy teszt: csatorna-soron nincs szerkeszthető mező és Autosave-kapcsoló. A 3 teszt zöld.
-- [ ] S2 tsc, lint, `npm test` (az integrációs csomaggal), a spec §6.3a egy mondattal a csatorna-sorról, bump-javaslat.
-- [ ] S3 (K2-től függ) Olvasó lekérdezés élesben: van-e csatorna-id = audience-id ugyanabban a kliensben, és van-e olyan `audit_log` audience-update, ami ilyen id-ra ment a 6.21.0 óta. Írás nincs.
+- [x] S1 Csatorna-sor csak olvasható, a kulcs `channel:<id>`. Plusz egy teszt: csatorna-soron nincs szerkeszthető mező és Autosave-kapcsoló. A 3 teszt zöld.
+  - Kész 2026-11-26: az új teszt előbb piros volt (`expected <input …>`, szerkeszthető mezők voltak). A `HeaderDetailDialog` a megnyitott `entity`-ből dönti el, hogy csatorna-sor-e (`channelCode`, `isChannelRow`); a munkamenet kulcsa `channel:<id>`; a bal panelen az új `ChannelForm` (Key, Name, Code, Order, mind `readOnly`, a meglévő `Field` + `readOnlyCls`; a Name alatt: „An Agentic channel: rename it in Settings › Channels.”); a fejlécben csatorna-soron nincs Autosave, modified, Save, Cancel, és a Delete is a megnyitott sorból dől el. Az új blokknév (`matrix-header-form--channel`) a `component-inventory.md`-ben. A hook és a szerver nem változott.
+- [x] S2 tsc, lint, `npm test` (az integrációs csomaggal), a spec §6.3a egy mondattal a csatorna-sorról, bump-javaslat.
+  - 2026-11-26: tsc tiszta. `npm test`: 139 fájl, 1348 teszt zöld (az integrációs csomaggal, `mm6-test-pg`; előtte 1344, plusz a 4 új). Lint a két érintett fájlon: 0 hiba, 6 figyelmeztetés, ugyanaz a 6, mint az alapon (`59441fd`), csak 11 sorral lejjebb.
+  - A spec (Drive, `mm6-docs/REBUILD_SPEC.md`) §6.3a-ja egy „Channel rows” bekezdést kapott a „Reseed rule” után, „(Robi, 2026-11-26; branch `claude/header-dialog-channel-row`, not deployed yet)” jelöléssel. A Drive-másolat bájtra azonos a szerkesztettel (`cmp`).
+- [x] S3 (K2) Olvasó lekérdezés élesben: van-e csatorna-id = audience-id ugyanabban a kliensben, és van-e olyan `audit_log` audience-update, ami ilyen id-ra ment a 6.21.0 óta. Írás nincs.
+  - Kész 2026-11-26, a tunnelen át (`localhost:5433/mm6`), `default_transaction_read_only=on` mellett. Megfigyelt adat:
+    - Csatornája csak az Erstének van: 6 db, id 1–6 (a `channels_id_seq` 6-on). Telekom, Proficio, demo: 0.
+    - Audience-id-k: Erste 282–461 (180 sor, archiváltakkal), Telekom 468–476 (`audiences_id_seq` 476-on). Ütközés ugyanabban a kliensben: 0 sor.
+    - `audit_log`, Erste, `audiences`, `entity_id` 1–6: négy sor, mind 2026-04-26-i (`aud1` kulcs: create/update/delete), hónapokkal a `channels` tábla (2026-08-17) előtt. Felülírás nyoma nincs.
+  - Ebből (kódból következtetve, nem megfigyelve): ma egy csatorna-sor szerkesztése 404-et kap (`not_found`, a route kliensre szűr), és a dialógus „Save failed”-et mutat; adat nem sérül. Ütközéshez a csatorna-sorozatnak az Erste legkisebb audience-id-jáig (282) kellene nőnie, vagy egy friss adatbázis kellene, ahol mindkét sorozat alulról indul (pl. a teszt-DB, egy új telepítés). A hiba ma látens, a sürgőssége kicsi.
 
 Planning review (Codex + Chief Architect) A-hoz nem kell: csak kliens, nincs új réteg, séma vagy deploy. B-hez kellene (séma).
 
 **Kérdések Robinak:**
 - K1: A, B vagy C? Ajánlom: A.
 - K2: Futtathatok egy csak olvasó ellenőrzést az éles DB-n (csatorna- és audience-id-k kliensenként, plusz az `audit_log`), hogy kiderüljön, felülírt-e már ez idegen audience-t? Ajánlom: igen, mert ettől függ, kell-e adatot visszaállítani.
+
+**Robi döntései (2026-11-26, „A, és mehet K2”):** K1 = A; K2 igen (eredménye az S3 alatt).
+
+**Review (2026-11-26)**
+
+*Jóslat és eredmény:*
+- Bejött: csatorna-soron semmi nem megy az `/api/audiences/*`-ra, nincs Delete, a mezők csak olvashatók; a 3 piros teszt és az S1 új tesztje zöld.
+- Nem változott: az audience- és topic-sor mentése (a régi 5 teszt zöld), a hook, a szerver, az előnézet-léptető.
+- Az ismeretlen (K2, megfigyelve): ma nincs ütközés, és felülírás nyoma sincs. A hiba élesben látens; ma egy csatorna-sor szerkesztése 404-et kapna (kódból következtetve).
+- Amit a terv nem látott előre: semmi új testvér.
+
+*Önellenőrzés a terv ellen* (kétirányú ajtó, kis blast radius, ezért nem kell külön reviewer): a diff a terv A útját valósítja meg, egy komponensfájl plusz teszt, inventory és todo. Nem kért dolog nincs benne.
+
+*Dokumentum és kód, nyitva maradt (Robi dönt):*
+- A §8.2 „Every row carries a `version` column” mondata a `channels` táblára nem igaz; a Channels-entitás (6.21.0) a specben nincs leírva.
+- Csatorna-soron a fejléc kis címkéje továbbra is „AUDIENCE”. Nem része a tervnek; „CHANNEL” lehetne.
+
+*Bump:* nincs még bumpolva; javaslat a session-üzenetben, Robi dönt.
+
+*Lecke, javaslat (Robi dönt):* egy helyettesítő sor (más tábla sora egy másik entitás alakjában) annak az entitásnak az írási útjait örökli, amelynek az alakjában megjelenik, hacsak a szerkesztő nem a megnyitott sorból dönti el, hova írhat. Ha még lesz ilyen helyettesítő sor, a `channelToAudience`-hez hasonlóan jelölje magát, és a szerkesztő ebből döntsön.
+

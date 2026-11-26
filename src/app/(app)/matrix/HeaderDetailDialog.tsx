@@ -239,15 +239,26 @@ export default function HeaderDetailDialog({
     NUM_CODEC,
   );
 
+  // ── Channel row ──
+  // The audience axis also carries the Agentic channels, as Audience-shaped
+  // rows (channelToAudience: the channel's own id, version 1). A channel lives
+  // in the channels table and is edited in Settings › Channels, and its id can
+  // be the id of an unrelated audience: /api/audiences/<id> would write to that
+  // one. So a channel row is shown read-only and has no write path here. Told
+  // from the row the matrix opened, never from a save's response.
+  const channelCode = kind === "audience" ? (entity as Audience).channel : null;
+  const isChannelRow = channelCode !== null;
+
   // ── Edit state (autosave w/ optimistic lock) ──
   // The rules (one save in flight, a 409 is terminal, a response only for the
   // row that sent it, re-seed only on another row) are in useVersionedAutosave.
-  // The key is kind:id: an audience and a topic can share an id.
+  // The key is kind:id: an audience and a topic can share an id, and so can a
+  // channel and an audience.
   const qc = useQueryClient();
   const [autoSave, setAutoSave] = useState<boolean>(true);
   const listKey = kind === "audience" ? "audiences" : "topics";
   const editor = useVersionedAutosave<Audience | Topic, Draft>({
-    rowKey: `${kind}:${entity.id}`,
+    rowKey: isChannelRow ? `channel:${entity.id}` : `${kind}:${entity.id}`,
     row: entity,
     rules: {
       toDraft: (r) => toDraft(kind, r),
@@ -366,11 +377,7 @@ export default function HeaderDetailDialog({
     skipAnim,
   ]);
 
-  // ── Hard delete (edit mode) ──
-  // Channel rows are only presented as audiences; they live in their own table
-  // and must not be deleted through /api/audiences.
-  const isChannelRow =
-    kind === "audience" && ((committed as Audience).channel ?? null) !== null;
+  // ── Hard delete (edit mode; never on a channel row, see above) ──
   const { confirm, alert } = useAlertDialog();
   const [deleting, setDeleting] = useState(false);
 
@@ -699,50 +706,54 @@ export default function HeaderDetailDialog({
                 Delete
               </button>
             ) : null}
-            <button
-              onClick={() => setAutoSave((v) => !v)}
-              className={clsx(
-                "matrix-header-dialog__autosave-toggle flex items-center gap-1 rounded border px-2 py-1 text-xs",
-                autoSave
-                  ? "matrix-header-dialog__autosave-toggle--active border-slate-900 bg-slate-900 text-white"
-                  : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
-              )}
-              title="Save changes automatically"
-            >
-              <span
-                className={clsx(
-                  "flex size-3.5 items-center justify-center rounded-sm border",
-                  autoSave
-                    ? "border-white bg-white text-slate-900"
-                    : "border-slate-400",
-                )}
-              >
-                {autoSave && <Icon name="check" className="size-2.5" bold />}
-              </span>
-              Autosave
-            </button>
-            {!autoSave && isDirty ? (
-              <span className="matrix-header-dialog__modified-tag text-xs text-amber-600">
-                modified
-              </span>
-            ) : null}
-            {!autoSave ? (
+            {!isChannelRow ? (
               <>
                 <button
-                  onClick={editor.save}
-                  // In a conflict only Reload leaves it (REBUILD_SPEC §8.2).
-                  disabled={!isDirty || saveState.kind === "saving" || saveState.kind === "conflict"}
-                  className="toolbar-btn--primary rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                  onClick={() => setAutoSave((v) => !v)}
+                  className={clsx(
+                    "matrix-header-dialog__autosave-toggle flex items-center gap-1 rounded border px-2 py-1 text-xs",
+                    autoSave
+                      ? "matrix-header-dialog__autosave-toggle--active border-slate-900 bg-slate-900 text-white"
+                      : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50",
+                  )}
+                  title="Save changes automatically"
                 >
-                  Save
+                  <span
+                    className={clsx(
+                      "flex size-3.5 items-center justify-center rounded-sm border",
+                      autoSave
+                        ? "border-white bg-white text-slate-900"
+                        : "border-slate-400",
+                    )}
+                  >
+                    {autoSave && <Icon name="check" className="size-2.5" bold />}
+                  </span>
+                  Autosave
                 </button>
-                <button
-                  onClick={editor.cancel}
-                  disabled={!isDirty || saveState.kind === "saving" || saveState.kind === "conflict"}
-                  className="toolbar-btn rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Cancel
-                </button>
+                {!autoSave && isDirty ? (
+                  <span className="matrix-header-dialog__modified-tag text-xs text-amber-600">
+                    modified
+                  </span>
+                ) : null}
+                {!autoSave ? (
+                  <>
+                    <button
+                      onClick={editor.save}
+                      // In a conflict only Reload leaves it (REBUILD_SPEC §8.2).
+                      disabled={!isDirty || saveState.kind === "saving" || saveState.kind === "conflict"}
+                      className="toolbar-btn--primary rounded bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Save
+                    </button>
+                    <button
+                      onClick={editor.cancel}
+                      disabled={!isDirty || saveState.kind === "saving" || saveState.kind === "conflict"}
+                      className="toolbar-btn rounded border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : null}
               </>
             ) : null}
             <button
@@ -783,7 +794,9 @@ export default function HeaderDetailDialog({
             }}
           >
             <div className="matrix-header-dialog__form-content flex-1 overflow-y-auto px-5 py-4 text-xs">
-              {kind === "audience" ? (
+              {isChannelRow ? (
+                <ChannelForm channel={entity as Audience} code={channelCode} />
+              ) : kind === "audience" ? (
                 <AudienceForm
                   draft={draft as AudienceDraft}
                   setDraft={(d) => setDraft(d)}
@@ -919,6 +932,32 @@ function StepperStrip({
           <Icon name="chevron-right" className="size-4" />
         </button>
       </div>
+    </div>
+  );
+}
+
+// A channel on the audience axis: read only, since it is edited in Settings ›
+// Channels (see the channel-row note in HeaderDetailDialog).
+function ChannelForm({ channel, code }: { channel: Audience; code: string }) {
+  return (
+    <div className="matrix-header-form matrix-header-form--channel form-grid grid grid-cols-2 gap-x-4">
+      <div className="col-span-2">
+        <Field label="Key">
+          <input readOnly value={channel.key} className={readOnlyCls} />
+        </Field>
+      </div>
+      <SectionHeader>Identity</SectionHeader>
+      <div className="col-span-2">
+        <Field label="Name" hint="An Agentic channel: rename it in Settings › Channels.">
+          <input readOnly value={channel.name} className={readOnlyCls} />
+        </Field>
+      </div>
+      <Field label="Code">
+        <input readOnly value={code} className={readOnlyCls} />
+      </Field>
+      <Field label="Order" hint="Display order in the matrix (lower first).">
+        <input readOnly value={channel.orderIndex} className={readOnlyCls} />
+      </Field>
     </div>
   );
 }

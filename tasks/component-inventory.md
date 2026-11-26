@@ -400,6 +400,7 @@ A row/col header kattintásra nyíló osztott modal: bal pane szerkeszthető aud
 | Edit form pane | `matrix-header-dialog__pane--form` | – |
 | Form scroll content | `matrix-header-dialog__form-content` | – |
 | Audience/Topic form grid | `matrix-header-form form-grid` | – |
+| Csatorna-sor (Agentic csatorna az audience-tengelyen): csak olvasható Key / Name / Code / Order, nincs Autosave, Save, Delete | `matrix-header-form--channel` | `ChannelForm`, HeaderDetailDialog, 2026-11-26 |
 | Draggable divider | `divider-handle--vertical` / `--horizontal` (globalis) | – |
 | Preview pane | `matrix-header-dialog__pane--preview` | – |
 | Stepper strip (prev/next + label + counter) | `matrix-header-dialog__stepper` | – |

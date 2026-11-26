@@ -1751,7 +1751,7 @@ Security: nincs új végpont (a `POST /api/text-formatting` megvolt). Az If-Matc
 *A spec:* REBUILD_SPEC (Drive, a 2026-11-25-i fájl) §6.3, §6.3a, §6.4 és §8.2 frissítve, „not deployed yet” jelöléssel. Deploy után ezt a jelölést le kell venni.
 
 *Nyitott, nem része ennek (Robi dönt; kódból követve, nem futtatva, ha nincs másképp írva):*
-- **Régi, talán komoly:** a csatornából képzett audience-sorok (`channelToAudience`, beégetett `version: 1`) a `HeaderDetailDialog`-ban nyílnak meg, és a `/api/audiences/<csatorna-id>`-ra autosave-elnek. A csatorna- és az audience-id ütközhet (`MatrixGrid.tsx:208-211`). Ha az azonos id-jú audience 1-es verzión van, a mezőit felülírja. Ha nem, conflict jön, és a Reload egy idegen audience-t tölt be. Az `isChannelRow` csak a Delete gombot rejti el. A régi kód rosszabb volt (rebase, majd újraküldés). Saját szeletet érdemel.
+- **Régi, talán komoly:** a csatornából képzett audience-sorok (`channelToAudience`, beégetett `version: 1`) a `HeaderDetailDialog`-ban nyílnak meg, és a `/api/audiences/<csatorna-id>`-ra autosave-elnek. A csatorna- és az audience-id ütközhet (`MatrixGrid.tsx:208-211`). Ha az azonos id-jú audience 1-es verzión van, a mezőit felülírja. Ha nem, conflict jön, és a Reload egy idegen audience-t tölt be. Az `isChannelRow` csak a Delete gombot rejti el. A régi kód rosszabb volt (rebase, majd újraküldés). Saját szeletet érdemel. → Terv és piros tesztek: lent, „Fejléc-dialógus: a csatorna-sor egy idegen audience-re ír”.
 - A → B → A egy mentés ideje alatt: visszatérve a draft a lista régi A-sorából töltődik újra. Ha azonnal gépelsz, a mentés a régi verzión megy ki, és a saját mentésre jön egy „Someone else saved…” conflict. Nem ír felül semmit, de félrevezető. A reviewer saját teszttel futtatta.
 - Új szabály törlése, amíg a létrehozó POST fut: a sor később visszajön (a régi kód is így viselkedett). A szövegformázó DELETE 409-e néma (régi).
 - Autosave kikapcsolva: amíg az elhagyott elem mentése fut, a Save némán nem csinál semmit (R1), és az állapot idle-t mutat.
@@ -1764,3 +1764,52 @@ Security: nincs új végpont (a `POST /api/text-formatting` megvolt). Az If-Matc
 *Bump:* `6.137.0` → `6.138.0` (minor), Robi: „Yes, bump 6.138.0”. A `package.json` kézzel van átírva, a lockfile érintetlen, és van CHANGELOG-sor. Ok: látható viselkedésváltozás. A 409 a dialógusokban terminális, conflict-sávval, a szövegformázó soron hiba- és conflict-jelzés van.
 
 *Lecke, javaslat (Robi dönt):* minden új autosave-es szerkesztő egy verziózott sorra a `useVersionedAutosave`-et használja, ne saját ciklust. A szabályokat a `tests/unit/autosave.test.ts` önmagában is ellenőrzi. Egy sor a `ui.md`-be vagy az AGENTS.md „Workflow notes” részébe arról, hogy új szerkesztő ezt használja.
+
+## 2026-11-26 — Fejléc-dialógus: a csatorna-sor egy idegen audience-re ír (TERV, piros tesztek megvannak; Robi döntésére vár)
+
+A 6.138.0 review „Régi, talán komoly” pontja (lásd fent). Ág: `claude/header-dialog-channel-row`, a `claude/autosave-editors` `59441fd`-jéről (Robi: „Igen, 59441fd-re”). A hiba a main-en (6.137.0, élő) is megvan: a régi dialógus ugyanígy `/api/audiences/${committed.id}`-ra PATCH-el.
+
+**A mechanizmus egy mondatban:** a közönség-tengely a csatornákat Audience-alakú helyettesítőként mutatja (`channelToAudience`, `matrix/types.ts:48`: a csatorna saját id-ja, beégetett `version: 1`), a `HeaderDetailDialog` pedig minden `kind="audience"` sort az audiences tábla sorának vesz: oda ír, a válaszát tárolt sornak veszi, és a szerkesztési munkamenetét `audience:<id>` kulccsal azonosítja.
+
+**Piros tesztek (a mostani kódon, futtatva):** `tests/components/header-detail-dialog.test.tsx`, „HeaderDetailDialog on a channel row”, 3/3 piros, a régi 5 zöld.
+1. A Name szerkesztése után 400 ms-mal: `expected [ 'PATCH /api/audiences/7 If-Match:1' ] to deeply equal []`. Ez maga a hiba. Ha a 7-es audience az 1-es verzión áll, a mezőit felülírja. Ha nem, 409 jön, a Reload az idegen audience-t tölti be, és a következő gépelés már annak a saját verzióján írja felül.
+2. Testvér: ha a téves mentésre a szerver a valódi 7-es audience-szel válaszol (`channel: null`), a `committed` az lesz, az `isChannelRow` (`HeaderDetailDialog.tsx:372`) hamis, és megjelenik a Delete gomb. Ha a csatorna oszlopán nincs kártya, a törlés a `/api/audiences/7/hard-delete`-re megy, az idegen audience verziójával.
+3. Testvér, látens: a 7-es csatorna és a 7-es audience munkamenet-kulcsa ugyanaz (`audience:7`, `HeaderDetailDialog.tsx:250`). Csatornáról az 1-es verziójú 7-es audience-re váltva a dialógus a csatornát mutatja tovább (`expected 'Display' to be 'Seven'`), mert a reducer azonos kulcsnál a nem újabb verziót figyelmen kívül hagyja. Ma a felületen nem érhető el: a dialógus modális, és két sor között lebomlik. A tesztben a dialógus újrarenderelése hozza elő.
+
+A rekey csatorna-soron nem érhető el: a `keyStale` a listából jövő `entity`-ből jön, és a `channelToAudience` nem állítja.
+
+**Szándék a kódban:** a csatorna-sor nem szerkeszthető itt. A `MatrixGrid.tsx:207-215` megjegyzése tudja, hogy az id-k ütközhetnek. Az `isChannelRow` megjegyzése szerint a csatornák „live in their own table and must not be deleted through /api/audiences”, mégis csak a Delete van elrejtve. A csatornák helye a Settings › Channels fül (`/api/channels/[id]` PATCH: code, label, orderIndex; `withAdmin`; nincs `version` oszlop, nincs If-Match). A régi csatorna-audience sorokat a 6.21.0 (`c71831c`, 2026-08-17) `migrateChannelsFromAudiences` törölte az audiences táblából.
+
+**Dokumentum és kód** (REBUILD_SPEC a Drive-on, a fájl 2026-11-26-i):
+- A §6.3a („Surfaces an audience or topic for direct edit”) nem említi a csatorna-sorokat.
+- A §8.2 szerint „Every row carries a `version` column”; a `channels` táblának nincs.
+- A Channels-entitás (6.21.0) a specben nincs leírva.
+- Szemantikai modell, ami ezt lefedné, nincs.
+
+**Utak:**
+- **A) Csatorna-soron csak olvasható dialógus (ajánlott).** A dialógus abból dönti el, hogy csatorna-sor-e, amit a mátrix megnyitott (`kind === "audience"` és `entity.channel !== null`), nem a tárolt sorból. Csatorna-soron: a bal oldalon csak olvasható mezők (Key, Code, Name, Order, a meglévő `Field` és `readOnlyCls`), egy sor: „Átnevezés: Settings › Channels”. Nincs Autosave-kapcsoló, Save, Cancel, mentésjelző, Delete és rekey. A munkamenet kulcsa `channel:<id>`. Az előnézet-léptető marad. Ez a mechanizmust zárja le: a csatorna-sorról nem indulhat írás az audiences útvonalra, és a három testvér együtt zöldre vált. A diff egy fájl plusz a teszt; a hook és a szerver nem változik.
+- **B) Csatorna-sor szerkesztése a `/api/channels/<id>`-n.** Csak a Name (label) lenne szerkeszthető. Ehhez a `channels` tábla `version` oszlopot és a route If-Match-et kapna (séma-migráció, egyirányú ajtó), a hook ugyanis verziózott sort vár, és a §8.2 is ezt írja. A route `withAdmin`, ezért nem admin felhasználónak 403-at adna. Kettőzné a Settings › Channels fület. Most nem ajánlom.
+- **C) Csatorna-soron ne nyíljon meg a dialógus** (`MatrixGrid` `onOpenHeader`). A legkisebb diff, de a csatorna-oszlop kártyáinak előnézet-léptetője elveszik, és a dialógus maga hibás marad (a 3 teszt piros marad).
+
+**Touches (A):** `HeaderDetailDialog.tsx` (a csatorna-sor felismerése, a munkamenet kulcsa, a bal panel és a fejléc gombjai). Szomszédok: a `MatrixGrid` `headerDialog`/`headerEntity` (nem változik), a `useVersionedAutosave` (nem változik), a `/api/audiences/[id]` és a `/api/channels/[id]` (nem változik). Szerződés: REBUILD_SPEC §6.3a, §8.2.
+
+**Door (A):** kétirányú (`git revert`), csak kliens. Blast radius: a fejléc-dialógus a csatorna-oszlopokon, mindkét tenanton; az audience- és topic-sorok viselkedése ugyanaz marad. A 6.138.0-val együtt menne ki, az sincs még deployolva. Deploy csak Robi szavára.
+
+**Jóslat (A):**
+- Ami változik: csatorna-soron semmi nem megy az `/api/audiences/*`-ra, nincs Delete, a mezők csak olvashatók. A 3 piros teszt zöld lesz.
+- Ami nem változik: az audience- és topic-sor mentése; a régi 5 teszt zöld marad. Az előnézet a csatorna-soron is ugyanaz.
+- Ismeretlen: ütközik-e ma élesben csatorna-id audience-id-val ugyanabban a kliensben, és írt-e már ilyen mentés idegen audience-re. Ezt csak egy olvasó lekérdezés dönti el (K2).
+
+**Seam:** a `HeaderDetailDialog` komponens, úgy, ahogy a `MatrixGrid` meghívja; a `components` vitest projekt, a `tests/components/dom.ts` keretével, új függőség nélkül.
+
+**Szeletek (A):**
+- [x] S0 Piros tesztek: a csatorna-sor PATCH-e, a felbukkanó Delete, az `audience:<id>` kulcs ütközése (3/3 piros, a régi 5 zöld).
+- [ ] S1 Csatorna-sor csak olvasható, a kulcs `channel:<id>`. Plusz egy teszt: csatorna-soron nincs szerkeszthető mező és Autosave-kapcsoló. A 3 teszt zöld.
+- [ ] S2 tsc, lint, `npm test` (az integrációs csomaggal), a spec §6.3a egy mondattal a csatorna-sorról, bump-javaslat.
+- [ ] S3 (K2-től függ) Olvasó lekérdezés élesben: van-e csatorna-id = audience-id ugyanabban a kliensben, és van-e olyan `audit_log` audience-update, ami ilyen id-ra ment a 6.21.0 óta. Írás nincs.
+
+Planning review (Codex + Chief Architect) A-hoz nem kell: csak kliens, nincs új réteg, séma vagy deploy. B-hez kellene (séma).
+
+**Kérdések Robinak:**
+- K1: A, B vagy C? Ajánlom: A.
+- K2: Futtathatok egy csak olvasó ellenőrzést az éles DB-n (csatorna- és audience-id-k kliensenként, plusz az `audit_log`), hogy kiderüljön, felülírt-e már ez idegen audience-t? Ajánlom: igen, mert ettől függ, kell-e adatot visszaállítani.

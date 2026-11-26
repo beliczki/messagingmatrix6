@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import HeaderDetailDialog from "@/app/(app)/matrix/HeaderDetailDialog";
 import { AlertDialogProvider } from "@/app/(app)/_components/AlertDialog";
-import type { Audience } from "@/app/(app)/matrix/types";
+import { channelToAudience, type Audience } from "@/app/(app)/matrix/types";
 import { advance, body, click, header, heldFetch, mount, typeInto } from "./dom";
 
 function aud(over: Partial<Audience> = {}): Audience {
@@ -162,5 +162,55 @@ describe("HeaderDetailDialog autosave", () => {
     expect(saves()[1].url).toBe("/api/audiences/2");
     expect(header(saves()[1], "If-Match")).toBe("7");
     expect(body(saves()[1])).toEqual({ name: "Two edited" });
+  });
+});
+
+// The audience axis also carries the Agentic channels, as Audience-shaped rows
+// (channelToAudience: the channel's own id, version 1). A channel lives in the
+// channels table, and its id can be the id of an unrelated audience of the
+// same client (MatrixGrid's headerDialog comment). Nothing the dialog does on
+// a channel row may reach that audience.
+describe("HeaderDetailDialog on a channel row", () => {
+  const channelRow = () =>
+    channelToAudience({ id: 7, key: "ch_disp", code: "DISP", label: "Display", orderIndex: 0, archivedAt: null });
+  // The real audience that happens to have the channel's id.
+  const audienceSeven = (over: Partial<Audience> = {}) =>
+    aud({ id: 7, key: "aud-7", name: "Seven", version: 1, ...over });
+  // Found by its label, read-only or not: a fix may make the form read-only.
+  const nameField = () =>
+    [...document.querySelectorAll<HTMLLabelElement>(".matrix-header-form label.form-field")]
+      .find((l) => l.querySelector(".form-field__label")!.textContent === "Name")!
+      .querySelector("input")!;
+  const audienceWrites = () =>
+    server.calls
+      .filter((c) => c.url.startsWith("/api/audiences/"))
+      .map((c) => `${c.init.method} ${c.url} If-Match:${header(c, "If-Match")}`);
+  const deleteButton = () => document.querySelector(".matrix-header-dialog__delete");
+
+  it("sends no edit of a channel row to /api/audiences/<channel id>", async () => {
+    mount(view(channelRow()));
+    typeInto(nameField(), "Display edited");
+    await advance(400);
+    expect(audienceWrites()).toEqual([]);
+  });
+
+  it("offers no Delete on a channel row, whatever an /api/audiences response says", async () => {
+    mount(view(channelRow()));
+    typeInto(nameField(), "Display edited");
+    await advance(400);
+    // If a save went out, answer it the way the route does when audience 7
+    // exists at version 1: with that audience, which has no channel.
+    for (const c of server.calls.filter((x) => x.url.startsWith("/api/audiences/"))) {
+      await c.respond(200, { audience: audienceSeven({ name: "Display edited", version: 2 }) });
+    }
+    await advance(400);
+    expect(deleteButton()).toBeNull();
+  });
+
+  it("treats channel 7 and audience 7 as two rows: the audience is shown, not the channel", async () => {
+    const ui = mount(view(channelRow()));
+    ui.rerender(view(audienceSeven()));
+    await advance(400);
+    expect(nameField().value).toBe("Seven");
   });
 });

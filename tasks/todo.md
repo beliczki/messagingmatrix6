@@ -1631,7 +1631,7 @@ Planning review nem kell (kliens-javítás, nincs séma, auth, deploy vagy depen
 
 **Rollback:** elbukó build → semmi nem változott, a régi build szolgál ki (`git -C /var/www/mm6-<t> reset --hard 3480889`). Nem jön fel → maint marad, `.next-old` vissza, reset `3480889`, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1` a három merge-re, push, deploy.
 
-## 2026-11-26 — Autosave-szerkesztők: a három nyitott pont + a szövegformázó sor kurzorugrása (KÉSZ az ágon, 6.138.0, NINCS deployolva; Robi: „Igen, mehet B”, „Yes, bump 6.138.0”)
+## 2026-11-26 — Autosave-szerkesztők: a három nyitott pont + a szövegformázó sor kurzorugrása (KÉSZ, 6.138.0, ÉLŐ mindkét tenanton 2026-11-26 óta, a 6.139.0-val; Robi: „Igen, mehet B”, „Yes, bump 6.138.0”)
 
 Robi: „csináljuk meg a nyitott pontokat”, közben pedig: „a texformatting is elugrál nekem gépelés közben a sor végére”. Ág: `claude/autosave-editors` (a main `26456ee`-ről).
 
@@ -1765,7 +1765,7 @@ Security: nincs új végpont (a `POST /api/text-formatting` megvolt). Az If-Matc
 
 *Lecke, javaslat (Robi dönt):* minden új autosave-es szerkesztő egy verziózott sorra a `useVersionedAutosave`-et használja, ne saját ciklust. A szabályokat a `tests/unit/autosave.test.ts` önmagában is ellenőrzi. Egy sor a `ui.md`-be vagy az AGENTS.md „Workflow notes” részébe arról, hogy új szerkesztő ezt használja.
 
-## 2026-11-26 — Fejléc-dialógus: a csatorna-sor egy idegen audience-re ír (KÉSZ az ágon, 6.139.0, NINCS deployolva; Robi: „A, és mehet K2”, „6.139.0 (minor)”)
+## 2026-11-26 — Fejléc-dialógus: a csatorna-sor egy idegen audience-re ír (KÉSZ, 6.139.0, ÉLŐ mindkét tenanton 2026-11-26 óta; Robi: „A, és mehet K2”, „6.139.0 (minor)”)
 
 A 6.138.0 review „Régi, talán komoly” pontja (lásd fent). Ág: `claude/header-dialog-channel-row`, a `claude/autosave-editors` `59441fd`-jéről (Robi: „Igen, 59441fd-re”). A hiba a main-en (6.137.0, élő) is megvan: a régi dialógus ugyanígy `/api/audiences/${committed.id}`-ra PATCH-el.
 
@@ -1842,7 +1842,7 @@ Planning review (Codex + Chief Architect) A-hoz nem kell: csak kliens, nincs új
 
 *Lecke, javaslat (Robi dönt):* egy helyettesítő sor (más tábla sora egy másik entitás alakjában) annak az entitásnak az írási útjait örökli, amelynek az alakjában megjelenik, hacsak a szerkesztő nem a megnyitott sorból dönti el, hova írhat. Ha még lesz ilyen helyettesítő sor, a `channelToAudience`-hez hasonlóan jelölje magát, és a szerkesztő ebből döntsön.
 
-## 2026-11-26 — 6.139.0 deploy (6.138.0 + 6.139.0) (FOLYAMATBAN; Robi: „merge-öld a main-be és mehet a deploy”)
+## 2026-11-26 — 6.139.0 deploy (6.138.0 + 6.139.0) (ÉLŐ mindkét tenanton; Robi: „merge-öld a main-be és mehet a deploy”, „Mehet az erste”)
 
 **Ami kimegy** (élő: `51b5bae` = 6.137.0 mindkét tenanton): a `claude/header-dialog-channel-row` ág, rajta a 6.138.0 (`dbdd4c1` + `59441fd`: a HeaderDetailDialog, a MediaEntityDialog és a szövegformázó sor egy közös hookon, `useVersionedAutosave`; a MessageEditor saját mentési útja marad, ott csak az S5-ös őr, a közös `ConflictBar` és `SaveIndicator` került be) és a 6.139.0 (`b0a0dba` + `c803410` + `e86ba2f`: a csatorna-sor fejléc-dialógusa csak olvasható). Csak `src/` (kliens), tesztek, docs: nincs migráció; a lockfile, a `templates/`, a `next.config.ts` és a `deploy/` változatlan a `51b5bae` óta.
 **Touches:** a két fenti szakasz Touches-a és review-ja (Autosave-szerkesztők, 2026-11-26; Fejléc-dialógus csatorna-sor, 2026-11-26); a spec §6.3 / §6.3a / §8.2 (Drive, `REBUILD_SPEC.md`, 2026-11-26).
@@ -1853,10 +1853,12 @@ Planning review (Codex + Chief Architect) A-hoz nem kell: csak kliens, nincs új
 ### Lépések
 - [x] D1 pre-flight (csak olvasva, Box B, 11:1x UTC): mindkét HEAD `51b5bae` (6.137.0), 0 tracked módosítás, `templates/` tiszta, nincs `.next-old`/`.next-build`; `mm6-deploy`/`mm6-maint` azonos a repóéval; `.mm6-lock-sha` = a lockfile hash-e (`7138f573…`) mindkét tenanton, és = a helyi lockfile-é; / 61%, 2298 MB elérhető; pm2 restarts 4/4; Node v24.22.3, Next 16.4.5 (a floor-on); külső sablon-ujjlenyomat `74b3c043`. error.log: telekom 0 sor, erste 18 sor (napi rotálás 00:00-kor; a mai sorok `Server Reference ID … Received "x"` szkenner-próbák, nem a kódunk).
 - [x] D2 helyben (`e86ba2f`): `tsc` 0; lint 0 hiba, a warningok azonosak a bázissal; `npm test` 139 fájl / 1348 zöld (integrációval).
-- [ ] D3 merge a main-be (`--no-ff`, `git add` nélkül; a merge fája = az ág csúcsának fája), push. A fő checkout két untracked fájlja (más session munkája) érintetlen és nincs a pushban.
-- [ ] D4 `mm6-deploy telekom`, memória-mintavétellel (120 MB alatt `next build` kilövése). Kapu: HEAD, 6.139.0, pm2 online, restarts +1, `/login` 200 (helyi + publikus), `/_next/image` 404, error.log nem nőtt, nincs `.next-old`/`.next-build`, 0 tracked módosítás, külső sablon-ujjlenyomat változatlan. Share oldalt nem kérek le (view countot írna).
-- [ ] Robi döntése a D4 után: kézi próba a telekomon (HeaderDetailDialog, MediaEntityDialog, MessageEditor bal kártya: egy mező mindegyikben; a verzió +1, nincs hamis conflict, szerkesztésenként 1 PATCH), vagy tovább próba nélkül.
-- [ ] D5 `mm6-deploy erste`, ugyanaz a kapu, plusz `templates/` = `51b5bae`; utána a telekom `/login` is 200.
-- [ ] Rögzítés: ez a szakasz, az infra-map Box B sora, a spec §6.3a „not deployed yet” jelölőjének levétele (Drive).
+- [x] D3 merge a main-be (`--no-ff`, `git add` nélkül, `8f1bd85`; a merge fája azonos az ág csúcsáéval, `a8b8b04`), push `26456ee..8f1bd85`. A fő checkout két untracked fájlja (más session munkája) érintetlen és nincs a pushban.
+- [x] D4 `mm6-deploy telekom` (11:14–11:15 UTC): rc 0, `npm ci` nem futott, min. 753 MB elérhető (a 120 MB-os őr nem lőtt), maint ~1 s. Kapu: HEAD `8f1bd85`, 6.139.0, pm2 online, restarts 4→5, `/login` 200 (a publikus is), `/_next/image` 404, error.log 0 sor (változatlan), nincs `.next-old`/`.next-build`, 0 tracked módosítás, külső sablon-ujjlenyomat `74b3c043` (változatlan). Share oldalt nem kértem le (view countot írna).
+- [x] Robi döntése a D4 után: „Mehet az erste”, kézi próba nélkül. A CA kérte a próbát, a Codex maradék kockázatként elfogadta a hiányát; a kézi próba nem volt meg, a mentési szabályokat csak a jsdom-tesztek fedik.
+- [x] D5 `mm6-deploy erste` (11:31–11:32 UTC; előtte `templates/` tiszta, 0 tracked módosítás): rc 0, `npm ci` nem futott, min. 701 MB elérhető, maint ~1 s. Kapu: HEAD `8f1bd85`, 6.139.0, pm2 online, restarts 4→5, `/login` 200 (a publikus is), `/_next/image` 404, error.log 18 sor (változatlan; a mai sorok szkenner-próbák), nincs maradék, `templates/` = `51b5bae`. A telekom `/login` utána is 200 (helyi + publikus).
+- [x] Rögzítés: ez a szakasz, az infra-map Box B sora, a spec (Drive, `REBUILD_SPEC.md`) hat „not deployed yet” jelölője → „6.138.0 / 6.139.0, live on both tenants since 2026-11-26” (a Drive-másolat `cmp`-vel azonos).
+
+**Élő:** 6.139.0 (`8f1bd85`) mindkét tenanton, 2026-11-26 11:15 UTC (telekom) / 11:32 UTC (erste). Deploy-logok: `/root/mm6-rollback/d1390-<tenant>-*.log` (+ `.mem`). Böngészős próba az élőn nem volt (Robi döntése).
 
 **Rollback:** elbukó build → semmi nem változott, a régi build szolgál ki (`git -C /var/www/mm6-<t> reset --hard 51b5bae`). Nem jön fel → maint marad, `.next-old` vissza, reset `51b5bae`, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1 <merge>`, push, deploy.

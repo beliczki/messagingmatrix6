@@ -1630,3 +1630,69 @@ Planning review nem kell (kliens-javítás, nincs séma, auth, deploy vagy depen
 **Élő:** 6.137.0 (`51b5bae`) mindkét tenanton, 2026-11-25 21:41 UTC (telekom) / 21:43 UTC (erste). Deploy-logok: `/root/mm6-rollback/d1370-<tenant>-*.log` (+ `.mem`). Böngészős próba az élőn nem volt.
 
 **Rollback:** elbukó build → semmi nem változott, a régi build szolgál ki (`git -C /var/www/mm6-<t> reset --hard 3480889`). Nem jön fel → maint marad, `.next-old` vissza, reset `3480889`, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1` a három merge-re, push, deploy.
+
+## 2026-11-26 — Autosave-szerkesztők: a három nyitott pont + a szövegformázó sor kurzorugrása (TERV, Robira vár)
+
+Robi: „csináljuk meg a nyitott pontokat”, közben pedig: „a texformatting is elugrál nekem gépelés közben a sor végére”. Ág: `claude/autosave-editors` (a main `26456ee`-ről).
+
+**A hibák (kódból követve, még nem reprodukálva; mindegyiket egy piros teszt dönti el):**
+1. **`TextFormattingRuleRow`** (`MessageEditor.tsx:1668`), Robi tünete. A sor minden `rule.version` változáskor felülírja a helyi szövegét a szerverről (`useEffect([rule.id, rule.version])`), és a verziót a saját mentése is emeli. A lánc: PATCH → `invalidateQueries(["text-formatting"])` → refetch → a sor visszaírja azt a szöveget, ami a PATCH-ben ment ki. A mentés futása alatt gépelt karakterek eltűnnek, és mivel a mező értéke kívülről változik, a kurzor a sor végére ugrik. Ugyanitt két további hiba: nincs mentés-sorosítás (a második PATCH a régi verzióval megy, és 409-et kap a saját mentésére), és minden hiba (`!r.ok`) csendes.
+2. **`MediaEntityDialog`** (asset és creative), három hiba:
+   - Nincs mentés-sorosítás.
+   - A 409 választ rossz kulcson olvassa: `current`/`row`-t keres, a szerver `currentRow`-t küld (`src/lib/optimistic.ts:22`). Ezért a konfliktus „error”-ként jelenik meg. Utána minden mentés megint 409-et kap, mert a snapshot nem lép előre, és csak a dialógus bezárása segít.
+   - Ha a felhasználó a ‹ › léptetővel már másik elemre lépett, a később érkező válasz a régi elemet teszi vissza snapshotnak. A következő autosave az új elem mezőit a régi elem sorára írja. Ez látens adatrontás; a MessageEditor `openRowIdRef`-fel már kivédi.
+3. **`HeaderDetailDialog`** (audience és topic): nincs mentés-sorosítás. 409-nél `setCommitted(current)` fut, erre az autosave effekt újra lefut, és a draftot az új verzióra küldi. Így a másik felhasználó mezőit csendben visszaírja: ez épp az a lost update, amit a spec §8.2 tilt.
+4. **`MessageEditor.handleWriteError`**: egy elhagyott kártya késve érkező hibája (nem 409) a most nyitott kártyán mutat „Save failed”-et.
+
+**A mechanizmus egy mondatban:** mind a négy szerkesztő kézzel írja a saját autosave-ciklusát (helyi buffer, snapshot, futó mentés, a válasz átvétele, 409, hiba), és mindegyikből más szabály hiányzik.
+
+**Dokumentum és kód eltérései** (REBUILD_SPEC a Drive-on, 2026-11-25):
+- A §8.2 és a §6.3 szerint a 409 terminális, csak Reload van, és a szerkesztő „must never auto-rebase-and-retry”. A §8.2 viszont ezt csak a Message Editorra mondja ki.
+- A §6.3a (HeaderDetailDialog) és a §6.4 (MediaEntityDialog) ezt írja: „409 → setCommitted(currentRow) + Refreshed badge; user's draft fields are preserved”. Ez épp az a rebase, amit a §8.2 lost update-nek nevez, vagyis a spec ellentmond önmagának.
+- A kódban a HeaderDetailDialog a §6.3a-t csinálja. A MediaEntityDialog egyiket sem: a rossz kulcs miatt error lesz belőle.
+- A §6.3 (788. sor) „formatting rules popover”-t ír, a kódban soron belüli sorok vannak. A szövegformázó sor mentési szabályairól a spec nem ír.
+- Szemantikai modell, ami ezt lefedné, nincs.
+
+**Két út:**
+- **A) Kis javítások komponensenként:** mindegyik komponens megkapja a hiányzó szabályt. Kisebb a diff, de a négy kézi ciklus marad, és a következő szerkesztő megint elfelejt egy szabályt.
+- **B) A mechanizmus javítása (ajánlott):** egy közös hook, a `useVersionedAutosave` (`src/app/(app)/_components/`), ami egy helyen tartja a szabályokat:
+  - egyszerre egy mentés fut;
+  - választ csak a még nyitott sorra vesz át;
+  - a 409 terminális, és csak Reload van;
+  - hiba után csak változásra küld újra (`autosaveDue`, már tesztelt);
+  - a buffert csak sorváltás tölti újra, a saját visszhangja nem.
+
+  Erre áll át egyenként a `TextFormattingRuleRow`, a `HeaderDetailDialog` és a `MediaEntityDialog`. A MessageEditor a saját ciklusán marad (kétlépéses mentés, Global, released version), és csak a 4. pont javítását kapja; az átállítása későbbi szelet lehet. Testvérhibák, amiket bezár: a fenti 1–3. mind, és mindegyikre a régi viselkedéssel pirosra menő teszt jön.
+
+**Touches:**
+- A fenti három komponens és a `MessageEditor.handleWriteError`.
+- Szomszédok: a `/api/text-formatting/[id]`, `/api/assets/[id]`, `/api/creatives/[id]`, `/api/audiences/[id]` és `/api/topics/[id]` útvonal. Mind `makeItemRoute`, a 409 `{currentRow}`-t ad, és ez nem változik.
+- Az `autosaveDue` (`src/lib/version-apply.ts`).
+- Szerződés: REBUILD_SPEC §6.3, §6.3a, §6.4 és §8.2.
+
+**Door:** kétirányú (`git revert`). Csak a klienst érinti, nincs séma- vagy szerverváltozás. Blast radius: napi használatú szerkesztők mindkét tenanton (asset/creative dialógus, audience/topic fejléc-dialógus, szövegformázó sorok). Deploy csak Robi szavára.
+
+**Jóslat:**
+- Ami változik: a mentés futása alatt gépelt szöveg megmarad, és a kurzor nem ugrik. A saját mentésre nem jön 409. Egy valódi ütközés mindhárom helyen conflict + Reload lesz, és nem ír vissza semmit. A szövegformázó soron is látszik a hiba.
+- Ami nem változik: a szerver, a 400 ms-os debounce, a mentett mezők és a MessageEditor mentési útja.
+- Ismeretlen: jsdom-os komponens-teszt még nincs a repóban. A `components` vitest projekt be van állítva, de nincs benne fájl, ezért az S1 a teszt-keretet is megadja.
+
+**Seam:** B-nél a hook nyilvános felülete, a `components` vitest projektben (jsdom), `react-dom/client` + `act` és hamis `fetch` mellett, új függőség nélkül. A-nál ugyanez a teszt-mód, csak a komponenseken.
+
+**Szeletek (B):**
+- [ ] S1 Piros tesztek a hookra (az öt szabály, köztük a saját visszhang esete), aztán maga a hook.
+- [ ] S2 A `TextFormattingRuleRow` átáll a hookra, és a soron megjelenik a hiba- és conflict-jelzés. Előbb piros teszt a soron: a futó mentés alatt gépelt szöveg megmarad.
+- [ ] S3 A `HeaderDetailDialog` átáll a hookra; 409 → conflict-sáv Reloaddal (K2).
+- [ ] S4 A `MediaEntityDialog` átáll a hookra; 409 → conflict + Reload; a léptetés közben érkező válasz nem írja át az új elemet.
+- [ ] S5 `MessageEditor.handleWriteError`: az elhagyott kártya hibája nem jelenik meg (a `SaveChange` viszi a sor id-ját).
+- [ ] S6 tsc, lint, `npm test` (az integrációs csomaggal együtt), a spec §6.3a, §6.4 és §8.2 frissítése a K2 szerint, bump-javaslat.
+
+Az S2–S4 egymástól független, de mindegyik az S1-re épül. B-nél a terv kódolás előtt Codex + Chief Architect review-t kap, mert új közös réteg, hacsak Robi nem mondja, hogy hagyjuk ki.
+
+**Nem része, csak feljegyezve (kódból, nem ellenőrizve):** ha a MessageEditorban vagy a MediaEntityDialogban az utolsó gépelés után 400 ms-on belül lépsz másik elemre (vagy zárod be), az a változás nem megy ki, mert az időzítőt a sorváltás törli.
+
+**Kérdések Robinak:**
+- K1: A vagy B? Ajánlom: B.
+- K2: A két dialógusban is terminális legyen a 409, csak Reloaddal (mint a §8.2-ben és a MessageEditorban), és a spec §6.3a/§6.4 „Refreshed” sorát erre javítsam? Ajánlom: igen, mert a mostani „Refreshed” viselkedés csendben visszaírja a másik felhasználó mezőit.
+- K3: A szövegformázó soron hibánál és conflictnál egy kis jelzés kerüljön a sor mellé a meglévő `save-indicator` osztállyal, conflictnál „Reload” linkkel? Ajánlom: igen.
+- K4: Új szabály-sor mentésekor a draft sor kicserélődik a tárolt szabályra. Ilyenkor elveszik a fókusz és a közben gépelt karakter (kódból, nem ellenőrizve). Ez is kerüljön bele az S2-be? Ajánlom: igen, ha gépelés közben ezt is látod.

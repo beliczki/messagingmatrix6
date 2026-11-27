@@ -1862,3 +1862,63 @@ Planning review (Codex + Chief Architect) A-hoz nem kell: csak kliens, nincs új
 **Élő:** 6.139.0 (`8f1bd85`) mindkét tenanton, 2026-11-26 11:15 UTC (telekom) / 11:32 UTC (erste). Deploy-logok: `/root/mm6-rollback/d1390-<tenant>-*.log` (+ `.mem`). Böngészős próba az élőn nem volt (Robi döntése).
 
 **Rollback:** elbukó build → semmi nem változott, a régi build szolgál ki (`git -C /var/www/mm6-<t> reset --hard 51b5bae`). Nem jön fel → maint marad, `.next-old` vissza, reset `51b5bae`, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1 <merge>`, push, deploy.
+
+## 2026-11-27 — Creative Library dialógus fejléce a draft-szerkesztő mintájára (KÉSZ az ágon, bump Robi go-jára vár; ág `claude/creative-dialog-header-c42da3`, a main `b255edd`-ből; nincs push, merge, deploy)
+
+Robi kérése (2026-11-27, két képernyőképpel, a megosztott jegyzetmappában): „itt az status jelző pötty kéne legyen mint a editorban, elég fentre csak az MC szám és variant, és version _n léptetőt pedig tegyük léptető helyet n5 n6 labelekkét mint a darft variánsok kontrolja, a Banner version label csak Version legyen mert ez is pl nem banner hanem video”.
+
+**Megfigyelve a kódban (2026-11-27):**
+- A dialógus a közös `MediaEntityDialog` (`src/app/(app)/_components/MediaEntityDialog.tsx`), ezt használja a `CreativeDetailDialog` (Creative Library + dashboard `CreativeStrip`) és az `AssetDetailDialog` is. A fejléc ma: `‹ fájlnév MC130a › 2/2`, zöld `status-badge` („Active”/„Archived”, az `archivedAt`-ból), `nav-stepper` `‹ 6 · 2/2 ›`, `SaveIndicator`.
+- **A két léptető nem ugyanaz.** A `‹ › 2/2` a Library szűrt listájának kreatívjai között lép (`entities` = `filtered`, mint a draftban a `‹ MC408c › 4/6`). A `‹ 6 · 2/2 ›` (`versionNav`) ugyanannak a kreatívnak a verziócsaládján belül lép: a `groupCreativeVersions` a fájlnév `_nN` tokenje szerint csoportosít és rendez (`src/lib/group-creative-versions.ts`), a címke viszont a `bannerVersion` mező („6”), ha ki van töltve, és csak üres mezőnél `n{N}` a fájlnévből (`versionLabel`, `CreativeDetailDialog.tsx:103`).
+- A draft-szerkesztő pöttye: `message-editor__status-dot size-2.5 rounded-full` + `STATUS_COLOR[status]` (`status-dot--{draft,…,dead}`, a Design fül színei), az MC **státuszát** mutatja. A variánsvezérlő: `draft-variants__list tab-bar tab-bar--segmented` + `tab-bar__tab` / `--active` (`DraftVariantSwitcher.tsx`).
+- „Banner version” csak a `CreativeDetailDialog.tsx:192`-ben van; az oszlop `creatives.banner_version` (szabad szöveg; az XLSX-import a „Version” oszlopból tölti, az MCP `banner_version`-ként írja).
+
+**Touches:** `MediaEntityDialog` fejléce (pötty, cím, verzióvezérlő), `CreativeDetailDialog` (cím, címkék, mezőfelirat). Szomszédok: `CreativeLibrary.tsx` (a `versions` családot adja, nem változik), `CreativeStrip.tsx` (verziók nélkül hívja, nem változik), `AssetDetailDialog` (ugyanaz a fejléc: K3), `useVersionedAutosave` (nem változik). Dokumentum: REBUILD_SPEC §6.4 „Detail dialog” (Header: „file name title + subtitle …, Active/Archived status badge”) és §21 (Version vs variant), a Drive-fájl 2026-11-26-i; a `MediaEntityDialog` utolsó commitja 2026-11-26 10:31, a spec frissebb vagy egyidős. A §6.4 Header-mondata a változás után elavul: a végén frissítem. Szemantikai modell, ami lefedné, nincs.
+
+**§21 és a „Version” felirat:** a kreatív `_nN`-je a §21 szerint a **released version** (ugyanaz, mint a `version_no` / `-n_`), és a §21 szerint a UI-szöveg a „released version” és „saved version” nevet használja. A dialógusban saved version nem látszik, így a puszta „Version” itt nem téveszthető össze vele, de a Naming fül ugyanezt az értéket „Released version”-nek hívja (K4).
+
+**Door:** kétirányú (`git revert`), csak kliens: nincs séma, route, MCP vagy szerver-változás. Blast radius: a Creative Library és a dashboard kreatívdialógusa, K3-tól függően az Assets dialógus is, mindkét tenanton. Planning review nem kell (nincs új réteg, séma, auth, deploy).
+
+**Jóslat:**
+- Változik: a fejlécben `‹ ● MC130a › 2/2 [n5 n6]`; a pötty title/aria-labelje mondja az állapotot; a fájlnév csak a File sorban; a mezőfelirat „Version” (vagy K4 szerint); egy `n5`-re kattintás a régi fájlt nyitja (File sor, előnézet), ahogy ma a léptető.
+- Nem változik: a lista-léptető és a ←/→ billentyűk, az Archive/Restore, az Autosave és a mentés, a verziócsalád összeállítása és sorrendje, a `bannerVersion` adat.
+- Ismeretlen: hány családban van két fájl ugyanazzal az `_nN`-nel (pl. jpg és png, mindkettő n2): ott két egyforma címke állna; a gombok `title`-je a fájlnevet mondja.
+
+**Seam:** a `CreativeDetailDialog` komponens, ahogy a `CreativeLibrary` hívja; `tests/components/creative-detail-dialog.test.tsx` a meglévő `tests/components/dom.ts` keretével (jsdom, új függőség nélkül). Piros előbb: a cím `MC130a` és nem a fájlnév; van `status-dot`, nincs „Active” badge; a verziók `n5` `n6` gombok, az aktív `tab-bar__tab--active`; `n5`-re kattintva a File sor az n5 fájlé; a felirat „Version”, nincs „Banner version”.
+
+**Szeletek:**
+- [x] S0 Piros komponens-tesztek (fent).
+- [x] S1 Fejléc: pötty (a meglévő `status-dot` + méret a draft-szerkesztőé), cím = MC-szám + variáns (font-mono, mint a `message-editor__mc-label`; MC nélküli kreatívnál marad a fájlnév), a `nav-stepper` helyén `tab-bar tab-bar--segmented` verziógombok `n{N}` címkével a fájlnév `_nN`-jéből (ugyanaz a token, ami szerint a család rendez). Mezőfelirat K4 szerint. `component-inventory.md` frissítése.
+- [x] S2 tsc, lint, `npm test`; ~~böngésző a lokális dev szerveren, csak nézve (a dev az élő DB-t látja: mezőt nem szerkesztek, Archive-ot nem nyomok); képernyőkép az új fejlécről~~ (Robi: „Hagyd ki”); a spec §6.4 Header-mondata; review-szakasz; bump-javaslat.
+
+**Kérdések Robinak (ajánlással):**
+- K1: A cím melletti `‹ › 2/2` a lista kreatívjai között lép, a `‹ 6 · 2/2 ›` a fájlverziók között. Csak az utóbbit cserélem `n5 n6` gombsorra, a lista-léptető marad (mint a draftban). Ajánlom: így. A gombsor egyetlen verziónál is látszik (`n1`), mert a fájlnév kikerül a címből, és a verzió csak így marad a fejlécben.
+- K2: Mit mutasson a pötty? Ajánlom: a kreatív saját állapotát (élő = `status-dot--active` zöld, archivált = `status-dot--inactive` szürke), ezt váltja az Archive/Restore. A másik út az összekötött MC130a státusza, mint a draftban; ehhez külön lekérés kell, és egy MC-nek több audience-példánya lehet eltérő státusszal.
+- K3: Az Assets dialógus ugyanezt a fejlécet használja. Ajánlom: ott is pötty legyen a badge helyett (egy közös fejléc). A másik út: csak a kreatívoknál (egy új prop).
+- K4: A mezőfelirat „Version” (ahogy kérted) vagy „Released version” (a §21 és a Naming fül szava ugyanerre az értékre)? Ajánlom: „Released version”, hogy egy jelentésnek egy neve legyen.
+
+**Robi döntései (2026-11-27):**
+- K1: az ajánlás szerint (a lista-léptető marad; `n5 n6` gombsor a verzióléptető helyén, egyetlen verziónál is).
+- K2: „nem az active badge helyén hanem az MC szám előtt mint az editorban, és igen állapotát status dot active zöld archivált szürke”. A pötty a cím előtt áll, a nyilak között (mint a `message-editor__status-dot`); a badge megszűnik.
+- K3: az ajánlás szerint (az Assets dialógusban is pötty, a fájlnév előtt).
+- K4: „Released version”.
+
+**Review (2026-11-27)**
+
+*Ami elkészült* (`claude/creative-dialog-header-c42da3`):
+- `MediaEntityDialog` fejléce: `media-entity-dialog__status-dot` a cím előtt (globális `status-dot`, `size-2.5`; élő `status-dot--active`, archivált `status-dot--inactive`, a szöveg a `title`/`aria-label`-ben); a régi `status-badge` kiment. Ez az Assets dialógusra is vonatkozik (K3). Új prop: `titleIsMcLabel` (`media-entity-dialog__title--mc`, font-mono text-base). A `nav-stepper` verzióléptető helyén `media-entity-dialog__versions` (`tab-bar tab-bar--segmented`, `tab-bar__tab` / `--active`); a gomb `title`-je a fájlnév.
+- `CreativeDetailDialog`: cím = `MC{szám}{variáns}`, MC nélkül a fájlnév; a verziócímke `n{N}` a fájlnév `_nN`-jéből, nem a `bannerVersion`-ből; a gombsor egy verziónál is látszik; a mezőfelirat „Released version”.
+- `component-inventory.md`: a három új név, a `nav-stepper` sora frissítve. Spec: REBUILD_SPEC §6.4 „Header” a Drive-on (2026-11-27, „not deployed yet” jelöléssel; `cmp`-pel ellenőrizve).
+
+*Piros előbb:* `tests/components/media-entity-dialog-header.test.tsx`, 8 tesztből 7 piros a régi kódon (a cím a fájlnév volt; nincs pötty; van `nav-stepper`; egy verziónál nincs gomb; „Banner version”; az asset-fejlécen nincs pötty). Őrző, elsőre zöld: MC nélküli kreatívnál a cím a fájlnév.
+
+*Ellenőrzés:* `npx tsc --noEmit` 0 hiba. `npm run lint` 0 hiba, 136 warning; az érintett fájlokban egy, a régi `CreativeDetailDialog.tsx:131` (`set-state-in-effect`, nem változott). `npm test` (az integrációs csomaggal, `mm6-test-pg`): 140 fájl, 1356 teszt zöld (a 6.139.0-n 139 / 1348; +1 fájl, +8 teszt).
+*Böngészős próba: nem volt.* A lokális dev szerver (6011) a loginra dobott, és Robi a „Hagyd ki”-t választotta; a fejlécet csak a jsdom-tesztek látták, képernyőkép nincs. A méretet és az igazítást (pötty, mono cím, gombsor) senki nem nézte meg.
+
+*Jóslat és eredmény:* a megjósolt változások teszttel igazolva (cím, pötty, gombsor, kattintásra a régi fájl, felirat). Ami nem változik: a lista-léptető, az Autosave, az Archive (a régi `media-entity-dialog.test.tsx` zöld). A két egyforma `_nN`-ű fájl esete nincs megnézve az adatban.
+
+*Önellenőrzés a terv ellen* (kétirányú ajtó, kis blast radius): a diff a K1–K4 döntéseket valósítja meg, két komponensfájl, egy tesztfájl, inventory, todo. Nem kért dolog nincs benne.
+
+*Dokumentum és kód, nyitva (Robi dönt):* a `creatives.banner_version` szabad szöveg és a fájlnév `_nN`-je két forrás ugyanarra a released versionre; eltérhetnek, és mostantól a fejléc a fájlnévét mutatja, a mező a kézzel írtat.
+
+*Bump-javaslat:* `6.139.0` → `6.140.0` (minor: látható UI-változás a kreatív- és asset-dialógus fejlécében). Patch is védhető, ha csak megjelenésnek vesszük (új funkció nincs, a verzióváltás ugyanaz). Robi dönt.

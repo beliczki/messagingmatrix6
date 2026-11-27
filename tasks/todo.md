@@ -1863,7 +1863,7 @@ Planning review (Codex + Chief Architect) A-hoz nem kell: csak kliens, nincs új
 
 **Rollback:** elbukó build → semmi nem változott, a régi build szolgál ki (`git -C /var/www/mm6-<t> reset --hard 51b5bae`). Nem jön fel → maint marad, `.next-old` vissza, reset `51b5bae`, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1 <merge>`, push, deploy.
 
-## 2026-11-27 — Creative Library dialógus fejléce a draft-szerkesztő mintájára (KÉSZ az ágon, bump Robi go-jára vár; ág `claude/creative-dialog-header-c42da3`, a main `b255edd`-ből; nincs push, merge, deploy)
+## 2026-11-27 — Creative Library dialógus fejléce a draft-szerkesztő mintájára (KÉSZ az ágon, 6.140.0; Robi: „6.140.0 (minor)”; ág `claude/creative-dialog-header-c42da3`, a main `b255edd`-ből; nincs push, merge, deploy)
 
 Robi kérése (2026-11-27, két képernyőképpel, a megosztott jegyzetmappában): „itt az status jelző pötty kéne legyen mint a editorban, elég fentre csak az MC szám és variant, és version _n léptetőt pedig tegyük léptető helyet n5 n6 labelekkét mint a darft variánsok kontrolja, a Banner version label csak Version legyen mert ez is pl nem banner hanem video”.
 
@@ -1921,4 +1921,6 @@ Robi kérése (2026-11-27, két képernyőképpel, a megosztott jegyzetmappában
 
 *Dokumentum és kód, nyitva (Robi dönt):* a `creatives.banner_version` szabad szöveg és a fájlnév `_nN`-je két forrás ugyanarra a released versionre; eltérhetnek, és mostantól a fejléc a fájlnévét mutatja, a mező a kézzel írtat.
 
-*Bump-javaslat:* `6.139.0` → `6.140.0` (minor: látható UI-változás a kreatív- és asset-dialógus fejlécében). Patch is védhető, ha csak megjelenésnek vesszük (új funkció nincs, a verzióváltás ugyanaz). Robi dönt.
+*Bump:* `6.139.0` → `6.140.0` (minor: látható UI-változás a kreatív- és asset-dialógus fejlécében), Robi: „6.140.0 (minor)”. A `package.json` kézzel átírva, a lockfile érintetlen; CHANGELOG-sor kész.
+
+*Nyitott:* merge a main-be, push és deploy csak Robi szavára.

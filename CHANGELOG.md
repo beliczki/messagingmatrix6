@@ -5,6 +5,17 @@ All notable changes to MessagingMatrix v6 are recorded here. Format follows
 
 ## [Unreleased]
 
+## [6.140.0] — 2026-11-27
+
+### Changed
+- The Creative Library dialog's header follows the draft editor: a status dot before the title
+  (green when live, grey when archived) instead of the Active/Archived badge, and the MC number and
+  variant as the title (`MC130a`). The file name stays in the File row.
+- A creative's versions show as a row of buttons (`n5 n6`, from the file name's `_nN`) instead of
+  the `‹ 6 · 2/2 ›` stepper, also when there is only one version.
+- The creative form's "Banner version" field is now labelled "Released version".
+- The asset dialog shows its status as the same dot.
+
 ## [6.139.0] — 2026-11-26
 
 ### Fixed

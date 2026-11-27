@@ -55,6 +55,8 @@ export type MediaEntityDialogProps<E extends MediaEntity, D extends Record<strin
   file: UploadedFile | undefined;
   /** Title rendered in the header (e.g. file name). */
   title: string;
+  /** The title is an MC label (`MC130a`): set in mono, like the draft editor's. */
+  titleIsMcLabel?: boolean;
   /** Optional subtitle / tag rendered next to the title. */
   subtitle?: string | null;
   /** Base API path, e.g. "/api/creatives" or "/api/assets". */
@@ -75,9 +77,13 @@ export type MediaEntityDialogProps<E extends MediaEntity, D extends Record<strin
    * (defaults to entity.id).
    */
   navId?: number;
-  /** Optional version stepper rendered in the header (creative version families). */
+  /**
+   * Optional version segments in the header (creative version families),
+   * oldest → newest, like the draft editor's variant letters. `title` is the
+   * tooltip (the file name), which tells two files of one version apart.
+   */
   versionNav?: {
-    versions: { id: number; label: string }[];
+    versions: { id: number; label: string; title?: string }[];
     currentId: number;
     onSelect: (id: number) => void;
   };
@@ -90,6 +96,7 @@ export default function MediaEntityDialog<E extends MediaEntity, D extends Recor
   onClose,
   file,
   title,
+  titleIsMcLabel,
   subtitle,
   endpoint,
   queryKey,
@@ -248,9 +255,24 @@ export default function MediaEntityDialog<E extends MediaEntity, D extends Recor
           >
             <Icon name="chevron-left" className="size-4" />
           </button>
+          {/* The row's state, before the title, as the draft editor's status
+              dot sits before the MC label (Robi, 2026-11-27). */}
+          <span
+            className={clsx(
+              "media-entity-dialog__status-dot status-dot size-2.5 shrink-0",
+              archived ? "status-dot--inactive" : "status-dot--active",
+            )}
+            title={archived ? "Archived" : "Active"}
+            aria-label={`Status: ${archived ? "archived" : "active"}`}
+          />
           <div className="media-entity-dialog__title-block flex min-w-0 items-baseline gap-2">
             <span
-              className="media-entity-dialog__title truncate text-sm font-semibold text-slate-900"
+              className={clsx(
+                "media-entity-dialog__title truncate font-semibold text-slate-900",
+                titleIsMcLabel
+                  ? "media-entity-dialog__title--mc font-mono text-base"
+                  : "text-sm",
+              )}
               title={title}
             >
               {title}
@@ -274,48 +296,29 @@ export default function MediaEntityDialog<E extends MediaEntity, D extends Recor
               {navIndex + 1}/{entities.length}
             </span>
           ) : null}
-          <span
-            className={clsx(
-              "status-badge ml-2 inline-flex items-center gap-1.5 rounded border px-2 py-0.5 text-xs",
-              archived
-                ? "border-rose-200 bg-rose-50 text-rose-700"
-                : "border-emerald-200 bg-emerald-50 text-emerald-700",
-            )}
-          >
-            {archived ? "Archived" : "Active"}
-          </span>
-          {versionNav && versionNav.versions.length > 1
-            ? (() => {
-                const vIdx = versionNav.versions.findIndex(
-                  (v) => v.id === versionNav.currentId,
-                );
-                return (
-                  <div className="nav-stepper ml-2 flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => versionNav.onSelect(versionNav.versions[vIdx - 1]!.id)}
-                      disabled={vIdx <= 0}
-                      aria-label="Previous version"
-                      className="nav-stepper__btn nav-stepper__btn--prev rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
-                    >
-                      <Icon name="chevron-left" className="size-3.5" />
-                    </button>
-                    <span className="nav-stepper__counter text-xs text-slate-500">
-                      {versionNav.versions[vIdx]?.label} · {vIdx + 1}/{versionNav.versions.length}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => versionNav.onSelect(versionNav.versions[vIdx + 1]!.id)}
-                      disabled={vIdx < 0 || vIdx >= versionNav.versions.length - 1}
-                      aria-label="Next version"
-                      className="nav-stepper__btn nav-stepper__btn--next rounded p-1 text-slate-500 hover:bg-slate-100 disabled:opacity-30"
-                    >
-                      <Icon name="chevron-right" className="size-3.5" />
-                    </button>
-                  </div>
-                );
-              })()
-            : null}
+          {versionNav && versionNav.versions.length > 0 ? (
+            <div
+              className="media-entity-dialog__versions tab-bar tab-bar--segmented inline-flex rounded-md border border-slate-300 p-0.5"
+              title="Versions of this file"
+            >
+              {versionNav.versions.map((v) => (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => versionNav.onSelect(v.id)}
+                  title={v.title}
+                  className={clsx(
+                    "media-entity-dialog__version tab-bar__tab rounded px-2 py-0.5 text-xs font-medium transition",
+                    v.id === versionNav.currentId
+                      ? "tab-bar__tab--active bg-slate-900 text-white"
+                      : "text-slate-600 hover:bg-slate-50",
+                  )}
+                >
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <SaveIndicator state={saveState} />
 
           <div className="media-entity-dialog__header-actions ml-auto flex items-center gap-2">

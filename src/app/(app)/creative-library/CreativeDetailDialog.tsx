@@ -100,9 +100,10 @@ function diffPayload(snapshot: Creative, draft: Draft): Record<string, unknown> 
   return out;
 }
 
+// The file name's _nN token (the released version, REBUILD_SPEC §21), the one
+// groupCreativeVersions orders the family by, so the labels read in order.
+// Not bannerVersion: that is a hand-typed field and can say something else.
 function versionLabel(c: Creative): string {
-  const banner = c.bannerVersion?.trim();
-  if (banner) return banner;
   return `n${parseCreativeFilename(c.fileName ?? "").version}`;
 }
 
@@ -157,9 +158,15 @@ export default function CreativeDetailDialog({
       entities={creatives}
       navId={creative.id}
       versionNav={
-        versions && versions.length > 1
+        // A single version shows too: the file name is no longer in the
+        // title, so this is where the header says which version is open.
+        versions && versions.length > 0
           ? {
-              versions: versions.map((v) => ({ id: v.id, label: versionLabel(v) })),
+              versions: versions.map((v) => ({
+                id: v.id,
+                label: versionLabel(v),
+                title: v.fileName ?? undefined,
+              })),
               currentId: current.id,
               onSelect: setSelectedVersionId,
             }
@@ -168,8 +175,10 @@ export default function CreativeDetailDialog({
       onJump={onJump}
       onClose={onClose}
       file={file}
-      title={current.fileName ?? "(no file)"}
-      subtitle={mcLabel ?? undefined}
+      // The MC number and variant only, as in the draft editor; the file
+      // name is in the File row below (Robi, 2026-11-27).
+      title={mcLabel ?? current.fileName ?? "(no file)"}
+      titleIsMcLabel={mcLabel !== null}
       endpoint="/api/creatives"
       queryKey="creatives"
       toDraft={toDraft}
@@ -189,7 +198,7 @@ export default function CreativeDetailDialog({
           <DraftField label="Template">
             <input value={draft.template} onChange={(e) => setDraft({ ...draft, template: e.target.value })} className={inputCls} />
           </DraftField>
-          <DraftField label="Banner version">
+          <DraftField label="Released version">
             <input value={draft.bannerVersion} onChange={(e) => setDraft({ ...draft, bannerVersion: e.target.value })} className={inputCls} />
           </DraftField>
           <DraftField label="Visual keyword">

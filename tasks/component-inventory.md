@@ -105,6 +105,9 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `media-entity-dialog--landscape` | Landscape layout flip (form fent, preview lent) | – | – |
 | `media-entity-dialog__header` | Full-width modal header (stepper + autosave + close) | – | – |
 | `media-entity-dialog__title-block` | Title + subtitle stack a header-ben | – | – |
+| `media-entity-dialog__status-dot` | Állapot-pötty a cím előtt (a globális `status-dot`, `size-2.5`, mint a `message-editor__status-dot`): élő = `status-dot--active`, archivált = `status-dot--inactive`; a régi Active/Archived `status-badge` helyén (2026-11-27) | – | – |
+| `media-entity-dialog__title--mc` | A cím MC-címke (`MC130a`, kreatívnál): `font-mono text-base`, mint a `message-editor__mc-label`; MC nélkül a fájlnév marad | – | – |
+| `media-entity-dialog__versions` / `__version` | Kreatív verziócsalád szegmentált gombsorként (`n5 n6`, a fájlnév `_nN`-jéből), a globális `tab-bar tab-bar--segmented` + `tab-bar__tab` / `--active` rétegen, mint a `draft-variants__list`; egy verziónál is látszik. A régi `nav-stepper` (`‹ 6 · 2/2 ›`) helyén (2026-11-27) | – | – |
 | `media-entity-dialog__nav-prev` / `__nav-next` / `__nav-counter` | Stepper bal/jobb chevron + N/M számláló | – | szemantikailag `nav-stepper` réteg fölött |
 | `media-entity-dialog__autosave-toggle` | Autosave checkbox + label (slate-900 active) | – | – |
 | `media-entity-dialog__modified-tag` | "modified" amber tag manual-mode + dirty | – | – |
@@ -187,7 +190,7 @@ Ezek minden képernyőn ismétlődnek. **Ezeknek lesz a legtöbb haszna ha kül�
 | `tab-bar` | Vízszintes tab nav | MessageEditor 5 tab | – |
 | `tab-bar__tab` | Egy tab gomb | MessageEditor `TabBtn` 583–608 | – |
 | `tab-bar__tab--active` | Aktív tab | – | – |
-| `nav-stepper` | "Prev / N / Next" navigátor | MessageEditor header, TemplateEditor MC stepper, MediaEntityDialog version stepper (`versionNav` prop, 2026-07-16) | inline duplikátum |
+| `nav-stepper` | "Prev / N / Next" navigátor | MessageEditor header, TemplateEditor MC stepper (a MediaEntityDialog verzióléptetője 2026-11-27 óta `media-entity-dialog__versions`) | inline duplikátum |
 | `nav-stepper__btn` | Bal/jobb chevron gomb | – | – |
 | `nav-stepper__counter` | "3 / 27" szöveg | – | – |
 | `divider-handle` | Húzható elválasztó pane-ek között | MessageEditor + TemplateEditor | inline duplikátum, ugyanaz a logika |

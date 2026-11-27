@@ -1863,7 +1863,7 @@ Planning review (Codex + Chief Architect) A-hoz nem kell: csak kliens, nincs új
 
 **Rollback:** elbukó build → semmi nem változott, a régi build szolgál ki (`git -C /var/www/mm6-<t> reset --hard 51b5bae`). Nem jön fel → maint marad, `.next-old` vissza, reset `51b5bae`, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1 <merge>`, push, deploy.
 
-## 2026-11-27 — Creative Library dialógus fejléce a draft-szerkesztő mintájára (KÉSZ az ágon, 6.140.0; Robi: „6.140.0 (minor)”; ág `claude/creative-dialog-header-c42da3`, a main `b255edd`-ből; nincs push, merge, deploy)
+## 2026-11-27 — Creative Library dialógus fejléce a draft-szerkesztő mintájára (KÉSZ, 6.140.0, ÉLŐ mindkét tenanton 2026-11-27 óta; Robi: „6.140.0 (minor)”; ág `claude/creative-dialog-header-c42da3`, a main `b255edd`-ből)
 
 Robi kérése (2026-11-27, két képernyőképpel, a megosztott jegyzetmappában): „itt az status jelző pötty kéne legyen mint a editorban, elég fentre csak az MC szám és variant, és version _n léptetőt pedig tegyük léptető helyet n5 n6 labelekkét mint a darft variánsok kontrolja, a Banner version label csak Version legyen mert ez is pl nem banner hanem video”.
 
@@ -1925,7 +1925,7 @@ Robi kérése (2026-11-27, két képernyőképpel, a megosztott jegyzetmappában
 
 *Nyitott:* merge a main-be, push és deploy csak Robi szavára.
 
-## 2026-11-27 — 6.140.0 deploy (Creative Library dialógus fejléce) (FOLYAMATBAN; Robi: „merge main-be és deploy mindkét tenantra”)
+## 2026-11-27 — 6.140.0 deploy (Creative Library dialógus fejléce) (ÉLŐ mindkét tenanton; Robi: „merge main-be és deploy mindkét tenantra”)
 
 **Ami kimegy** (élő: `8f1bd85` = 6.139.0 mindkét tenanton): a `claude/creative-dialog-header-c42da3` ág, rajta `b2b5462` (a kreatív- és asset-dialógus fejléce: státuszpötty, MC-címke mint cím, `n5 n6` verziógombok, „Released version”) és `8839df1` (6.140.0, CHANGELOG). Csak `src/` (kliens), teszt, docs: nincs migráció; a lockfile (`7138f573…`), a `templates/`, a `deploy/`, a `next.config.ts`, a `db/` és a `src/app/api/` változatlan a `8f1bd85` óta.
 **Touches:** a fenti szakasz Touches-a és review-ja (Creative Library dialógus fejléce, 2026-11-27); a spec §6.4 „Header” és §21 (Drive, `REBUILD_SPEC.md`, 2026-11-27; a §6.4 ma reggeli frissítése óta a kód nem változott). Szemantikai modell, ami lefedné, nincs.
@@ -1938,9 +1938,13 @@ Robi kérése (2026-11-27, két képernyőképpel, a megosztott jegyzetmappában
 ### Lépések
 - [x] D1 pre-flight (csak olvasva, Box B, 11:4x UTC): mindkét HEAD `8f1bd85` (6.139.0), 0 tracked módosítás, `templates/` tiszta, nincs `.next-old`/`.next-build`; a telepített `mm6-deploy` (`c3438a49…`) és `mm6-maint` (`cb1e6d8d…`) azonos a repóéval; `node_modules/.mm6-lock-sha` = a lockfile hash-e (`7138f573…`) mindkét tenanton; / 61%, 2092 MB elérhető; pm2 online, restarts 5/5; Node v24.22.3; error.log: telekom 0 sor, erste 6 sor (az utolsó 02:07 UTC-s); a telekom külső sablon-ujjlenyomata `74b3c043` (`cd html && find . -type f | sort | xargs md5sum | md5sum`).
 - [x] D2 helyben (`b2b5462`; a `8839df1` csak a verziót és a CHANGELOG-ot írja): `tsc` 0; lint 0 hiba; `npm test` 140 fájl / 1356 zöld (integrációval).
-- [ ] D3 merge a main-be (`--no-ff`, `git add` nélkül; a merge fája = az ág csúcsáé, a tervező commité), push `b255edd..<merge>`. A fő checkout két untracked fájlja (más session munkája) nem kerül bele.
-- [ ] D4 `mm6-deploy telekom`. Előtte a boxon `git ls-remote origin main` = a merge SHA (eltérésnél stop). Napló: `/root/mm6-rollback/d1400-telekom-*.log`. Memória-mintavétel közben; 120 MB alatt a `next build` kilövése. Kapu: HEAD = merge, 6.140.0, pm2 online, restarts +1, `/login` 200 (helyi és publikus), `/_next/image` 404, az error.log nem nőtt, nincs maradék, 0 tracked módosítás, az ujjlenyomat változatlan. Ha bármelyik elbukik, az erste nem megy.
-- [ ] D5 `mm6-deploy erste`. Előtte újra: `git ls-remote origin main` = a merge SHA, 0 tracked módosítás, `templates/` tiszta, nincs maradék. Kapu: ugyanaz, plusz `templates/` = `8f1bd85`. Utána a telekom `/login` is 200.
-- [ ] Rögzítés: ez a szakasz, az infra-map Box B sora, a spec §6.4 „not deployed yet” jelölője.
+- [x] D3 merge a main-be (`--no-ff`, `git add` nélkül, `f45fddd`; a merge fája `adb3e9c…` = az ág csúcsáé, `d2ad34c`), push `b255edd..f45fddd`. A fő checkout két untracked fájlja (más session munkája) érintetlen, és nincs a pushban.
+- [x] D4 `mm6-deploy telekom` (11:39:09–11:39:55 UTC). Előtte a boxról `git ls-remote origin main` = `f45fddd`, az ujjlenyomat `74b3c043`. Eredmény: rc 0, `npm ci` nem futott, a 120 MB-os őr nem lőtt (min. 861 MB elérhető), maint ~1 s. Kapu: HEAD `f45fddd`, 6.140.0, pm2 online, restarts 5→6, `/login` 200 (a publikus is), `/_next/image` 404, error.log 0 sor (változatlan), nincs `.next-old`/`.next-build`, 0 tracked módosítás, ujjlenyomat `74b3c043` (változatlan). Share oldalt nem kértem le (view countot írna).
+- [x] D5 `mm6-deploy erste` (11:40:33–11:41:22 UTC). Előtte újra: `ls-remote` = `f45fddd`, 0 tracked módosítás, `templates/` tiszta, nincs maradék. Eredmény: rc 0, `npm ci` nem futott, a 120 MB-os őr nem lőtt (min. 924 MB elérhető), maint ~1 s. Kapu: HEAD `f45fddd`, 6.140.0, pm2 online, restarts 5→6, `/login` 200 (a publikus is), `/_next/image` 404, error.log 6 sor (változatlan), nincs maradék, `templates/` = `8f1bd85` (0 eltérő fájl). Utána a telekom `/login` is 200 (helyi és publikus), restartja 6 maradt.
+- [x] Rögzítés: ez a szakasz, az infra-map Box B sora, a spec (Drive, `REBUILD_SPEC.md`) §6.4 jelölője: „not deployed yet” → „6.140.0, live on both tenants since 2026-11-27” (a Drive-másolat `cmp`-vel azonos).
+
+**Élő:** 6.140.0 (`f45fddd`) mindkét tenanton, 2026-11-27 11:39 UTC (telekom) / 11:41 UTC (erste). Deploy-logok: `/root/mm6-rollback/d1400-<tenant>-*.log` (+ `.mem`). Böngészős próba sem helyben, sem az élőn nem volt: a fejléc méretét és igazítását senki nem nézte meg (maradék kockázat, a CA és a Codex elfogadta). Opcionális (a CA szerint, nem kapu): Robi megnyit egy többverziós és egy MC nélküli kreatívot.
+
+**Nyitva Robinak:** a `creatives.banner_version` (kézzel írt) és a fájlnév `_nN`-je két forrás ugyanarra a released versionre. A fejléc most az `_nN`-t mutatja; `_nN` nélküli fájlnál „n1”-et.
 
 **Rollback:** elbukó build → semmi nem változott, a régi build szolgál ki (`git -C /var/www/mm6-<t> reset --hard 8f1bd85`). Nem jön fel → maint marad, `.next-old` vissza, reset `8f1bd85`, `pm2 restart`, `/login` 200, maint off. Siker után → `git revert -m 1 <merge>`, push, deploy.
